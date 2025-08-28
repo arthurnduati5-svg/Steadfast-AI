@@ -2,15 +2,19 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { usePathname } from 'next/navigation';
-import { useIsMobile } from '@/hooks/use-mobile';
 import { Button } from '@/components/ui/button';
-import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Textarea } from '@/components/ui/textarea';
-import { Bot, ChevronDown, History, MessageSquare, Send, User, Loader2, Lightbulb } from 'lucide-react';
+import { Bot, History, MessageSquare, Send, User, Loader2 } from 'lucide-react';
 import type { Message, ChatSession } from '@/lib/types';
 import { getAssistantResponse } from '@/app/actions';
 import { cn } from '@/lib/utils';
@@ -71,7 +75,6 @@ const MessageBubble: React.FC<{ message: Message }> = ({ message }) => {
   };
 
 export function SteadfastCopilot() {
-  const isMobile = useIsMobile();
   const pathname = usePathname();
   const { toast } = useToast();
   const [isOpen, setIsOpen] = useState(false);
@@ -84,6 +87,15 @@ export function SteadfastCopilot() {
   const [isLoading, setIsLoading] = useState(false);
 
   const scrollAreaRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    // Close the copilot when the page changes
+    if (isOpen) {
+      setIsOpen(false);
+    }
+    // We only want to run this effect on pathname change, not isOpen
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pathname]);
 
   useEffect(() => {
     if (activeTab === 'chat' && messages.length > 0) {
@@ -135,7 +147,7 @@ export function SteadfastCopilot() {
   const handleContinueChat = (session: ChatSession) => {
     setMessages(session.messages);
     setActiveTab('chat');
-    if (isMobile) setIsOpen(true);
+    setIsOpen(true);
     toast({
         title: "Chat history loaded",
         description: `Continuing conversation about "${session.topic}".`,
@@ -224,37 +236,21 @@ export function SteadfastCopilot() {
 
   return (
     <>
-      <Sheet open={isOpen && isMobile} onOpenChange={setIsOpen}>
-        <SheetContent side="right" className="w-[85vw] p-0 sm:max-w-md">
-            <SheetHeader className="p-4 border-b">
-                <SheetTitle className="flex items-center gap-2"><Bot className="h-5 w-5 text-primary"/> Steadfast Copilot</SheetTitle>
-            </SheetHeader>
-            <div className="h-[calc(100%-65px)]">
+      <Dialog open={isOpen} onOpenChange={setIsOpen}>
+        <DialogContent className="p-0 h-[70vh] max-w-[90vw] sm:max-w-lg flex flex-col">
+            <DialogHeader className="p-4 border-b">
+                <DialogTitle className="flex items-center gap-2"><Bot className="h-5 w-5 text-primary"/> Steadfast Copilot</DialogTitle>
+            </DialogHeader>
+            <div className="flex-1 min-h-0">
                 {copilotContent}
             </div>
-        </SheetContent>
-      </Sheet>
+        </DialogContent>
+      </Dialog>
 
       <div className="fixed bottom-4 right-4 z-30">
         <Button onClick={() => setIsOpen(!isOpen)} size="icon" className="h-14 w-14 rounded-full shadow-lg">
           <Bot className="h-7 w-7" />
         </Button>
-      </div>
-
-      <div className={cn(
-          "fixed bottom-20 right-4 z-30 transition-all duration-300 ease-in-out",
-          !isMobile && isOpen ? "w-[380px] h-[calc(100vh-10rem)] max-h-[700px] opacity-100" : "w-0 h-0 opacity-0",
-          isMobile ? "hidden" : "block"
-      )}>
-        <Card className="h-full w-full flex flex-col shadow-2xl">
-            <div className="flex items-center justify-between border-b p-3">
-                <h3 className="font-semibold flex items-center gap-2"><Bot className="h-5 w-5 text-primary"/> Steadfast Copilot</h3>
-                <Button variant="ghost" size="icon" onClick={() => setIsOpen(false)} className="h-7 w-7">
-                    <ChevronDown className="h-5 w-5" />
-                </Button>
-            </div>
-            {copilotContent}
-        </Card>
       </div>
     </>
   );
