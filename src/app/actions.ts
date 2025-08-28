@@ -4,7 +4,7 @@ import { emotionalAICopilot } from '@/ai/flows/emotional-ai-copilot';
 import { personalizedObjectives } from '@/ai/flows/personalize-daily-objectives';
 import { generateAdaptiveHint } from '@/ai/flows/generate-adaptive-hints';
 
-export async function getAssistantResponse(message: string, chatHistory: {role: 'user' | 'assistant', content: string}[]): Promise<string> {
+export async function getAssistantResponse(message: string, chatHistory: {role: 'user' | 'assistant', content: string}[], pathname: string): Promise<string> {
   const isHintRequest = /hint|stuck|help/i.test(message);
 
   if (isHintRequest) {
@@ -29,7 +29,7 @@ export async function getAssistantResponse(message: string, chatHistory: {role: 
   }
 
   try {
-    const result = await emotionalAICopilot({ text: message });
+    const result = await emotionalAICopilot({ text: message, pathname });
     return result.processedText;
   } catch (error) {
     console.error('Error in emotional AI copilot:', error);

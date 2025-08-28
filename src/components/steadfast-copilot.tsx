@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
+import { usePathname } from 'next/navigation';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
@@ -71,6 +72,7 @@ const MessageBubble: React.FC<{ message: Message }> = ({ message }) => {
 
 export function SteadfastCopilot() {
   const isMobile = useIsMobile();
+  const pathname = usePathname();
   const { toast } = useToast();
   const [isOpen, setIsOpen] = useState(false);
   const [activeTab, setActiveTab] = useState('chat');
@@ -109,7 +111,7 @@ export function SteadfastCopilot() {
 
     try {
         const stringHistory = messages.map(m => ({role: m.role, content: m.content as string}));
-      const responseContent = await getAssistantResponse(input, stringHistory);
+      const responseContent = await getAssistantResponse(input, stringHistory, pathname);
       const assistantMessage: Message = {
         id: `assistant-${Date.now()}`,
         role: 'assistant',
@@ -158,7 +160,7 @@ export function SteadfastCopilot() {
                                 </CardHeader>
                                 <CardContent>
                                     <p className="text-muted-foreground">
-                                        How can I help you learn today? Ask a question or type 'hint' if you're stuck.
+                                        How can I help you with the {pathname === '/' ? 'dashboard' : pathname.substring(1)}? Ask a question or type 'hint' if you're stuck.
                                     </p>
                                 </CardContent>
                             </Card>
