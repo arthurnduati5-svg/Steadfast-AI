@@ -4,17 +4,17 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
-import { Card, CardContent } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Textarea } from '@/components/ui/textarea';
-import { Bot, Check, ChevronDown, History, MessageSquare, Send, Sparkles, User, Loader2, Lightbulb } from 'lucide-react';
-import type { Message, ChatSession, DailyObjective } from '@/lib/types';
-import { getAssistantResponse, getDailyObjectives } from '@/app/actions';
+import { Bot, ChevronDown, History, MessageSquare, Send, User, Loader2, Lightbulb } from 'lucide-react';
+import type { Message, ChatSession } from '@/lib/types';
+import { getAssistantResponse } from '@/app/actions';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 
 const mockHistory: ChatSession[] = [
   {
@@ -77,11 +77,9 @@ export function SteadfastCopilot() {
   
   const [messages, setMessages] = useState<Message[]>([]);
   const [history, setHistory] = useState<ChatSession[]>(mockHistory);
-  const [objectives, setObjectives] = useState<DailyObjective[]>([]);
   
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [isLoadingObjectives, setIsLoadingObjectives] = useState(true);
 
   const scrollAreaRef = useRef<HTMLDivElement>(null);
 
@@ -93,27 +91,6 @@ export function SteadfastCopilot() {
       }, 100);
     }
   }, [messages, activeTab]);
-
-  useEffect(() => {
-    async function fetchObjectives() {
-      setIsLoadingObjectives(true);
-      try {
-        const fetchedObjectives = await getDailyObjectives();
-        setObjectives(
-          fetchedObjectives.map((q, i) => ({ id: `obj-${i}`, question: q, isCompleted: false }))
-        );
-      } catch (e) {
-        toast({
-          variant: "destructive",
-          title: "Error",
-          description: "Could not load daily objectives.",
-        });
-      } finally {
-        setIsLoadingObjectives(false);
-      }
-    }
-    fetchObjectives();
-  }, [toast]);
 
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -163,10 +140,6 @@ export function SteadfastCopilot() {
     })
   };
 
-  const toggleObjective = (id: string) => {
-    setObjectives(objectives.map(obj => obj.id === id ? {...obj, isCompleted: !obj.isCompleted} : obj));
-  };
-
   const copilotContent = (
     <div className="flex h-full flex-col">
       <Tabs value={activeTab} onValueChange={setActiveTab} className="flex flex-1 flex-col">
@@ -179,35 +152,16 @@ export function SteadfastCopilot() {
                 <ScrollArea className="flex-1" ref={scrollAreaRef}>
                     <div className="p-4 space-y-6">
                         {messages.length === 0 ? (
-                             <Card className="bg-muted/50">
-                                <CardContent className="p-4">
-                                    <Accordion type="single" collapsible defaultValue="item-1">
-                                    <AccordionItem value="item-1">
-                                        <AccordionTrigger className="font-semibold">
-                                            <div className="flex items-center gap-2">
-                                                <Sparkles className="h-5 w-5 text-accent" /> Your Daily Objectives
-                                            </div>
-                                        </AccordionTrigger>
-                                        <AccordionContent className="pt-2">
-                                        {isLoadingObjectives ? <div className="flex items-center gap-2 text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin"/>Loading objectives...</div> : (
-                                            <ul className="space-y-3">
-                                                {objectives.map(obj => (
-                                                    <li key={obj.id} className="flex items-start gap-3">
-                                                        <button onClick={() => toggleObjective(obj.id)} className="mt-1">
-                                                            <div className={cn("h-5 w-5 rounded-full border-2 flex items-center justify-center transition-all", obj.isCompleted ? 'border-primary bg-primary' : 'border-muted-foreground')}>
-                                                                {obj.isCompleted && <Check className="h-3 w-3 text-primary-foreground" />}
-                                                            </div>
-                                                        </button>
-                                                        <span className={cn("flex-1 text-sm text-muted-foreground", obj.isCompleted && "line-through")}>{obj.question}</span>
-                                                    </li>
-                                                ))}
-                                            </ul>
-                                        )}
-                                        </AccordionContent>
-                                    </AccordionItem>
-                                    </Accordion>
+                            <Card className="bg-muted/50 text-center">
+                                <CardHeader>
+                                    <CardTitle>Welcome!</CardTitle>
+                                </CardHeader>
+                                <CardContent>
+                                    <p className="text-muted-foreground">
+                                        How can I help you learn today? Ask a question or type 'hint' if you're stuck.
+                                    </p>
                                 </CardContent>
-                             </Card>
+                            </Card>
                         ) : (
                             messages.map(msg => <MessageBubble key={msg.id} message={msg} />)
                         )}
@@ -266,14 +220,9 @@ export function SteadfastCopilot() {
     </div>
   );
 
-  if (isMobile) {
-    return (
-      <Sheet open={isOpen} onOpenChange={setIsOpen}>
-        <SheetTrigger asChild>
-          <Button size="icon" className="fixed bottom-4 right-4 z-20 h-14 w-14 rounded-full shadow-lg">
-            <Bot className="h-7 w-7" />
-          </Button>
-        </SheetTrigger>
+  return (
+    <>
+      <Sheet open={isOpen && isMobile} onOpenChange={setIsOpen}>
         <SheetContent side="right" className="w-[85vw] p-0 sm:max-w-md">
             <SheetHeader className="p-4 border-b">
                 <SheetTitle className="flex items-center gap-2"><Bot className="h-5 w-5 text-primary"/> Steadfast Copilot</SheetTitle>
@@ -283,16 +232,28 @@ export function SteadfastCopilot() {
             </div>
         </SheetContent>
       </Sheet>
-    );
-  }
 
-  return (
-    <aside className="hidden lg:block w-[380px] shrink-0">
-        <div className="sticky top-[73px] h-[calc(100vh-89px)]">
-            <Card className="h-full w-full flex flex-col shadow-lg">
-                {copilotContent}
-            </Card>
-        </div>
-    </aside>
+      <div className="fixed bottom-4 right-4 z-30">
+        <Button onClick={() => setIsOpen(!isOpen)} size="icon" className="h-14 w-14 rounded-full shadow-lg">
+          <Bot className="h-7 w-7" />
+        </Button>
+      </div>
+
+      <div className={cn(
+          "fixed bottom-20 right-4 z-30 transition-all duration-300 ease-in-out",
+          !isMobile && isOpen ? "w-[380px] h-[calc(100vh-10rem)] max-h-[700px] opacity-100" : "w-0 h-0 opacity-0",
+          isMobile ? "hidden" : "block"
+      )}>
+        <Card className="h-full w-full flex flex-col shadow-2xl">
+            <div className="flex items-center justify-between border-b p-3">
+                <h3 className="font-semibold flex items-center gap-2"><Bot className="h-5 w-5 text-primary"/> Steadfast Copilot</h3>
+                <Button variant="ghost" size="icon" onClick={() => setIsOpen(false)} className="h-7 w-7">
+                    <ChevronDown className="h-5 w-5" />
+                </Button>
+            </div>
+            {copilotContent}
+        </Card>
+      </div>
+    </>
   );
 }
