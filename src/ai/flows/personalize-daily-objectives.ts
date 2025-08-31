@@ -8,8 +8,12 @@
  * - PersonalizedObjectivesOutput - The return type for the personalizedObjectives function.
  */
 
-import {ai} from '@/ai/genkit';
 import {z} from 'genkit';
+import OpenAI from 'openai';
+
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY,
+});
 
 const PersonalizedObjectivesInputSchema = z.object({
   studentPerformance: z.string().describe('The student\u2019s recent academic performance data.'),
@@ -29,29 +33,18 @@ export async function personalizedObjectives(input: PersonalizedObjectivesInput)
   return personalizedObjectivesFlow(input);
 }
 
-const prompt = ai.definePrompt({
-  name: 'personalizedObjectivesPrompt',
-  input: {schema: PersonalizedObjectivesInputSchema},
-  output: {schema: PersonalizedObjectivesOutputSchema},
-  prompt: `You are an AI assistant that creates personalized daily objectives for students.
+const personalizedObjectivesFlow = async (input: PersonalizedObjectivesInput): Promise<PersonalizedObjectivesOutput> => {
+  const systemMessage = `You are an AI assistant that creates personalized daily objectives for students.\n\n  Based on the student\'s performance, the curriculum, and any logged misconceptions, create a list of 2-5 daily objectives.\n\n  Student Performance: ${input.studentPerformance}\n  Curriculum: ${input.curriculum}\n  Logged Misconceptions: ${input.loggedMisconceptions}\n\n  Objectives:`;
 
-  Based on the student's performance, the curriculum, and any logged misconceptions, create a list of 2-5 daily objectives.
+  const completion = await openai.chat.completions.create({
+    messages: [
+      { role: 'system', content: systemMessage },
+    ],
+    model: 'gpt-4o',
+  });
 
-  Student Performance: {{{studentPerformance}}}
-  Curriculum: {{{curriculum}}}
-  Logged Misconceptions: {{{loggedMisconceptions}}}
+  const objectivesString = completion.choices[0].message.content || '';
+  const dailyObjectives = objectivesString.split('\n').filter(obj => obj.trim() !== '');
 
-  Objectives:`,
-});
-
-const personalizedObjectivesFlow = ai.defineFlow(
-  {
-    name: 'personalizedObjectivesFlow',
-    inputSchema: PersonalizedObjectivesInputSchema,
-    outputSchema: PersonalizedObjectivesOutputSchema,
-  },
-  async input => {
-    const {output} = await prompt(input);
-    return output!;
-  }
-);
+  return { dailyObjectives };
+};

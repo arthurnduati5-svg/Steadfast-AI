@@ -3,6 +3,7 @@ export type Message = {
   role: 'user' | 'assistant';
   content: React.ReactNode;
   timestamp: Date;
+  image?: { src: string; alt: string }; // Added for image uploads
 };
 
 export type ChatSession = {

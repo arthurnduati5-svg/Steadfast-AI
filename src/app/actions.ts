@@ -2,34 +2,31 @@
 
 import { emotionalAICopilot } from '@/ai/flows/emotional-ai-copilot';
 import { personalizedObjectives } from '@/ai/flows/personalize-daily-objectives';
-import { generateAdaptiveHint } from '@/ai/flows/generate-adaptive-hints';
+// The generateAdaptiveHint flow and its input type are no longer needed as the emotionalAICopilot handles all guidance.
+// import { generateAdaptiveHint } from '@/ai/flows/generate-adaptive-hints';
+// import { GenerateAdaptiveHintInput } from '@/ai/flows/generate-adaptive-hints';
+import { PersonalizedObjectivesInput } from '@/ai/flows/personalize-daily-objectives';
 
-export async function getAssistantResponse(message: string, chatHistory: {role: 'user' | 'assistant', content: string}[], pathname: string): Promise<string> {
-  const isHintRequest = /hint|stuck|help/i.test(message);
 
-  if (isHintRequest) {
-    try {
-      const result = await generateAdaptiveHint({
-        problemDescription: 'Student is working on Algebra 1, solving linear equations like "2x - 5 = 11".',
-        studentProgress: `Previous conversation: ${chatHistory.map(m => `${m.role}: ${m.content}`).join('\n')}\n\nCurrent query: ${message}`,
-        hintLadder: [
-          'Remember to perform the same operation on both sides to keep the equation balanced. What should be the first step?',
-          'Think about isolating the term with the variable (x) first. How can you undo the subtraction of 5?',
-          'Try adding 5 to both sides of the equation. What does that give you?',
-          'After adding 5 to both sides, you get 2x = 16. What is the final step to solve for x?',
-          'Divide both sides by 2 to find the value of x. The answer is x = 8.'
-        ],
-        currentHintIndex: 0,
-      });
-      return result.hint;
-    } catch (error) {
-      console.error('Error generating adaptive hint:', error);
-      return 'I had trouble generating a hint. Could you try rephrasing your question?';
-    }
-  }
+export async function getAssistantResponse(
+  message: string,
+  chatHistory: {role: 'user' | 'assistant', content: string}[],
+  pathname: string,
+  // All hint-related parameters are removed as emotionalAICopilot now handles this internally.
+  fileDataBase64: { type: string; base64: string } | undefined,
+): Promise<string> {
+  // The isHintRequest logic is no longer needed as emotionalAICopilot will decide how to respond.
+  // For simplicity, multimodal input is currently only handled by emotionalAICopilot.
 
   try {
-    const result = await emotionalAICopilot({ text: message, pathname });
+    // Pass the message, pathname, and fileDataBase64 to the emotionalAICopilot.
+    // The chat history can be included in the 'text' to provide context to the AI.
+    // The AI's prompt in emotionalAICopilot.ts is now designed to handle the full conversation context.
+    const result = await emotionalAICopilot({ 
+      text: chatHistory.map(m => `${m.role}: ${m.content}`).join('\n') + '\n' + `user: ${message}`,
+      pathname,
+      fileDataBase64 
+    });
     return result.processedText;
   } catch (error) {
     console.error('Error in emotional AI copilot:', error);
@@ -37,13 +34,19 @@ export async function getAssistantResponse(message: string, chatHistory: {role: 
   }
 }
 
-export async function getDailyObjectives(): Promise<string[]> {
+export async function getDailyObjectives(
+  // Parameters for personalizedObjectives - these should come from your application's state/database
+  studentPerformance: string,
+  curriculum: string,
+  loggedMisconceptions: string,
+): Promise<string[]> {
   try {
-    const result = await personalizedObjectives({
-      studentPerformance: 'Student is excelling in basic algebra but struggles with word problems and applying concepts.',
-      curriculum: 'Today’s lesson is on applying linear equations to real-world scenarios.',
-      loggedMisconceptions: 'Difficulty in translating written descriptions into mathematical equations.',
-    });
+    const objectivesInput: PersonalizedObjectivesInput = {
+      studentPerformance, // This should be the actual student's performance
+      curriculum, // This should be the actual curriculum
+      loggedMisconceptions, // This should be the actual logged misconceptions for the student
+    };
+    const result = await personalizedObjectives(objectivesInput);
     return result.dailyObjectives;
   } catch (error) {
     console.error('Error getting daily objectives:', error);

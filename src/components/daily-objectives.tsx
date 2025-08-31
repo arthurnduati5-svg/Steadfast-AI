@@ -18,7 +18,12 @@ export function DailyObjectives() {
         async function fetchObjectives() {
           setIsLoadingObjectives(true);
           try {
-            const fetchedObjectives = await getDailyObjectives();
+            // TODO: Replace with actual dynamic data from student's profile or backend
+            const studentPerformance = 'Student is excelling in basic algebra but struggles with word problems and applying concepts.';
+            const curriculum = 'Today’s lesson is on applying linear equations to real-world scenarios.';
+            const loggedMisconceptions = 'Difficulty in translating written descriptions into mathematical equations.';
+
+            const fetchedObjectives = await getDailyObjectives(studentPerformance, curriculum, loggedMisconceptions);
             setObjectives(
               fetchedObjectives.map((q, i) => ({ id: `obj-${i}`, question: q, isCompleted: false }))
             );

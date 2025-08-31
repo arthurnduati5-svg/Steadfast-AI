@@ -14,18 +14,19 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Textarea } from '@/components/ui/textarea';
-import { Bot, History, MessageSquare, Send, User, Loader2 } from 'lucide-react';
+import { Bot, History, MessageSquare, Send, User, Loader2, Plus, Paperclip, X } from 'lucide-react';
 import type { Message, ChatSession } from '@/lib/types';
 import { getAssistantResponse } from '@/app/actions';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'; // Added Tooltip imports
 
 const mockHistory: ChatSession[] = [
   {
     id: 'session1',
     topic: 'Solving for X',
-    date: '2024-07-28',
+    date: new Date().toISOString().split('T')[0],
     messages: [
       { id: '1', role: 'user', content: 'how do i solve 2x - 5 = 11?', timestamp: new Date() },
       { id: '2', role: 'assistant', content: 'Great question! To solve for x, you want to get it by itself on one side of the equation. What do you think the first step is?', timestamp: new Date() },
@@ -34,7 +35,7 @@ const mockHistory: ChatSession[] = [
   {
     id: 'session2',
     topic: 'Fractions',
-    date: '2024-07-27',
+    date: new Date(Date.now() - 86400000).toISOString().split('T')[0], // Yesterday
     messages: [
       { id: '1', role: 'user', content: 'im stuck on adding 1/2 and 1/4', timestamp: new Date() },
       { id: '2', role: 'assistant', content: 'No problem! To add fractions, they need a common denominator. Can you find one for 2 and 4?', timestamp: new Date() },
@@ -45,9 +46,12 @@ const mockHistory: ChatSession[] = [
 const MessageBubble: React.FC<{ message: Message }> = ({ message }) => {
     const isUser = message.role === 'user';
     return (
-      <div className={cn('flex items-start gap-3', isUser ? 'justify-end' : 'justify-start')}>
+      <div className={cn(
+        'flex items-start gap-3 w-full',
+        isUser ? 'justify-end' : 'justify-start'
+      )}>
         {!isUser && (
-            <Avatar className="h-8 w-8">
+            <Avatar className="h-8 w-8 flex-shrink-0">
                 <AvatarFallback className="bg-primary text-primary-foreground">
                 <Bot className="h-5 w-5" />
                 </AvatarFallback>
@@ -55,16 +59,20 @@ const MessageBubble: React.FC<{ message: Message }> = ({ message }) => {
         )}
         <div
           className={cn(
-            'max-w-xs rounded-2xl px-4 py-2.5 text-sm lg:max-w-md',
+            'max-w-[75%] rounded-2xl px-4 py-2.5 text-sm break-words overflow-hidden min-w-0 flex-grow-0 flex-shrink', 
             isUser
               ? 'rounded-br-none bg-primary text-primary-foreground'
               : 'rounded-bl-none bg-muted'
           )}
         >
           {message.content}
+          {message.image && (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={message.image.src} alt={message.image.alt} className="mt-2 max-w-full rounded-md" />
+          )}
         </div>
         {isUser && (
-            <Avatar className="h-8 w-8">
+            <Avatar className="h-8 w-8 flex-shrink-0">
                 <AvatarFallback>
                 <User className="h-5 w-5" />
                 </AvatarFallback>
@@ -73,6 +81,9 @@ const MessageBubble: React.FC<{ message: Message }> = ({ message }) => {
       </div>
     );
   };
+
+  const MAX_FILE_SIZE_MB = 5;
+  const MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024; // 5MB
 
 export function SteadfastCopilot() {
   const pathname = usePathname();
@@ -85,6 +96,10 @@ export function SteadfastCopilot() {
   
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [studentName, setStudentName] = useState('Student'); // Placeholder for student's name
+  const [displayedWelcomeText, setDisplayedWelcomeText] = useState('');
 
   const scrollAreaRef = useRef<HTMLDivElement>(null);
 
@@ -98,6 +113,25 @@ export function SteadfastCopilot() {
   }, [pathname]);
 
   useEffect(() => {
+    if (activeTab === 'chat' && messages.length === 0 && isOpen) {
+      const fullText = `Hello ${studentName}, how can I help you?`;
+      let i = 0;
+      const typingInterval = setInterval(() => {
+        setDisplayedWelcomeText(fullText.substring(0, i));
+        i++;
+        if (i > fullText.length) {
+          clearInterval(typingInterval);
+        }
+      }, 50); // Adjust typing speed here
+
+      return () => clearInterval(typingInterval);
+    } else if (messages.length > 0) {
+      // Reset welcome text if messages are present
+      setDisplayedWelcomeText(''); 
+    }
+  }, [activeTab, messages, isOpen, studentName]);
+
+  useEffect(() => {
     if (activeTab === 'chat' && messages.length > 0) {
       setTimeout(() => {
         const viewport = scrollAreaRef.current?.querySelector('[data-radix-scroll-area-viewport]');
@@ -106,41 +140,130 @@ export function SteadfastCopilot() {
     }
   }, [messages, activeTab]);
 
+  const handleNewChat = () => {
+    // If there are messages, save the current session to history
+    if (messages.length > 0) {
+      const firstUserMessage = messages.find(m => m.role === 'user');
+      const topicContent = firstUserMessage && typeof firstUserMessage.content === 'string' 
+        ? firstUserMessage.content 
+        : 'Chat Session';
+
+      const newSession: ChatSession = {
+        id: `session-${Date.now()}`,
+        topic: topicContent.length > 30 ? topicContent.substring(0, 30) + '...' : topicContent,
+        date: new Date().toISOString().split('T')[0],
+        messages: [...messages],
+      };
+      setHistory(prevHistory => [newSession, ...prevHistory]);
+    }
+
+    // Reset the chat interface for the new session
+    setMessages([]);
+    setInput('');
+    setSelectedFile(null);
+    setDisplayedWelcomeText(''); // Clear welcome text for new chat animation
+    toast({
+      title: "New Chat Started",
+      description: "Your previous chat has been saved to history.",
+    });
+  };
+
+  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    if (event.target.files && event.target.files[0]) {
+      const file = event.target.files[0];
+      if (file.size > MAX_FILE_SIZE_BYTES) {
+        toast({
+          variant: "destructive",
+          title: "File Too Large",
+          description: `Please select a file smaller than ${MAX_FILE_SIZE_MB}MB.`,
+        });
+        // Clear the file input
+        if (fileInputRef.current) {
+          fileInputRef.current.value = '';
+        }
+        setSelectedFile(null);
+        return;
+      }
+      setSelectedFile(file);
+    }
+  };
+
+  const handleRemoveFile = () => {
+    setSelectedFile(null);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
+
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!input.trim() || isLoading) return;
+    if ((!input.trim() && !selectedFile) || isLoading) return;
 
-    const newUserMessage: Message = {
-      id: `user-${Date.now()}`,
-      role: 'user',
-      content: input,
-      timestamp: new Date(),
+    let fileDataBase64: { type: string, base64: string } | undefined;
+    const userMessageContent = input;
+
+    // Function to send the message, whether with file or just text
+    const sendMessageLogic = async (fileData?: { type: string; base64: string }) => {
+      const newUserMessage: Message = {
+        id: `user-${Date.now()}`,
+        role: 'user',
+        content: userMessageContent,
+        timestamp: new Date(),
+        image: fileData && selectedFile ? { src: URL.createObjectURL(selectedFile), alt: selectedFile.name } : undefined,
+      };
+
+      setMessages((prev) => [...prev, newUserMessage]);
+      setInput('');
+      setSelectedFile(null);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+      setIsLoading(true);
+
+      try {
+          const stringHistory = messages.map(m => ({role: m.role, content: m.content as string}));
+          
+          // Call getAssistantResponse with the simplified signature
+          const responseContent = await getAssistantResponse(
+              input,
+              stringHistory,
+              pathname,
+              fileData // Pass the file data here
+          );
+        const assistantMessage: Message = {
+          id: `assistant-${Date.now()}`,
+          role: 'assistant',
+          content: responseContent,
+          timestamp: new Date(),
+        };
+        setMessages((prev) => [...prev, assistantMessage]);
+      } catch (error) {
+        console.error("Error sending message or getting AI response:", error);
+        const errorMessage: Message = {
+          id: `assistant-error-${Date.now()}`,
+          role: 'assistant',
+          content: "Sorry, I encountered an error. Please try again.",
+          timestamp: new Date(),
+        };
+        setMessages((prev) => [...prev, errorMessage]);
+      } finally {
+        setIsLoading(false);
+      }
     };
 
-    setMessages((prev) => [...prev, newUserMessage]);
-    setInput('');
-    setIsLoading(true);
-
-    try {
-        const stringHistory = messages.map(m => ({role: m.role, content: m.content as string}));
-      const responseContent = await getAssistantResponse(input, stringHistory, pathname);
-      const assistantMessage: Message = {
-        id: `assistant-${Date.now()}`,
-        role: 'assistant',
-        content: responseContent,
-        timestamp: new Date(),
+    if (selectedFile) {
+      const reader = new FileReader();
+      reader.readAsDataURL(selectedFile);
+      reader.onloadend = () => {
+        const base64String = reader.result?.toString().split(',')[1];
+        const fileType = selectedFile.type;
+        if (base64String) {
+          fileDataBase64 = { type: fileType, base64: base64String };
+        }
+        sendMessageLogic(fileDataBase64);
       };
-      setMessages((prev) => [...prev, assistantMessage]);
-    } catch (error) {
-      const errorMessage: Message = {
-        id: `assistant-error-${Date.now()}`,
-        role: 'assistant',
-        content: "Sorry, I encountered an error. Please try again.",
-        timestamp: new Date(),
-      };
-      setMessages((prev) => [...prev, errorMessage]);
-    } finally {
-      setIsLoading(false);
+    } else {
+      sendMessageLogic();
     }
   };
 
@@ -151,28 +274,36 @@ export function SteadfastCopilot() {
     toast({
         title: "Chat history loaded",
         description: `Continuing conversation about "${session.topic}".`,
-    })
+    });
   };
 
   const copilotContent = (
     <div className="flex h-full flex-col">
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="flex flex-1 flex-col">
+      {/* Moved DialogHeader here to be above Tabs */}
+      <DialogHeader className="p-4 border-b flex flex-row items-center justify-between">
+          <DialogTitle className="flex items-center gap-2"><Bot className="h-5 w-5 text-primary"/> Steadfast AI</DialogTitle> {/* Changed name here */}
+          <Button variant="outline" size="sm" onClick={handleNewChat} className="text-sm">
+            <Plus className="h-4 w-4 mr-1" /> New Chat
+          </Button>
+      </DialogHeader>
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="flex flex-1 flex-col min-h-0">
         <TabsList className="grid w-full grid-cols-2">
           <TabsTrigger value="chat"><MessageSquare className="mr-2 h-4 w-4" />Chat</TabsTrigger>
           <TabsTrigger value="history"><History className="mr-2 h-4 w-4" />History</TabsTrigger>
         </TabsList>
-        <TabsContent value="chat" className="mt-0 flex-1 flex-col border-0 p-0 outline-none">
+        <TabsContent value="chat" className="mt-0 flex-1 flex flex-col border-0 p-0 outline-none min-h-0">
             <div className="flex h-full flex-col">
+                {/* Removed DialogHeader from here */}
                 <ScrollArea className="flex-1" ref={scrollAreaRef}>
                     <div className="p-4 space-y-6">
                         {messages.length === 0 ? (
                             <Card className="bg-muted/50 text-center">
                                 <CardHeader>
-                                    <CardTitle>Welcome!</CardTitle>
+                                    <CardTitle>Hello {studentName}</CardTitle> {/* Personalized greeting */}
                                 </CardHeader>
                                 <CardContent>
                                     <p className="text-muted-foreground">
-                                        How can I help you with the {pathname === '/' ? 'dashboard' : pathname.substring(1)}? Ask a question or type 'hint' if you're stuck.
+                                        {displayedWelcomeText} {/* Typing animation text */}
                                     </p>
                                 </CardContent>
                             </Card>
@@ -182,10 +313,22 @@ export function SteadfastCopilot() {
                     </div>
                 </ScrollArea>
                 <div className="border-t bg-background p-4">
+                    {selectedFile && (
+                        <div className="flex items-center justify-between rounded-md bg-muted px-3 py-2 text-sm mb-2">
+                            <div className="flex items-center gap-2">
+                                <Paperclip className="h-4 w-4 text-muted-foreground" />
+                                <span>{selectedFile.name}</span>
+                            </div>
+                            <Button variant="ghost" size="icon" onClick={handleRemoveFile} className="h-7 w-7">
+                                <X className="h-4 w-4" />
+                                <span className="sr-only">Remove file</span>
+                            </Button>
+                        </div>
+                    )}
                     <form onSubmit={handleSendMessage} className="relative">
                     <Textarea
                         placeholder="Ask a question or type 'hint'..."
-                        className="min-h-[48px] w-full resize-none rounded-2xl border-border bg-muted p-3 pr-16"
+                        className="min-h-[48px] w-full resize-none rounded-2xl border-border bg-muted p-3 pr-24"
                         value={input}
                         onChange={(e) => setInput(e.target.value)}
                         onKeyDown={(e) => {
@@ -195,10 +338,23 @@ export function SteadfastCopilot() {
                         }}
                         disabled={isLoading}
                     />
-                    <Button type="submit" size="icon" className="absolute bottom-2 right-2 h-9 w-9" disabled={isLoading || !input.trim()}>
-                        {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-                        <span className="sr-only">Send</span>
-                    </Button>
+                    <input
+                        type="file"
+                        ref={fileInputRef}
+                        onChange={handleFileChange}
+                        className="hidden"
+                        accept="image/*, .pdf, .doc, .docx"
+                    />
+                    <div className="absolute bottom-2 right-2 flex gap-1">
+                        <Button type="button" size="icon" variant="ghost" className="h-9 w-9" onClick={() => fileInputRef.current?.click()}>
+                            <Paperclip className="h-4 w-4" />
+                            <span className="sr-only">Attach file</span>
+                        </Button>
+                        <Button type="submit" size="icon" className="h-9 w-9" disabled={isLoading || (!input.trim() && !selectedFile)}>
+                            {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+                            <span className="sr-only">Send</span>
+                        </Button>
+                    </div>
                     </form>
                 </div>
             </div>
@@ -237,10 +393,7 @@ export function SteadfastCopilot() {
   return (
     <>
       <Dialog open={isOpen} onOpenChange={setIsOpen}>
-        <DialogContent className="p-0 h-[70vh] max-w-[90vw] sm:max-w-lg flex flex-col">
-            <DialogHeader className="p-4 border-b">
-                <DialogTitle className="flex items-center gap-2"><Bot className="h-5 w-5 text-primary"/> Steadfast Copilot</DialogTitle>
-            </DialogHeader>
+        <DialogContent className="p-0 h-[70vh] max-w-[90vw] sm:max-w-lg flex flex-col [&>button]:hidden">
             <div className="flex-1 min-h-0">
                 {copilotContent}
             </div>
@@ -248,9 +401,18 @@ export function SteadfastCopilot() {
       </Dialog>
 
       <div className="fixed bottom-4 right-4 z-30">
-        <Button onClick={() => setIsOpen(!isOpen)} size="icon" className="h-14 w-14 rounded-full shadow-lg">
-          <Bot className="h-7 w-7" />
-        </Button>
+        <TooltipProvider> 
+          <Tooltip> 
+            <TooltipTrigger asChild> 
+              <Button onClick={() => setIsOpen(!isOpen)} size="icon" className="h-14 w-14 rounded-full shadow-lg">
+                <MessageSquare className="h-7 w-7" /> 
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent> 
+              <p>Chat with Steadfast AI</p>
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
       </div>
     </>
   );
