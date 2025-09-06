@@ -1,0 +1,80 @@
+
+.youtube-player {
+    position: relative;
+    width: 100%;
+    padding-top: 56.25%; /* 16:9 Aspect Ratio for the embedded player */
+    border-radius: 1rem; 
+    overflow: hidden; 
+}
+
+.youtube-iframe {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+}
+
+/* Fullscreen mode styles */
+.youtube-player.fullscreen {
+    position: fixed !important; 
+    top: 0 !important;
+    left: 0 !important;
+    width: 100vw !important; 
+    height: 100vh !important; 
+    z-index: 9999 !important; 
+    background-color: black !important;
+    padding-top: 0 !important; 
+    border-radius: 0 !important;
+    margin: 0 !important; 
+}
+
+.youtube-player.fullscreen .youtube-iframe {
+    width: 100% !important;
+    height: 100% !important;
+}
+
+/* Mini-player mode styles */
+.youtube-player.mini-player {
+    position: fixed !important; 
+    bottom: 20px !important; 
+    right: 20px !important; 
+    width: 400px !important; 
+    height: 225px !important; 
+    padding-top: 0 !important; 
+    z-index: 9998 !important; 
+    border-radius: 0.5rem !important; 
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2); 
+}
+
+.youtube-player.mini-player .youtube-iframe {
+    width: 100% !important;
+    height: 100% !important;
+}
+
+/* Theater mode styles */
+.youtube-player.theater-mode {
+    width: 100% !important;
+    max-width: 100% !important;
+    padding-top: 56.25%;
+    margin: 1rem 0;
+    border-radius: 0.5rem !important;
+}
+
+.video-controls {
+    position: absolute;
+    bottom: 8px;
+    right: 8px;
+    z-index: 10;
+    display: flex;
+    gap: 4px; 
+}
+
+.fullscreen-button, .mini-player-button, .theater-mode-button {
+    background-color: rgba(0, 0, 0, 0.6); 
+    color: white; 
+}
+
+.fullscreen-button:hover, .mini-player-button:hover, .theater-mode-button:hover {
+    background-color: rgba(0, 0, 0, 0.8); 
+}

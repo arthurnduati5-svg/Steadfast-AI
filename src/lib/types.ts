@@ -1,9 +1,18 @@
+import { ReactNode } from 'react';
+
+export type VideoData = {
+  id: string;
+  title: string;
+  channel?: string;
+};
+
 export type Message = {
   id: string;
   role: 'user' | 'assistant';
-  content: React.ReactNode;
+  content: string; 
   timestamp: Date;
-  image?: { src: string; alt: string }; // Added for image uploads
+  image?: { src: string; alt: string }; 
+  videoData?: VideoData; // New: Optional video data for suggested videos
 };
 
 export type ChatSession = {
