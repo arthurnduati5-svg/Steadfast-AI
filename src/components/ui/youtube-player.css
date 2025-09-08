@@ -4,7 +4,8 @@
     width: 100%;
     padding-top: 56.25%; /* 16:9 Aspect Ratio for the embedded player */
     border-radius: 1rem; 
-    overflow: hidden; 
+    overflow: hidden;
+    background-color: #000; /* Black background for letterboxing */
 }
 
 .youtube-iframe {
@@ -15,36 +16,17 @@
     height: 100%;
 }
 
-/* Fullscreen mode styles */
-.youtube-player.fullscreen {
-    position: fixed !important; 
-    top: 0 !important;
-    left: 0 !important;
-    width: 100vw !important; 
-    height: 100vh !important; 
-    z-index: 9999 !important; 
-    background-color: black !important;
-    padding-top: 0 !important; 
-    border-radius: 0 !important;
-    margin: 0 !important; 
-}
-
-.youtube-player.fullscreen .youtube-iframe {
-    width: 100% !important;
-    height: 100% !important;
-}
-
 /* Mini-player mode styles */
 .youtube-player.mini-player {
     position: fixed !important; 
     bottom: 20px !important; 
     right: 20px !important; 
-    width: 400px !important; 
-    height: 225px !important; 
+    width: 500px !important; /* Larger width for comfortable viewing */
+    height: 281px !important; /* 16:9 aspect ratio for 500px width */
     padding-top: 0 !important; 
     z-index: 9998 !important; 
     border-radius: 0.5rem !important; 
-    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2); 
+    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.4); /* Enhanced shadow for floating effect */
 }
 
 .youtube-player.mini-player .youtube-iframe {
@@ -52,29 +34,36 @@
     height: 100% !important;
 }
 
-/* Theater mode styles */
-.youtube-player.theater-mode {
-    width: 100% !important;
-    max-width: 100% !important;
-    padding-top: 56.25%;
-    margin: 1rem 0;
-    border-radius: 0.5rem !important;
-}
-
 .video-controls {
     position: absolute;
-    bottom: 8px;
+    /* Position at top right to avoid conflict with native controls at bottom */
+    top: 8px;
     right: 8px;
     z-index: 10;
     display: flex;
-    gap: 4px; 
+    gap: 4px;
+    opacity: 0; /* Hidden by default */
+    transition: opacity 0.2s ease-in-out;
 }
 
-.fullscreen-button, .mini-player-button, .theater-mode-button {
-    background-color: rgba(0, 0, 0, 0.6); 
-    color: white; 
+.youtube-player:hover .video-controls {
+    opacity: 1; /* Show on hover */
 }
 
-.fullscreen-button:hover, .mini-player-button:hover, .theater-mode-button:hover {
-    background-color: rgba(0, 0, 0, 0.8); 
+.video-controls Button {
+    background-color: rgba(0, 0, 0, 0.6) !important; 
+    color: white !important;
+    border-radius: 50%; /* Circular button */
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
 }
+
+.video-controls Button:hover {
+    background-color: rgba(0, 0, 0, 0.8) !important; 
+}
+
+/* The native YouTube controls will appear at the bottom on hover. 
+   Our custom mini-player button is at the top, so they will not conflict. */

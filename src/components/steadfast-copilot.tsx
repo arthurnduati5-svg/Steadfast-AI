@@ -60,16 +60,19 @@ const mockHistory: ChatSession[] = [
         <div
           className={cn(
             'max-w-[75%] rounded-2xl px-4 py-2.5 text-sm break-words overflow-hidden min-w-0 flex-grow-0 flex-shrink',
-            isUser ? 'rounded-br-none bg-primary text-primary-foreground' : 'rounded-bl-none bg-muted',
-            hasVideo ? 'p-2' : ''
+            isUser 
+              ? 'rounded-br-none bg-primary text-primary-foreground' 
+              : 'rounded-bl-none bg-muted',
+            // Ensure enough space for video player without fixed width, let YouTube handle responsiveness
+            hasVideo ? 'p-0' : '' 
           )}
         >
-          {/* Always render text content */}
-          {message.content}
+          {/* Always render text content if it exists */}
+          {message.content && <p className={cn('mb-2', hasVideo ? 'p-2' : '')}>{message.content}</p>}
           
           {/* Render the video player if videoData is present */}
           {hasVideo && message.videoData && (
-            <div className="mt-2">
+            <div className="mt-0">
               <YouTubePlayer videoId={message.videoData.id} />
               <p className="text-xs text-muted-foreground mt-2 px-2">{message.videoData.title}</p>
             </div>
@@ -89,7 +92,7 @@ const mockHistory: ChatSession[] = [
         )}
       </div>
     );
-  };
+};
 
   const MAX_FILE_SIZE_MB = 5;
   const MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024; // 5MB
@@ -170,11 +173,29 @@ export function SteadfastCopilot() {
   };
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    // ... file change logic remains the same
+    if (event.target.files && event.target.files[0]) {
+      const file = event.target.files[0];
+      if (file.size > MAX_FILE_SIZE_BYTES) {
+        toast({
+          variant: "destructive",
+          title: "File Too Large",
+          description: `Please select a file smaller than ${MAX_FILE_SIZE_MB}MB.`,
+        });
+        if (fileInputRef.current) {
+          fileInputRef.current.value = '';
+        }
+        setSelectedFile(null);
+        return;
+      }
+      setSelectedFile(file);
+    }
   };
 
   const handleRemoveFile = () => {
-    // ... remove file logic remains the same
+    setSelectedFile(null);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
   };
 
   const handleSendMessage = async (e: React.FormEvent) => {
@@ -182,26 +203,38 @@ export function SteadfastCopilot() {
     const userInput = input;
     if ((!userInput.trim() && !selectedFile) || isLoading) return;
 
+    let fileDataBase64: { type: string, base64: string } | undefined;
+
     const newUserMessage: Message = {
       id: `user-${Date.now()}`,
       role: 'user',
       content: userInput,
       timestamp: new Date(),
+      image: selectedFile ? { src: URL.createObjectURL(selectedFile), alt: selectedFile.name } : undefined,
     };
     
     const updatedMessages = [...messages, newUserMessage];
     setMessages(updatedMessages);
     setInput('');
+    setSelectedFile(null); // Clear selected file after sending
+    if (fileInputRef.current) {
+      fileInputRef.current.value = ''; // Clear file input element
+    }
     setIsLoading(true);
 
-    try {
-        const chatHistory = messages.map(m => ({role: m.role, content: m.content as string}));
+    // Function to execute the API call and update messages
+    const executeApiCall = async (fileData?: { type: string; base64: string }) => {
+      try {
+        const stringHistory = updatedMessages.map(m => ({
+          role: m.role,
+          content: m.content
+        }));
         
         const assistantResponse = await getAssistantResponse(
           userInput,
-          chatHistory,
+          stringHistory,
           pathname,
-          undefined // Placeholder for file data
+          fileData
         );
       
         const assistantMessage: Message = {
@@ -211,18 +244,34 @@ export function SteadfastCopilot() {
             videoData: assistantResponse.videoData,
             timestamp: new Date(),
         };
-      setMessages((prev) => [...prev, assistantMessage]);
-    } catch (error) {
-      console.error("Error sending message or getting AI response:", error);
-      const errorMessage: Message = {
-        id: `assistant-error-${Date.now()}`,
-        role: 'assistant',
-        content: "Sorry, I encountered an error. Please try again.",
-        timestamp: new Date(),
+        setMessages((prev) => [...prev, assistantMessage]);
+      } catch (error) {
+        console.error("Error sending message or getting AI response:", error);
+        const errorMessage: Message = {
+          id: `assistant-error-${Date.now()}`,
+          role: 'assistant',
+          content: "Sorry, I encountered an error. Please try again.",
+          timestamp: new Date(),
+        };
+        setMessages((prev) => [...prev, errorMessage]);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    if (selectedFile) {
+      const reader = new FileReader();
+      reader.readAsDataURL(selectedFile);
+      reader.onloadend = () => {
+        const base64String = reader.result?.toString().split(',')[1];
+        const fileType = selectedFile.type;
+        if (base64String) {
+          fileDataBase64 = { type: fileType, base64: base64String };
+        }
+        executeApiCall(fileDataBase64);
       };
-      setMessages((prev) => [...prev, errorMessage]);
-    } finally {
-      setIsLoading(false);
+    } else {
+      executeApiCall();
     }
   };
 
@@ -313,64 +362,64 @@ export function SteadfastCopilot() {
                         </Button>
                     </div>
                     </form>
-                </div>
-            </div>
-        </TabsContent>
-        <TabsContent value="history" className="mt-0 flex-1 flex-col border-0 p-0 outline-none">
-          <ScrollArea className="h-full">
-            <div className="p-4 space-y-2">
-              <Accordion type="single" collapsible>
-                {history.map(session => (
-                  <AccordionItem value={session.id} key={session.id}>
-                    <AccordionTrigger>
-                      <div>
-                        <p className="font-semibold text-left">{session.topic}</p>
-                        <p className="text-xs text-muted-foreground text-left">{session.date}</p>
-                      </div>
-                    </AccordionTrigger>
-                    <AccordionContent>
-                      <div className="space-y-2 text-sm text-muted-foreground">
-                        {session.messages.slice(0, 2).map(msg => (
-                          <p key={msg.id} className="truncate"><strong>{msg.role}:</strong> {msg.content}</p>
-                        ))}
-                        {session.messages.length > 2 && <p>...</p>}
-                      </div>
-                      <Button variant="link" className="p-0 h-auto mt-2 text-primary" onClick={() => handleContinueChat(session)}>Continue this chat</Button>
-                    </AccordionContent>
-                  </AccordionItem>
-                ))}
-              </Accordion>
-            </div>
-          </ScrollArea>
-        </TabsContent>
-      </Tabs>
-    </div>
-  );
-
-  return (
-    <>
-      <Dialog open={isOpen} onOpenChange={setIsOpen}>
-        <DialogContent className="p-0 h-[70vh] max-w-[90vw] sm:max-w-lg flex flex-col [&>button]:hidden">
-            <div className="flex-1 min-h-0">
-                {copilotContent}
-            </div>
-        </DialogContent>
-      </Dialog>
-
-      <div className="fixed bottom-4 right-4 z-30">
-        <TooltipProvider> 
-          <Tooltip> 
-            <TooltipTrigger asChild> 
-              <Button onClick={() => setIsOpen(!isOpen)} size="icon" className="h-14 w-14 rounded-full shadow-lg">
-                <MessageSquare className="h-7 w-7" /> 
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent> 
-              <p>Chat with Steadfast AI</p>
-            </TooltipContent>
-          </Tooltip>
-        </TooltipProvider>
+                  </div>
+              </div>
+          </TabsContent>
+          <TabsContent value="history" className="mt-0 flex-1 flex-col border-0 p-0 outline-none">
+            <ScrollArea className="h-full">
+              <div className="p-4 space-y-2">
+                <Accordion type="single" collapsible>
+                  {history.map(session => (
+                    <AccordionItem value={session.id} key={session.id}>
+                      <AccordionTrigger>
+                        <div>
+                          <p className="font-semibold text-left">{session.topic}</p>
+                          <p className="text-xs text-muted-foreground text-left">{session.date}</p>
+                        </div>
+                      </AccordionTrigger>
+                      <AccordionContent>
+                        <div className="space-y-2 text-sm text-muted-foreground">
+                          {session.messages.slice(0, 2).map(msg => (
+                            <p key={msg.id} className="truncate"><strong>{msg.role}:</strong> {msg.content}</p>
+                          ))}
+                          {session.messages.length > 2 && <p>...</p>}
+                        </div>
+                        <Button variant="link" className="p-0 h-auto mt-2 text-primary" onClick={() => handleContinueChat(session)}>Continue this chat</Button>
+                      </AccordionContent>
+                    </AccordionItem>
+                  ))}
+                </Accordion>
+              </div>
+            </ScrollArea>
+          </TabsContent>
+        </Tabs>
       </div>
-    </>
-  );
+    );
+  
+    return (
+      <>
+        <Dialog open={isOpen} onOpenChange={setIsOpen}>
+          <DialogContent className="p-0 h-[70vh] max-w-[90vw] sm:max-w-lg flex flex-col [&>button]:hidden">
+              <div className="flex-1 min-h-0">
+                  {copilotContent}
+              </div>
+          </DialogContent>
+        </Dialog>
+  
+        <div className="fixed bottom-4 right-4 z-30">
+          <TooltipProvider> 
+            <Tooltip> 
+              <TooltipTrigger asChild> 
+                <Button onClick={() => setIsOpen(!isOpen)} size="icon" className="h-14 w-14 rounded-full shadow-lg">
+                  <MessageSquare className="h-7 w-7" /> 
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent> 
+                <p>Chat with Steadfast AI</p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        </div>
+      </>
+    );
 }

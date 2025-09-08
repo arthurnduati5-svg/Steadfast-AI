@@ -16,8 +16,6 @@ export async function getAssistantResponse(
   fileDataBase64: { type: string; base64: string } | undefined,
 ): Promise<EmotionalAICopilotOutput> {
   try {
-    // The emotionalAICopilot flow expects a single 'text' property.
-    // We construct it from the chat history and the new message.
     const result = await emotionalAICopilot({
       text:
         chatHistory.map((m) => `${m.role}: ${m.content}`).join('\n') +
