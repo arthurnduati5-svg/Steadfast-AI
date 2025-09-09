@@ -25,7 +25,7 @@ export const webSearchFlow = defineFlow(
         z.object({
           id: z.string(),
           title: z.string(),
-          channel: z.string(), // Output always expects a string channel
+          channel: z.string().optional(), // Make channel optional in output schema
         })
       ),
     }),
@@ -37,8 +37,8 @@ export const webSearchFlow = defineFlow(
       results: response.items.map((video: YouTubeVideo) => ({
         id: video.id,
         title: video.title,
-        // Safely access channel name, providing a fallback if undefined
-        channel: video.channel?.name || 'Unknown Channel',
+        // Safely access channel name, providing undefined if not available
+        channel: video.channel?.name, 
       })),
     };
   }

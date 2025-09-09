@@ -1,0 +1,84 @@
+// backend/prisma/ai_chat_schema_snippet.prisma
+//
+// IMPORTANT: This file is a *snippet* containing only the new AI chat-related
+// Prisma models and necessary configurations to make it a valid .prisma file.
+//
+// You need to manually COPY the 'model ChatMessage' and 'model ChatSession' blocks
+// into your main 'backend/prisma/schema.prisma' file.
+//
+// Additionally, you MUST add the 'chatSessions ChatSession[]' line
+// into your existing 'StudentProfile' model in your main schema.prisma file.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL") // Include directUrl as per your provided schema
+}
+
+// =========================================================
+// START OF AI CHAT DATA MODELS (Copy these into your main schema.prisma)
+// =========================================================
+
+// This model stores individual chat messages within a session.
+// It is linked to the ChatSession model.
+model ChatMessage {
+  id            String      @id @default(uuid())
+  sessionId     String      // Foreign key to the ChatSession this message belongs to
+  chatSession   ChatSession @relation(fields: [sessionId], references: [id], onDelete: Cascade) // Cascade means if a session is deleted, its messages are too.
+  role          String      // The role of the message sender (e.g., "user", "assistant", "tool")
+  content       String      @db.Text // The actual text content of the message
+  timestamp     DateTime    @default(now()) // When the message was created
+  messageNumber Int         // A sequential number to maintain the order of messages in a session
+  metadata      Json?       // Optional: To store additional structured data like tool calls, hint levels, etc.
+
+  @@index([sessionId])     // Index for quick lookups of messages by session
+  @@index([timestamp])     // Index for ordering messages by time
+  @@map("ai_chat_messages") // Custom table name for clarity
+}
+
+// This model stores a sequence of chat interactions, representing one conversation,
+// and is directly linked to your existing StudentProfile model (via its userId).
+model ChatSession {
+  id          String         @id @default(uuid())
+  studentId   String         // Foreign key linking to the StudentProfile's userId
+  student     StudentProfile @relation(fields: [studentId], references: [userId], onDelete: Cascade) // Links to the StudentProfile via its unique userId (from User.id)
+  startTime   DateTime       @default(now()) // When the chat session began
+  endTime     DateTime?      // When the chat session ended (can be null if ongoing)
+  topic       String?        // A brief description or title for the chat session (e.g., "Simultaneous Equations Help")
+  isActive    Boolean        @default(true) // Indicates if the session is currently active or archived
+  messages    ChatMessage[]  // One-to-many relationship: a session has many messages
+  metadata    Json?          // Optional: To store session-level data, like initial context, last AI flow used, etc.
+
+  createdAt   DateTime       @default(now()) // Standard created timestamp
+  updatedAt   DateTime       @updatedAt     // Standard updated timestamp
+
+  @@index([studentId])   // Index for quickly retrieving all chat sessions for a student
+  @@index([startTime])   // Index for ordering sessions by when they started
+  @@map("ai_chat_sessions") // Custom table name for clarity
+}
+
+// =========================================================
+// END OF AI CHAT DATA MODELS
+// =========================================================
+
+
+// =========================================================
+// REQUIRED MODIFICATION FOR YOUR EXISTING StudentProfile MODEL
+// (Add this line into your existing StudentProfile model in your main schema.prisma)
+// =========================================================
+
+// model StudentProfile {
+//   // ... (all your existing fields in StudentProfile) ...
+//
+//   chatSessions ChatSession[] // <--- ADD THIS LINE to allow a student to have multiple chat sessions
+//
+//   // ... (rest of your existing fields and relations) ...
+// }
+
+// Note: The 'StudentProfile' model itself is not defined in this snippet
+// as it exists in your comprehensive schema. It's included here as a comment
+// for instructional purposes on how to link the new models.
