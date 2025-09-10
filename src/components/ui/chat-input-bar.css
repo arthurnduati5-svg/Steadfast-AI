@@ -1,0 +1,77 @@
+.chat-input-bar-container {
+    padding: 1rem;
+    border-top: 1px solid hsl(var(--border));
+    background-color: hsl(var(--background));
+  }
+  
+  .file-preview-chip {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem;
+    background-color: hsl(var(--muted));
+    border-radius: 0.5rem;
+    margin-bottom: 0.5rem;
+    font-size: 0.875rem;
+    width: fit-content;
+  }
+  
+  .file-preview-thumbnail {
+    width: 2rem;
+    height: 2rem;
+    object-fit: cover;
+    border-radius: 0.25rem;
+  }
+  
+  .remove-file-button {
+    width: 1.5rem;
+    height: 1.5rem;
+  }
+  
+  .chat-input-bar {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+  
+  .plus-button-container {
+    position: relative;
+  }
+  
+  .plus-button {
+    border-radius: 50%;
+  }
+  
+  .plus-menu {
+    position: absolute;
+    bottom: calc(100% + 0.5rem);
+    left: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    background-color: hsl(var(--popover));
+    padding: 0.5rem;
+    border-radius: 0.5rem;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  }
+  
+  .chat-textarea {
+    flex: 1;
+    resize: none;
+    border-radius: 1.5rem;
+    padding: 0.75rem 6rem 0.75rem 3.5rem;
+    min-height: 3rem;
+    background-color: hsl(var(--muted));
+  }
+  
+  .mic-button {
+    position: absolute;
+    right: 3.5rem;
+    border-radius: 50%;
+  }
+  
+  .send-button {
+    border-radius: 50%;
+  }
+  
