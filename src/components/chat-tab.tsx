@@ -9,6 +9,7 @@ import type { Message } from '@/lib/types';
 import { cn } from '@/lib/utils';
 import YouTubePlayer from './ui/youtube-player';
 import { ChatInputBar } from './chat-input-bar';
+import { ConversationState } from '@/app/actions'; // Import ConversationState
 
 const MessageBubble: React.FC<{ message: Message }> = ({ message }) => {
     const isUser = message.role === 'user';
@@ -24,8 +25,7 @@ const MessageBubble: React.FC<{ message: Message }> = ({ message }) => {
           </Avatar>
         )}
         <div
-          className={cn(
-            'max-w-[75%] rounded-2xl px-4 py-2.5 text-sm break-words overflow-hidden min-w-0 flex-grow-0 flex-shrink',
+          className={cn('w-fit max-w-[90%] md:max-w-[75%] rounded-2xl px-4 py-2.5 text-sm break-words',
             isUser 
               ? 'rounded-br-none bg-primary text-primary-foreground' 
               : 'rounded-bl-none bg-muted',
@@ -65,10 +65,19 @@ interface ChatTabProps {
     handleRemoveFile: () => void;
     input: string;
     setInput: (value: string) => void;
-    handleSendMessage: (e: React.FormEvent) => void;
+    handleSendMessage: (e: React.FormEvent, forceWebSearch: boolean, includeVideos: boolean) => void;
     isLoading: boolean;
     handleFileChange: (event: React.ChangeEvent<HTMLInputElement>) => void;
     fileInputRef: React.RefObject<HTMLInputElement>;
+    forceWebSearch: boolean;
+    setForceWebSearch: (value: boolean) => void;
+    includeVideos: boolean;
+    setIncludeVideos: (value: boolean) => void;
+    level: 'Primary' | 'LowerSecondary' | 'UpperSecondary';
+    setLevel: (value: 'Primary' | 'LowerSecondary' | 'UpperSecondary') => void;
+    languageHint: 'English' | 'Swahili mix';
+    setLanguageHint: (value: 'English' | 'Swahili mix') => void;
+    conversationState: ConversationState; // Changed to accept the ConversationState object
 }
 
 export const ChatTab: React.FC<ChatTabProps> = ({
@@ -84,11 +93,20 @@ export const ChatTab: React.FC<ChatTabProps> = ({
     isLoading,
     handleFileChange,
     fileInputRef,
+    forceWebSearch,
+    setForceWebSearch,
+    includeVideos,
+    setIncludeVideos,
+    level,
+    setLevel,
+    languageHint,
+    setLanguageHint,
+    conversationState, // Destructure conversationState
 }) => {
     return (
         <div className="flex h-full flex-col">
             <ScrollArea className="flex-1" ref={scrollAreaRef}>
-                <div className="p-4 space-y-6">
+                <div className="p-4 flex flex-col space-y-2">
                     {messages.length === 0 ? (
                         <Card className="bg-muted/50 text-center">
                             <CardHeader>
@@ -114,6 +132,14 @@ export const ChatTab: React.FC<ChatTabProps> = ({
                 handleFileChange={handleFileChange}
                 handleRemoveFile={handleRemoveFile}
                 fileInputRef={fileInputRef}
+                forceWebSearch={forceWebSearch}
+                setForceWebSearch={setForceWebSearch}
+                includeVideos={includeVideos}
+                setIncludeVideos={setIncludeVideos}
+                level={level}
+                setLevel={setLevel}
+                languageHint={languageHint}
+                setLanguageHint={setLanguageHint}
             />
         </div>
     );

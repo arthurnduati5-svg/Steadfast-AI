@@ -8,7 +8,7 @@ export type VideoData = {
 
 export type Message = {
   id: string;
-  role: 'user' | 'assistant';
+  role: 'user' | 'model'; // Changed 'assistant' to 'model'
   content: string; 
   timestamp: Date;
   image?: { src: string; alt: string }; 

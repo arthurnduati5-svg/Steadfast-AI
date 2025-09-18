@@ -29,18 +29,25 @@
   }
   
   .chat-input-bar {
-    position: relative;
     display: flex;
     align-items: center;
     gap: 0.5rem;
+    position: relative; /* Needed for positioning the search options menu relative to this bar */
   }
   
   .plus-button-container {
     position: relative;
+    flex-shrink: 0;
   }
   
   .plus-button {
     border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  .search-mode-indicator {
+    flex-shrink: 0;
+    border-radius: 50%; /* Ensure it's round like other icon buttons */
   }
   
   .plus-menu {
@@ -54,24 +61,42 @@
     padding: 0.5rem;
     border-radius: 0.5rem;
     box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    z-index: 10;
   }
   
   .chat-textarea {
     flex: 1;
     resize: none;
     border-radius: 1.5rem;
-    padding: 0.75rem 6rem 0.75rem 3.5rem;
+    padding: 0.75rem 1rem; /* Adjusted padding */
     min-height: 3rem;
     background-color: hsl(var(--muted));
   }
   
   .mic-button {
-    position: absolute;
-    right: 3.5rem;
     border-radius: 50%;
+    flex-shrink: 0;
   }
   
   .send-button {
     border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  .search-options-button {
+    flex-shrink: 0;
+    border-radius: 50%;
+  }
+  
+  .search-options-menu {
+    position: absolute;
+    bottom: calc(100% + 0.5rem); /* Position above the input bar */
+    right: 0;
+    background-color: hsl(var(--popover));
+    padding: 0.5rem;
+    border-radius: 0.5rem;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    z-index: 10;
+    min-width: 200px; /* Give it a reasonable minimum width */
   }
   

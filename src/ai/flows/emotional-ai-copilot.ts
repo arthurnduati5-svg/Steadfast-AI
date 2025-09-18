@@ -254,10 +254,11 @@ You must always act like a wise, supportive teacher in a real classroom. Never r
   
         try {
           if (functionName === 'youtube_search') {
-            const { results } = await runFlow(webSearchFlow, functionArgs);
-            console.log(`[AI-DEBUG] STEP 6: 'webSearchFlow' returned ${results.length} results.`);
-  
-            if (results.length > 0) {
+            const { results } = await runFlow(webSearchFlow, { ...functionArgs, isAnswerMode: false });
+            
+            // Fix: Check if results is defined and has elements before proceeding
+            if (results && results.length > 0) {
+              console.log(`[AI-DEBUG] STEP 6: 'webSearchFlow' returned ${results.length} results.`);
               const video = results[0];
               console.log(`[AI-DEBUG] STEP 7: Found video: "${video.title}". Embedding ID.`);
               return {
@@ -265,6 +266,7 @@ You must always act like a wise, supportive teacher in a real classroom. Never r
                 videoData: { id: video.id, title: video.title, channel: video.channel },
               };
             } else {
+              // Handle case where results is undefined or empty
               return { processedText: "I couldn’t find a video for that topic right now 😅 — but I can explain it to you myself. Shall we begin?" };
             }
           } else if (functionName === 'get_youtube_transcript') {

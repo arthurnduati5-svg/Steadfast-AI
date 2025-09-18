@@ -24,8 +24,8 @@ export default function Home() {
                   <Image 
                       src="https://picsum.photos/800/200"
                       alt="Lesson background"
-                      layout="fill"
-                      objectFit="cover"
+                      fill // Use fill prop instead of layout="fill"
+                      style={{ objectFit: 'cover' }} // Use style prop for object-fit
                       data-ai-hint="abstract education"
                   />
                     <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent" />

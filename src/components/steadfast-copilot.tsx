@@ -12,13 +12,14 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Bot, History, MessageSquare, Plus } from 'lucide-react';
 import type { Message, ChatSession } from '@/lib/types';
-import { getAssistantResponse } from '@/app/actions';
+import { getAssistantResponse, AssistantResponseOutput, ConversationState } from '@/app/actions'; // Import ConversationState
 import { useToast } from '@/hooks/use-toast';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
 // Import the new tab components
 import { ChatTab } from './chat-tab';
 import { HistoryTab } from './history-tab';
+import { Spinner } from './ui/spinner';
 
 const mockHistory: ChatSession[] = [
     {
@@ -27,7 +28,7 @@ const mockHistory: ChatSession[] = [
       date: new Date().toISOString().split('T')[0],
       messages: [
         { id: '1', role: 'user', content: 'how do i solve 2x - 5 = 11?', timestamp: new Date() },
-        { id: '2', role: 'assistant', content: 'Great question! To solve for x, you want to get it by itself on one side of the equation. What do you think the first step is?', timestamp: new Date() },
+        { id: '2', role: 'model', content: 'Great question! To solve for x, you want to get it by itself on one side of the equation. What do you think the first step is?', timestamp: new Date() },
       ],
     },
     {
@@ -36,7 +37,7 @@ const mockHistory: ChatSession[] = [
       date: new Date(Date.now() - 86400000).toISOString().split('T')[0], // Yesterday
       messages: [
         { id: '1', role: 'user', content: 'im stuck on adding 1/2 and 1/4', timestamp: new Date() },
-        { id: '2', role: 'assistant', content: 'No problem! To add fractions, they need a common denominator. Can you find one for 2 and 4?', timestamp: new Date() },
+        { id: '2', role: 'model', content: 'No problem! To add fractions, they need a common denominator. Can you find one for 2 and 4?', timestamp: new Date() },
       ],
     },
   ];
@@ -60,6 +61,21 @@ export function SteadfastCopilot() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [studentName, setStudentName] = useState('Student');
   const [displayedWelcomeText, setDisplayedWelcomeText] = useState('');
+
+  // Web Search flags, these will still be controlled by UI toggles directly.
+  const [forceWebSearch, setForceWebSearch] = useState(false);
+  const [includeVideos, setIncludeVideos] = useState(false);
+  const [level, setLevel] = useState<'Primary' | 'LowerSecondary' | 'UpperSecondary'>('Primary');
+  const [languageHint, setLanguageHint] = useState<'English' | 'Swahili mix'>('English');
+
+  // Consolidated conversation state
+  const [conversationState, setConversationState] = useState<ConversationState>({
+    researchModeActive: false,
+    lastSearchTopic: undefined,
+    awaitingPracticeQuestionConfirmation: false,
+    awaitingPracticeQuestionAnswer: false,
+    validationAttemptCount: 0,
+  });
 
   const scrollAreaRef = useRef<HTMLDivElement>(null);
 
@@ -97,6 +113,11 @@ export function SteadfastCopilot() {
     }
   }, [messages, activeTab]);
 
+  // Sync forceWebSearch with researchModeActive from the backend
+  useEffect(() => {
+    setForceWebSearch(conversationState.researchModeActive);
+  }, [conversationState.researchModeActive]);
+
   const handleNewChat = () => {
     if (messages.length > 0) {
       const firstUserMessage = messages.find(m => m.role === 'user');
@@ -114,6 +135,18 @@ export function SteadfastCopilot() {
     setInput('');
     setSelectedFile(null);
     setDisplayedWelcomeText('');
+    setForceWebSearch(false);
+    setIncludeVideos(false);
+    setLevel('Primary');
+    setLanguageHint('English');
+    // Reset the consolidated conversation state
+    setConversationState({
+      researchModeActive: false,
+      lastSearchTopic: undefined,
+      awaitingPracticeQuestionConfirmation: false,
+      awaitingPracticeQuestionAnswer: false,
+      validationAttemptCount: 0,
+    });
     toast({
       title: "New Chat Started",
       description: "Your previous chat has been saved to history.",
@@ -146,10 +179,10 @@ export function SteadfastCopilot() {
     }
   };
 
-  const handleSendMessage = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSendMessage = async (e: React.FormEvent | null, currentForceWebSearch: boolean, currentIncludeVideos: boolean) => {
+    if (e) e.preventDefault();
     const userInput = input;
-    if ((!userInput.trim() && !selectedFile) || isLoading) return;
+    if ((!userInput.trim() && !selectedFile && !currentForceWebSearch) || isLoading) return;
 
     let fileDataBase64: { type: string; base64: string } | undefined;
 
@@ -177,30 +210,45 @@ export function SteadfastCopilot() {
           content: m.content
         }));
         
-        const assistantResponse = await getAssistantResponse(
+        const assistantResponse: AssistantResponseOutput = await getAssistantResponse(
           userInput,
           stringHistory,
+          conversationState, // Pass the entire conversation state
           pathname,
-          fileData
+          fileData,
+          currentForceWebSearch,
+          currentIncludeVideos,
+          level,
+          languageHint,
         );
       
         const assistantMessage: Message = {
             id: `assistant-${Date.now()}`,
-            role: 'assistant',
+            role: 'model',
             content: assistantResponse.processedText,
             videoData: assistantResponse.videoData,
             timestamp: new Date(),
         };
         setMessages((prev) => [...prev, assistantMessage]);
+        setConversationState(assistantResponse.state); // Update with the new state from the backend
+
       } catch (error) {
         console.error("Error sending message or getting AI response:", error);
         const errorMessage: Message = {
           id: `assistant-error-${Date.now()}`,
-          role: 'assistant',
+          role: 'model',
           content: "Sorry, I encountered an error. Please try again.",
           timestamp: new Date(),
         };
         setMessages((prev) => [...prev, errorMessage]);
+        // On error, revert to a clean general state for robustness
+        setConversationState({
+          researchModeActive: false,
+          lastSearchTopic: undefined,
+          awaitingPracticeQuestionConfirmation: false,
+          awaitingPracticeQuestionAnswer: false,
+          validationAttemptCount: 0,
+        });
       } finally {
         setIsLoading(false);
       }
@@ -226,10 +274,36 @@ export function SteadfastCopilot() {
     setMessages(session.messages);
     setActiveTab('chat');
     setIsOpen(true);
+    
+    // When continuing a chat, reconstruct the conversation state based on the session.
+    let initialContinuedState: ConversationState = {
+      researchModeActive: false,
+      lastSearchTopic: undefined,
+      awaitingPracticeQuestionConfirmation: false,
+      awaitingPracticeQuestionAnswer: false,
+      validationAttemptCount: 0,
+    };
+
+    const lastBotMessage = session.messages.filter(m => m.role === 'model').pop();
+    if (lastBotMessage) {
+        // If the last bot message asked for a practice question, set the state accordingly
+        if (lastBotMessage.content.toLowerCase().includes('would you like me to give you a practice question?')) {
+            initialContinuedState.awaitingPracticeQuestionConfirmation = true;
+            // Attempt to derive lastSearchTopic from session topic or last user message
+            initialContinuedState.lastSearchTopic = session.topic; 
+            initialContinuedState.researchModeActive = true; // Assume research mode active if awaiting question
+        }
+    }
+    setConversationState(initialContinuedState);
+
     toast({
         title: "Chat history loaded",
         description: `Continuing conversation about "${session.topic}".`,
     });
+  };
+
+  const onWebSearchClick = () => {
+    setForceWebSearch(prev => !prev); // Toggle web search mode
   };
 
   const copilotContent = (
@@ -245,7 +319,7 @@ export function SteadfastCopilot() {
           <TabsTrigger value="chat"><MessageSquare className="mr-2 h-4 w-4" />Chat</TabsTrigger>
           <TabsTrigger value="history"><History className="mr-2 h-4 w-4" />History</TabsTrigger>
         </TabsList>
-        <TabsContent value="chat" className="mt-0 flex-1 flex flex-col border-0 p-0 outline-none min-h-0">
+        <TabsContent value="chat" className="mt-0 flex-1 flex-col border-0 p-0 outline-none min-h-0">
             <ChatTab 
                 messages={messages}
                 studentName={studentName}
@@ -259,6 +333,15 @@ export function SteadfastCopilot() {
                 isLoading={isLoading}
                 fileInputRef={fileInputRef}
                 handleFileChange={handleFileChange}
+                forceWebSearch={forceWebSearch}
+                setForceWebSearch={setForceWebSearch}
+                includeVideos={includeVideos}
+                setIncludeVideos={setIncludeVideos}
+                level={level}
+                setLevel={setLevel}
+                languageHint={languageHint}
+                setLanguageHint={setLanguageHint}
+                conversationState={conversationState} // Pass the consolidated state object
             />
           </TabsContent>
           <TabsContent value="history" className="mt-0 flex-1 flex-col border-0 p-0 outline-none min-h-0">
@@ -277,8 +360,9 @@ export function SteadfastCopilot() {
       <>
         <Dialog open={isOpen} onOpenChange={setIsOpen}>
           <DialogContent className="p-0 h-[70vh] max-w-[90vw] sm:max-w-lg flex flex-col [&>button]:hidden">
-              <div className="flex-1 min-h-0">
+              <div className="flex flex-col flex-1 min-h-0">
                   {copilotContent}
+              
               </div>
           </DialogContent>
         </Dialog>
