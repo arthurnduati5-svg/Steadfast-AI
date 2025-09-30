@@ -25,7 +25,11 @@ export function DailyObjectives() {
 
             const fetchedObjectives = await getDailyObjectives(studentPerformance, curriculum, loggedMisconceptions);
             setObjectives(
-              fetchedObjectives.map((q, i) => ({ id: `obj-${i}`, question: q, isCompleted: false }))
+              fetchedObjectives.map((q, i) => ({
+                id: `obj-${i}`,
+                description: q, // Changed from 'question' to 'description'
+                completed: false // Changed from 'isCompleted' to 'completed'
+              }))
             );
           } catch (e) {
             toast({
@@ -41,7 +45,7 @@ export function DailyObjectives() {
     }, [toast]);
     
     const toggleObjective = (id: string) => {
-        setObjectives(objectives.map(obj => obj.id === id ? {...obj, isCompleted: !obj.isCompleted} : obj));
+        setObjectives(objectives.map(obj => obj.id === id ? {...obj, completed: !obj.completed} : obj)); // Changed from 'isCompleted' to 'completed'
     };
 
     return (
@@ -59,11 +63,11 @@ export function DailyObjectives() {
                     {objectives.map(obj => (
                         <li key={obj.id} className="flex items-start gap-3">
                             <button onClick={() => toggleObjective(obj.id)} className="mt-1 flex-shrink-0">
-                                <div className={cn("h-5 w-5 rounded-full border-2 flex items-center justify-center transition-all", obj.isCompleted ? 'border-primary bg-primary' : 'border-muted-foreground')}>
-                                    {obj.isCompleted && <Check className="h-3 w-3 text-primary-foreground" />}
+                                <div className={cn("h-5 w-5 rounded-full border-2 flex items-center justify-center transition-all", obj.completed ? 'border-primary bg-primary' : 'border-muted-foreground')}>
+                                    {obj.completed && <Check className="h-3 w-3 text-primary-foreground" />}
                                 </div>
                             </button>
-                            <span className={cn("flex-1 text-sm text-muted-foreground", obj.isCompleted && "line-through")}>{obj.question}</span>
+                            <span className={cn("flex-1 text-sm text-muted-foreground", obj.completed && "line-through")}>{obj.description}</span>
                         </li>
                     ))}
                 </ul>

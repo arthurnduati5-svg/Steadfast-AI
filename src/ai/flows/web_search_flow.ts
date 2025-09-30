@@ -81,12 +81,6 @@ const correctResponses = [
   "That's correct! Well done!",
 ];
 
-const incorrectResponses = [
-  "Not quite 😊. That’s the gas we breathe out. Try again — which one do we breathe in?",
-  "Almost! Think about oxygen and glucose.",
-  "Good effort 👏. Want a little hint?",
-];
-
 const stuckResponses = [
   "That's okay 💙. Many students feel this way. Let me give you a hint: {hint}",
   "It's tricky, but we'll do it step by step. Here's a small clue: {hint}",
@@ -94,8 +88,8 @@ const stuckResponses = [
 ];
 
 const confirmationPrompts = [
-  "Would you like a practice question related to what we just learned about {topic}?",
-  "How about a quick practice question on {topic} to check your understanding?",
+  "Would you like a practice question on {topic}?",
+  "How about a quick question on {topic}?",
   "Ready for a question about {topic}?",
 ];
 
@@ -103,6 +97,19 @@ const confirmationPrompts = [
 function getRandomResponse(responses: string[]): string {
   return responses[Math.floor(Math.random() * responses.length)];
 }
+
+/**
+ * Aggressively cleans AI-generated text to remove all newlines and extra spaces.
+ * @param text The raw text from the AI model.
+ * @returns A clean, single-line string.
+ */
+function cleanAIText(text: string): string {
+  if (!text) return "";
+  // Replaces all newline characters (Unix, Windows, Mac) with a single space,
+  // then collapses multiple whitespace characters into a single space, and trims.
+  return text.replace(/(\r\n|\n|\r)/gm, " ").replace(/\s+/g, " ").trim();
+}
+
 
 /**
  * Normalizes kid's input to handle common non-sequiturs and insults.
@@ -135,7 +142,7 @@ function normalizeKidInput(input: string): NormalizedInputResponse {
   }
 
   const vagueKeywords = [
-    "yes", "hmmm", "idk", "i don't know", "i am unsure", "i don't understand",
+    "hmmm", "idk", "i don't know", "i am unsure", "i don't understand",
     "can you explain that again", "what does that mean", "am not sure", "i'm not sure",
     "what is the question", // Added from user's example
   ];
@@ -168,6 +175,123 @@ function getTeacherFallback(responseType: ResponseType, hint?: string): string |
       return "Okay, what would you like to search for next?";
   }
 }
+
+function validateAnswer(studentInput: string, correctAnswers: string[]): boolean {
+    const userAnswer = studentInput.trim().toLowerCase();
+    if (userAnswer.length === 0) return false;
+    // A simple validation for now, can be improved with more sophisticated checks
+    return correctAnswers.some(ans => userAnswer.includes(ans.toLowerCase()));
+}
+
+
+// Steadfast Copilot System Message for Web Search Flow
+const webSearchSystemMessage = `
+---
+## 🚨 CRITICAL FORMATTING RULES (NON-NEGOTIABLE)
+---
+- **CRITICAL:** Your entire response MUST be a single, natural block of text.
+- **MUST NOT** use double newlines (\\n\\n) or any form of line breaks.
+- **MUST NOT** use Markdown, lists, bullet points, or any special formatting.
+- **MUST** keep all sentences short and concise (1-3 sentences maximum).
+- **FAILURE TO COMPLY WILL RESULT IN AN ERROR.**
+
+You are **Steadfast Copilot AI**, a super-intelligent, warm, and patient teacher for Kenyan students (K–12, Cambridge curriculum, and beyond).
+Your mission: make learning unforgettable, precise, and adaptive — teaching like a real Kenyan classroom teacher.
+You must always be a wise, supportive teacher in a real classroom. Never robotic, never spoon-feeding.
+
+---
+## 🚨 ABSOLUTE, NON-NEGOTIABLE COMMANDS (OVERRIDE ALL OTHER RULES)
+---
+
+### TEACHING STYLE (ROBUST LOGIC)
+- Always pair everyday explanation with academic term in brackets.
+  Example: "The top number (numerator) shows parts you have. The bottom number (denominator) shows total parts."
+- Always assume student starts with zero knowledge. Begin with basics, then confirm with a guiding question.
+- Move slowly, never overload the student with responsibility too early.
+- Use step wording ("Step one, Step two") only when teaching multi-step processes, not for simple guiding questions.
+- Always check for understanding before exploring advanced branches (fractions → addition, subtraction, etc.).
+- Use simple English and short sentences.
+
+### MEMORY & SCALABILITY
+- Never lose context within a session.
+- Support 1000+ student profiles, each storing: name, grade, learning pace, strengths, weaknesses, frustrations, progress, and preferred examples.
+- Responses must adapt automatically to each profile when loaded.
+- Students can request: "Remind me what we learned yesterday about X", and you must recall from their profile.
+
+### 1. FORMATTING ISSUES
+- No Markdown, LaTeX, Code Blocks, or list-like hyphens/bullets. EVER. Output must be plain text.
+- Equations must be in symbolic form inside parentheses, named clearly (Equation one, Equation two).
+- Steps must always be named in words (Step one, Step two).
+
+### 2. LANGUAGE ISSUES
+- Always use simple classroom English.
+- Explanations must be short, clear, and memorable.
+
+### 3. TEACHING FLOW ISSUES
+- Always start with basics → local example → exam-style practice.
+- Teach one concept at a time. Never dump multiple steps.
+- End each turn with only one guiding question.
+- Never assume prior knowledge.
+
+### 4. HOMEWORK & FINAL ANSWERS
+- Never give final homework/exam answers.
+- Always stop one step before the end.
+
+### 5. EXAMPLES
+- Always use Kenyan context (mandazi, chai, matatu, football, shillings).
+
+### 6. REPETITION
+- Never repeat the same wording. Always paraphrase or reframe.
+
+### 7. STUDENT ENGAGEMENT
+- Be interactive, warm, and teacher-like.
+- Use emojis sparingly but positively (😊🎉👏✨).
+
+### 8. TOKEN ECONOMY
+- Use 1–3 sentence replies. No long paragraphs.
+
+### 9. CULTURAL + LANGUAGE
+- Respond in simple English. Be patient if student mixes Swahili/Arabic.
+
+---
+## CORE TEACHING PRINCIPLES
+- Discovery first → guide with hints.
+- Socratic method → one step, then a guiding question.
+- Teacher mode → explain clearly when student says “I don’t know”.
+- Worked examples → show full example but stop before last step.
+- Local context always.
+
+---
+## ADAPTIVE LEARNING
+- Slow learners → baby steps, celebrate effort.
+- Fast learners → give challenges.
+- Balance difficulty.
+
+---
+## EMOTIONAL HANDLING
+- If frustrated → empathy + tiny step.
+- If bored → playful example.
+- If successful → celebrate.
+- Never shame mistakes. Normalize them.
+
+---
+## HOMEWORK RULES
+- Never give full solutions. Always guide step by step.
+
+---
+## SUBJECT COVERAGE
+- Teach all subjects: Math, Science, English, History, CRE, Islamic Studies, Business, CS, etc.
+
+---
+## YOUTUBE & WEB CONTENT
+- Search only if explicitly asked.
+- Summarize in 1-3 concise sentences, simple language. Absolutely no double newlines (\\n\\n) or excessive spacing in summaries.
+- Use whitelisted sources only.
+- Never include HTML/IDs in text.
+- Practice questions and explanations must also adhere to the 1-3 sentence limit and avoid double newlines.
+
+✅ This system message applies to ALL responses in this flow.
+`;
 
 // Updated input schema for the flow to handle conversational state
 const webSearchFlowInputSchema = z.object({
@@ -244,7 +368,7 @@ export const webSearchFlow = defineFlow(
     }
 
     // Handle insults, empty, vague, off-topic inputs first, unless we're confirming a practice question
-    if (normalizedInput.type !== ResponseType.Valid && !awaitingPracticeQuestionConfirmation) {
+    if (normalizedInput.type !== ResponseType.Valid && !awaitingPracticeQuestionConfirmation && !awaitingPracticeQuestionAnswer) {
         currentResponse = getTeacherFallback(normalizedInput.type)!;
         return {
             response: currentResponse,
@@ -259,11 +383,7 @@ export const webSearchFlow = defineFlow(
         };
     }
 
-    // --- Fix 3: Guardrails for Web Search Mode ---
-    // Web search is only for initial research or explicit "search again".
-    // Once in teaching/validation flow, never search the web again.
-    const shouldPerformWebSearch = !isAnswerMode; // Only search if not in answer mode
-
+    const shouldPerformWebSearch = !isAnswerMode && !awaitingPracticeQuestionAnswer && !awaitingPracticeQuestionConfirmation;
 
     // Scenario: Confirming to start a practice question
     if (awaitingPracticeQuestionConfirmation) {
@@ -272,31 +392,30 @@ export const webSearchFlow = defineFlow(
         awaitingPracticeQuestionConfirmation = false;
         awaitingPracticeQuestionAnswer = true;
         
-        // --- Fix 1: Intelligent Practice Question Generator ---
-        // Generate a question linked to lastSearchTopic
-        if (lastSearchTopic && lastSearchTopic.toLowerCase().includes("respiration")) {
-          currentResponse = "Practice Question: Which gas do humans breathe in during respiration?";
-          correctAnswers = ["oxygen"];
-        } else if (lastSearchTopic && lastSearchTopic.toLowerCase().includes("photosynthesis")) {
-          currentResponse = "Practice Question: What gas do plants release during photosynthesis?";
-          correctAnswers = ["oxygen"];
+        if (lastSearchTopic) {
+          const questionPrompt = `Based on the summary: "${searchResultSummary || lastSearchTopic}", generate a simple, age-appropriate practice question. Also provide a comma-separated list of correct keywords for the answer. Format as: QUESTION: [question] CORRECT_ANSWERS: [answers]`;
+          const modelResponse = await ai.generate({
+            prompt: `${webSearchSystemMessage}\n\n${questionPrompt}`,
+            model: 'openai/gpt-3.5-turbo',
+          });
+          const responseText = modelResponse.text;
+          const questionMatch = responseText.match(/QUESTION:\s*(.*)/);
+          const answersMatch = responseText.match(/CORRECT_ANSWERS:\s*(.*)/);
+
+          lastQuestionAsked = cleanAIText(questionMatch ? questionMatch[1].trim() : `What is one key fact about ${lastSearchTopic}?`);
+          correctAnswers = answersMatch ? answersMatch[1].split(',').map((a: string) => a.trim().toLowerCase()) : [lastSearchTopic.toLowerCase()];
+          
+          currentResponse = lastQuestionAsked;
         } else {
-          // Fallback if topic is not specifically handled, or if lastSearchTopic is undefined
-          const questionPrompt = `Based on the summary: "${searchResultSummary || lastSearchTopic}", generate a simple, age-appropriate practice question.`;
-          const modelResponse = await ai.generate({ prompt: questionPrompt, model: 'gemini-pro' });
-          currentResponse = `Practice Question: ${modelResponse.text.trim()}`;
-          // For AI-generated questions, we might need a more sophisticated way to get correct answers,
-          // for now, a simple keyword might suffice, or we acknowledge this limitation.
-          // For simplicity in this implementation, we will expect a generic "fact" answer if not specific.
-          correctAnswers = [lastSearchTopic ? lastSearchTopic.toLowerCase() : "fact"]; // Placeholder
+            currentResponse = "Practice Question: What is the main topic we just discussed?";
+            correctAnswers = ["the main topic"];
+            lastQuestionAsked = currentResponse;
         }
-        lastQuestionAsked = currentResponse; // Store the generated question
       } else if (userConfirmation.includes("no") || userConfirmation === "nope") {
         awaitingPracticeQuestionConfirmation = false;
-        isAnswerMode = false; // Exit teaching mode if they don't want a question
+        isAnswerMode = false; 
         currentResponse = `Okay, we can skip the practice question for now. What would you like to do next? Maybe a new search?`;
       } else {
-        // --- Fix 4: Teacher-style fallback for confirmation ---
         currentResponse = getRandomResponse(vagueResponses) + " Please say 'yes' or 'no' if you want a practice question.";
       }
 
@@ -314,10 +433,8 @@ export const webSearchFlow = defineFlow(
       };
     }
 
-
-    // Scenario A: Initial Search Query
     if (shouldPerformWebSearch) {
-      lastSearchTopic = normalizedInput.content!; // Update lastSearchTopic with the new query
+      lastSearchTopic = normalizedInput.content as string; 
 
       const response = await youtubeSearch.GetListByKeyword(lastSearchTopic, false, 5, [{type: 'video'}]);
       searchResults = response.items.map((video: YouTubeVideo) => ({
@@ -326,58 +443,69 @@ export const webSearchFlow = defineFlow(
         channel: video.channel?.name,
       }));
 
-      // Summarize search results
-      const summaryPrompt = `Summarize the following video titles about "${lastSearchTopic}" into a concise paragraph suitable for a 10-year-old. Focus on key information and concepts. Also, create a simple, age-appropriate practice question based on this summary.\n\nVideo Titles:\n${searchResults.map(video => `- ${video.title}`).join('\n')}\n\nProvide the summary and then the question, clearly labeled "SUMMARY:" and "QUESTION:".`;
+      const summaryPrompt = `Summarize the following video titles about "${lastSearchTopic}" into a concise paragraph suitable for a 10-year-old. Focus on key information and concepts.\n\nVideo Titles:\n${searchResults.map(video => `- ${video.title}`).join('\n')}`;
 
       const summaryModelResponse = await ai.generate({
-        prompt: summaryPrompt,
-        model: 'gemini-pro',
+        prompt: `${webSearchSystemMessage}\n\n${summaryPrompt}`,
+        model: 'openai/gpt-3.5-turbo',
       });
       
-      const summaryText = summaryModelResponse.text;
-      const summaryMatch = summaryText.match(/SUMMARY:\s*([\s\S]*?)(?=\nQUESTION:)/);
-      const questionMatch = summaryText.match(/QUESTION:\s*([\s\S]*)/);
-
-      searchResultSummary = summaryMatch ? summaryMatch[1].trim() : "I couldn't generate a clear summary from the search results.";
-      lastQuestionAsked = questionMatch ? questionMatch[1].trim() : `Can you tell me one key fact about ${lastSearchTopic}?`;
+      searchResultSummary = cleanAIText(summaryModelResponse.text);
       
-      currentResponse = `Okay, I found some videos about "${lastSearchTopic}":\n${searchResultSummary}\n\n${getRandomResponse(confirmationPrompts).replace('{topic}', lastSearchTopic)}`;
-      isAnswerMode = true; // Enter answer mode after initial search and summary
-      awaitingPracticeQuestionConfirmation = true; // Await confirmation for practice question
-    } else if (awaitingPracticeQuestionAnswer) { // Scenario B: Student Answering a Practice Question
-        // --- Fix 2: Validation Before Moving On ---
-        const userAnswer = query.trim().toLowerCase();
-        let isCorrect = false;
-
-        if (correctAnswers.some(ans => userAnswer.includes(ans.toLowerCase()))) {
-            isCorrect = true;
-        }
+      currentResponse = `Found videos on "${lastSearchTopic}": ${searchResultSummary} ${getRandomResponse(confirmationPrompts).replace('{topic}', lastSearchTopic)}`;
+      isAnswerMode = true; 
+      awaitingPracticeQuestionConfirmation = true; 
+    } else if (awaitingPracticeQuestionAnswer) { 
+        const isCorrect = validateAnswer(query, correctAnswers);
 
         if (isCorrect) {
-          currentResponse = getRandomResponse(correctResponses);
-          awaitingPracticeQuestionAnswer = false; // Exit answer mode for this question
-          validationAttemptCount = 0; // Reset attempts
+          const explanationPrompt = `The student correctly answered the question "${lastQuestionAsked}" about "${lastSearchTopic}". Briefly explain in one short line why this concept is important.`;
+          const explanationResponse = await ai.generate({
+            prompt: `${webSearchSystemMessage}\n\n${explanationPrompt}`,
+            model: 'openai/gpt-3.5-turbo',
+          });
+          const explanation = cleanAIText(explanationResponse.text);
 
-          // Offer another question or suggest next steps (e.g., new search or deeper dive)
-          const followUpPrompt = `The student answered correctly about "${lastSearchTopic}". Based on the summary: "${searchResultSummary}", generate a new, slightly different age-appropriate practice question about the same topic, or suggest exploring a related aspect if no more simple questions are available. Conclude by asking if they want another question or to search for something new.`;
-          const followUpModelResponse = await ai.generate({ prompt: followUpPrompt, model: 'gemini-pro' });
-          currentResponse += `\n\n${followUpModelResponse.text.trim()}`;
-          lastQuestionAsked = followUpModelResponse.text.trim(); // Store the new follow-up
+          currentResponse = `Excellent 🌟 Yes, that’s it! ${explanation} Want to try another question?`;
+          
+          awaitingPracticeQuestionAnswer = false;
+          awaitingPracticeQuestionConfirmation = true;
+          validationAttemptCount = 0; 
         } else {
             validationAttemptCount++;
-            // --- Fix 4: Teacher-style fallback pool for incorrect answers ---
-            const hint = "Remember what we discussed about how humans get energy."; // Example hint
-            if (validationAttemptCount >= incorrectResponses.length) {
-              // Cycle through hints or provide a more direct one after multiple attempts
-              currentResponse = getRandomResponse(incorrectResponses); // Use a generic incorrect response
-            } else {
-              currentResponse = incorrectResponses[validationAttemptCount - 1].replace('{hint}', hint);
+            let hint = "";
+            switch (validationAttemptCount) {
+                case 1:
+                    const hintPrompt1 = `The user gave a wrong answer to "${lastQuestionAsked}". Give a constructive hint by providing an analogy to help them understand.`;
+                    const hintResponse1 = await ai.generate({
+                      prompt: `${webSearchSystemMessage}\n\n${hintPrompt1}`,
+                      model: 'openai/gpt-3.5-turbo',
+                    });
+                    hint = `Good try 👏, but that’s not quite right. ${cleanAIText(hintResponse1.text)}`;
+                    break;
+                case 2:
+                    const hintPrompt2 = `The user is stuck on "${lastQuestionAsked}". Simplify the problem into a smaller, easier-to-answer question.`;
+                    const hintResponse2 = await ai.generate({
+                      prompt: `${webSearchSystemMessage}\n\n${hintPrompt2}`,
+                      model: 'openai/gpt-3.5-turbo',
+                    });
+                    hint = `Okay, let’s do it step by step. ${cleanAIText(hintResponse2.text)}`;
+                    break;
+                case 3:
+                     const hintPrompt3 = `The user has failed "${lastQuestionAsked}" three times. Explain the underlying concept without giving away the answer and encourage them to try again.`;
+                    const hintResponse3 = await ai.generate({
+                      prompt: `${webSearchSystemMessage}\n\n${hintPrompt3}`,
+                      model: 'openai/gpt-3.5-turbo',
+                    });
+                    hint = `Let's look at it another way. ${cleanAIText(hintResponse3.text)}`;
+                    break;
+                default:
+                    hint = "Don’t worry 💙. This is tricky, but we’ll do it step by step together. Want me to show you the first step?";
+                    break;
             }
-            currentResponse = `Not quite 😊. ${currentResponse} Try again!`;
+            currentResponse = hint;
         }
     } else {
-      // Fallback for when in isAnswerMode but not awaiting a practice question answer
-      // This might happen if the student is just chatting while in teaching mode.
       currentResponse = "I'm here to help you learn. We're currently in a teaching moment. Do you want to try another practice question, or would you like me to clarify something from our last search?";
     }
 

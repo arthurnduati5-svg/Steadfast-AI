@@ -1,10 +1,10 @@
-
 import { defineFlow } from '@genkit-ai/flow';
 import { z } from 'zod';
 import * as cheerio from 'cheerio';
 import { ai, serperSearchTool } from '../genkit';
+import { ConversationState } from '@/lib/types';
 
-// Whitelisted domains for educational content - corrected based on user's original strict list.
+// Whitelisted domains for educational content
 const WHITELISTED_DOMAINS = [
   'khanacademy.org',
   'britannica.com',
@@ -38,11 +38,12 @@ const generalWebSearchFlowInputSchema = z.object({
     role: z.enum(['user', 'model']),
     content: z.string(),
   })).optional(),
-  lastSearchTopic: z.string().optional(), // Frontend MUST pass this back for reliable context
+  lastSearchTopic: z.string().optional(),
   forceWebSearch: z.boolean().default(false),
   includeVideos: z.boolean().default(false),
   gradeHint: z.enum(['Primary', 'LowerSecondary', 'UpperSecondary']).optional(),
   languageHint: z.enum(['English', 'Swahili mix']).optional(),
+  awaitingPracticeQuestionConfirmation: z.boolean().default(false),
 });
 
 export const GeneralWebSearchResultSchema = z.object({
@@ -70,7 +71,7 @@ const generalWebSearchFlowOutputSchema = z.object({
     mode: z.string().default('web_search'),
     sources_count: z.number().optional(),
     conversationState: z.enum(['initial_search', 'awaiting_practice_response', 'providing_practice_question', 'general']).default('general'),
-    lastSearchTopic: z.string().optional(), // Output current topic for frontend to store
+    lastSearchTopic: z.string().optional(),
   });
 
 export type GeneralWebSearchFlowOutput = z.infer<typeof generalWebSearchFlowOutputSchema>;
@@ -82,7 +83,7 @@ async function scrapePage(url: string): Promise<string> {
       headers: {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
       },
-      signal: AbortSignal.timeout(10000), // 10-second timeout
+      signal: AbortSignal.timeout(10000),
     });
 
     if (!response.ok) {
@@ -92,18 +93,16 @@ async function scrapePage(url: string): Promise<string> {
     const html = await response.text();
     const $ = cheerio.load(html);
 
-    // Remove common non-content elements
     $('header, nav, footer, aside, form, script, style, noscript, svg').remove();
 
-    // Extract text from the body, which is more likely to contain the main content
     const bodyText = $('body').text();
     
     const cleanedText = bodyText.replace(/\s\s+/g, ' ').trim();
     console.log(`✅ Successfully scraped ${url} (length: ${cleanedText.length})`);
-    return cleanedText.substring(0, 8000); // Increased content limit
+    return cleanedText.substring(0, 8000);
   } catch (error) {
     console.error(`❌ fetch/cheerio scraping failed for ${url}:`, (error as Error).message);
-    return ''; // Return empty on failure for graceful fallback
+    return '';
   }
 }
 
@@ -112,10 +111,11 @@ export async function summarizeContent(topic: string, content: string, gradeHint
 You are a school tutor summarizer. Your task is to create a very short, student-friendly summary about "${topic}" based on the provided article text.
 The provided text might be a short snippet if the full page could not be read.
 Rules:
-- Synthesize a helpful 2-3 sentence summary from the provided text.
+- Synthesize a helpful 1-3 sentence summary from the provided text.
 - If the text is just a snippet and lacks context, say "I could only see a preview, but it seems to be about..." and then summarize the snippet.
-- Cite 1-3 student-friendly sources (BBC Bitesize, Britannica, Khan Academy, National Geographic Kids, GradeHint).
-- Always finish with the question: "Would you like me to give you a practice question?"
+- Do not include extra newlines or bullet points.
+- Integrate 1-3 student-friendly sources (e.g., BBC Bitesize, Britannica, Khan Academy, National Geographic Kids, GradeHint) smoothly within the summary. For example, "According to [Source Name], ..." or similar. Avoid listing sources separately.
+- Always finish with the question: "Would you like me to give you a practice question on this?"
 Article text:
 ${content}
 GradeHint: ${gradeHint || 'LowerSecondary'}
@@ -124,6 +124,7 @@ GradeHint: ${gradeHint || 'LowerSecondary'}
     model: 'openai/gpt-4o',
     prompt: summarizerPrompt,
     output: { format: 'text' },
+    config: { temperature: 0.2, maxTokens: 120 },
   });
   return llmResponse.text;
 }
@@ -140,7 +141,7 @@ export async function generatePracticeQuestion(topic: string, gradeHint?: string
       model: 'openai/gpt-4o',
       prompt: practiceQuestionPrompt,
       output: { format: 'text' },
-      config: { temperature: 0.7 } // Higher temperature for question creativity
+      config: { temperature: 0.7 }
     });
     return llmResponse.text.trim();
   } catch (error) {
@@ -209,69 +210,29 @@ export const generalWebSearchFlow = defineFlow(
           reply: "I am in web search mode, but the 'forceWebSearch' flag was not set.",
           mode: 'error',
           conversationState: 'general',
-          lastSearchTopic: input.lastSearchTopic, // Preserve topic if available
+          lastSearchTopic: input.lastSearchTopic,
       };
     }
 
-    // === CONTEXT GUARDRAIL V13: Unified Active Topic Derivation and Immediate Return for Practice Questions ===
-    const isAffirmativeResponse = /^\s*(yes|yep|yeah|ok|okay|sure|go on)\s*$/i.test(input.query);
-    let currentConversationState: z.infer<typeof generalWebSearchFlowOutputSchema>['conversationState'] = 'general';
-    let activeTopic = input.query; // Default to current query if no context is found/used
-
-    // Prioritize context from lastSearchTopic if provided by frontend and it's a follow-up
-    if (input.lastSearchTopic && isAffirmativeResponse) {
-        activeTopic = input.lastSearchTopic;
-        console.log(`🔍 Using frontend-provided lastSearchTopic for follow-up: "${activeTopic}"`);
-    } else if (isAffirmativeResponse && input.history && input.history.length > 0) {
-        // Fallback: if no lastSearchTopic from frontend, try to infer from history for follow-ups
-        const lastModelMessage = input.history.filter(h => h.role === 'model').pop()?.content;
-        if (lastModelMessage && lastModelMessage.toLowerCase().includes('would you like me to give you a practice question?')) {
-            // Use LLM to extract topic from previous AI response for better context
-            const topicExtractionPrompt = `What was the main educational subject or topic of the following AI response? Respond with only the topic. AI Response: "${lastModelMessage}" Topic:`;
-            try {
-                const topicResponse = await ai.generate({
-                    model: 'openai/gpt-4o',
-                    prompt: topicExtractionPrompt,
-                    output: { format: 'text' },
-                    config: { temperature: 0.0 }
-                });
-                const inferredTopic = topicResponse.text.trim();
-                if (inferredTopic && inferredTopic.toLowerCase() !== input.query.toLowerCase()) { // Only use if different and meaningful
-                    activeTopic = inferredTopic;
-                    console.log(`🔍 Fallback context: Inferred topic "${activeTopic}" from history for follow-up.`);
-                }
-            } catch (error) {
-                console.error("❌ Error inferring topic from history for follow-up:", error);
-            }
-        }
-    }
-
-    // IMMEDIATE RETURN for practice question generation if conditions met
-    if (isAffirmativeResponse && activeTopic && input.history && input.history.length > 0) {
-      const lastModelMessage = input.history.filter(h => h.role === 'model').pop()?.content;
-      
-      if (lastModelMessage && lastModelMessage.toLowerCase().includes('would you like me to give you a practice question?')) {
-        console.log(`✅ CONTEXT GUARDRAIL ACTIVE: Detected request for practice question about "${activeTopic}". Bypassing web search.`);
+    if (input.awaitingPracticeQuestionConfirmation && /^\s*(yes|yep|yeah|ok|okay|sure|go on)\s*$/i.test(input.query)) {
+      const activeTopic = input.lastSearchTopic || "the topic we just discussed";
+      console.log(`✅ CONTEXT GUARDRAIL ACTIVE: Detected request for practice question about "${activeTopic}". Bypassing web search.`);
         
-        const practiceQuestion = await generatePracticeQuestion(activeTopic, input.gradeHint);
+      const practiceQuestion = await generatePracticeQuestion(activeTopic, input.gradeHint);
 
-        return {
-            reply: `Great! Here's a practice question:\n\n${practiceQuestion}`,
-            sources: [],
-            mode: 'answered_from_context',
-            sources_count: 0,
-            conversationState: 'providing_practice_question',
-            lastSearchTopic: activeTopic, // Maintain topic
-        };
-      }
+      return {
+          reply: `Great! Here's a practice question:\n\n${practiceQuestion}`,
+          sources: [],
+          mode: 'answered_from_context',
+          sources_count: 0,
+          conversationState: 'providing_practice_question',
+          lastSearchTopic: activeTopic,
+      };
     }
-    // === END CONTEXT GUARDRAIL ===
 
-    // If we reach here, it's either a new search query or a follow-up not specifically for a practice question.
-    // The web search should proceed with the derived 'activeTopic'.
-    // If activeTopic was derived from a previous follow-up but not for a practice question, it will be used here.
-    // If it's a fresh query (not a follow-up), activeTopic will still be input.query.
-    const topicForCurrentSearch = activeTopic; 
+    let currentConversationState: z.infer<typeof generalWebSearchFlowOutputSchema>['conversationState'] = 'general';
+
+    const topicForCurrentSearch = input.lastSearchTopic || input.query; 
     const focusedQueries = buildFocusedSearchQueries(topicForCurrentSearch, input.gradeHint, input.includeVideos);
     let allSearchResults: SerperSearchResult[] = [];
 
@@ -299,7 +260,7 @@ export const generalWebSearchFlow = defineFlow(
         contentToSummarize = pageText;
       } else {
         console.warn(`⚠️ Scraping failed or content too short for ${item.link}, falling back to snippet.`);
-        contentToSummarize = item.snippet; // Graceful fallback
+        contentToSummarize = item.snippet;
       }
 
       if (contentToSummarize) {
@@ -318,14 +279,15 @@ export const generalWebSearchFlow = defineFlow(
     if (contentSummaries.length > 0) {
       const synthesisPrompt = `
 You are a friendly and helpful school tutor for a Kenyan K-12 student.
-Synthesize the following summaries into ONE coherent, student-friendly reply about "${topicForCurrentSearch}".
+Synthesize the following summaries into ONE coherent, student-friendly paragraph (1-3 sentences) about "${topicForCurrentSearch}".
 Rules:
-- Output a short, clear paragraph (2-3 sentences).
-- Cite 1-3 student-friendly sources (BBC Bitesize, Britannica, Khan Academy, National Geographic Kids, GradeHint).
-- End with the guiding question: "Would you like me to give you a practice question?"
-- If the content is insufficient, state: "I couldn't find a clear educational result on the web. I can still explain from class knowledge — would you like that?"
+- Output a short, clear paragraph (1-3 sentences).
+- Integrate 1-3 student-friendly sources (e.g., BBC Bitesize, Britannica, Khan Academy, National Geographic Kids, GradeHint) smoothly within the summary. Do NOT use bullet points or separate source sections. For example, "According to [Source Name], ..." or similar.
+- Avoid extra newlines or unnecessary spacing. Keep the output as a compact paragraph.
+- If the content is insufficient, state: "I couldn't find enough clear educational results on the web to give a good summary. I can still explain from class knowledge — would you like that?"
+- Always finish with the exact question: "Would you like me to give you a practice question on this?"
 Summaries:
-${contentSummaries.join('\n\n')}
+${contentSummaries.join(' ')}
 Synthesized Reply:
       `;
       try {
@@ -333,11 +295,11 @@ Synthesized Reply:
           model: 'openai/gpt-4o',
           prompt: synthesisPrompt,
           output: { format: 'text' },
-          config: { temperature: 0.2 },
+          config: { temperature: 0.2, maxTokens: 120 },
         });
         finalReply = llmResponse.text.trim();
         
-        if (finalReply.toLowerCase().includes('would you like me to give you a practice question?')) {
+        if (finalReply.toLowerCase().includes('would you like me to give you a practice question on this?')) {
           currentConversationState = 'awaiting_practice_response';
         } else if (finalReply.toLowerCase().includes('here\'s a practice question')) {
           currentConversationState = 'providing_practice_question';
@@ -350,9 +312,12 @@ Synthesized Reply:
         currentConversationState = 'general';
       }
     } else {
-      finalReply = "I couldn't find a clear educational result on the web. I can still explain from class knowledge — would you like that?";
+      finalReply = "I couldn't find enough clear educational results on the web. I can still explain from class knowledge — would you like that?";
       currentConversationState = 'general';
     }
+
+    // Clean up extra newlines for the final reply before returning
+    finalReply = finalReply.replace(/\s*\n\s*\n\s*/g, '\n').replace(/\s*\n\s*/g, ' ').trim();
 
     return {
       reply: finalReply,
@@ -360,7 +325,7 @@ Synthesized Reply:
       mode: 'web_search',
       sources_count: sources.length,
       conversationState: currentConversationState,
-      lastSearchTopic: topicForCurrentSearch, // Store the active topic for the next turn
+      lastSearchTopic: topicForCurrentSearch,
     };
   }
 );

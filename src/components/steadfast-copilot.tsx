@@ -11,8 +11,8 @@ import {
 } from '@/components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Bot, History, MessageSquare, Plus } from 'lucide-react';
-import type { Message, ChatSession } from '@/lib/types';
-import { getAssistantResponse, AssistantResponseOutput, ConversationState } from '@/app/actions'; // Import ConversationState
+import type { Message, ChatSession, ConversationState } from '@/lib/types';
+import { getAssistantResponse, AssistantResponseOutput } from '@/app/actions';
 import { useToast } from '@/hooks/use-toast';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
@@ -24,20 +24,22 @@ import { Spinner } from './ui/spinner';
 const mockHistory: ChatSession[] = [
     {
       id: 'session1',
-      topic: 'Solving for X',
-      date: new Date().toISOString().split('T')[0],
+      title: 'Solving for X',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
       messages: [
-        { id: '1', role: 'user', content: 'how do i solve 2x - 5 = 11?', timestamp: new Date() },
-        { id: '2', role: 'model', content: 'Great question! To solve for x, you want to get it by itself on one side of the equation. What do you think the first step is?', timestamp: new Date() },
+        { id: '1', role: 'user', content: 'how do i solve 2x - 5 = 11?' },
+        { id: '2', role: 'model', content: 'Great question! To solve for x, you want to get it by itself on one side of the equation. What do you think the first step is?' },
       ],
     },
     {
       id: 'session2',
-      topic: 'Fractions',
-      date: new Date(Date.now() - 86400000).toISOString().split('T')[0], // Yesterday
+      title: 'Fractions',
+      createdAt: new Date(Date.now() - 86400000).toISOString(), 
+      updatedAt: new Date(Date.now() - 86400000).toISOString(),
       messages: [
-        { id: '1', role: 'user', content: 'im stuck on adding 1/2 and 1/4', timestamp: new Date() },
-        { id: '2', role: 'model', content: 'No problem! To add fractions, they need a common denominator. Can you find one for 2 and 4?', timestamp: new Date() },
+        { id: '3', role: 'user', content: 'im stuck on adding 1/2 and 1/4' },
+        { id: '4', role: 'model', content: 'No problem! To add fractions, they need a common denominator. Can you find one for 2 and 4?' },
       ],
     },
   ];
@@ -71,10 +73,14 @@ export function SteadfastCopilot() {
   // Consolidated conversation state
   const [conversationState, setConversationState] = useState<ConversationState>({
     researchModeActive: false,
-    lastSearchTopic: undefined,
-    awaitingPracticeQuestionConfirmation: false,
+    lastSearchTopic: [],
+    awaitingPracticeQuestionInvitationResponse: false,
+    activePracticeQuestion: undefined,
     awaitingPracticeQuestionAnswer: false,
     validationAttemptCount: 0,
+    lastAssistantMessage: undefined,
+    sensitiveContentDetected: false,
+    videoSuggested: false,
   });
 
   const scrollAreaRef = useRef<HTMLDivElement>(null);
@@ -121,13 +127,20 @@ export function SteadfastCopilot() {
   const handleNewChat = () => {
     if (messages.length > 0) {
       const firstUserMessage = messages.find(m => m.role === 'user');
-      const topicContent = firstUserMessage ? firstUserMessage.content : 'Chat Session';
+      const titleContent = firstUserMessage ? firstUserMessage.content : 'Chat Session';
 
       const newSession: ChatSession = {
         id: `session-${Date.now()}`,
-        topic: topicContent.length > 30 ? topicContent.substring(0, 30) + '...' : topicContent,
-        date: new Date().toISOString().split('T')[0],
-        messages: [...messages],
+        title: titleContent.length > 30 ? titleContent.substring(0, 30) + '...' : titleContent,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        messages: messages.map(msg => ({ 
+          id: msg.id, // Include id
+          role: msg.role,
+          content: msg.content,
+          ...(msg.videoData && { videoData: msg.videoData }), // Include videoData if present
+          ...(msg.image && { image: msg.image }), // Include image if present
+        }))
       };
       setHistory(prevHistory => [newSession, ...prevHistory]);
     }
@@ -142,10 +155,14 @@ export function SteadfastCopilot() {
     // Reset the consolidated conversation state
     setConversationState({
       researchModeActive: false,
-      lastSearchTopic: undefined,
-      awaitingPracticeQuestionConfirmation: false,
+      lastSearchTopic: [],
+      awaitingPracticeQuestionInvitationResponse: false,
+      activePracticeQuestion: undefined,
       awaitingPracticeQuestionAnswer: false,
       validationAttemptCount: 0,
+      lastAssistantMessage: undefined,
+      sensitiveContentDetected: false,
+      videoSuggested: false,
     });
     toast({
       title: "New Chat Started",
@@ -190,7 +207,6 @@ export function SteadfastCopilot() {
       id: `user-${Date.now()}`,
       role: 'user',
       content: userInput,
-      timestamp: new Date(),
       image: selectedFile ? { src: URL.createObjectURL(selectedFile), alt: selectedFile.name } : undefined,
     };
     
@@ -205,9 +221,12 @@ export function SteadfastCopilot() {
 
     const executeApiCall = async (fileData?: { type: string; base64: string }) => {
       try {
-        const stringHistory = updatedMessages.map(m => ({
+        const stringHistory = updatedMessages.map((m: Message) => ({
           role: m.role,
-          content: m.content
+          content: m.content,
+          ...(m.id && { id: m.id }),
+          ...(m.videoData && { videoData: m.videoData }),
+          ...(m.image && { image: m.image }),
         }));
         
         const assistantResponse: AssistantResponseOutput = await getAssistantResponse(
@@ -227,7 +246,6 @@ export function SteadfastCopilot() {
             role: 'model',
             content: assistantResponse.processedText,
             videoData: assistantResponse.videoData,
-            timestamp: new Date(),
         };
         setMessages((prev) => [...prev, assistantMessage]);
         setConversationState(assistantResponse.state); // Update with the new state from the backend
@@ -238,16 +256,19 @@ export function SteadfastCopilot() {
           id: `assistant-error-${Date.now()}`,
           role: 'model',
           content: "Sorry, I encountered an error. Please try again.",
-          timestamp: new Date(),
         };
         setMessages((prev) => [...prev, errorMessage]);
         // On error, revert to a clean general state for robustness
         setConversationState({
           researchModeActive: false,
-          lastSearchTopic: undefined,
-          awaitingPracticeQuestionConfirmation: false,
+          lastSearchTopic: [],
+          awaitingPracticeQuestionInvitationResponse: false,
+          activePracticeQuestion: undefined,
           awaitingPracticeQuestionAnswer: false,
           validationAttemptCount: 0,
+          lastAssistantMessage: undefined,
+          sensitiveContentDetected: false,
+          videoSuggested: false,
         });
       } finally {
         setIsLoading(false);
@@ -278,32 +299,36 @@ export function SteadfastCopilot() {
     // When continuing a chat, reconstruct the conversation state based on the session.
     let initialContinuedState: ConversationState = {
       researchModeActive: false,
-      lastSearchTopic: undefined,
-      awaitingPracticeQuestionConfirmation: false,
+      lastSearchTopic: [],
+      awaitingPracticeQuestionInvitationResponse: false,
+      activePracticeQuestion: undefined,
       awaitingPracticeQuestionAnswer: false,
       validationAttemptCount: 0,
+      lastAssistantMessage: undefined,
+      sensitiveContentDetected: false,
+      videoSuggested: false,
     };
 
     const lastBotMessage = session.messages.filter(m => m.role === 'model').pop();
     if (lastBotMessage) {
         // If the last bot message asked for a practice question, set the state accordingly
         if (lastBotMessage.content.toLowerCase().includes('would you like me to give you a practice question?')) {
-            initialContinuedState.awaitingPracticeQuestionConfirmation = true;
-            // Attempt to derive lastSearchTopic from session topic or last user message
-            initialContinuedState.lastSearchTopic = session.topic; 
-            initialContinuedState.researchModeActive = true; // Assume research mode active if awaiting question
+            initialContinuedState.awaitingPracticeQuestionInvitationResponse = true;
+            // Attempt to derive lastSearchTopic from session title or last user message
+            initialContinuedState.lastSearchTopic = [session.title]; 
+            initialContinuedState.researchModeActive = true; 
         }
     }
     setConversationState(initialContinuedState);
 
     toast({
         title: "Chat history loaded",
-        description: `Continuing conversation about "${session.topic}".`,
+        description: `Continuing conversation about "${session.title}".`,
     });
   };
 
   const onWebSearchClick = () => {
-    setForceWebSearch(prev => !prev); // Toggle web search mode
+    setForceWebSearch(prev => !prev); 
   };
 
   const copilotContent = (
@@ -341,7 +366,7 @@ export function SteadfastCopilot() {
                 setLevel={setLevel}
                 languageHint={languageHint}
                 setLanguageHint={setLanguageHint}
-                conversationState={conversationState} // Pass the consolidated state object
+                conversationState={conversationState} 
             />
           </TabsContent>
           <TabsContent value="history" className="mt-0 flex-1 flex-col border-0 p-0 outline-none min-h-0">

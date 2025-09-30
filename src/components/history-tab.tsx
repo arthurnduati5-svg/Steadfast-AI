@@ -5,7 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { Button } from '@/components/ui/button';
 import { Search } from 'lucide-react';
-import type { ChatSession } from '@/lib/types';
+import type { ChatSession, Message } from '@/lib/types'; // Import Message type as well
 
 interface HistoryTabProps {
   history: ChatSession[];
@@ -26,8 +26,8 @@ export const HistoryTab: React.FC<HistoryTabProps> = ({
     }
     const lowerCaseQuery = searchQuery.toLowerCase();
     return history.filter(session =>
-      session.topic.toLowerCase().includes(lowerCaseQuery) ||
-      session.messages.some(msg => msg.content.toLowerCase().includes(lowerCaseQuery))
+      session.title.toLowerCase().includes(lowerCaseQuery) || // Changed 'topic' to 'title' to match ChatSessionSchema
+      session.messages.some((msg: Message) => msg.content.toLowerCase().includes(lowerCaseQuery))
     );
   }, [history, searchQuery]);
 
@@ -55,14 +55,14 @@ export const HistoryTab: React.FC<HistoryTabProps> = ({
               <AccordionItem value={session.id} key={session.id}>
                 <AccordionTrigger>
                   <div>
-                    <p className="font-semibold text-left">{session.topic}</p>
-                    <p className="text-xs text-muted-foreground text-left">{session.date}</p>
+                    <p className="font-semibold text-left">{session.title}</p> {/* Changed 'topic' to 'title' */}
+                    <p className="text-xs text-muted-foreground text-left">{new Date(session.createdAt).toLocaleDateString()}</p> {/* Using createdAt and formatting */}
                   </div>
                 </AccordionTrigger>
                 <AccordionContent>
                   <div className="space-y-2 text-sm text-muted-foreground">
-                    {session.messages.slice(0, 2).map(msg => (
-                      <p key={msg.id} className="truncate">
+                    {session.messages.slice(0, 2).map((msg: Message) => (
+                      <p key={msg.content} className="truncate"> {/* Changed key to msg.content as msg.id might not exist for older messages */}
                         <strong>{msg.role}:</strong> {msg.content}
                       </p>
                     ))}
