@@ -25,7 +25,8 @@ export type KidInputClassification = {
     | 'Curious'
     | 'Unsure'
     | 'SensitiveContent'
-    | 'VideoRequest'; // Added VideoRequest
+    | 'VideoRequest'
+    | 'Explore'; // Added Explore intent
   topic?: string;
   sensitiveCategory?: SensitiveContentClassification['category']; // New field
 };
@@ -80,6 +81,11 @@ export async function classifyKidInput(
   }
   if (/\b(shut up|stupid|dumb|hate you|angry|upset)\b/i.test(lowerInput)) {
     return { intent: 'Insult' };
+  }
+
+  // New: Check for Explore intent before other LLM classifications
+  if (/\b(explore|tell me more|go deeper|continue|teach me more)\b/i.test(lowerInput)) {
+    return { intent: 'Explore' };
   }
 
   if (state.awaitingPracticeQuestionInvitationResponse) {
@@ -142,6 +148,7 @@ export async function classifyKidInput(
     - Unsure: The child expresses indecision or uncertainty (e.g., "not sure", "maybe").
     - SensitiveContent: The child's input contains sensitive or inappropriate content that should not be discussed.
     - VideoRequest: The child explicitly asks for a video (e.g., "show me a video", "I want to watch a video", "can I see a video on this").
+    - Explore: The child wants to explore the current topic further or get more details (e.g., "explore", "tell me more", "go deeper").
 
     Output in JSON format: {"intent": "INTENT", "topic": "TOPIC" | null}
     `;

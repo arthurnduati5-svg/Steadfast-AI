@@ -114,6 +114,25 @@ function getDynamicResponse(
   return options[Math.floor(Math.random() * options.length)];
 }
 
+// Pool of local analogies for varied teaching
+const localExamples = [
+  { name: "matatu stage", analogy: "matatu stage and your plants are the passengers. Suddenly, some weeds start growing in your garden, just like extra passengers trying to squeeze into an already full matatu" },
+  { name: "football game", analogy: "football game where your plants are the players and weeds are like extra players from another team trying to get the ball" },
+  { name: "mandazi and chai shop", analogy: "mandazi and chai shop where your plants are the mandazi and weeds are like uninvited guests trying to eat them all" },
+  { name: "village farm with maize and beans", analogy: "village farm with maize and beans where your plants are the good crops and weeds are like wild plants taking up the good soil" },
+  { name: "school classroom with limited chairs", analogy: "school classroom with limited chairs where your plants are the students and weeds are like extra students trying to sit on the same chair" }
+];
+
+function getRandomExample(usedExamples: string[] = []): { name: string; analogy: string } {
+  const available = localExamples.filter(ex => !usedExamples.includes(ex.name));
+  if (available.length === 0) {
+    // If all examples have been used, reset and pick a new one
+    return localExamples[Math.floor(Math.random() * localExamples.length)];
+  }
+  return available[Math.floor(Math.random() * available.length)];
+}
+
+
 // Core state transition and response logic
 export async function getAssistantResponse(
   message: string,
@@ -159,6 +178,7 @@ export async function getAssistantResponse(
     updatedState.activePracticeQuestion = undefined;
     updatedState.validationAttemptCount = 0;
     updatedState.videoSuggested = false; // Reset video suggested state
+    updatedState.usedExamples = []; // Reset used examples
 
     switch (classification.sensitiveCategory) {
       case 'Sexual':
@@ -250,6 +270,7 @@ export async function getAssistantResponse(
       updatedState.validationAttemptCount = 0;
       updatedState.awaitingPracticeQuestionInvitationResponse = false; // Reset invitation state
       updatedState.videoSuggested = false; // Reset video suggested state
+      updatedState.usedExamples = []; // Reset used examples
       // Immediately trigger a search for the new topic
       return getAssistantResponse(
         classification.topic!,
@@ -270,6 +291,7 @@ export async function getAssistantResponse(
         message,
         currentTopic,
         updatedState.validationAttemptCount,
+        updatedState.usedExamples || [] // Pass used examples
       );
 
       responseText = feedback;
@@ -282,6 +304,7 @@ export async function getAssistantResponse(
         updatedState.validationAttemptCount = 0;
         updatedState.awaitingPracticeQuestionInvitationResponse = false; // Reset invitation state
         updatedState.videoSuggested = false; // Reset video suggested state
+        updatedState.usedExamples = []; // Reset used examples on correct answer
       } 
     } else if (classification.intent === 'Nonsense') {
       responseText = getDynamicResponse(
@@ -316,7 +339,9 @@ export async function getAssistantResponse(
   // 2. Awaiting Invitation Response for Practice Question (NEW STATE)
   if (updatedState.awaitingPracticeQuestionInvitationResponse) {
     if (classification.intent === 'Affirmative') {
-      const question = await generatePracticeQuestion(currentTopic!, gradeHint);
+      const example = getRandomExample(updatedState.usedExamples || []);
+      updatedState.usedExamples = [...(updatedState.usedExamples || []), example.name];
+      const question = await generatePracticeQuestion(currentTopic!, gradeHint, example.analogy);
       responseText = `Great! 🎉 Here’s one: ${question}`;
       updatedState.activePracticeQuestion = question;
       updatedState.awaitingPracticeQuestionAnswer = true;
@@ -343,7 +368,9 @@ export async function getAssistantResponse(
       );
       responseText += `Want me to slow it down and explain simply, or give you a small question to try?`;
     } else if (classification.intent === 'Vague' && message.trim() === '') { // Silent response
-      const question = await generatePracticeQuestion(currentTopic!, gradeHint);
+      const example = getRandomExample(updatedState.usedExamples || []);
+      updatedState.usedExamples = [...(updatedState.usedExamples || []), example.name];
+      const question = await generatePracticeQuestion(currentTopic!, gradeHint, example.analogy);
       responseText = getDynamicResponse(responseTemplates.redirect.silent, updatedState.lastAssistantMessage);
       responseText += question;
       updatedState.activePracticeQuestion = question;
@@ -356,6 +383,7 @@ export async function getAssistantResponse(
       updatedState.lastSearchTopic.push(classification.topic!);
       updatedState.awaitingPracticeQuestionInvitationResponse = false;
       updatedState.videoSuggested = false; // Reset video suggested state
+      updatedState.usedExamples = []; // Reset used examples on new topic
       // Immediately trigger a search for the new topic
       return getAssistantResponse(
         classification.topic!,
@@ -395,6 +423,7 @@ export async function getAssistantResponse(
     updatedState.awaitingPracticeQuestionInvitationResponse = true; // Offer practice again
     updatedState.videoSuggested = false; // Reset video suggested state
     updatedState.lastAssistantMessage = responseText;
+    updatedState.usedExamples = []; // Reset used examples on previous topic
     return { processedText: responseText, state: updatedState };
   }
 
@@ -416,6 +445,7 @@ export async function getAssistantResponse(
         });
         responseText = result.processedText;
         updatedState.lastAssistantMessage = responseText;
+        updatedState.usedExamples = []; // Reset used examples on general chat fallback
         return {
           processedText: responseText,
           state: updatedState,
@@ -483,6 +513,7 @@ export async function getAssistantResponse(
       updatedState.awaitingPracticeQuestionInvitationResponse = true; // Set new state here
       updatedState.awaitingPracticeQuestionAnswer = false;
       updatedState.activePracticeQuestion = undefined;
+      updatedState.usedExamples = []; // Reset used examples on new search
     } catch (error) {
       console.error('Error during web search:', error);
       responseText =
@@ -552,6 +583,7 @@ export async function getAssistantResponse(
       activePracticeQuestion: undefined,
       sensitiveContentDetected: false, 
       videoSuggested: false, // Reset video suggested state on general chat fallback
+      usedExamples: [], // Reset used examples on general chat fallback
     });
 
     return {
@@ -577,7 +609,9 @@ async function validateAnswerSocratically(
   answer: string,
   topic: string,
   attempt: number,
+  usedExamples: string[], // Added usedExamples parameter
 ): Promise<{ feedback: string; status: 'Correct' | 'Incorrect' }> {
+  const example = getRandomExample(usedExamples);
   const prompt = `
     You are a patient, Socratic teacher for K-12 students in Kenya. Your goal is to guide, not to give answers directly. Use simple, Kenyan classroom English.
     The student is learning about "${topic}".
@@ -593,6 +627,7 @@ async function validateAnswerSocratically(
         -   Explain in one simple sentence why the answer is important (e.g., “Trees take in carbon dioxide from the air and water from the soil, and they use these in photosynthesis to create energy.”).
         -   End with a guiding choice to keep the flow alive (e.g., “Do you want me to ask you another question or explore a new topic?”).
         -   Combine all these parts into a single, cohesive response of 2-4 sentences max. Do not use bullet points or numbered lists.
+        -   When you show sources, never use \n or backslashes. Always show links as plain clickable hyperlinks. Example: "Here’s a trusted source: https://www.britannica.com/plant/weed"
 
     2.  If the student's answer is INCORRECT or PARTIAL:
         -   DO NOT give the correct answer directly.
@@ -602,9 +637,10 @@ async function validateAnswerSocratically(
             b. Rephrase the original question in a simpler way.
             c. Build on a *partially correct* aspect of their previous answer, if any, to nudge them further.
         -   Refer back to the original question or its core idea to maintain context.
-        -   Use local and playful examples when helpful (e.g., mandazi 🥯, matatu 🚐, football ⚽).
+        -   Use local and playful examples when helpful. **Rotate analogies and do not repeat the same example twice in one session.** Current analogy hint: "${example.analogy}"
         -   Your hint should be a new, fresh thought, not a repetition of a previous hint or the original question.
         -   Always end the hint with a guiding question. Keep hints to 2-3 sentences max.
+        -   When you show sources, never use \n or backslashes. Always show links as plain clickable hyperlinks. Example: "Here’s a trusted source: https://www.britannica.com/plant/weed"
 
     3.  If the student’s input is NONSENSE, SILLY, or completely OFF-TOPIC:
         -   Playfully redirect them back to the *current practice question*.
@@ -657,8 +693,9 @@ async function validateAnswerSocratically(
 async function generatePracticeQuestion(
   topic: string,
   gradeHint: string,
+  analogy: string, // Added analogy parameter
 ): Promise<string> {
-  const prompt = `Create one, and only one, practice question for a ${gradeHint}-level student in Kenya on the topic of "${topic}". The question should be clear, encourage thinking, use simple Kenyan classroom English, and ideally relate to a real-life Kenyan context or an analogy a Kenyan child would understand (e.g., mandazi 🥯, matatu 🚐, local animals). Do not provide the answer.`;
+  const prompt = `Create one, and only one, practice question for a ${gradeHint}-level student in Kenya on the topic of "${topic}". The question should be clear, encourage thinking, use simple Kenyan classroom English, and ideally relate to a real-life Kenyan context or an analogy a Kenyan child would understand. Do not provide the answer. Use this analogy hint: "${analogy}". Do not repeat the same analogy twice in one session.`;
   try {
     const response = await openai.chat.completions.create({
       messages: [{ role: 'system', content: prompt }],

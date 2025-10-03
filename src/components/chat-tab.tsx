@@ -6,12 +6,12 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Bot, User } from 'lucide-react';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import type { Message } from '@/lib/types';
-import { cn } from '@/lib/utils';
+import { cn, formatMessageContent } from '@/lib/utils'; // Import formatMessageContent
 import YouTubePlayer from './ui/youtube-player';
 import { ChatInputBar } from './chat-input-bar';
 import { ConversationState } from '@/app/actions'; // Import ConversationState
 
-const MessageBubble: React.FC<{ message: Message }> = ({ message }) => {
+const MessageBubble: React.FC<{ message: Message; isResearchModeActive: boolean }> = ({ message, isResearchModeActive }) => {
     const isUser = message.role === 'user';
     const hasVideo = !!message.videoData;
   
@@ -25,14 +25,25 @@ const MessageBubble: React.FC<{ message: Message }> = ({ message }) => {
           </Avatar>
         )}
         <div
-          className={cn('w-fit max-w-[90%] md:max-w-[75%] rounded-2xl px-4 py-2.5 text-sm break-words',
+          className={cn(
+            'rounded-2xl px-4 py-2.5 text-sm break-words w-fit',
+            hasVideo ? 'p-0' : '',
+            // Default max-width for all messages (user and AI in normal mode)
+            'max-w-[90%] md:max-w-[75%]',
+            // Override max-width specifically for AI messages when in research mode
+            !isUser && isResearchModeActive && 'max-w-none',
             isUser 
-              ? 'rounded-br-none bg-primary text-primary-foreground' 
-              : 'rounded-bl-none bg-muted',
-            hasVideo ? 'p-0' : ''
+              ? 'rounded-br-none bg-primary text-primary-foreground'
+              : 'rounded-bl-none bg-muted'
           )}
         >
-          {message.content && <p className={cn('mb-2', hasVideo ? 'p-2' : '')}>{message.content}</p>}
+          {/* Use dangerouslySetInnerHTML and formatMessageContent for displaying message content */}
+          {message.content && (
+            <p 
+              className={cn('mb-2', hasVideo ? 'p-2' : '')}
+              dangerouslySetInnerHTML={{ __html: formatMessageContent(message.content) }}
+            />
+          )}
           
           {hasVideo && message.videoData && (
             <div className="mt-0">
@@ -119,7 +130,7 @@ export const ChatTab: React.FC<ChatTabProps> = ({
                             </CardContent>
                         </Card>
                     ) : (
-                        messages.map(msg => <MessageBubble key={msg.id} message={msg} />)
+                        messages.map(msg => <MessageBubble key={msg.id} message={msg} isResearchModeActive={conversationState.researchModeActive} />)
                     )}
                 </div>
             </ScrollArea>

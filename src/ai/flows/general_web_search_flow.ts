@@ -32,6 +32,18 @@ const WHITELISTED_YOUTUBE_CHANNELS = [
   'TED-Ed',
 ];
 
+/**
+ * Aggressively cleans AI-generated text to remove all newlines and extra spaces.
+ * @param text The raw text from the AI model.
+ * @returns A clean, single-line string.
+ */
+export function cleanAIText(text: string): string {
+  if (!text) return "";
+  // Replaces all newline characters (Unix, Windows, Mac) with a single space,
+  // then collapses multiple whitespace characters into a single space, and trims.
+  return text.replace(/(\r\n|\n|\r)/gm, " ").replace(/\s+/g, " ").trim();
+}
+
 const generalWebSearchFlowInputSchema = z.object({
   query: z.string(),
   history: z.array(z.object({
@@ -111,11 +123,11 @@ export async function summarizeContent(topic: string, content: string, gradeHint
 You are a school tutor summarizer. Your task is to create a very short, student-friendly summary about "${topic}" based on the provided article text.
 The provided text might be a short snippet if the full page could not be read.
 Rules:
-- Synthesize a helpful 1-3 sentence summary from the provided text.
+- Synthesize a helpful 1-6 sentence summary from the provided text.
 - If the text is just a snippet and lacks context, say "I could only see a preview, but it seems to be about..." and then summarize the snippet.
 - Do not include extra newlines or bullet points.
-- Integrate 1-3 student-friendly sources (e.g., BBC Bitesize, Britannica, Khan Academy, National Geographic Kids, GradeHint) smoothly within the summary. For example, "According to [Source Name], ..." or similar. Avoid listing sources separately.
-- Always finish with the question: "Would you like me to give you a practice question on this?"
+- CRITICAL: DO NOT mention or integrate any sources in the summary. Just provide the summary content.
+- CRITICAL: DO NOT ask any follow-up questions at the end of the summary.
 Article text:
 ${content}
 GradeHint: ${gradeHint || 'LowerSecondary'}
@@ -124,7 +136,7 @@ GradeHint: ${gradeHint || 'LowerSecondary'}
     model: 'openai/gpt-4o',
     prompt: summarizerPrompt,
     output: { format: 'text' },
-    config: { temperature: 0.2, maxTokens: 120 },
+    config: { temperature: 0.2, maxTokens: 180 }, // Increased maxTokens for 1-6 sentences
   });
   return llmResponse.text;
 }
@@ -133,7 +145,6 @@ export async function generatePracticeQuestion(topic: string, gradeHint?: string
   const practiceQuestionPrompt = `
     Generate one clear practice question about the last researched topic: "${topic}".
     The question should be suitable for a ${gradeHint || 'LowerSecondary'} student.
-    WAIT for the student's answer before moving forward.
     Practice Question:
   `;
   try {
@@ -221,7 +232,7 @@ export const generalWebSearchFlow = defineFlow(
       const practiceQuestion = await generatePracticeQuestion(activeTopic, input.gradeHint);
 
       return {
-          reply: `Great! Here's a practice question:\n\n${practiceQuestion}`,
+          reply: `Great! Here's a practice question: ${cleanAIText(practiceQuestion)}`,
           sources: [],
           mode: 'answered_from_context',
           sources_count: 0,
@@ -247,7 +258,7 @@ export const generalWebSearchFlow = defineFlow(
 
     const filteredResults = filterSearchResults(allSearchResults, input.includeVideos, topicForCurrentSearch);
     let contentSummaries: string[] = [];
-    let sources: { sourceName: string; url: string }[] = [];
+    let collectedSources: { sourceName: string; url: string }[] = []; 
     let processedLinks = new Set<string>();
 
     for (const item of filteredResults) {
@@ -265,10 +276,10 @@ export const generalWebSearchFlow = defineFlow(
 
       if (contentToSummarize) {
         const summary = await summarizeContent(topicForCurrentSearch, contentToSummarize, input.gradeHint);
-        contentSummaries.push(summary);
+        contentSummaries.push(cleanAIText(summary)); 
         const sourceNameMatch = item.link.match(/^(?:https?:\/\/)?(?:[^@\n]+@)?(?:www\.)?([^:\/\n?]+)/im);
         const sourceName = sourceNameMatch ? sourceNameMatch[1] : 'Web Source';
-        sources.push({ sourceName: sourceName, url: item.link });
+        collectedSources.push({ sourceName: sourceName, url: item.link }); // Collect sources here
         processedLinks.add(item.link);
       }
       if (contentSummaries.length >= 3) break;
@@ -278,34 +289,37 @@ export const generalWebSearchFlow = defineFlow(
     
     if (contentSummaries.length > 0) {
       const synthesisPrompt = `
+CRITICAL: Your entire response MUST be a single, natural block of text.
+CRITICAL: The summary MUST be 1-6 sentences maximum.
+CRITICAL: DO NOT use newlines. DO NOT use Markdown, bullet points, or any special formatting. Just plain text.
+CRITICAL: DO NOT include any phrases about sources.
+CRITICAL: DO NOT ask any follow-up questions at the end of the summary. Just provide the summary content.
+
 You are a friendly and helpful school tutor for a Kenyan K-12 student.
-Synthesize the following summaries into ONE coherent, student-friendly paragraph (1-3 sentences) about "${topicForCurrentSearch}".
+Synthesize the following summaries into ONE coherent, student-friendly paragraph (1-6 sentences) about "${topicForCurrentSearch}".
 Rules:
-- Output a short, clear paragraph (1-3 sentences).
-- Integrate 1-3 student-friendly sources (e.g., BBC Bitesize, Britannica, Khan Academy, National Geographic Kids, GradeHint) smoothly within the summary. Do NOT use bullet points or separate source sections. For example, "According to [Source Name], ..." or similar.
+- Output a short, clear paragraph (1-6 sentences).
 - Avoid extra newlines or unnecessary spacing. Keep the output as a compact paragraph.
 - If the content is insufficient, state: "I couldn't find enough clear educational results on the web to give a good summary. I can still explain from class knowledge — would you like that?"
-- Always finish with the exact question: "Would you like me to give you a practice question on this?"
 Summaries:
 ${contentSummaries.join(' ')}
 Synthesized Reply:
       `;
       try {
         const llmResponse = await ai.generate({
-          model: 'openai/gpt-4o',
+          model: 'openai/gpt-3.5-turbo',
           prompt: synthesisPrompt,
           output: { format: 'text' },
-          config: { temperature: 0.2, maxTokens: 120 },
+          config: { temperature: 0.2, maxTokens: 180 }, // Increased maxTokens for 1-6 sentences
         });
-        finalReply = llmResponse.text.trim();
+        finalReply = cleanAIText(llmResponse.text);
         
-        if (finalReply.toLowerCase().includes('would you like me to give you a practice question on this?')) {
-          currentConversationState = 'awaiting_practice_response';
-        } else if (finalReply.toLowerCase().includes('here\'s a practice question')) {
-          currentConversationState = 'providing_practice_question';
-        } else {
-          currentConversationState = 'general';
-        }
+        // The client will handle displaying sources based on the 'sources' array
+        // and the practice question based on 'conversationState'.
+        // No manual appending of sources or practice question to finalReply here.
+
+        currentConversationState = 'awaiting_practice_response'; // Signal client for practice question
+
       } catch (error) {
         console.error('❌ Error during synthesis LLM call:', error);
         finalReply = "I'm sorry, I encountered an issue while synthesizing the search results. Please try again.";
@@ -316,14 +330,11 @@ Synthesized Reply:
       currentConversationState = 'general';
     }
 
-    // Clean up extra newlines for the final reply before returning
-    finalReply = finalReply.replace(/\s*\n\s*\n\s*/g, '\n').replace(/\s*\n\s*/g, ' ').trim();
-
     return {
       reply: finalReply,
-      sources: sources,
+      sources: collectedSources, // Return the collected sources for client to render
       mode: 'web_search',
-      sources_count: sources.length,
+      sources_count: collectedSources.length, // Return the count of collected sources
       conversationState: currentConversationState,
       lastSearchTopic: topicForCurrentSearch,
     };

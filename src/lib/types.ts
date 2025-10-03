@@ -49,6 +49,7 @@ export const ConversationStateSchema = z.object({
   lastAssistantMessage: z.string().optional(),
   sensitiveContentDetected: z.boolean().default(false), 
   videoSuggested: z.boolean().default(false), // New state for video suggestion
+  usedExamples: z.array(z.string()).optional(), // Added usedExamples
 });
 export type ConversationState = z.infer<typeof ConversationStateSchema>;
 
