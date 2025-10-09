@@ -1,5 +1,6 @@
-import { Router, Request } from 'express'; // Import Request
+import { Router, Request } from 'express';
 import { authMiddleware } from '../middleware/authMiddleware';
+import { rateLimiter } from '../middleware/rateLimiter';
 import prisma from '../utils/prismaClient';
 import redis from '../lib/redis';
 import pinecone from '../lib/vectorClient';
@@ -74,7 +75,7 @@ router.get('/preload', authMiddleware, async (req: Request, res) => {
 });
 
 // 2. Starting a New Chat (POST /new-session)
-router.post('/new-session', authMiddleware, async (req: Request, res) => {
+router.post('/new-session', authMiddleware, rateLimiter, async (req: Request, res) => {
   try {
     const studentId = req.currentUser!.userId;
 
@@ -88,6 +89,7 @@ router.post('/new-session', authMiddleware, async (req: Request, res) => {
         data: { isActive: false, endTime: new Date() },
       });
       
+      // Enqueue job for summarization and embedding
       summarizationQueue.add('summarize-session', { sessionId: session.id, studentId });
       
       await redis.del(activeSessionKey);
@@ -112,16 +114,38 @@ router.post('/new-session', authMiddleware, async (req: Request, res) => {
 });
 
 // 3. Sending a Message (POST /chat)
-router.post('/chat', authMiddleware, async (req: Request, res) => {
+router.post('/chat', authMiddleware, rateLimiter, async (req: Request, res) => {
   try {
     const studentId = req.currentUser!.userId;
     const { message } = req.body;
 
-    const profileString = await redis.get(`profile:${studentId}`);
-    const sessionString = await redis.get(`session:active:${studentId}`);
+    let profileString = await redis.get(`profile:${studentId}`);
+    let sessionString = await redis.get(`session:active:${studentId}`);
+
+    if (!profileString) {
+      const profileFromDb = await prisma.studentProfile.findUnique({
+        where: { userId: studentId },
+        select: { userId: true, gradeLevel: true, preferredLanguage: true, preferences: true },
+      });
+      if (profileFromDb) {
+        profileString = JSON.stringify(profileFromDb);
+        await redis.set(`profile:${studentId}`, profileString, 'EX', 43200);
+      }
+    }
+
+    if (!sessionString) {
+      const sessionFromDb = await prisma.chatSession.findFirst({
+        where: { studentId, isActive: true },
+        include: { messages: { take: 5, orderBy: { timestamp: 'desc' } } },
+      });
+      if (sessionFromDb) {
+        sessionString = JSON.stringify(sessionFromDb);
+        await redis.set(`session:active:${studentId}`, sessionString, 'EX', 3600);
+      }
+    }
 
     if (!profileString || !sessionString) {
-      return res.status(400).send({ message: 'Profile or active session not found in cache. Please preload.' });
+      return res.status(400).send({ message: 'Profile or active session not found. Please preload.' });
     }
 
     const profile = JSON.parse(profileString);
@@ -166,6 +190,7 @@ router.post('/chat', authMiddleware, async (req: Request, res) => {
 
     res.status(200).send({ response: aiResponse });
 
+    // Enqueue job for embeddings and other async tasks
     embeddingQueue.add('embed-message', { sessionId, studentId, message, aiResponse });
     
   } catch (error) {
@@ -178,9 +203,12 @@ router.post('/chat', authMiddleware, async (req: Request, res) => {
 router.get('/history', authMiddleware, async (req: Request, res) => {
   try {
     const studentId = req.currentUser!.userId;
+    const { limit = '10', offset = '0' } = req.query;
     const history = await prisma.chatSession.findMany({
       where: { studentId },
       orderBy: { updatedAt: 'desc' },
+      take: parseInt(limit as string),
+      skip: parseInt(offset as string),
       select: { id: true, topic: true, metadata: true, updatedAt: true },
     });
 
@@ -304,6 +332,55 @@ router.get('/search', authMiddleware, async (req: Request, res) => {
     res.status(200).send(uniqueResults.slice(0, 10));
   } catch (error) {
     console.error('Error searching past chats:', error);
+    res.status(500).send({ message: 'Internal server error' });
+  }
+});
+
+// Student and global memory routes (from original ai.ts)
+router.get('/memory/student', authMiddleware, async (req: Request, res) => {
+  try {
+    const studentId = req.currentUser!.userId;
+    const progress = await prisma.progress.findMany({ where: { studentId } });
+    const mistakes = await prisma.mistake.findMany({ where: { studentId } });
+    res.status(200).send({ progress, mistakes });
+  } catch (error) {
+    console.error('Error fetching student memory:', error);
+    res.status(500).send({ message: 'Internal server error' });
+  }
+});
+router.get('/memory/global', authMiddleware, async (req: Request, res) => {
+  try {
+    const globalMemory = await prisma.globalMemory.findMany();
+    res.status(200).send({ globalMemory });
+  } catch (error) {
+    console.error('Error fetching global memory:', Error);
+    res.status(500).send({ message: 'Internal server error' });
+  }
+});
+router.post('/memory/update', authMiddleware, async (req: Request, res) => {
+  try {
+    const studentId = req.currentUser!.userId;
+    const { type, data } = req.body;
+    if (type === 'progress') {
+      const { subject, topic, mastery } = data;
+      await prisma.progress.upsert({
+        where: { id: data.id || '' },
+        update: { subject, topic, mastery },
+        create: { studentId, subject, topic, mastery },
+      });
+    } else if (type === 'mistake') {
+      const { topic, error, attempts } = data;
+      await prisma.mistake.upsert({
+        where: { id: data.id || '' },
+        update: { topic, error, attempts: { increment: attempts || 1 }, lastSeen: new Date() },
+        create: { studentId, topic, error, attempts: attempts || 1 },
+      });
+    } else {
+      return res.status(400).send({ message: 'Invalid memory type' });
+    }
+    res.status(200).send({ message: 'Memory updated successfully' });
+  } catch (error) {
+    console.error('Error updating memory:', error);
     res.status(500).send({ message: 'Internal server error' });
   }
 });

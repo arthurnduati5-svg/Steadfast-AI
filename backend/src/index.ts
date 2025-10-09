@@ -1,66 +1,42 @@
-// backend/src/index.ts
-
-import 'dotenv/config'; // Load environment variables from .env file
+import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
-import chatRoutes from './routes/chatRoutes';
-import prisma from './utils/prismaClient';
+import pino from 'pino';
+import profileRoutes from './routes/profile';
+import aiRoutes from './routes/ai';
+import chatRoutes from './routes/chatRoutes'; // Import the new chat routes
 
 const app = express();
-const PORT = process.env.PORT || 3001;
+const PORT = process.env.PORT || 8080;
 
-// --- Middleware --- //
+// Logger
+const logger = pino({ name: 'steadfast-copilot-backend' });
 
-// Enable CORS for all routes
-// You might want to restrict this to specific origins in a production environment.
+// Middleware
 app.use(cors());
-
-// Parse JSON request bodies
 app.use(express.json());
-
-// --- API Routes --- //
-
-// Mount the chat routes under /api
-app.use('/api', chatRoutes);
-
-// Basic health check route
-app.get('/', (req, res) => {
-  res.status(200).json({ message: 'AI Chat Backend is running!' });
+app.use((req, res, next) => {
+  logger.info(`${req.method} ${req.url}`);
+  next();
 });
 
-// --- Server Start --- //
+// Routes
+app.use('/api', profileRoutes);
+app.use('/api/ai', aiRoutes); // Keep the existing AI routes for memory, etc.
+app.use('/api/ai', chatRoutes); // Add the new, refactored chat routes
 
-async function startServer() {
-  try {
-    // Connect to the database (Prisma handles connection pooling)
-    await prisma.$connect();
-    console.log('Connected to the database successfully!');
-
-    app.listen(PORT, () => {
-      console.log(`AI Chat Backend server listening on port ${PORT}`);
-      console.log(`Access at: http://localhost:${PORT}`);
-    });
-  } catch (error) {
-    console.error('Failed to connect to the database or start server:', error);
-    process.exit(1);
-  }
-}
-
-startServer();
-
-// Graceful shutdown
-process.on('SIGTERM', async () => {
-  console.log('SIGTERM signal received: closing HTTP server');
-  await prisma.$disconnect();
-  console.log('Disconnected from database.');
-  // Add any other cleanup here
-  process.exit(0);
+// Health Check Route
+app.get('/api/health', (req, res) => {
+  res.status(200).send({ status: 'ok', timestamp: new Date() });
 });
 
-process.on('SIGINT', async () => {
-  console.log('SIGINT signal received: closing HTTP server');
-  await prisma.$disconnect();
-  console.log('Disconnected from database.');
-  // Add any other cleanup here
-  process.exit(0);
+// Global Error Handler
+app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
+  logger.error(err, 'Unhandled application error');
+  res.status(500).send({ message: 'An unexpected error occurred.' });
+});
+
+// Start the server
+app.listen(PORT, () => {
+  logger.info(`Server running on port ${PORT}`);
 });

@@ -1,15 +1,82 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
-// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
-
-generator client {
-  provider = "prisma-client-js"
-  output   = "../src/generated/prisma"
-}
-
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model ChatMessage {
+  id            String      @id @default(uuid())
+  sessionId     String
+  chatSession   ChatSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  role          String
+  content       String      @db.Text
+  timestamp     DateTime    @default(now())
+  messageNumber Int
+  metadata      Json?
+
+  @@index([sessionId])
+  @@index([timestamp])
+}
+
+model ChatSession {
+  id        String         @id @default(uuid())
+  studentId String
+  student   StudentProfile @relation(fields: [studentId], references: [userId], onDelete: Cascade)
+  startTime DateTime       @default(now())
+  endTime   DateTime?
+  topic     String?
+  isActive  Boolean        @default(true)
+  messages  ChatMessage[]
+  metadata  Json?
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
+}
+
+model Progress {
+  id        String         @id @default(uuid())
+  studentId String
+  student   StudentProfile @relation(fields: [studentId], references: [userId], onDelete: Cascade)
+  subject   String
+  topic     String
+  mastery   Int
+  updatedAt DateTime       @updatedAt
+}
+
+model Mistake {
+  id        String         @id @default(uuid())
+  studentId String
+  student   StudentProfile @relation(fields: [studentId], references: [userId], onDelete: Cascade)
+  topic     String
+  error     String
+  attempts  Int            @default(1)
+  lastSeen  DateTime       @default(now())
+}
+
+model GlobalMemory {
+  id         String   @id @default(uuid())
+  topic      String
+  question   String
+  correction String
+  frequency  Int      @default(1)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}
+
+model StudentProfile {
+  userId            String        @id
+  name              String?
+  email             String?
+  gradeLevel        String?
+  preferredLanguage String?
+  preferences       Json?
+  favoriteShows     Json?
+  profileCompleted  Boolean       @default(false)
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+  chatSessions      ChatSession[]
+  progress          Progress[]
+  mistakes          Mistake[]
 }
