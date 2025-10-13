@@ -4,7 +4,9 @@ import cors from 'cors';
 import pino from 'pino';
 import profileRoutes from './routes/profile';
 import aiRoutes from './routes/ai';
-import chatRoutes from './routes/chatRoutes'; // Import the new chat routes
+import chatRoutes from './routes/chatRoutes';
+// import authExchangeRoutes from './routes/auth';
+import { schoolAuthMiddleware } from './middleware/schoolAuthMiddleware'; // Import our new middleware
 
 const app = express();
 const PORT = process.env.PORT || 8080;
@@ -20,12 +22,23 @@ app.use((req, res, next) => {
   next();
 });
 
-// Routes
-app.use('/api', profileRoutes);
-app.use('/api/ai', aiRoutes); // Keep the existing AI routes for memory, etc.
-app.use('/api/ai', chatRoutes); // Add the new, refactored chat routes
+// --- Public Authentication Route ---
+// This route is for exchanging the school's token for our backend token.
+// It is NOT protected by the auth middleware.
+// app.use('/api/auth', authExchangeRoutes);
 
-// Health Check Route
+
+// --- Protected API Routes ---
+// All routes below this point are now protected by our schoolAuthMiddleware.
+// Any request to these endpoints MUST include a valid "Bearer [backendToken]".
+app.use('/api', schoolAuthMiddleware, profileRoutes);
+app.use('/api/ai', schoolAuthMiddleware, aiRoutes);
+// Note: The middleware is applied to the '/api/ai' path, so it covers both `aiRoutes` and `chatRoutes`.
+// Applying it to `chatRoutes` again is redundant but harmless.
+app.use('/api/ai', schoolAuthMiddleware, chatRoutes);
+
+
+// Health Check Route (Public)
 app.get('/api/health', (req, res) => {
   res.status(200).send({ status: 'ok', timestamp: new Date() });
 });

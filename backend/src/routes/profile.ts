@@ -1,13 +1,13 @@
 import { Router, Request } from 'express';
-import { authMiddleware } from '../middleware/authMiddleware';
+import { schoolAuthMiddleware } from '../middleware/schoolAuthMiddleware';
 import prisma from '../utils/prismaClient';
 
 const router = Router();
 
 // Get student profile
-router.get('/profile', authMiddleware, async (req: Request, res) => {
+router.get('/profile', schoolAuthMiddleware, async (req: Request, res) => {
   try {
-    const studentId = req.currentUser!.userId;
+    const studentId = req.user!.id; // UPDATED: Changed from req.currentUser.userId
     const profile = await prisma.studentProfile.findUnique({ where: { userId: studentId } });
     if (!profile) {
       return res.status(404).send({ message: 'Profile not found.' });
@@ -20,9 +20,9 @@ router.get('/profile', authMiddleware, async (req: Request, res) => {
 });
 
 // Create or update student profile
-router.post('/profile', authMiddleware, async (req: Request, res) => {
+router.post('/profile', schoolAuthMiddleware, async (req: Request, res) => {
   try {
-    const studentId = req.currentUser!.userId;
+    const studentId = req.user!.id; // UPDATED: Changed from req.currentUser.userId
     const { name, email, gradeLevel, preferredLanguage, preferences, favoriteShows } = req.body;
 
     const profile = await prisma.studentProfile.upsert({

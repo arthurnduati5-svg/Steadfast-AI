@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
@@ -10,16 +11,17 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Bot, History, MessageSquare, Plus } from 'lucide-react';
+import { Bot, History, MessageSquare, Plus, Settings } from 'lucide-react';
 import type { Message, ChatSession, ConversationState } from '@/lib/types';
 import { getAssistantResponse, AssistantResponseOutput } from '@/app/actions';
 import { useToast } from '@/hooks/use-toast';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
-// Import the new tab components
+// Import the new components
+import { PreferencesForm } from './copilot/PreferencesForm';
 import { ChatTab } from './chat-tab';
 import { HistoryTab } from './history-tab';
-import { Spinner } from './ui/spinner';
+import { useUserProfile } from '@/contexts/UserProfileContext';
 
 const mockHistory: ChatSession[] = [
     {
@@ -51,6 +53,7 @@ export function SteadfastCopilot() {
   const pathname = usePathname();
   const { toast } = useToast();
   const [isOpen, setIsOpen] = useState(false);
+  const [view, setView] = useState('chat');
   const [activeTab, setActiveTab] = useState('chat');
   
   const [messages, setMessages] = useState<Message[]>([]);
@@ -59,10 +62,14 @@ export function SteadfastCopilot() {
   
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [isProfileLoading, setIsProfileLoading] = useState(false);
+  const [isSavingProfile, setIsSavingProfile] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [studentName, setStudentName] = useState('Student');
   const [displayedWelcomeText, setDisplayedWelcomeText] = useState('');
+
+  const { profile, setProfile, updateProfile } = useUserProfile();
 
   // Web Search flags, these will still be controlled by UI toggles directly.
   const [forceWebSearch, setForceWebSearch] = useState(false);
@@ -124,6 +131,57 @@ export function SteadfastCopilot() {
     setForceWebSearch(conversationState.researchModeActive);
   }, [conversationState.researchModeActive]);
 
+    const fetchProfile = async () => {
+        setIsProfileLoading(true);
+        try {
+            // Replace with your actual API call: GET /api/profile
+            await new Promise(resolve => setTimeout(resolve, 1000)); // Simulate API call
+            const mockProfile = {
+                preferredLanguage: 'English',
+                topInterests: ['Coding', 'Music'],
+                favoriteShows: ['Science Kids'],
+            };
+            setProfile(mockProfile);
+        } catch (error) {
+            toast({
+                title: "Error",
+                description: "Could not fetch your learning preferences.",
+                variant: "destructive",
+            });
+        } finally {
+            setIsProfileLoading(false);
+        }
+    };
+
+    const handleSavePreferences = async (data: any) => {
+        setIsSavingProfile(true);
+        try {
+            // Replace with your actual API call: POST /api/profile/update
+            await new Promise(resolve => setTimeout(resolve, 1500)); // Simulate API call
+            updateProfile(data);
+            toast({
+                title: "✅ Preferences saved!",
+                description: "The copilot will now use your updated preferences.",
+            });
+            setTimeout(() => {
+                setView('chat');
+            }, 1000);
+        } catch (error) {
+            toast({
+                title: "⚠️ Couldn’t save preferences.",
+                description: "Please try again.",
+                variant: "destructive",
+            });
+        } finally {
+            setIsSavingProfile(false);
+        }
+    };
+
+    const handleOpenPreferences = () => {
+        setView('preferences');
+        fetchProfile();
+    };
+
   const handleNewChat = () => {
     if (messages.length > 0) {
       const firstUserMessage = messages.find(m => m.role === 'user');
@@ -135,11 +193,11 @@ export function SteadfastCopilot() {
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
         messages: messages.map(msg => ({ 
-          id: msg.id, // Include id
+          id: msg.id,
           role: msg.role,
           content: msg.content,
-          ...(msg.videoData && { videoData: msg.videoData }), // Include videoData if present
-          ...(msg.image && { image: msg.image }), // Include image if present
+          ...(msg.videoData && { videoData: msg.videoData }),
+          ...(msg.image && { image: msg.image }),
         }))
       };
       setHistory(prevHistory => [newSession, ...prevHistory]);
@@ -152,7 +210,6 @@ export function SteadfastCopilot() {
     setIncludeVideos(false);
     setLevel('Primary');
     setLanguageHint('English');
-    // Reset the consolidated conversation state
     setConversationState({
       researchModeActive: false,
       lastSearchTopic: [],
@@ -232,7 +289,7 @@ export function SteadfastCopilot() {
         const assistantResponse: AssistantResponseOutput = await getAssistantResponse(
           userInput,
           stringHistory,
-          conversationState, // Pass the entire conversation state
+          conversationState,
           pathname,
           fileData,
           currentForceWebSearch,
@@ -248,7 +305,7 @@ export function SteadfastCopilot() {
             videoData: assistantResponse.videoData,
         };
         setMessages((prev) => [...prev, assistantMessage]);
-        setConversationState(assistantResponse.state); // Update with the new state from the backend
+        setConversationState(assistantResponse.state);
 
       } catch (error) {
         console.error("Error sending message or getting AI response:", error);
@@ -258,7 +315,6 @@ export function SteadfastCopilot() {
           content: "Sorry, I encountered an error. Please try again.",
         };
         setMessages((prev) => [...prev, errorMessage]);
-        // On error, revert to a clean general state for robustness
         setConversationState({
           researchModeActive: false,
           lastSearchTopic: [],
@@ -296,7 +352,6 @@ export function SteadfastCopilot() {
     setActiveTab('chat');
     setIsOpen(true);
     
-    // When continuing a chat, reconstruct the conversation state based on the session.
     let initialContinuedState: ConversationState = {
       researchModeActive: false,
       lastSearchTopic: [],
@@ -311,10 +366,8 @@ export function SteadfastCopilot() {
 
     const lastBotMessage = session.messages.filter(m => m.role === 'model').pop();
     if (lastBotMessage) {
-        // If the last bot message asked for a practice question, set the state accordingly
         if (lastBotMessage.content.toLowerCase().includes('would you like me to give you a practice question?')) {
             initialContinuedState.awaitingPracticeQuestionInvitationResponse = true;
-            // Attempt to derive lastSearchTopic from session title or last user message
             initialContinuedState.lastSearchTopic = [session.title]; 
             initialContinuedState.researchModeActive = true; 
         }
@@ -327,67 +380,97 @@ export function SteadfastCopilot() {
     });
   };
 
-  const onWebSearchClick = () => {
-    setForceWebSearch(prev => !prev); 
-  };
+  const renderContent = () => {
+      if (view === 'preferences') {
+          return (
+              <PreferencesForm
+                profileData={profile}
+                onSave={handleSavePreferences}
+                isSaving={isSavingProfile}
+                isLoading={isProfileLoading}
+                onClose={() => setView('chat')}
+              />
+          )
+      }
 
-  const copilotContent = (
-    <div className="flex h-full flex-col">
-      <DialogHeader className="p-4 border-b flex flex-row items-center justify-between">
-          <DialogTitle className="flex items-center gap-2"><Bot className="h-5 w-5 text-primary"/> Steadfast AI</DialogTitle>
-          <Button variant="outline" size="sm" onClick={handleNewChat} className="text-sm">
-            <Plus className="h-4 w-4 mr-1" /> New Chat
-          </Button>
-      </DialogHeader>
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="flex flex-1 flex-col min-h-0">
-        <TabsList className="grid w-full grid-cols-2">
-          <TabsTrigger value="chat"><MessageSquare className="mr-2 h-4 w-4" />Chat</TabsTrigger>
-          <TabsTrigger value="history"><History className="mr-2 h-4 w-4" />History</TabsTrigger>
-        </TabsList>
-        <TabsContent value="chat" className="mt-0 flex-1 flex-col border-0 p-0 outline-none min-h-0">
-            <ChatTab 
-                messages={messages}
-                studentName={studentName}
-                displayedWelcomeText={displayedWelcomeText}
-                scrollAreaRef={scrollAreaRef}
-                selectedFile={selectedFile}
-                handleRemoveFile={handleRemoveFile}
-                input={input}
-                setInput={setInput}
-                handleSendMessage={handleSendMessage}
-                isLoading={isLoading}
-                fileInputRef={fileInputRef}
-                handleFileChange={handleFileChange}
-                forceWebSearch={forceWebSearch}
-                setForceWebSearch={setForceWebSearch}
-                includeVideos={includeVideos}
-                setIncludeVideos={setIncludeVideos}
-                level={level}
-                setLevel={setLevel}
-                languageHint={languageHint}
-                setLanguageHint={setLanguageHint}
-                conversationState={conversationState} 
-            />
-          </TabsContent>
-          <TabsContent value="history" className="mt-0 flex-1 flex-col border-0 p-0 outline-none min-h-0">
-            <HistoryTab 
-                history={history}
-                searchQuery={searchQuery}
-                setSearchQuery={setSearchQuery}
-                handleContinueChat={handleContinueChat}
-            />
-          </TabsContent>
-        </Tabs>
-      </div>
-    );
+      return (
+        <div className="flex h-full flex-col">
+          <DialogHeader className="p-4 border-b">
+              <div className="flex items-center justify-between w-full">
+                  <DialogTitle className="flex items-center gap-2">
+                      <Bot className="h-5 w-5 text-primary"/> Steadfast AI
+                  </DialogTitle>
+                  <TooltipProvider>
+                      <Tooltip>
+                          <TooltipTrigger asChild>
+                          <Button variant="ghost" size="icon" onClick={handleOpenPreferences}>
+                              <Settings className="h-5 w-5" />
+                          </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                          <p>My Learning Preferences</p>
+                          </TooltipContent>
+                      </Tooltip>
+                  </TooltipProvider>
+              </div>
+              <div className="mt-4">
+                  <Button variant="outline" size="sm" onClick={handleNewChat} className="text-sm">
+                      <Plus className="h-4 w-4 mr-1" /> New Chat
+                  </Button>
+              </div>
+          </DialogHeader>
+            <Tabs value={activeTab} onValueChange={setActiveTab} className="flex flex-1 flex-col min-h-0">
+                <TabsList className="grid w-full grid-cols-2">
+                <TabsTrigger value="chat"><MessageSquare className="mr-2 h-4 w-4" />Chat</TabsTrigger>
+                <TabsTrigger value="history"><History className="mr-2 h-4 w-4" />History</TabsTrigger>
+                </TabsList>
+                <TabsContent value="chat" className="mt-0 flex-1 flex-col border-0 p-0 outline-none min-h-0">
+                    <ChatTab 
+                        messages={messages}
+                        studentName={studentName}
+                        displayedWelcomeText={displayedWelcomeText}
+                        scrollAreaRef={scrollAreaRef}
+                        selectedFile={selectedFile}
+                        handleRemoveFile={handleRemoveFile}
+                        input={input}
+                        setInput={setInput}
+                        handleSendMessage={handleSendMessage}
+                        isLoading={isLoading}
+                        fileInputRef={fileInputRef}
+                        handleFileChange={handleFileChange}
+                        forceWebSearch={forceWebSearch}
+                        setForceWebSearch={setForceWebSearch}
+                        includeVideos={includeVideos}
+                        setIncludeVideos={setIncludeVideos}
+                        level={level}
+                        setLevel={setLevel}
+                        languageHint={languageHint}
+                        setLanguageHint={setLanguageHint}
+                        conversationState={conversationState} 
+                    />
+                </TabsContent>
+                <TabsContent value="history" className="mt-0 flex-1 flex-col border-0 p-0 outline-none min-h-0">
+                    <HistoryTab 
+                        history={history}
+                        searchQuery={searchQuery}
+                        setSearchQuery={setSearchQuery}
+                        handleContinueChat={handleContinueChat}
+                    />
+                </TabsContent>
+                </Tabs>
+        </div>
+      );
+  }
   
     return (
       <>
-        <Dialog open={isOpen} onOpenChange={setIsOpen}>
+        <Dialog open={isOpen} onOpenChange={(open) => {
+            setIsOpen(open);
+            if (!open) setView('chat');
+        }}>
           <DialogContent className="p-0 h-[70vh] max-w-[90vw] sm:max-w-lg flex flex-col [&>button]:hidden">
               <div className="flex flex-col flex-1 min-h-0">
-                  {copilotContent}
-              
+                  {renderContent()}
               </div>
           </DialogContent>
         </Dialog>

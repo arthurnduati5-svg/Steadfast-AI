@@ -1,5 +1,5 @@
 import { Router, Request } from 'express'; // Import Request
-import { authMiddleware } from '../middleware/authMiddleware';
+import { schoolAuthMiddleware } from '../middleware/schoolAuthMiddleware';
 import prisma from '../utils/prismaClient';
 import redis from '../lib/redis';
 import pinecone from '../lib/vectorClient';
@@ -12,9 +12,9 @@ const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 const pineconeIndex = pinecone.Index(process.env.PINECONE_INDEX || '');
 
 // 1. Preload Logic (GET /preload)
-router.get('/preload', authMiddleware, async (req: Request, res) => {
+router.get('/preload', schoolAuthMiddleware, async (req: Request, res) => {
   try {
-    const studentId = req.currentUser!.userId;
+    const studentId = req.user!.id; // UPDATED: Changed from req.currentUser.userId
 
     const [profile, lastSession, history] = await Promise.all([
       prisma.studentProfile.findUnique({
@@ -74,9 +74,9 @@ router.get('/preload', authMiddleware, async (req: Request, res) => {
 });
 
 // 2. Starting a New Chat (POST /new-session)
-router.post('/new-session', authMiddleware, async (req: Request, res) => {
+router.post('/new-session', schoolAuthMiddleware, async (req: Request, res) => {
   try {
-    const studentId = req.currentUser!.userId;
+    const studentId = req.user!.id; // UPDATED: Changed from req.currentUser.userId
 
     const activeSessionKey = `session:active:${studentId}`;
     const existingActiveSession = await redis.get(activeSessionKey);
@@ -112,9 +112,9 @@ router.post('/new-session', authMiddleware, async (req: Request, res) => {
 });
 
 // 3. Sending a Message (POST /chat)
-router.post('/chat', authMiddleware, async (req: Request, res) => {
+router.post('/chat', schoolAuthMiddleware, async (req: Request, res) => {
   try {
-    const studentId = req.currentUser!.userId;
+    const studentId = req.user!.id; // UPDATED: Changed from req.currentUser.userId
     const { message } = req.body;
 
     const profileString = await redis.get(`profile:${studentId}`);
@@ -175,9 +175,9 @@ router.post('/chat', authMiddleware, async (req: Request, res) => {
 });
 
 // 4. History (GET /history)
-router.get('/history', authMiddleware, async (req: Request, res) => {
+router.get('/history', schoolAuthMiddleware, async (req: Request, res) => {
   try {
-    const studentId = req.currentUser!.userId;
+    const studentId = req.user!.id; // UPDATED: Changed from req.currentUser.userId
     const history = await prisma.chatSession.findMany({
       where: { studentId },
       orderBy: { updatedAt: 'desc' },
@@ -197,9 +197,9 @@ router.get('/history', authMiddleware, async (req: Request, res) => {
 });
 
 // 5. Resume Chat (GET /session/:id)
-router.get('/session/:id', authMiddleware, async (req: Request, res) => {
+router.get('/session/:id', schoolAuthMiddleware, async (req: Request, res) => {
   try {
-    const studentId = req.currentUser!.userId;
+    const studentId = req.user!.id; // UPDATED: Changed from req.currentUser.userId
     const sessionId = req.params.id;
 
     const session = await prisma.chatSession.findUnique({
@@ -226,9 +226,9 @@ router.get('/session/:id', authMiddleware, async (req: Request, res) => {
 });
 
 // 6. Search Past Chats (GET /search?q=fractions&mode=hybrid)
-router.get('/search', authMiddleware, async (req: Request, res) => {
+router.get('/search', schoolAuthMiddleware, async (req: Request, res) => {
   try {
-    const studentId = req.currentUser!.userId;
+    const studentId = req.user!.id; // UPDATED: Changed from req.currentUser.userId
     const { q: query, mode = 'hybrid' } = req.query;
 
     if (!query || typeof query !== 'string') {
