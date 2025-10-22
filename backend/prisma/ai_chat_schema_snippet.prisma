@@ -8,9 +8,6 @@ datasource db {
   directUrl = env("DIRECT_URL")
 }
 
-// ---------------------------------------------------------
-// AI CHAT MODELS (same as before)
-// ---------------------------------------------------------
 model ChatMessage {
   id            String      @id @default(uuid())
   sessionId     String
@@ -45,9 +42,7 @@ model ChatSession {
   @@map("ai_chat_sessions")
 }
 
-// ---------------------------------------------------------
-// STUDENT-LEVEL MEMORY
-// ---------------------------------------------------------
+
 model Progress {
   id         String         @id @default(uuid())
   studentId  String

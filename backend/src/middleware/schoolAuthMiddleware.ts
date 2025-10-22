@@ -1,7 +1,8 @@
 // backend/src/middleware/schoolAuthMiddleware.ts
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
-import prisma from '../utils/prismaClient'; // Use our singleton prisma client
+// Prisma is no longer needed in this file
+// import prisma from '../utils/prismaClient';
 
 // Extend the Express Request type to include our custom 'user' property
 declare global {
@@ -9,7 +10,6 @@ declare global {
     interface Request {
       user?: {
         id: string;
-        // We can add other properties like name, email if needed
       };
     }
   }
@@ -34,7 +34,7 @@ export const schoolAuthMiddleware = async (req: Request, res: Response, next: Ne
     let decoded;
     try {
       // 1. Verify the JWT token
-      decoded = jwt.verify(token, JWT_SECRET) as { userId: string }; // Assuming payload has { userId: '...' }
+      decoded = jwt.verify(token, JWT_SECRET) as { userId: string };
     } catch (error: any) {
       if (error.name === 'TokenExpiredError') {
         return res.status(401).json({
@@ -57,32 +57,16 @@ export const schoolAuthMiddleware = async (req: Request, res: Response, next: Ne
       });
     }
 
-    // 3. Lookup student profile by userId in our AI backend's database
-    // This replaces the 'user' lookup from your original code.
-    const studentProfile = await prisma.studentProfile.findUnique({
-      where: { userId: userId },
-      select: {
-        userId: true, // We only need the ID for now
-      }
-    });
+    // THE FIX: The database lookup has been removed.
+    // The middleware now trusts that the route handler (e.g., getOrCreateStudentProfile)
+    // will be responsible for handling the existence of a user profile.
 
-    if (!studentProfile) {
-      return res.status(401).json({
-        success: false,
-        message: 'Student profile not found or token invalid.'
-      });
-    }
-
-    // NOTE: The checks for user 'status' ('suspended', 'pending-completion') and 'role' from
-    // your original code have been removed because these fields do not exist on our
-    // StudentProfile model. If you need this functionality, we will need to add these
-    // fields to the 'StudentProfile' schema in 'backend/prisma/schema.prisma'.
-
-    // 4. Attach user information to the request object
+    // 3. Attach user ID to the request object
     req.user = {
-      id: studentProfile.userId
+      id: userId
     };
     
+    // 4. Pass control to the next handler
     next();
   } catch (error: any) {
     console.error('Authentication error:', error.message);

@@ -4,7 +4,6 @@ import cors from 'cors';
 import pino from 'pino';
 import profileRoutes from './routes/profile';
 import aiRoutes from './routes/ai';
-import chatRoutes from './routes/chatRoutes';
 // import authExchangeRoutes from './routes/auth';
 import { schoolAuthMiddleware } from './middleware/schoolAuthMiddleware'; // Import our new middleware
 
@@ -33,9 +32,6 @@ app.use((req, res, next) => {
 // Any request to these endpoints MUST include a valid "Bearer [backendToken]".
 app.use('/api', schoolAuthMiddleware, profileRoutes);
 app.use('/api/ai', schoolAuthMiddleware, aiRoutes);
-// Note: The middleware is applied to the '/api/ai' path, so it covers both `aiRoutes` and `chatRoutes`.
-// Applying it to `chatRoutes` again is redundant but harmless.
-app.use('/api/ai', schoolAuthMiddleware, chatRoutes);
 
 
 // Health Check Route (Public)

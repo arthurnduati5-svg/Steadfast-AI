@@ -1,4 +1,4 @@
-import { Router, Request } from 'express';
+import { Router, Request, Response } from 'express';
 import { schoolAuthMiddleware } from '../middleware/schoolAuthMiddleware';
 import { rateLimiter } from '../middleware/rateLimiter';
 import prisma from '../utils/prismaClient';
@@ -12,16 +12,74 @@ const router = Router();
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 const pineconeIndex = pinecone.Index(process.env.PINECONE_INDEX || '');
 
-// 1. Preload Logic (GET /preload)
-router.get('/preload', schoolAuthMiddleware, async (req: Request, res) => {
-  try {
-    const studentId = req.user!.id; // UPDATED: Changed from req.currentUser.userId
+// Helper: typed Request with user
+type AuthedRequest = Request & { user?: any };
 
-    const [profile, lastSession, history] = await Promise.all([
-      prisma.studentProfile.findUnique({
-        where: { userId: studentId },
-        select: { userId: true, gradeLevel: true, preferredLanguage: true, preferences: true },
-      }),
+// --- NEW HELPER FUNCTION ---
+const getOrCreateStudentProfile = async (studentId: string) => {
+  let profile = await prisma.studentProfile.findUnique({
+    where: { userId: studentId },
+  });
+
+  if (profile) {
+    console.log(`[Profile] Found existing profile for student: ${studentId}`);
+    return profile;
+  }
+
+  console.log(`[Profile] No profile found for student: ${studentId}. Creating new profile...`);
+
+  const MAIN_SYSTEM_API_URL = process.env.MAIN_SYSTEM_API_URL;
+  const INTERNAL_API_KEY = process.env.INTERNAL_API_KEY;
+
+  if (!MAIN_SYSTEM_API_URL || !INTERNAL_API_KEY) {
+    throw new Error('MAIN_SYSTEM_API_URL or INTERNAL_API_KEY is not configured in .env');
+  }
+
+  try {
+    // THE FIX: Programmatically remove trailing slash to make the code resilient
+    const sanitizedUrl = MAIN_SYSTEM_API_URL.endsWith('/') ? MAIN_SYSTEM_API_URL.slice(0, -1) : MAIN_SYSTEM_API_URL;
+    const response = await fetch(`${sanitizedUrl}/api/internal/students/${studentId}`, {
+      method: 'GET',
+      headers: {
+        'x-internal-api-key': INTERNAL_API_KEY,
+      },
+    });
+
+    if (!response.ok) {
+      // Log the actual error from the main system for better debugging
+      const errorBody = await response.text();
+      console.error(`[Profile] Error from main system: ${response.status} ${response.statusText}`, errorBody);
+      throw new Error(`Failed to fetch student data from main system. Status: ${response.status}`);
+    }
+
+    const studentData = await response.json();
+
+    profile = await prisma.studentProfile.create({
+      data: {
+        userId: studentData.id,
+        name: studentData.name,
+        email: studentData.email,
+        gradeLevel: studentData.grade || 'Not specified',
+        profileCompleted: false,
+      },
+    });
+
+    console.log(`[Profile] Successfully created new profile for student: ${studentId}`);
+    return profile;
+  } catch (error) {
+    console.error(`[Profile] Critical error creating profile for student ${studentId}:`, error);
+    throw new Error('Could not get or create student profile.');
+  }
+};
+// --- END OF HELPER FUNCTION ---
+
+// 1. Preload Logic (GET /preload)
+router.get('/preload', schoolAuthMiddleware, async (req: AuthedRequest, res: Response) => {
+  try {
+    const studentId = req.user!.id;
+    const profile = await getOrCreateStudentProfile(studentId);
+
+    const [lastSession, history] = await Promise.all([
       prisma.chatSession.findFirst({
         where: { studentId, isActive: true },
         include: { messages: { take: 5, orderBy: { timestamp: 'desc' } } },
@@ -41,24 +99,26 @@ router.get('/preload', schoolAuthMiddleware, async (req: Request, res) => {
     }
     await redis.set(`state:ready:${studentId}`, 'true', 'EX', 3600);
 
+    // Async warm-up
     (async () => {
       try {
         const queryEmbeddingResponse = await openai.embeddings.create({
           model: 'text-embedding-ada-002',
-          input: "Recent learning sessions",
+          input: 'Recent learning sessions',
         });
-        const queryEmbedding = queryEmbeddingResponse.data[0]?.embedding;
-        
+        const queryEmbedding = queryEmbeddingResponse.data?.[0]?.embedding;
+
         if (queryEmbedding) {
           const pineconeResults = await pineconeIndex.query({
             vector: queryEmbedding,
             topK: 3,
-            filter: { studentId: { '$eq': studentId } },
+            filter: { studentId: { $eq: studentId } },
           });
-          const semanticRecent = pineconeResults.matches?.map(match => ({
-            id: match.id,
-            topic: (match.metadata as any)?.topic,
-          })) || [];
+          const semanticRecent =
+            pineconeResults.matches?.map((match: any) => ({
+              id: match.id,
+              topic: (match.metadata as any)?.topic,
+            })) || [];
           await redis.set(`semantic:recent:${studentId}`, JSON.stringify(semanticRecent), 'EX', 3600);
         }
         console.log(`Async warm-up for student ${studentId} completed.`);
@@ -74,10 +134,12 @@ router.get('/preload', schoolAuthMiddleware, async (req: Request, res) => {
   }
 });
 
+// Other routes remain the same...
+
 // 2. Starting a New Chat (POST /new-session)
-router.post('/new-session', schoolAuthMiddleware, rateLimiter, async (req: Request, res) => {
+router.post('/new-session', schoolAuthMiddleware, async (req: AuthedRequest, res: Response) => {
   try {
-    const studentId = req.user!.id; // UPDATED: Changed from req.currentUser.userId
+    const studentId = req.user!.id;
 
     const activeSessionKey = `session:active:${studentId}`;
     const existingActiveSession = await redis.get(activeSessionKey);
@@ -88,23 +150,27 @@ router.post('/new-session', schoolAuthMiddleware, rateLimiter, async (req: Reque
         where: { id: session.id },
         data: { isActive: false, endTime: new Date() },
       });
-      
-      // Enqueue job for summarization and embedding
+
       summarizationQueue.add('summarize-session', { sessionId: session.id, studentId });
-      
+
       await redis.del(activeSessionKey);
     }
 
     const newSession = await prisma.chatSession.create({
-      data: { studentId, topic: "Untitled", isActive: true },
+      data: { studentId, topic: 'Untitled', isActive: true },
     });
 
-    await redis.set(activeSessionKey, JSON.stringify({
-      id: newSession.id,
-      messages: [],
-      topic: "Untitled",
-      sessionSummary: null,
-    }), 'EX', 3600);
+    await redis.set(
+      activeSessionKey,
+      JSON.stringify({
+        id: newSession.id,
+        messages: [],
+        topic: 'Untitled',
+        sessionSummary: null,
+      }),
+      'EX',
+      3600,
+    );
 
     res.status(200).send({ sessionId: newSession.id });
   } catch (error) {
@@ -114,59 +180,46 @@ router.post('/new-session', schoolAuthMiddleware, rateLimiter, async (req: Reque
 });
 
 // 3. Sending a Message (POST /chat)
-router.post('/chat', schoolAuthMiddleware, rateLimiter, async (req: Request, res) => {
+router.post('/chat', schoolAuthMiddleware, async (req: AuthedRequest, res: Response) => {
   try {
-    const studentId = req.user!.id; // UPDATED: Changed from req.currentUser.userId
+    const studentId = req.user!.id;
     const { message } = req.body;
 
-    let profileString = await redis.get(`profile:${studentId}`);
-    let sessionString = await redis.get(`session:active:${studentId}`);
-
-    if (!profileString) {
-      const profileFromDb = await prisma.studentProfile.findUnique({
-        where: { userId: studentId },
-        select: { userId: true, gradeLevel: true, preferredLanguage: true, preferences: true },
-      });
-      if (profileFromDb) {
-        profileString = JSON.stringify(profileFromDb);
-        await redis.set(`profile:${studentId}`, profileString, 'EX', 43200);
-      }
-    }
-
-    if (!sessionString) {
-      const sessionFromDb = await prisma.chatSession.findFirst({
-        where: { studentId, isActive: true },
-        include: { messages: { take: 5, orderBy: { timestamp: 'desc' } } },
-      });
-      if (sessionFromDb) {
-        sessionString = JSON.stringify(sessionFromDb);
-        await redis.set(`session:active:${studentId}`, sessionString, 'EX', 3600);
-      }
-    }
+    const profileString = await redis.get(`profile:${studentId}`);
+    const sessionString = await redis.get(`session:active:${studentId}`);
 
     if (!profileString || !sessionString) {
-      return res.status(400).send({ message: 'Profile or active session not found. Please preload.' });
+      return res.status(400).send({ message: 'Profile or active session not found in cache. Please preload.' });
     }
 
     const profile = JSON.parse(profileString);
     const session = JSON.parse(sessionString);
     const sessionId = session.id;
 
+    const nextMessageNumber = (session.messages?.length || 0) + 1;
+
     const studentMessage = await prisma.chatMessage.create({
-      data: { sessionId, role: 'student', content: message, timestamp: new Date(), messageNumber: session.messages.length + 1 }
+      data: { sessionId, role: 'student', content: message, timestamp: new Date(), messageNumber: nextMessageNumber },
     });
+
+    // keep local session.messages array updated
+    session.messages = session.messages || [];
     session.messages.push(studentMessage);
 
     const systemContext = promptBuilder.buildSystemContext(profile, session);
     const semanticCache = await redis.get(`semantic:recent:${studentId}`);
     const relatedTopics = semanticCache ? JSON.parse(semanticCache) : [];
-    
-    const messagesForAI: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [
+
+    const messagesForAI: any[] = [
       { role: 'system', content: systemContext },
       ...session.messages.slice(-10).map((msg: any) => ({ role: msg.role, content: msg.content })),
     ];
+
     if (relatedTopics.length > 0) {
-      messagesForAI.push({ role: 'system', content: `Previous related topics: ${relatedTopics.map((t: any) => t.topic).join(', ')}` });
+      messagesForAI.push({
+        role: 'system',
+        content: `Previous related topics: ${relatedTopics.map((t: any) => t.topic).join(', ')}`,
+      });
     }
 
     const aiCompletion = await openai.chat.completions.create({
@@ -176,23 +229,29 @@ router.post('/chat', schoolAuthMiddleware, rateLimiter, async (req: Request, res
       max_tokens: 1000,
     });
 
-    const aiResponse = aiCompletion.choices[0]?.message?.content || 'I am sorry, I could not generate a response.';
+    const aiResponse = aiCompletion.choices?.[0]?.message?.content || 'I am sorry, I could not generate a response.';
 
+    const aiMessageNumber = (session.messages?.length || 0) + 1;
     const aiMessage = await prisma.chatMessage.create({
-      data: { sessionId, role: 'ai', content: aiResponse, timestamp: new Date(), messageNumber: session.messages.length + 1 }
+      data: { sessionId, role: 'ai', content: aiResponse, timestamp: new Date(), messageNumber: aiMessageNumber },
     });
+
     session.messages.push(aiMessage);
 
-    await redis.set(`session:active:${studentId}`, JSON.stringify({
-      ...session,
-      messages: session.messages.slice(-10),
-    }), 'EX', 3600);
+    await redis.set(
+      `session:active:${studentId}`,
+      JSON.stringify({
+        ...session,
+        messages: session.messages.slice(-10),
+      }),
+      'EX',
+      3600,
+    );
 
     res.status(200).send({ response: aiResponse });
 
-    // Enqueue job for embeddings and other async tasks
+    // Fire-and-forget embedding job
     embeddingQueue.add('embed-message', { sessionId, studentId, message, aiResponse });
-    
   } catch (error) {
     console.error('Error in AI chat:', error);
     res.status(500).send({ message: 'Internal server error' });
@@ -200,24 +259,23 @@ router.post('/chat', schoolAuthMiddleware, rateLimiter, async (req: Request, res
 });
 
 // 4. History (GET /history)
-router.get('/history', schoolAuthMiddleware, async (req: Request, res) => {
+router.get('/history', schoolAuthMiddleware, async (req: AuthedRequest, res: Response) => {
   try {
-    const studentId = req.user!.id; // UPDATED: Changed from req.currentUser.userId
-    const { limit = '10', offset = '0' } = req.query;
+    const studentId = req.user!.id;
     const history = await prisma.chatSession.findMany({
       where: { studentId },
       orderBy: { updatedAt: 'desc' },
-      take: parseInt(limit as string),
-      skip: parseInt(offset as string),
       select: { id: true, topic: true, metadata: true, updatedAt: true },
     });
 
-    res.status(200).send(history.map(session => ({
-      id: session.id,
-      topic: session.topic,
-      summary: (session.metadata as any)?.summary || session.topic,
-      updatedAt: session.updatedAt,
-    })));
+    res.status(200).send(
+      history.map((session) => ({
+        id: session.id,
+        topic: session.topic,
+        summary: (session.metadata as any)?.summary || session.topic,
+        updatedAt: session.updatedAt,
+      })),
+    );
   } catch (error) {
     console.error('Error fetching history:', error);
     res.status(500).send({ message: 'Internal server error' });
@@ -225,26 +283,32 @@ router.get('/history', schoolAuthMiddleware, async (req: Request, res) => {
 });
 
 // 5. Resume Chat (GET /session/:id)
-router.get('/session/:id', schoolAuthMiddleware, async (req: Request, res) => {
+router.get('/session/:id', schoolAuthMiddleware, async (req: AuthedRequest, res: Response) => {
   try {
-    const studentId = req.user!.id; // UPDATED: Changed from req.currentUser.userId
+    const studentId = req.user!.id;
     const sessionId = req.params.id;
 
     const session = await prisma.chatSession.findUnique({
-      where: { id: sessionId, studentId },
+      where: { id: sessionId },
       include: { messages: { orderBy: { timestamp: 'asc' } } },
     });
 
-    if (!session) {
+    // ensure session belongs to student
+    if (!session || session.studentId !== studentId) {
       return res.status(404).send({ message: 'Session not found or not owned by student.' });
     }
 
-    await redis.set(`session:active:${studentId}`, JSON.stringify({
-      id: session.id,
-      messages: session.messages,
-      topic: session.topic,
-      sessionSummary: (session.metadata as any)?.summary || session.topic,
-    }), 'EX', 3600);
+    await redis.set(
+      `session:active:${studentId}`,
+      JSON.stringify({
+        id: session.id,
+        messages: session.messages,
+        topic: session.topic,
+        sessionSummary: (session.metadata as any)?.summary || session.topic,
+      }),
+      'EX',
+      3600,
+    );
 
     res.status(200).send({ messages: session.messages, topic: session.topic });
   } catch (error) {
@@ -254,10 +318,12 @@ router.get('/session/:id', schoolAuthMiddleware, async (req: Request, res) => {
 });
 
 // 6. Search Past Chats (GET /search?q=fractions&mode=hybrid)
-router.get('/search', schoolAuthMiddleware, async (req: Request, res) => {
+router.get('/search', schoolAuthMiddleware, async (req: AuthedRequest, res: Response) => {
   try {
-    const studentId = req.user!.id; // UPDATED: Changed from req.currentUser.userId
-    const { q: query, mode = 'hybrid' } = req.query;
+    const studentId = req.user!.id;
+    const { q: queryParam, mode: modeParam } = req.query as any;
+    const query = queryParam as string;
+    const mode = (modeParam as string) || 'hybrid';
 
     if (!query || typeof query !== 'string') {
       return res.status(400).send({ message: 'Search query (q) is required.' });
@@ -277,14 +343,17 @@ router.get('/search', schoolAuthMiddleware, async (req: Request, res) => {
         select: { id: true, topic: true, metadata: true, updatedAt: true },
         take: 10,
       });
-      results.push(...keywordSessions.map(session => ({
-        id: session.id,
-        topic: session.topic,
-        summary: (session.metadata as any)?.summary || session.topic,
-        updatedAt: session.updatedAt,
-        source: 'keyword',
-        relevance: 0.5,
-      })));
+
+      results.push(
+        ...keywordSessions.map((session) => ({
+          id: session.id,
+          topic: session.topic,
+          summary: (session.metadata as any)?.summary || session.topic,
+          updatedAt: session.updatedAt,
+          source: 'keyword',
+          relevance: 0.5,
+        })),
+      );
     }
 
     if (mode === 'semantic' || mode === 'hybrid') {
@@ -292,27 +361,27 @@ router.get('/search', schoolAuthMiddleware, async (req: Request, res) => {
         model: 'text-embedding-ada-002',
         input: query,
       });
-      const queryEmbedding = embeddingResponse.data[0]?.embedding;
+      const queryEmbedding = embeddingResponse.data?.[0]?.embedding;
 
       if (queryEmbedding) {
         const pineconeResults = await pineconeIndex.query({
           vector: queryEmbedding,
           topK: 10,
           filter: {
-            studentId: { '$eq': studentId },
-            type: { '$eq': 'session_summary' },
+            studentId: { $eq: studentId },
+            type: { $eq: 'session_summary' },
           },
         });
 
-        const semanticSessionIds = pineconeResults.matches?.map(match => match.id) || [];
+        const semanticSessionIds = pineconeResults.matches?.map((m: any) => m.id) || [];
         if (semanticSessionIds.length > 0) {
           const semanticSessions = await prisma.chatSession.findMany({
             where: { id: { in: semanticSessionIds } },
             select: { id: true, topic: true, metadata: true, updatedAt: true },
           });
 
-          semanticSessions.forEach(session => {
-            const match = pineconeResults.matches?.find(m => m.id === session.id);
+          semanticSessions.forEach((session) => {
+            const match = pineconeResults.matches?.find((m: any) => m.id === session.id);
             results.push({
               id: session.id,
               topic: session.topic,
@@ -326,8 +395,8 @@ router.get('/search', schoolAuthMiddleware, async (req: Request, res) => {
       }
     }
 
-    const uniqueResults = Array.from(new Map(results.map(item => [item.id, item])).values());
-    uniqueResults.sort((a, b) => b.relevance - a.relevance);
+    const uniqueResults = Array.from(new Map(results.map((item) => [item.id, item])).values());
+    uniqueResults.sort((a, b) => (b.relevance || 0) - (a.relevance || 0));
 
     res.status(200).send(uniqueResults.slice(0, 10));
   } catch (error) {
