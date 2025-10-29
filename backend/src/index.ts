@@ -4,11 +4,12 @@ import cors from 'cors';
 import pino from 'pino';
 import profileRoutes from './routes/profile';
 import aiRoutes from './routes/ai';
-// import authExchangeRoutes from './routes/auth';
+// import authExchangeRoutes from './routes/auth'; // Commented out this line again
 import { schoolAuthMiddleware } from './middleware/schoolAuthMiddleware'; // Import our new middleware
 
 const app = express();
-const PORT = process.env.PORT || 8080;
+const PORT = parseInt(process.env.PORT || '8080', 10); // Parse PORT to a number
+const HOST = '0.0.0.0'; // Explicitly set host to 0.0.0.0
 
 // Logger
 const logger = pino({ name: 'steadfast-copilot-backend' });
@@ -24,8 +25,12 @@ app.use((req, res, next) => {
 // --- Public Authentication Route ---
 // This route is for exchanging the school's token for our backend token.
 // It is NOT protected by the auth middleware.
-// app.use('/api/auth', authExchangeRoutes);
+// app.use('/api/auth', authExchangeRoutes); // Commented out this line again
 
+// Health Check Route (Public)
+app.get('/api/health', (req, res) => {
+  res.status(200).send({ status: 'ok', timestamp: new Date() });
+});
 
 // --- Protected API Routes ---
 // All routes below this point are now protected by our schoolAuthMiddleware.
@@ -34,11 +39,6 @@ app.use('/api', schoolAuthMiddleware, profileRoutes);
 app.use('/api/ai', schoolAuthMiddleware, aiRoutes);
 
 
-// Health Check Route (Public)
-app.get('/api/health', (req, res) => {
-  res.status(200).send({ status: 'ok', timestamp: new Date() });
-});
-
 // Global Error Handler
 app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
   logger.error(err, 'Unhandled application error');
@@ -46,6 +46,6 @@ app.use((err: any, req: express.Request, res: express.Response, next: express.Ne
 });
 
 // Start the server
-app.listen(PORT, () => {
-  logger.info(`Server running on port ${PORT}`);
+app.listen(PORT, HOST, () => { 
+  logger.info(`Server trying to listen on ${HOST}:${PORT}`); 
 });

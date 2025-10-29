@@ -1,16 +1,17 @@
 import { Router, Request } from 'express';
 import { schoolAuthMiddleware } from '../middleware/schoolAuthMiddleware';
 import prisma from '../utils/prismaClient';
+import _ from 'lodash';
 
 const router = Router();
 
 // Get student profile
 router.get('/profile', schoolAuthMiddleware, async (req: Request, res) => {
   try {
-    const studentId = req.user!.id; // UPDATED: Changed from req.currentUser.userId
+    const studentId = req.user!.id;
     const profile = await prisma.studentProfile.findUnique({ where: { userId: studentId } });
     if (!profile) {
-      return res.status(404).send({ message: 'Profile not found.' });
+      return res.status(404).send({ message: 'Profile not found. It will be created on first interaction.' });
     }
     res.status(200).send(profile);
   } catch (error) {
@@ -19,20 +20,50 @@ router.get('/profile', schoolAuthMiddleware, async (req: Request, res) => {
   }
 });
 
-// Create or update student profile
+// Create or Update student profile with safe merging
 router.post('/profile', schoolAuthMiddleware, async (req: Request, res) => {
   try {
-    const studentId = req.user!.id; // UPDATED: Changed from req.currentUser.userId
-    const { name, email, gradeLevel, preferredLanguage, preferences, favoriteShows } = req.body;
+    const studentId = req.user!.id;
+    const { preferredLanguage, topInterests, favoriteShows, ...otherData } = req.body;
+
+    const existingProfile = await prisma.studentProfile.findUnique({
+      where: { userId: studentId },
+    });
+
+    // Prepare preferences JSON
+    const newPreferences = {
+      ...(existingProfile?.preferences as object || {}),
+      ...otherData.preferences, // Merge any other preferences if sent directly
+      topInterests: topInterests || [], // Ensure topInterests is an array within preferences
+    };
+
+    // For updates, we merge new data onto existing data.
+    const updatePayload = {
+      ...otherData,
+      preferredLanguage: preferredLanguage || existingProfile?.preferredLanguage,
+      favoriteShows: favoriteShows || existingProfile?.favoriteShows || [],
+      preferences: newPreferences, // Use the constructed preferences object
+      profileCompleted: true,
+    };
+
+    // For creates, use the request data, ensuring defaults for JSON fields.
+    const createPayload = {
+      userId: studentId,
+      ...otherData,
+      preferredLanguage: preferredLanguage || null,
+      favoriteShows: favoriteShows || [],
+      preferences: newPreferences,
+      profileCompleted: true,
+    };
 
     const profile = await prisma.studentProfile.upsert({
       where: { userId: studentId },
-      update: { name, email, gradeLevel, preferredLanguage, preferences, favoriteShows, profileCompleted: true },
-      create: { userId: studentId, name, email, gradeLevel, preferredLanguage, preferences, favoriteShows, profileCompleted: true },
+      update: updatePayload,
+      create: createPayload,
     });
-    res.status(201).send(profile);
-  } catch (error)
- {
+
+    res.status(200).send(profile);
+  } catch (error) {
     console.error('Error creating/updating profile:', error);
     res.status(500).send({ message: 'Internal server error.' });
   }

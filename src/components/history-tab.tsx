@@ -5,13 +5,13 @@ import { Input } from '@/components/ui/input';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { Button } from '@/components/ui/button';
 import { Search } from 'lucide-react';
-import type { ChatSession, Message } from '@/lib/types'; // Import Message type as well
+import type { ChatSession, Message } from '@/lib/types';
 
 interface HistoryTabProps {
-  history: ChatSession[];
+  history: any[]; // Loosen type to handle backend-originated sessions
   searchQuery: string;
   setSearchQuery: (query: string) => void;
-  handleContinueChat: (session: ChatSession) => void;
+  handleContinueChat: (session: any) => void;
 }
 
 export const HistoryTab: React.FC<HistoryTabProps> = ({
@@ -25,15 +25,15 @@ export const HistoryTab: React.FC<HistoryTabProps> = ({
       return history;
     }
     const lowerCaseQuery = searchQuery.toLowerCase();
+    // Handle both frontend-created (title) and backend-created (topic) sessions
     return history.filter(session =>
-      session.title.toLowerCase().includes(lowerCaseQuery) || // Changed 'topic' to 'title' to match ChatSessionSchema
-      session.messages.some((msg: Message) => msg.content.toLowerCase().includes(lowerCaseQuery))
+      (session.title || session.topic || '').toLowerCase().includes(lowerCaseQuery) ||
+      (session.messages && session.messages.some((msg: Message) => msg.content.toLowerCase().includes(lowerCaseQuery)))
     );
   }, [history, searchQuery]);
 
   return (
     <div className="flex flex-col h-full min-h-0">
-      {/* Sticky search bar */}
       <div className="sticky top-0 z-20 border-b bg-background px-4 py-2">
         <div className="relative w-full">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -47,7 +47,6 @@ export const HistoryTab: React.FC<HistoryTabProps> = ({
         </div>
       </div>
 
-      {/* Scrollable history */}
       <div className="flex-1 overflow-y-auto min-h-0 px-4 pb-4">
         <Accordion type="single" collapsible className="space-y-2 pt-4">
           {filteredHistory.length > 0 ? (
@@ -55,18 +54,21 @@ export const HistoryTab: React.FC<HistoryTabProps> = ({
               <AccordionItem value={session.id} key={session.id}>
                 <AccordionTrigger>
                   <div>
-                    <p className="font-semibold text-left">{session.title}</p> {/* Changed 'topic' to 'title' */}
-                    <p className="text-xs text-muted-foreground text-left">{new Date(session.createdAt).toLocaleDateString()}</p> {/* Using createdAt and formatting */}
+                    <p className="font-semibold text-left">{session.topic || session.title}</p>
+                    <p className="text-xs text-muted-foreground text-left">
+                      {new Date(session.updatedAt || session.createdAt).toLocaleDateString()}
+                    </p>
                   </div>
                 </AccordionTrigger>
                 <AccordionContent>
                   <div className="space-y-2 text-sm text-muted-foreground">
-                    {session.messages.slice(0, 2).map((msg: Message) => (
-                      <p key={msg.content} className="truncate"> {/* Changed key to msg.content as msg.id might not exist for older messages */}
+                    {/* Use optional chaining and provide a default empty array */}
+                    {(session.messages || []).slice(0, 2).map((msg: Message, index: number) => (
+                      <p key={msg.id || index} className="truncate">
                         <strong>{msg.role}:</strong> {msg.content}
                       </p>
                     ))}
-                    {session.messages.length > 2 && <p>...</p>}
+                    {(session.messages || []).length > 2 && <p>...</p>}
                   </div>
                   <Button
                     variant="link"
@@ -80,7 +82,7 @@ export const HistoryTab: React.FC<HistoryTabProps> = ({
             ))
           ) : (
             <p className="text-center text-muted-foreground">
-              No chat sessions found matching your search.
+              {searchQuery ? 'No sessions found matching your search.' : 'You have no chat history yet.'}
             </p>
           )}
         </Accordion>

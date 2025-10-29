@@ -17,37 +17,16 @@ import { getAssistantResponse, AssistantResponseOutput } from '@/app/actions';
 import { useToast } from '@/hooks/use-toast';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
+import api from '@/lib/api';
+
 // Import the new components
 import { PreferencesForm } from './copilot/PreferencesForm';
 import { ChatTab } from './chat-tab';
 import { HistoryTab } from './history-tab';
 import { useUserProfile } from '@/contexts/UserProfileContext';
 
-const mockHistory: ChatSession[] = [
-    {
-      id: 'session1',
-      title: 'Solving for X',
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-      messages: [
-        { id: '1', role: 'user', content: 'how do i solve 2x - 5 = 11?' },
-        { id: '2', role: 'model', content: 'Great question! To solve for x, you want to get it by itself on one side of the equation. What do you think the first step is?' },
-      ],
-    },
-    {
-      id: 'session2',
-      title: 'Fractions',
-      createdAt: new Date(Date.now() - 86400000).toISOString(), 
-      updatedAt: new Date(Date.now() - 86400000).toISOString(),
-      messages: [
-        { id: '3', role: 'user', content: 'im stuck on adding 1/2 and 1/4' },
-        { id: '4', role: 'model', content: 'No problem! To add fractions, they need a common denominator. Can you find one for 2 and 4?' },
-      ],
-    },
-  ];
-
-  const MAX_FILE_SIZE_MB = 5;
-  const MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024; // 5MB
+const MAX_FILE_SIZE_MB = 5;
+const MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024; // 5MB
 
 export function SteadfastCopilot() {
   const pathname = usePathname();
@@ -57,7 +36,7 @@ export function SteadfastCopilot() {
   const [activeTab, setActiveTab] = useState('chat');
   
   const [messages, setMessages] = useState<Message[]>([]);
-  const [history, setHistory] = useState<ChatSession[]>(mockHistory);
+  const [history, setHistory] = useState<ChatSession[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   
   const [input, setInput] = useState('');
@@ -68,6 +47,7 @@ export function SteadfastCopilot() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [studentName, setStudentName] = useState('Student');
   const [displayedWelcomeText, setDisplayedWelcomeText] = useState('');
+  const [sessionToLoad, setSessionToLoad] = useState<any | null>(null);
 
   const { profile, setProfile, updateProfile } = useUserProfile();
 
@@ -94,10 +74,32 @@ export function SteadfastCopilot() {
 
   useEffect(() => {
     if (isOpen) {
-      setIsOpen(false);
+        loadInitialData();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pathname]);
+}, [isOpen]);
+
+const loadInitialData = async () => {
+    try {
+        const data = await api.get('/api/ai/preload');
+
+        if (data.history) {
+            setHistory(data.history);
+        }
+
+        if (data.lastSession && data.lastSession.messages) {
+            setMessages(data.lastSession.messages);
+        }
+
+    } catch (error) {
+        console.error('Error loading initial data:', error);
+        toast({
+            title: 'Error',
+            description: 'Could not load your session data. Starting a new chat.',
+            variant: 'destructive',
+        });
+    }
+};
 
   useEffect(() => {
     if (activeTab === 'chat' && messages.length === 0 && isOpen) {
@@ -134,14 +136,8 @@ export function SteadfastCopilot() {
     const fetchProfile = async () => {
         setIsProfileLoading(true);
         try {
-            // Replace with your actual API call: GET /api/profile
-            await new Promise(resolve => setTimeout(resolve, 1000)); // Simulate API call
-            const mockProfile = {
-                preferredLanguage: 'English',
-                topInterests: ['Coding', 'Music'],
-                favoriteShows: ['Science Kids'],
-            };
-            setProfile(mockProfile);
+            const profileData = await api.get('/api/profile'); // Corrected API path
+            setProfile(profileData);
         } catch (error) {
             toast({
                 title: "Error",
@@ -156,8 +152,8 @@ export function SteadfastCopilot() {
     const handleSavePreferences = async (data: any) => {
         setIsSavingProfile(true);
         try {
-            // Replace with your actual API call: POST /api/profile/update
-            await new Promise(resolve => setTimeout(resolve, 1500)); // Simulate API call
+            await api.post('/api/profile', data); // Corrected API path
+            
             updateProfile(data);
             toast({
                 title: "✅ Preferences saved!",
@@ -182,50 +178,48 @@ export function SteadfastCopilot() {
         fetchProfile();
     };
 
-  const handleNewChat = () => {
-    if (messages.length > 0) {
-      const firstUserMessage = messages.find(m => m.role === 'user');
-      const titleContent = firstUserMessage ? firstUserMessage.content : 'Chat Session';
+    const handleNewChat = async () => {
+        try {
+            await api.post('/api/ai/new-session', {});
 
-      const newSession: ChatSession = {
-        id: `session-${Date.now()}`,
-        title: titleContent.length > 30 ? titleContent.substring(0, 30) + '...' : titleContent,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-        messages: messages.map(msg => ({ 
-          id: msg.id,
-          role: msg.role,
-          content: msg.content,
-          ...(msg.videoData && { videoData: msg.videoData }),
-          ...(msg.image && { image: msg.image }),
-        }))
-      };
-      setHistory(prevHistory => [newSession, ...prevHistory]);
-    }
-    setMessages([]);
-    setInput('');
-    setSelectedFile(null);
-    setDisplayedWelcomeText('');
-    setForceWebSearch(false);
-    setIncludeVideos(false);
-    setLevel('Primary');
-    setLanguageHint('English');
-    setConversationState({
-      researchModeActive: false,
-      lastSearchTopic: [],
-      awaitingPracticeQuestionInvitationResponse: false,
-      activePracticeQuestion: undefined,
-      awaitingPracticeQuestionAnswer: false,
-      validationAttemptCount: 0,
-      lastAssistantMessage: undefined,
-      sensitiveContentDetected: false,
-      videoSuggested: false,
-    });
-    toast({
-      title: "New Chat Started",
-      description: "Your previous chat has been saved to history.",
-    });
-  };
+            // The old session is now archived on the backend, so we can clear the UI.
+            // We can also optimistically update the history, or reload it.
+            loadInitialData(); // Reload history and ensure we have a clean slate.
+
+            setMessages([]);
+            setInput('');
+            setSelectedFile(null);
+            setDisplayedWelcomeText('');
+            setForceWebSearch(false);
+            setIncludeVideos(false);
+            setLevel('Primary');
+            setLanguageHint('English');
+            setConversationState({
+                researchModeActive: false,
+                lastSearchTopic: [],
+                awaitingPracticeQuestionInvitationResponse: false,
+                activePracticeQuestion: undefined,
+                awaitingPracticeQuestionAnswer: false,
+                validationAttemptCount: 0,
+                lastAssistantMessage: undefined,
+                sensitiveContentDetected: false,
+                videoSuggested: false,
+            });
+
+            toast({
+                title: "New Chat Started",
+                description: "Your previous chat has been saved to history.",
+            });
+
+        } catch (error) {
+            console.error('Error starting new chat:', error);
+            toast({
+                title: "Error",
+                description: "Could not start a new chat session. Please try again.",
+                variant: "destructive",
+            });
+        }
+    };
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     if (event.target.files && event.target.files[0]) {
@@ -263,7 +257,7 @@ export function SteadfastCopilot() {
     const newUserMessage: Message = {
       id: `user-${Date.now()}`,
       role: 'user',
-      content: userInput,
+      content: userInput ?? '',
       image: selectedFile ? { src: URL.createObjectURL(selectedFile), alt: selectedFile.name } : undefined,
     };
     
@@ -280,7 +274,7 @@ export function SteadfastCopilot() {
       try {
         const stringHistory = updatedMessages.map((m: Message) => ({
           role: m.role,
-          content: m.content,
+          content: m.content || '',
           ...(m.id && { id: m.id }),
           ...(m.videoData && { videoData: m.videoData }),
           ...(m.image && { image: m.image }),
@@ -290,7 +284,7 @@ export function SteadfastCopilot() {
           userInput,
           stringHistory,
           conversationState,
-          pathname,
+          pathname ?? '',
           fileData,
           currentForceWebSearch,
           currentIncludeVideos,
@@ -339,46 +333,75 @@ export function SteadfastCopilot() {
         const fileType = selectedFile.type;
         if (base64String) {
           fileDataBase64 = { type: fileType, base64: base64String };
+          executeApiCall(fileDataBase64);
+        } else {
+          // Handle case where base64String is undefined, e.g., show an error toast
+          toast({
+            variant: "destructive",
+            title: "File Read Error",
+            description: "Could not read the selected file. Please try again.",
+          });
+          setIsLoading(false);
         }
-        executeApiCall(fileDataBase64);
       };
     } else {
       executeApiCall();
     }
   };
 
-  const handleContinueChat = (session: ChatSession) => {
-    setMessages(session.messages);
-    setActiveTab('chat');
-    setIsOpen(true);
-    
-    let initialContinuedState: ConversationState = {
-      researchModeActive: false,
-      lastSearchTopic: [],
-      awaitingPracticeQuestionInvitationResponse: false,
-      activePracticeQuestion: undefined,
-      awaitingPracticeQuestionAnswer: false,
-      validationAttemptCount: 0,
-      lastAssistantMessage: undefined,
-      sensitiveContentDetected: false,
-      videoSuggested: false,
-    };
+  useEffect(() => {
+    if (sessionToLoad) {
+        setMessages(sessionToLoad.messages || []);
+        
+        let initialContinuedState: ConversationState = {
+            researchModeActive: false,
+            lastSearchTopic: [sessionToLoad.topic || 'Untitled'],
+            awaitingPracticeQuestionInvitationResponse: false,
+            activePracticeQuestion: undefined,
+            awaitingPracticeQuestionAnswer: false,
+            validationAttemptCount: 0,
+            lastAssistantMessage: undefined,
+            sensitiveContentDetected: false,
+            videoSuggested: false,
+        };
 
-    const lastBotMessage = session.messages.filter(m => m.role === 'model').pop();
-    if (lastBotMessage) {
-        if (lastBotMessage.content.toLowerCase().includes('would you like me to give you a practice question?')) {
+        const lastBotMessage = sessionToLoad.messages?.filter((m: Message) => m.role === 'model').pop();
+        if (lastBotMessage && lastBotMessage.content.toLowerCase().includes('would you like me to give you a practice question?')) {
             initialContinuedState.awaitingPracticeQuestionInvitationResponse = true;
-            initialContinuedState.lastSearchTopic = [session.title]; 
             initialContinuedState.researchModeActive = true; 
         }
-    }
-    setConversationState(initialContinuedState);
 
-    toast({
-        title: "Chat history loaded",
-        description: `Continuing conversation about "${session.title}".`,
-    });
-  };
+        setConversationState(initialContinuedState);
+        
+        setActiveTab('chat');
+
+        toast({
+            title: "Chat history loaded",
+            description: `Continuing conversation about "${sessionToLoad.topic}".`,
+        });
+
+        setSessionToLoad(null);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sessionToLoad]);
+
+    const handleContinueChat = async (session: ChatSession) => {
+        try {
+            const sessionData = await api.get(`/api/ai/session/${session.id}`);
+            if (sessionData) {
+                setSessionToLoad(sessionData);
+            } else {
+                throw new Error("No session data returned from API");
+            }
+        } catch (error) {
+            console.error('Error resuming chat:', error);
+            toast({
+                title: "Error",
+                description: "Could not fetch the chat session. Please try again.",
+                variant: "destructive",
+            });
+        }
+    };
 
   const renderContent = () => {
       if (view === 'preferences') {

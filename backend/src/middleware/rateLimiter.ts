@@ -6,7 +6,7 @@ const RATE_LIMIT_WINDOW = 60; // 60 seconds
 
 export const rateLimiter = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const studentId = req.currentUser?.userId;
+    const studentId = req.user?.id;
 
     if (!studentId) {
       return res.status(401).send({ error: "Unauthorized" });
@@ -19,11 +19,14 @@ export const rateLimiter = async (req: Request, res: Response, next: NextFunctio
       return res.status(429).send({ error: 'Too many requests' });
     }
 
-    await redis.multi().incr(key).expire(key, RATE_LIMIT_WINDOW).exec();
+    const newCurrent = await redis.incr(key);
+
+    if (newCurrent === 1) {
+      await redis.expire(key, RATE_LIMIT_WINDOW);
+    }
 
     next();
   } catch (error) {
-    console.error('Error in rate limiter:', error);
-    next();
+    next(error);
   }
 };

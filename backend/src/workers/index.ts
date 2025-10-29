@@ -43,21 +43,31 @@ export const summarizationWorker = new Worker<SummarizationJobData>('summarizati
     });
     const sessionContent = messages.map(m => m.content).join(' ');
 
-    const summaryResponse = await openai.chat.completions.create({
-      model: 'gpt-3.5-turbo',
-      messages: [{ role: 'user', content: `Summarize this chat session title in 4 words: ${sessionContent}` }],
-      max_tokens: 20,
+    const topicResponse = await openai.chat.completions.create({
+        model: 'gpt-3.5-turbo',
+        messages: [
+            {
+                role: 'user',
+                content: `Generate a concise and engaging topic for the following chat session. The topic should be a short, catchy title that reflects the main theme of the conversation. Keep it under 5 words.
+
+Chat Session:
+${sessionContent}`
+            }
+        ],
+        max_tokens: 20,
     });
-    const summary = summaryResponse.choices[0]?.message?.content?.trim() || 'Untitled Session';
+    const topic = topicResponse.choices[0]?.message?.content?.trim() || 'Untitled Session';
 
     await prisma.chatSession.update({
       where: { id: sessionId },
-      data: { topic: summary, metadata: { summary } },
+      data: { 
+        topic: topic,
+      },
     });
 
     const embeddingResponse = await openai.embeddings.create({
       model: 'text-embedding-ada-002',
-      input: summary,
+      input: topic,
     });
     const embedding = embeddingResponse.data[0]?.embedding;
 
@@ -66,7 +76,7 @@ export const summarizationWorker = new Worker<SummarizationJobData>('summarizati
         {
           id: sessionId,
           values: embedding,
-          metadata: { studentId, topic: summary, type: 'session_summary' },
+          metadata: { studentId, topic: topic, type: 'session_summary' },
         },
       ]);
       console.log(`Session ${sessionId} summarized and embedded.`);

@@ -24,6 +24,18 @@ const nextConfig: NextConfig = {
       },
     ],
   },
+  env: {
+    NEXT_PUBLIC_BACKEND_URL: '',
+  },
+  async rewrites() {
+    return [
+      {
+        source: '/api/:path*',
+        // Change destination to localhost, as it was proven resolvable by curl from within the environment
+        destination: 'http://localhost:8080/api/:path*',
+      },
+    ];
+  },
 };
 
 export default nextConfig;
