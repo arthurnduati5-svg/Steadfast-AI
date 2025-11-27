@@ -66,17 +66,29 @@ model GlobalMemory {
 }
 
 model StudentProfile {
-  userId            String        @id
-  name              String?
-  email             String?
-  gradeLevel        String?
-  preferredLanguage String?
-  preferences       Json?
-  favoriteShows     Json?
-  profileCompleted  Boolean       @default(false)
-  createdAt         DateTime      @default(now())
-  updatedAt         DateTime      @updatedAt
-  chatSessions      ChatSession[]
-  progress          Progress[]
-  mistakes          Mistake[]
+  userId               String                @id
+  name                 String?
+  email                String?
+  gradeLevel           String?
+  preferredLanguage    String                @default("English")
+  topInterests         String[]              @default([])
+  preferences          Json?
+  favoriteShows        Json?
+  profileCompleted     Boolean               @default(false)
+  createdAt            DateTime              @default(now())
+  updatedAt            DateTime              @updatedAt
+  chatSessions         ChatSession[]
+  progress             Progress[]
+  mistakes             Mistake[]
+  copilotPreferences   CopilotPreferences?
+}
+
+model CopilotPreferences {
+  id                String         @id @default(uuid())
+  userId            String         @unique
+  student           StudentProfile @relation(fields: [userId], references: [userId], onDelete: Cascade)
+  preferredLanguage String
+  interests         Json
+  lastUpdatedAt     DateTime       @updatedAt
+  createdAt         DateTime       @default(now())
 }

@@ -1,9 +1,14 @@
 import prisma from '../lib/prisma';
-import redis from '../lib/redis';
+import { getRedisClient } from '../lib/redis'; // Corrected import
 import pinecone from '../lib/pinecone';
-import { Prisma } from '@prisma/client';
 import { buildProfileSummary } from '../utils/buildProfileSummary';
 import OpenAI from 'openai';
+
+// --- Prisma Type Inference ---
+// Import Prisma and infer types directly from Prisma functions
+type ChatMessage = Awaited<ReturnType<typeof prisma.chatMessage.findUnique>>;
+type Mistake = Awaited<ReturnType<typeof prisma.mistake.findUnique>>;
+type Progress = Awaited<ReturnType<typeof prisma.progress.findUnique>>;
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
@@ -32,28 +37,42 @@ export const aiService = {
       throw new Error('Student profile not found');
     }
 
-    // 1. Retrieve cached context from Redis (last 5 turns)
     const redisKey = `session:${studentId}`;
-    const cachedContext = await redis.lrange(redisKey, 0, 4);
-    const recentChatHistory = cachedContext.map(item => JSON.parse(item)) as { role: string; content: string }[];
+    // 1. Retrieve cached context from Redis (last 5 turns)
+    let recentChatHistory: { role: string; content: string }[] = [];
+    const redis = await getRedisClient();
+    if (redis) {
+      try {
+        const cachedContext = await redis.lRange(redisKey, 0, 4);
+        recentChatHistory = cachedContext.map((item: string) => JSON.parse(item)) as { role: string; content: string }[];
+      } catch (error) {
+        console.warn('Redis client available but error during context retrieval.', error);
+      }
+    } else {
+      console.warn('Redis client not available for chat context retrieval.');
+    }
 
     // 2. Retrieve long-term context from Pinecone (semantic similarity search)
-    let pineconeContext: Prisma.ChatMessage[] = [];
+    let pineconeContext: ChatMessage[] = []; // Use inferred ChatMessage type
     if (topic) {
       const messageEmbedding = await getEmbedding(message);
-      const index = pinecone.index(`student-${studentId}`);
-      const queryResponse = await index.query({
-        vector: messageEmbedding,
-        topK: 5,
-        filter: { topic: { '$eq': topic } },
-      });
-
-      const chatMessageIds = queryResponse.matches.map(match => match.id);
-      if (chatMessageIds.length > 0) {
-        pineconeContext = await prisma.chatMessage.findMany({
-          where: { id: { in: chatMessageIds } },
-          orderBy: { timestamp: 'asc' },
+      if (pinecone) {
+        const index = pinecone.index(`student-${studentId}`);
+        const queryResponse = await index.query({
+          vector: messageEmbedding,
+          topK: 5,
+          filter: { topic: { '$eq': topic } },
         });
+
+        const chatMessageIds = queryResponse.matches.map((match: { id: any; }) => match.id);
+        if (chatMessageIds.length > 0) {
+          pineconeContext = await prisma.chatMessage.findMany({
+            where: { id: { in: chatMessageIds } },
+            orderBy: { timestamp: 'asc' },
+          });
+        }
+      } else {
+        console.warn('Pinecone client not available. Skipping Pinecone context retrieval.');
       }
     }
 
@@ -74,17 +93,17 @@ export const aiService = {
     const profileSummary = buildProfileSummary(studentProfile);
     let systemPrompt = `You are Steadfast Copilot, an AI tutor for student ${studentProfile.name || ''}. `;
     systemPrompt += `You adapt to their behavior, learning pace, and interests. `;
-    systemPrompt += `Here's what I know about the student: ${profileSummary}. `;
+    systemPrompt += `Here\'s what I know about the student: ${profileSummary}. `;
 
     if (recentMistakes.length > 0) {
-      systemPrompt += `\nRecent mistakes to focus on: ${recentMistakes.map((m: Prisma.Mistake) => m.error).join(', ')}. `;
+      systemPrompt += `\nRecent mistakes to focus on: ${recentMistakes.map((m) => m?.error).join(', ')}. `;
     }
     if (studentProgress.length > 0) {
-      systemPrompt += `\nStudent's recent progress: ${studentProgress.map((p: Prisma.Progress) => `${p.subject} - ${p.topic}: Mastery ${p.mastery}`).join('; ')}. `;
+      systemPrompt += `\nStudent\'s recent progress: ${studentProgress.map((p) => `${p?.subject} - ${p?.topic}: Mastery ${p?.mastery}`).join('; ')}. `;
     }
     if (pineconeContext.length > 0) {
-      systemPrompt += `\nRelevant past discussions: ${pineconeContext.map((m: Prisma.ChatMessage) => m.content).join('\n')}. `;
-    }
+      systemPrompt += `\nRelevant past discussions: ${pineconeContext.map((m) => m?.content).join('\n')}. `;
+    };
 
     const messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [
       { role: 'system', content: systemPrompt },
@@ -132,25 +151,37 @@ export const aiService = {
 
     // 7. Store embeddings of the new conversation in Pinecone.
     const conversationEmbedding = await getEmbedding(`${message} ${aiResponse}`);
-    const index = pinecone.index(`student-${studentId}`);
-    await index.upsert([
-      {
-        id: newMessage.id,
-        values: await getEmbedding(newMessage.content),
-        metadata: { studentId: studentId, topic: chatSession.topic, role: 'user' },
-      },
-      {
-        id: newAIResponse.id,
-        values: await getEmbedding(newAIResponse.content),
-        metadata: { studentId: studentId, topic: chatSession.topic, role: 'assistant' },
-      },
-    ]);
+    if (pinecone) {
+      const index = pinecone.index(`student-${studentId}`);
+      await index.upsert([
+        {
+          id: newMessage.id,
+          values: await getEmbedding(newMessage.content),
+          metadata: { studentId: studentId, topic: chatSession.topic || '', role: 'user' },
+        },
+        {
+          id: newAIResponse.id,
+          values: await getEmbedding(newAIResponse.content),
+          metadata: { studentId: studentId, topic: chatSession.topic || '', role: 'assistant' },
+        },
+      ]);
+    } else {
+      console.warn('Pinecone client not available. Skipping Pinecone embeddings update.');
+    }
 
     // 8. Update Redis cache for fast follow-up responses.
-    await redis.lpush(redisKey, JSON.stringify({ role: 'assistant', content: aiResponse }));
-    await redis.lpush(redisKey, JSON.stringify({ role: 'user', content: message }));
-    await redis.ltrim(redisKey, 0, 9); // Keep last 10 messages (5 turns)
-    await redis.expire(redisKey, 3600); // Expire after 1 hour of inactivity
+    if (redis) {
+      try {
+        await redis.lPush(redisKey, JSON.stringify({ role: 'assistant', content: aiResponse }));
+        await redis.lPush(redisKey, JSON.stringify({ role: 'user', content: message }));
+        await redis.lTrim(redisKey, 0, 9); // Keep last 10 messages (5 turns)
+        await redis.expire(redisKey, 3600); // Expire after 1 hour of inactivity
+      } catch (error) {
+        console.warn('Redis client available but error during context update.', error);
+      }
+    } else {
+      console.warn('Redis client not available for chat context update.');
+    }
 
     return { response: aiResponse };
   },

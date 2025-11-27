@@ -36,7 +36,7 @@ app.get('/api/health', (req, res) => {
 // All routes below this point are now protected by our schoolAuthMiddleware.
 // Any request to these endpoints MUST include a valid "Bearer [backendToken]".
 app.use('/api', schoolAuthMiddleware, profileRoutes);
-app.use('/api/ai', schoolAuthMiddleware, aiRoutes);
+app.use('/api/copilot', schoolAuthMiddleware, aiRoutes);
 
 
 // Global Error Handler

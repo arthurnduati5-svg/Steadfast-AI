@@ -1,13 +1,14 @@
-
 'use client';
 
-import React, { createContext, useContext, useState, ReactNode } from 'react';
+import React, { createContext, useContext, useState, ReactNode, useEffect } from 'react';
 
 // Define the shape of the user profile
 interface UserProfile {
+  name?: string;
   gradeLevel?: string;
   preferredLanguage: string;
-  topInterests: string[];
+  // FIX: Renamed 'topInterests' to 'interests' to match the backend API and create a single source of truth.
+  interests: string[]; 
   favoriteShows: string[];
 }
 
@@ -25,8 +26,13 @@ const UserProfileContext = createContext<UserProfileContextType | undefined>(und
 export const UserProfileProvider = ({ children }: { children: ReactNode }) => {
   const [profile, setProfile] = useState<UserProfile | null>(null);
 
+  // This function is generic and will work correctly with the updated UserProfile interface.
   const updateProfile = (updates: Partial<UserProfile>) => {
-    setProfile(prev => (prev ? { ...prev, ...updates } : { ...updates } as UserProfile));
+    setProfile(prev => {
+      const newProfile = prev ? { ...prev, ...updates } : { ...updates } as UserProfile;
+      console.log("UserProfileContext: Profile updated", newProfile);
+      return newProfile;
+    });
   };
 
   return (

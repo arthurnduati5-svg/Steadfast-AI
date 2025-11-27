@@ -1,0 +1,75 @@
+[
+    {
+      "name": "ask_practice_question",
+      "description": "Ask a short practice question and return normalized correct keywords.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "question": { "type": "string" },
+          "correctAnswers": { "type": "array", "items": { "type": "string" } },
+          "topic": { "type": "string" }
+        },
+        "required": ["question", "correctAnswers", "topic"]
+      }
+    },
+    {
+      "name": "youtube_search",
+      "description": "Return top educational video metadata for a query from whitelisted sources.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "query": { "type": "string" },
+          "maxResults": { "type": "integer" }
+        },
+        "required": ["query"]
+      }
+    },
+    {
+      "name": "get_youtube_transcript",
+      "description": "Fetch a video's transcript by videoId.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "videoId": { "type": "string" }
+        },
+        "required": ["videoId"]
+      }
+    },
+    {
+      "name": "validate_math",
+      "description": "Validate and compute a simple arithmetic expression written in plain parentheses.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "expression": { "type": "string" }
+        },
+        "required": ["expression"]
+      }
+    },
+    {
+      "name": "format_preferences",
+      "description": "Serialize the student's preferences into a concise system instruction string.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "userId": { "type": "string" },
+          "preferredLanguage": { "type": "string" },
+          "interests": { "type": "array", "items": { "type": "string" } }
+        },
+        "required": ["userId"]
+      }
+    },
+    {
+      "name": "final_output_checker",
+      "description": "Run final safety and formatting checks on candidate assistant messages before returning them.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "candidateMessage": { "type": "string" },
+          "languageMode": { "type": "string" }
+        },
+        "required": ["candidateMessage"]
+      }
+    }
+  ]
+  

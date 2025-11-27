@@ -1,8 +1,6 @@
 // backend/src/middleware/schoolAuthMiddleware.ts
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
-// Prisma is no longer needed in this file
-// import prisma from '../utils/prismaClient';
 
 // Extend the Express Request type to include our custom 'user' property
 declare global {
@@ -21,27 +19,33 @@ if (!JWT_SECRET) {
 }
 
 export const schoolAuthMiddleware = async (req: Request, res: Response, next: NextFunction) => {
+  console.log(`[AuthMiddleware] - Incoming request for: ${req.method} ${req.originalUrl}`);
   try {
     const authHeader = req.headers.authorization;
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      console.warn(`[AuthMiddleware] - No token or invalid format for ${req.originalUrl}`);
       return res.status(401).json({
         success: false,
         message: 'Authentication required. No token provided or invalid format.'
       });
     }
     const token = authHeader.split(' ')[1];
+    console.log(`[AuthMiddleware] - Token received, attempting verification for ${req.originalUrl}`);
 
     let decoded;
     try {
       // 1. Verify the JWT token
       decoded = jwt.verify(token, JWT_SECRET) as { userId: string };
+      console.log(`[AuthMiddleware] - Token successfully verified for ${req.originalUrl}. Decoded userId: ${decoded.userId}`);
     } catch (error: any) {
       if (error.name === 'TokenExpiredError') {
+        console.warn(`[AuthMiddleware] - Token expired for ${req.originalUrl}`);
         return res.status(401).json({
           success: false,
           message: 'Token has expired. Please log in again.'
         });
       }
+      console.error(`[AuthMiddleware] - Invalid token for ${req.originalUrl}:`, error.message);
       return res.status(401).json({
         success: false,
         message: 'Authentication failed. Invalid token.'
@@ -51,15 +55,12 @@ export const schoolAuthMiddleware = async (req: Request, res: Response, next: Ne
     // 2. Extract the user ID from the token payload
     const userId = decoded.userId;
     if (!userId) {
+      console.warn(`[AuthMiddleware] - User ID not found in token payload for ${req.originalUrl}`);
       return res.status(401).json({
         success: false,
         message: 'User ID not found in token payload.'
       });
     }
-
-    // THE FIX: The database lookup has been removed.
-    // The middleware now trusts that the route handler (e.g., getOrCreateStudentProfile)
-    // will be responsible for handling the existence of a user profile.
 
     // 3. Attach user ID to the request object
     req.user = {
@@ -67,9 +68,10 @@ export const schoolAuthMiddleware = async (req: Request, res: Response, next: Ne
     };
     
     // 4. Pass control to the next handler
+    console.log(`[AuthMiddleware] - Calling next() for ${req.originalUrl}`);
     next();
   } catch (error: any) {
-    console.error('Authentication error:', error.message);
+    console.error(`[AuthMiddleware] - Unexpected authentication error for ${req.originalUrl}:`, error.message);
     return res.status(500).json({
       success: false,
       message: 'Unexpected server error during authentication.'

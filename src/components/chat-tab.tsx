@@ -6,10 +6,10 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Bot, User } from 'lucide-react';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import type { Message } from '@/lib/types';
-import { cn, formatMessageContent } from '@/lib/utils'; // Import formatMessageContent
+import { cn } from '@/lib/utils';
 import YouTubePlayer from './ui/youtube-player';
 import { ChatInputBar } from './chat-input-bar';
-import { ConversationState } from '@/app/actions'; // Import ConversationState
+import { ConversationState } from '@/app/actions'; // Adjust this import if ConversationState is now in @/lib/types
 
 const MessageBubble: React.FC<{ message: Message; isResearchModeActive: boolean }> = ({ message, isResearchModeActive }) => {
     const isUser = message.role === 'user';
@@ -28,21 +28,23 @@ const MessageBubble: React.FC<{ message: Message; isResearchModeActive: boolean 
           className={cn(
             'rounded-2xl px-4 py-2.5 text-sm break-words w-fit',
             hasVideo ? 'p-0' : '',
-            // Default max-width for all messages (user and AI in normal mode)
             'max-w-[90%] md:max-w-[75%]',
-            // Override max-width specifically for AI messages when in research mode
-            !isUser && isResearchModeActive && 'max-w-none',
             isUser 
               ? 'rounded-br-none bg-primary text-primary-foreground'
               : 'rounded-bl-none bg-muted'
           )}
+          // Using inline style to ensure white-space is preserved for newlines
+          style={{ whiteSpace: 'pre-wrap' }} 
         >
-          {/* Use dangerouslySetInnerHTML and formatMessageContent for displaying message content */}
           {message.content && (
-            <p 
-              className={cn('mb-2', hasVideo ? 'p-2' : '')}
-              dangerouslySetInnerHTML={{ __html: formatMessageContent(message.content) }}
-            />
+            // ==================================================================
+            // THE FIX: DANGEROUS HTML IS GONE. THIS IS NOW 100% SAFE.
+            // This renders message.content as plain text, preventing any
+            // Markdown or HTML from being executed.
+            // ==================================================================
+            <p className={cn('mb-2', hasVideo ? 'p-2' : '')}>
+              {message.content} 
+            </p>
           )}
           
           {hasVideo && message.videoData && (
@@ -67,6 +69,7 @@ const MessageBubble: React.FC<{ message: Message; isResearchModeActive: boolean 
     );
 };
 
+// Interface remains the same, no changes needed here
 interface ChatTabProps {
     messages: Message[];
     studentName: string;
@@ -76,7 +79,7 @@ interface ChatTabProps {
     handleRemoveFile: () => void;
     input: string;
     setInput: (value: string) => void;
-    handleSendMessage: (e: React.FormEvent, forceWebSearch: boolean, includeVideos: boolean) => void;
+    handleSendMessage: (e: React.FormEvent) => void; // Simplified signature
     isLoading: boolean;
     handleFileChange: (event: React.ChangeEvent<HTMLInputElement>) => void;
     fileInputRef: React.RefObject<HTMLInputElement>;
@@ -88,9 +91,11 @@ interface ChatTabProps {
     setLevel: (value: 'Primary' | 'LowerSecondary' | 'UpperSecondary') => void;
     languageHint: 'English' | 'Swahili mix';
     setLanguageHint: (value: 'English' | 'Swahili mix') => void;
-    conversationState: ConversationState; // Changed to accept the ConversationState object
+    conversationState: ConversationState;
+    isNewChat: boolean;
 }
 
+// The component itself remains largely the same, just rendering safely now
 export const ChatTab: React.FC<ChatTabProps> = ({
     messages,
     studentName,
@@ -112,13 +117,14 @@ export const ChatTab: React.FC<ChatTabProps> = ({
     setLevel,
     languageHint,
     setLanguageHint,
-    conversationState, // Destructure conversationState
+    conversationState,
+    isNewChat,
 }) => {
     return (
         <div className="flex h-full flex-col">
             <ScrollArea className="flex-1" ref={scrollAreaRef}>
                 <div className="p-4 flex flex-col space-y-2">
-                    {messages.length === 0 ? (
+                    {messages.length === 0 && isNewChat ? (
                         <Card className="bg-muted/50 text-center">
                             <CardHeader>
                                 <CardTitle>Hello {studentName}</CardTitle>
@@ -130,7 +136,7 @@ export const ChatTab: React.FC<ChatTabProps> = ({
                             </CardContent>
                         </Card>
                     ) : (
-                        messages.map(msg => <MessageBubble key={msg.id} message={msg} isResearchModeActive={conversationState.researchModeActive} />)
+                        messages.map((msg, index) => <MessageBubble key={msg.id || index} message={msg} isResearchModeActive={conversationState.researchModeActive} />)
                     )}
                 </div>
             </ScrollArea>

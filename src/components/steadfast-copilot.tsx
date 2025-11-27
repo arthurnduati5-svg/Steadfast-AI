@@ -1,8 +1,6 @@
-
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
-import { usePathname } from 'next/navigation';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -13,23 +11,46 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Bot, History, MessageSquare, Plus, Settings } from 'lucide-react';
 import type { Message, ChatSession, ConversationState } from '@/lib/types';
-import { getAssistantResponse, AssistantResponseOutput } from '@/app/actions';
+import { getAssistantResponse } from '@/app/actions';
 import { useToast } from '@/hooks/use-toast';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-
 import api from '@/lib/api';
-
-// Import the new components
 import { PreferencesForm } from './copilot/PreferencesForm';
 import { ChatTab } from './chat-tab';
 import { HistoryTab } from './history-tab';
 import { useUserProfile } from '@/contexts/UserProfileContext';
 
 const MAX_FILE_SIZE_MB = 5;
-const MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024; // 5MB
+const MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024;
+
+const DEFAULT_CONVERSATION_STATE: ConversationState = {
+  researchModeActive: false,
+  lastSearchTopic: [],
+  awaitingPracticeQuestionInvitationResponse: false,
+  activePracticeQuestion: undefined,
+  awaitingPracticeQuestionAnswer: false,
+  validationAttemptCount: 0,
+  lastAssistantMessage: undefined,
+  sensitiveContentDetected: false,
+  videoSuggested: false,
+  usedExamples: [],
+};
+
+const languageFrontendToBackend = {
+  'English': 'english',
+  'Swahili': 'swahili',
+  'Arabic': 'arabic',
+  'English + Swahili Mix': 'english_sw',
+};
+
+const languageBackendToFrontend = {
+  'english': 'English',
+  'swahili': 'Swahili',
+  'arabic': 'Arabic',
+  'english_sw': 'English + Swahili Mix',
+};
 
 export function SteadfastCopilot() {
-  const pathname = usePathname();
   const { toast } = useToast();
   const [isOpen, setIsOpen] = useState(false);
   const [view, setView] = useState('chat');
@@ -37,202 +58,329 @@ export function SteadfastCopilot() {
   
   const [messages, setMessages] = useState<Message[]>([]);
   const [history, setHistory] = useState<ChatSession[]>([]);
+  const [activeSession, setActiveSession] = useState<ChatSession | null>(null);
+  const [isNewChat, setIsNewChat] = useState(true);
+  const [conversationState, setConversationState] = useState<ConversationState>(DEFAULT_CONVERSATION_STATE);
   const [searchQuery, setSearchQuery] = useState('');
-  
+
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [isProfileLoading, setIsProfileLoading] = useState(false);
   const [isSavingProfile, setIsSavingProfile] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [studentName, setStudentName] = useState('Student');
-  const [displayedWelcomeText, setDisplayedWelcomeText] = useState('');
-  const [sessionToLoad, setSessionToLoad] = useState<any | null>(null);
 
   const { profile, setProfile, updateProfile } = useUserProfile();
 
-  // Web Search flags, these will still be controlled by UI toggles directly.
   const [forceWebSearch, setForceWebSearch] = useState(false);
   const [includeVideos, setIncludeVideos] = useState(false);
   const [level, setLevel] = useState<'Primary' | 'LowerSecondary' | 'UpperSecondary'>('Primary');
   const [languageHint, setLanguageHint] = useState<'English' | 'Swahili mix'>('English');
 
-  // Consolidated conversation state
-  const [conversationState, setConversationState] = useState<ConversationState>({
-    researchModeActive: false,
-    lastSearchTopic: [],
-    awaitingPracticeQuestionInvitationResponse: false,
-    activePracticeQuestion: undefined,
-    awaitingPracticeQuestionAnswer: false,
-    validationAttemptCount: 0,
-    lastAssistantMessage: undefined,
-    sensitiveContentDetected: false,
-    videoSuggested: false,
-  });
-
   const scrollAreaRef = useRef<HTMLDivElement>(null);
+
+  const scrollToBottom = useCallback(() => {
+    setTimeout(() => {
+      const viewport = scrollAreaRef.current?.querySelector('[data-radix-scroll-area-viewport]');
+      if (viewport) {
+        viewport.scrollTop = viewport.scrollHeight;
+      }
+    }, 100);
+  }, []);
+
+  const handleNewChat = useCallback(async (showToast = true) => {
+    try {
+      // Create session in DB immediately
+      const newSessionData = await api.post('/api/copilot/new-session', {});
+      
+      setMessages([]); 
+      setInput('');
+      setSelectedFile(null);
+      setActiveSession({ 
+        id: newSessionData.sessionId, 
+        title: newSessionData.topic || 'New Chat', 
+        messages: [],
+        createdAt: newSessionData.createdAt,
+        updatedAt: newSessionData.updatedAt,
+        conversationState: newSessionData.conversationState || DEFAULT_CONVERSATION_STATE
+      });
+      setIsNewChat(true);
+      setConversationState(DEFAULT_CONVERSATION_STATE);
+      setActiveTab('chat');
+
+      if (showToast) {
+          toast({ title: "New Chat Started", description: "Previous conversation saved to history." });
+      }
+      
+      // Refresh history list
+      const data = await api.get('/api/copilot/preload');
+      if (data.history) {
+        setHistory(data.history);
+      }
+    } catch (error) {
+        console.error('[handleNewChat] Error starting new chat:', error);
+        toast({ title: "Error", description: "Could not start a new chat.", variant: "destructive" });
+    }
+  }, [toast]);
+  
+  const loadInitialData = useCallback(async () => {
+    try {
+        const data = await api.get('/api/copilot/preload');
+        if (data.history) setHistory(data.history);
+
+        if (data.lastSession) {
+            const messagesWithParsedDates = data.lastSession.messages.map((m: any) => ({
+                ...m,
+                timestamp: new Date(m.timestamp),
+            }));
+            setMessages(messagesWithParsedDates);
+            setActiveSession(data.lastSession);
+            setConversationState(data.lastSession.conversationState || DEFAULT_CONVERSATION_STATE);
+            setIsNewChat(false);
+            setActiveTab('chat');
+        } else {
+            // If no last session exists, create one strictly
+            handleNewChat(false);
+        }
+    } catch (error) {
+        console.error('[loadInitialData] Error loading initial data:', error);
+        toast({ title: 'Error', description: 'Could not load session data.', variant: 'destructive' });
+        // Fallback to local new chat state if API fails
+        setMessages([]);
+        setConversationState(DEFAULT_CONVERSATION_STATE);
+    }
+  }, [toast, handleNewChat]);
 
   useEffect(() => {
     if (isOpen) {
         loadInitialData();
+    } else {
+        setInput('');
+        setSelectedFile(null);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-}, [isOpen]);
-
-const loadInitialData = async () => {
-    try {
-        const data = await api.get('/api/ai/preload');
-
-        if (data.history) {
-            setHistory(data.history);
-        }
-
-        if (data.lastSession && data.lastSession.messages) {
-            setMessages(data.lastSession.messages);
-        }
-
-    } catch (error) {
-        console.error('Error loading initial data:', error);
-        toast({
-            title: 'Error',
-            description: 'Could not load your session data. Starting a new chat.',
-            variant: 'destructive',
-        });
-    }
-};
+  }, [isOpen, loadInitialData]);
 
   useEffect(() => {
-    if (activeTab === 'chat' && messages.length === 0 && isOpen) {
-      const fullText = `Hello ${studentName}, how can I help you?`;
-      let i = 0;
-      const typingInterval = setInterval(() => {
-        setDisplayedWelcomeText(fullText.substring(0, i));
-        i++;
-        if (i > fullText.length) {
-          clearInterval(typingInterval);
-        }
-      }, 50);
-
-      return () => clearInterval(typingInterval);
-    } else if (messages.length > 0) {
-      setDisplayedWelcomeText(''); 
+    if (messages.length > 0) {
+      scrollToBottom();
     }
-  }, [activeTab, messages, isOpen, studentName]);
+  }, [messages, scrollToBottom]);
 
-  useEffect(() => {
-    if (activeTab === 'chat' && messages.length > 0) {
-      setTimeout(() => {
-        const viewport = scrollAreaRef.current?.querySelector('[data-radix-scroll-area-viewport]');
-        if (viewport) viewport.scrollTop = viewport.scrollHeight;
-      }, 100);
-    }
-  }, [messages, activeTab]);
-
-  // Sync forceWebSearch with researchModeActive from the backend
   useEffect(() => {
     setForceWebSearch(conversationState.researchModeActive);
   }, [conversationState.researchModeActive]);
 
-    const fetchProfile = async () => {
-        setIsProfileLoading(true);
-        try {
-            const profileData = await api.get('/api/profile'); // Corrected API path
-            setProfile(profileData);
-        } catch (error) {
-            toast({
-                title: "Error",
-                description: "Could not fetch your learning preferences.",
-                variant: "destructive",
-            });
-        } finally {
-            setIsProfileLoading(false);
-        }
-    };
+  const handleSendMessage = async (e: React.FormEvent | null) => {
+    if (e) e.preventDefault();
+    if (isLoading || (!input.trim() && !selectedFile)) return;
 
-    const handleSavePreferences = async (data: any) => {
-        setIsSavingProfile(true);
+    setIsLoading(true);
+    const userInput = input;
+    const fileToUpload = selectedFile;
+    
+    // 1. Optimistic UI Update
+    const userMessage: Message = {
+      id: `user-${Date.now()}`,
+      role: 'user',
+      content: userInput,
+      image: fileToUpload ? { src: URL.createObjectURL(fileToUpload), alt: fileToUpload.name } : undefined,
+      timestamp: new Date(),
+    };
+    
+    const currentMessages = [...messages, userMessage];
+    setMessages(currentMessages);
+    setInput('');
+    setSelectedFile(null);
+    if (fileInputRef.current) fileInputRef.current.value = '';
+    scrollToBottom();
+
+    let fileDataForAction: { type: string; base64: string } | undefined = undefined;
+
+    const executeAction = async () => {
         try {
-            await api.post('/api/profile', data); // Corrected API path
+            // 2. Ensure Active Session & Persist User Message
+            let currentSessionId = activeSession?.id;
+
+            if (!currentSessionId) {
+                // Should logically be handled by handleNewChat, but safety net:
+                const newSess = await api.post('/api/copilot/new-session', {});
+                currentSessionId = newSess.sessionId;
+                setActiveSession(prev => prev ? { ...prev, id: newSess.sessionId } : newSess);
+            }
+
+            // SAVE USER MESSAGE TO DB
+            await api.post('/api/copilot/message', {
+                sessionId: currentSessionId,
+                message: userMessage
+            });
+
+            // 3. Get AI Response (Server Action Bridge)
+            const response = await getAssistantResponse(
+              userInput,
+              currentMessages,
+              conversationState,
+              fileDataForAction,
+              forceWebSearch,
+              includeVideos,
+              level,
+              (languageFrontendToBackend as any)[languageHint] || 'english'
+            );
             
-            updateProfile(data);
-            toast({
-                title: "✅ Preferences saved!",
-                description: "The copilot will now use your updated preferences.",
+            const assistantMessage: Message = {
+              id: `model-${Date.now()}`,
+              role: 'model', 
+              content: response.processedText,
+              videoData: response.videoData,
+              timestamp: new Date(),
+            };
+
+            // 4. Update UI with AI Message
+            setMessages(prev => [...prev, assistantMessage]);
+            setConversationState(response.state);
+
+            // 5. SAVE AI MESSAGE & STATE TO DB
+            await api.post('/api/copilot/message', {
+                sessionId: currentSessionId,
+                message: assistantMessage,
+                conversationState: response.state // Save state so context isn't lost on reload
             });
-            setTimeout(() => {
-                setView('chat');
-            }, 1000);
-        } catch (error) {
-            toast({
-                title: "⚠️ Couldn’t save preferences.",
-                description: "Please try again.",
-                variant: "destructive",
-            });
+
+            // 6. Update Session Title if Topic Changed
+            if (response.topic && activeSession && activeSession.title !== response.topic) {
+                const updatedSession: ChatSession = {
+                  ...activeSession,
+                  title: response.topic,
+                };
+                setActiveSession(updatedSession);
+                
+                // Persist Title Change (USING POST INSTEAD OF PATCH TO FIX TYPE ERROR)
+                await api.post(`/api/copilot/session/${currentSessionId}/title`, { title: response.topic });
+
+                // Refresh history
+                const data = await api.get('/api/copilot/preload');
+                if (data.history) setHistory(data.history);
+            }
+        } catch (error: any) {
+            console.error("Server Action failed:", error);
+            const errorMessage: Message = {
+              id: `model-error-${Date.now()}`,
+              role: 'model',
+              content: error.message || "Sorry, an unexpected error occurred. Please try again.",
+              timestamp: new Date(),
+            };
+            setMessages(prev => [...prev, errorMessage]);
         } finally {
-            setIsSavingProfile(false);
+            setIsLoading(false);
+            scrollToBottom();
         }
     };
 
-    const handleOpenPreferences = () => {
-        setView('preferences');
-        fetchProfile();
-    };
-
-    const handleNewChat = async () => {
-        try {
-            await api.post('/api/ai/new-session', {});
-
-            // The old session is now archived on the backend, so we can clear the UI.
-            // We can also optimistically update the history, or reload it.
-            loadInitialData(); // Reload history and ensure we have a clean slate.
-
-            setMessages([]);
-            setInput('');
-            setSelectedFile(null);
-            setDisplayedWelcomeText('');
-            setForceWebSearch(false);
-            setIncludeVideos(false);
-            setLevel('Primary');
-            setLanguageHint('English');
-            setConversationState({
-                researchModeActive: false,
-                lastSearchTopic: [],
-                awaitingPracticeQuestionInvitationResponse: false,
-                activePracticeQuestion: undefined,
-                awaitingPracticeQuestionAnswer: false,
-                validationAttemptCount: 0,
-                lastAssistantMessage: undefined,
-                sensitiveContentDetected: false,
-                videoSuggested: false,
-            });
-
-            toast({
-                title: "New Chat Started",
-                description: "Your previous chat has been saved to history.",
-            });
-
-        } catch (error) {
-            console.error('Error starting new chat:', error);
-            toast({
-                title: "Error",
-                description: "Could not start a new chat session. Please try again.",
-                variant: "destructive",
-            });
+    if (fileToUpload) {
+      const reader = new FileReader();
+      reader.readAsDataURL(fileToUpload);
+      reader.onloadend = () => {
+        const base64String = reader.result?.toString().split(',')[1];
+        if (base64String) {
+          fileDataForAction = { type: fileToUpload.type, base64: base64String };
+          executeAction();
+        } else {
+          toast({ variant: "destructive", title: "File Read Error", description: "Could not process the file." });
+          setIsLoading(false);
         }
-    };
+      };
+      reader.onerror = () => {
+        toast({ variant: "destructive", title: "File Read Error" });
+        setIsLoading(false);
+      };
+    } else {
+      executeAction();
+    }
+  };
+  
+  const handleContinueChat = async (session: ChatSession) => {
+    try {
+      const sessionData = await api.get(`/api/copilot/session/${session.id}`);
+      const messagesWithParsedDates = sessionData.messages.map((m: any) => ({
+          ...m,
+          timestamp: new Date(m.timestamp),
+      }));
+      setMessages(messagesWithParsedDates);
+      setActiveSession(sessionData);
+      setConversationState(sessionData.conversationState || DEFAULT_CONVERSATION_STATE);
+      setIsNewChat(false);
+      setInput('');
+      setSelectedFile(null);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+      setActiveTab('chat');
+      toast({ title: "Chat Loaded", description: `Continuing session: "${sessionData.title || 'Untitled'}"` });
+    } catch (error) {
+        console.error('[handleContinueChat] API error resuming chat:', error);
+        toast({ title: "Error", description: "Could not fetch the chat session.", variant: "destructive" });
+        handleNewChat(false);
+    }
+  };
+
+  const fetchProfile = async () => {
+    setIsProfileLoading(true);
+    try {
+        const preferencesData = await api.get('/api/copilot/preferences');
+        const frontendPreferredLanguage = (languageBackendToFrontend as any)[preferencesData.preferredLanguage] || 'English';
+
+        setProfile({
+          preferredLanguage: frontendPreferredLanguage,
+          interests: preferencesData.interests || [],
+          name: profile?.name,
+          gradeLevel: profile?.gradeLevel,
+          favoriteShows: profile?.favoriteShows || [],
+        });
+
+    } catch (error) {
+        console.error('Error fetching preferences:', error);
+        toast({ title: "Error", description: "Could not fetch preferences.", variant: "destructive" });
+    } finally {
+        setIsProfileLoading(false);
+    }
+  };
+
+  const handleSavePreferences = async (data: any) => {
+    setIsSavingProfile(true);
+    try {
+        const backendPreferredLanguage = (languageFrontendToBackend as any)[data.preferredLanguage] || 'english';
+        const payload = {
+          preferredLanguage: backendPreferredLanguage,
+          interests: data.interests || [],
+        };
+        const savedPreferences = await api.post('/api/copilot/preferences', payload);
+        const frontendPreferredLanguage = (languageBackendToFrontend as any)[savedPreferences.preferredLanguage] || 'English';
+        updateProfile({
+          preferredLanguage: frontendPreferredLanguage,
+          interests: savedPreferences.interests || [],
+        });
+        toast({ title: "✅ Preferences saved!" });
+        setTimeout(() => setView('chat'), 1000);
+    } catch (error) {
+        console.error('Error saving preferences:', error);
+        toast({ title: "⚠️ Couldn’t save preferences.", description: "Please check your inputs and try again.", variant: "destructive" });
+    } finally {
+        setIsSavingProfile(false);
+    }
+  };
+
+  const handleOpenPreferences = () => {
+      setView('preferences');
+      fetchProfile();
+  };
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    if (event.target.files && event.target.files[0]) {
-      const file = event.target.files[0];
+    const file = event.target.files?.[0];
+    if (file) {
       if (file.size > MAX_FILE_SIZE_BYTES) {
         toast({
           variant: "destructive",
           title: "File Too Large",
           description: `Please select a file smaller than ${MAX_FILE_SIZE_MB}MB.`,
         });
-        if (fileInputRef.current) {
-          fileInputRef.current.value = '';
-        }
+        if (fileInputRef.current) fileInputRef.current.value = '';
         setSelectedFile(null);
         return;
       }
@@ -242,259 +390,79 @@ const loadInitialData = async () => {
 
   const handleRemoveFile = () => {
     setSelectedFile(null);
-    if (fileInputRef.current) {
-      fileInputRef.current.value = '';
-    }
+    if (fileInputRef.current) fileInputRef.current.value = '';
   };
-
-  const handleSendMessage = async (e: React.FormEvent | null, currentForceWebSearch: boolean, currentIncludeVideos: boolean) => {
-    if (e) e.preventDefault();
-    const userInput = input;
-    if ((!userInput.trim() && !selectedFile && !currentForceWebSearch) || isLoading) return;
-
-    let fileDataBase64: { type: string; base64: string } | undefined;
-
-    const newUserMessage: Message = {
-      id: `user-${Date.now()}`,
-      role: 'user',
-      content: userInput ?? '',
-      image: selectedFile ? { src: URL.createObjectURL(selectedFile), alt: selectedFile.name } : undefined,
-    };
-    
-    const updatedMessages = [...messages, newUserMessage];
-    setMessages(updatedMessages);
-    setInput('');
-    setSelectedFile(null);
-    if (fileInputRef.current) {
-      fileInputRef.current.value = '';
-    }
-    setIsLoading(true);
-
-    const executeApiCall = async (fileData?: { type: string; base64: string }) => {
-      try {
-        const stringHistory = updatedMessages.map((m: Message) => ({
-          role: m.role,
-          content: m.content || '',
-          ...(m.id && { id: m.id }),
-          ...(m.videoData && { videoData: m.videoData }),
-          ...(m.image && { image: m.image }),
-        }));
-        
-        const assistantResponse: AssistantResponseOutput = await getAssistantResponse(
-          userInput,
-          stringHistory,
-          conversationState,
-          pathname ?? '',
-          fileData,
-          currentForceWebSearch,
-          currentIncludeVideos,
-          level,
-          languageHint,
-        );
-      
-        const assistantMessage: Message = {
-            id: `assistant-${Date.now()}`,
-            role: 'model',
-            content: assistantResponse.processedText,
-            videoData: assistantResponse.videoData,
-        };
-        setMessages((prev) => [...prev, assistantMessage]);
-        setConversationState(assistantResponse.state);
-
-      } catch (error) {
-        console.error("Error sending message or getting AI response:", error);
-        const errorMessage: Message = {
-          id: `assistant-error-${Date.now()}`,
-          role: 'model',
-          content: "Sorry, I encountered an error. Please try again.",
-        };
-        setMessages((prev) => [...prev, errorMessage]);
-        setConversationState({
-          researchModeActive: false,
-          lastSearchTopic: [],
-          awaitingPracticeQuestionInvitationResponse: false,
-          activePracticeQuestion: undefined,
-          awaitingPracticeQuestionAnswer: false,
-          validationAttemptCount: 0,
-          lastAssistantMessage: undefined,
-          sensitiveContentDetected: false,
-          videoSuggested: false,
-        });
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    if (selectedFile) {
-      const reader = new FileReader();
-      reader.readAsDataURL(selectedFile);
-      reader.onloadend = () => {
-        const base64String = reader.result?.toString().split(',')[1];
-        const fileType = selectedFile.type;
-        if (base64String) {
-          fileDataBase64 = { type: fileType, base64: base64String };
-          executeApiCall(fileDataBase64);
-        } else {
-          // Handle case where base64String is undefined, e.g., show an error toast
-          toast({
-            variant: "destructive",
-            title: "File Read Error",
-            description: "Could not read the selected file. Please try again.",
-          });
-          setIsLoading(false);
-        }
-      };
-    } else {
-      executeApiCall();
-    }
-  };
-
-  useEffect(() => {
-    if (sessionToLoad) {
-        setMessages(sessionToLoad.messages || []);
-        
-        let initialContinuedState: ConversationState = {
-            researchModeActive: false,
-            lastSearchTopic: [sessionToLoad.topic || 'Untitled'],
-            awaitingPracticeQuestionInvitationResponse: false,
-            activePracticeQuestion: undefined,
-            awaitingPracticeQuestionAnswer: false,
-            validationAttemptCount: 0,
-            lastAssistantMessage: undefined,
-            sensitiveContentDetected: false,
-            videoSuggested: false,
-        };
-
-        const lastBotMessage = sessionToLoad.messages?.filter((m: Message) => m.role === 'model').pop();
-        if (lastBotMessage && lastBotMessage.content.toLowerCase().includes('would you like me to give you a practice question?')) {
-            initialContinuedState.awaitingPracticeQuestionInvitationResponse = true;
-            initialContinuedState.researchModeActive = true; 
-        }
-
-        setConversationState(initialContinuedState);
-        
-        setActiveTab('chat');
-
-        toast({
-            title: "Chat history loaded",
-            description: `Continuing conversation about "${sessionToLoad.topic}".`,
-        });
-
-        setSessionToLoad(null);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sessionToLoad]);
-
-    const handleContinueChat = async (session: ChatSession) => {
-        try {
-            const sessionData = await api.get(`/api/ai/session/${session.id}`);
-            if (sessionData) {
-                setSessionToLoad(sessionData);
-            } else {
-                throw new Error("No session data returned from API");
-            }
-        } catch (error) {
-            console.error('Error resuming chat:', error);
-            toast({
-                title: "Error",
-                description: "Could not fetch the chat session. Please try again.",
-                variant: "destructive",
-            });
-        }
-    };
 
   const renderContent = () => {
       if (view === 'preferences') {
-          return (
-              <PreferencesForm
-                profileData={profile}
-                onSave={handleSavePreferences}
-                isSaving={isSavingProfile}
-                isLoading={isProfileLoading}
-                onClose={() => setView('chat')}
-              />
-          )
+          return <PreferencesForm profileData={profile} onSave={handleSavePreferences} isSaving={isSavingProfile} isLoading={isProfileLoading} onClose={() => setView('chat')} />
       }
-
       return (
         <div className="flex h-full flex-col">
           <DialogHeader className="p-4 border-b">
               <div className="flex items-center justify-between w-full">
-                  <DialogTitle className="flex items-center gap-2">
-                      <Bot className="h-5 w-5 text-primary"/> Steadfast AI
-                  </DialogTitle>
+                  <DialogTitle className="flex items-center gap-2"><Bot className="h-5 w-5 text-primary"/> Steadfast AI</DialogTitle>
                   <TooltipProvider>
                       <Tooltip>
-                          <TooltipTrigger asChild>
-                          <Button variant="ghost" size="icon" onClick={handleOpenPreferences}>
-                              <Settings className="h-5 w-5" />
-                          </Button>
-                          </TooltipTrigger>
-                          <TooltipContent>
-                          <p>My Learning Preferences</p>
-                          </TooltipContent>
+                          <TooltipTrigger asChild><Button variant="ghost" size="icon" onClick={handleOpenPreferences}><Settings className="h-5 w-5" /></Button></TooltipTrigger>
+                          <TooltipContent><p>My Learning Preferences</p></TooltipContent>
                       </Tooltip>
                   </TooltipProvider>
               </div>
               <div className="mt-4">
-                  <Button variant="outline" size="sm" onClick={handleNewChat} className="text-sm">
-                      <Plus className="h-4 w-4 mr-1" /> New Chat
-                  </Button>
+                  <Button variant="outline" size="sm" onClick={() => handleNewChat(true)} className="text-sm"><Plus className="h-4 w-4 mr-1" /> New Chat</Button>
               </div>
           </DialogHeader>
-            <Tabs value={activeTab} onValueChange={setActiveTab} className="flex flex-1 flex-col min-h-0">
-                <TabsList className="grid w-full grid-cols-2">
-                <TabsTrigger value="chat"><MessageSquare className="mr-2 h-4 w-4" />Chat</TabsTrigger>
-                <TabsTrigger value="history"><History className="mr-2 h-4 w-4" />History</TabsTrigger>
-                </TabsList>
-                <TabsContent value="chat" className="mt-0 flex-1 flex-col border-0 p-0 outline-none min-h-0">
-                    <ChatTab 
-                        messages={messages}
-                        studentName={studentName}
-                        displayedWelcomeText={displayedWelcomeText}
-                        scrollAreaRef={scrollAreaRef}
-                        selectedFile={selectedFile}
-                        handleRemoveFile={handleRemoveFile}
-                        input={input}
-                        setInput={setInput}
-                        handleSendMessage={handleSendMessage}
-                        isLoading={isLoading}
-                        fileInputRef={fileInputRef}
-                        handleFileChange={handleFileChange}
-                        forceWebSearch={forceWebSearch}
-                        setForceWebSearch={setForceWebSearch}
-                        includeVideos={includeVideos}
-                        setIncludeVideos={setIncludeVideos}
-                        level={level}
-                        setLevel={setLevel}
-                        languageHint={languageHint}
-                        setLanguageHint={setLanguageHint}
-                        conversationState={conversationState} 
-                    />
-                </TabsContent>
-                <TabsContent value="history" className="mt-0 flex-1 flex-col border-0 p-0 outline-none min-h-0">
-                    <HistoryTab 
-                        history={history}
-                        searchQuery={searchQuery}
-                        setSearchQuery={setSearchQuery}
-                        handleContinueChat={handleContinueChat}
-                    />
-                </TabsContent>
-                </Tabs>
+          <Tabs value={activeTab} onValueChange={setActiveTab} className="flex flex-1 flex-col min-h-0">
+              <TabsList className="grid w-full grid-cols-2">
+                  <TabsTrigger value="chat"><MessageSquare className="mr-2 h-4 w-4" />Chat</TabsTrigger>
+                  <TabsTrigger value="history"><History className="mr-2 h-4 w-4" />History</TabsTrigger>
+              </TabsList>
+              <TabsContent value="chat" className="mt-0 flex-1 flex-col border-0 p-0 outline-none min-h-0">
+                  <ChatTab 
+                      messages={messages}
+                      studentName={profile?.name || 'Student'}
+                      scrollAreaRef={scrollAreaRef}
+                      selectedFile={selectedFile}
+                      handleRemoveFile={handleRemoveFile}
+                      input={input}
+                      setInput={setInput}
+                      handleSendMessage={handleSendMessage}
+                      isLoading={isLoading}
+                      fileInputRef={fileInputRef}
+                      handleFileChange={handleFileChange}
+                      forceWebSearch={forceWebSearch}
+                      setForceWebSearch={setForceWebSearch}
+                      includeVideos={includeVideos}
+                      setIncludeVideos={setIncludeVideos}
+                      level={level}
+                      setLevel={setLevel}
+                      languageHint={languageHint}
+                      setLanguageHint={setLanguageHint}
+                      conversationState={conversationState}
+                      isNewChat={isNewChat} 
+                      displayedWelcomeText=""
+                  />
+              </TabsContent>
+              <TabsContent value="history" className="mt-0 flex-1 flex-col border-0 p-0 outline-none min-h-0">
+                  <HistoryTab 
+                      history={history}
+                      searchQuery={searchQuery}
+                      setSearchQuery={setSearchQuery}
+                      handleContinueChat={handleContinueChat}
+                  />
+              </TabsContent>
+          </Tabs>
         </div>
       );
   }
   
     return (
       <>
-        <Dialog open={isOpen} onOpenChange={(open) => {
-            setIsOpen(open);
-            if (!open) setView('chat');
-        }}>
+        <Dialog open={isOpen} onOpenChange={setIsOpen}>
           <DialogContent className="p-0 h-[70vh] max-w-[90vw] sm:max-w-lg flex flex-col [&>button]:hidden">
-              <div className="flex flex-col flex-1 min-h-0">
-                  {renderContent()}
-              </div>
+            <DialogTitle className="sr-only">Steadfast Copilot AI Chat Interface</DialogTitle>
+            <div className="flex flex-col flex-1 min-h-0">{renderContent()}</div>
           </DialogContent>
         </Dialog>
   
@@ -506,9 +474,7 @@ const loadInitialData = async () => {
                   <MessageSquare className="h-7 w-7" /> 
                 </Button>
               </TooltipTrigger>
-              <TooltipContent> 
-                <p>Chat with Steadfast AI</p>
-              </TooltipContent>
+              <TooltipContent><p>Chat with Steadfast AI</p></TooltipContent>
             </Tooltip>
           </TooltipProvider>
         </div>

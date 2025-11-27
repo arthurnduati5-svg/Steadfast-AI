@@ -1,9 +1,14 @@
+import { ConversationState, UserProfile, ChatSession } from './types';
+
 export const promptBuilder = {
-  buildSystemContext: (profile: any, session: any) => {
+  buildSystemContext: (profile: UserProfile, session: ChatSession, conversationState: ConversationState) => {
     const interests = profile.preferences?.interests || [];
     const gradeLevel = profile.gradeLevel || 'a student';
     const preferredLanguage = profile.preferredLanguage || 'English';
     const sessionTopic = session?.topic || 'a new lesson';
+
+    // Use conversationState to adapt the system context further if needed
+    const researchModeStatus = conversationState.researchModeActive ? ' (Research Mode Active)' : '';
 
     return `
       You are Steadfast Copilot, a friendly AI teacher designed for students.
@@ -14,7 +19,7 @@ export const promptBuilder = {
       - Grade Level: ${gradeLevel}
       - Preferred Language: ${preferredLanguage}
       - Student Interests: ${interests.length > 0 ? interests.join(', ') : 'Not specified'}
-      - Current Session Topic: ${sessionTopic}
+      - Current Session Topic: ${sessionTopic}${researchModeStatus}
 
       When responding, please adhere to the following guidelines:
 

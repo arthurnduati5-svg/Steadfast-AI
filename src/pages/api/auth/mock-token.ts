@@ -18,7 +18,7 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
     userId: MOCK_USER_ID,
   };
 
-  const token = jwt.sign(payload, secret, { expiresIn: '1h' });
+  const token = jwt.sign(payload, secret, { expiresIn: '24h' });
 
   res.status(200).json({ token });
 }
