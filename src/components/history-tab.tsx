@@ -4,7 +4,7 @@ import React, { useMemo } from 'react';
 import { Input } from '@/components/ui/input';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { Button } from '@/components/ui/button';
-import { Search } from 'lucide-react';
+import { Search, Trash2 } from 'lucide-react';
 import type { ChatSession, Message } from '@/lib/types';
 
 interface HistoryTabProps {
@@ -12,6 +12,8 @@ interface HistoryTabProps {
   searchQuery: string;
   setSearchQuery: (query: string) => void;
   handleContinueChat: (session: any) => void;
+  // NEW: Callback for deletion
+  handleDeleteChat: (sessionId: string) => void;
 }
 
 export const HistoryTab: React.FC<HistoryTabProps> = ({
@@ -19,6 +21,7 @@ export const HistoryTab: React.FC<HistoryTabProps> = ({
   searchQuery,
   setSearchQuery,
   handleContinueChat,
+  handleDeleteChat,
 }) => {
   const filteredHistory = useMemo(() => {
     if (!searchQuery) {
@@ -70,13 +73,31 @@ export const HistoryTab: React.FC<HistoryTabProps> = ({
                     ))}
                     {(session.messages || []).length > 2 && <p>...</p>}
                   </div>
-                  <Button
-                    variant="link"
-                    className="p-0 h-auto mt-2 text-primary"
-                    onClick={() => handleContinueChat(session)}
-                  >
-                    Continue this chat
-                  </Button>
+                  
+                  {/* Action Buttons */}
+                  <div className="flex items-center justify-between mt-3">
+                    <Button
+                      variant="link"
+                      className="p-0 h-auto text-primary"
+                      onClick={() => handleContinueChat(session)}
+                    >
+                      Continue this chat
+                    </Button>
+                    <Button
+                        variant="ghost"
+                        size="sm"
+                        className="text-destructive hover:text-destructive hover:bg-destructive/10 h-8 px-2"
+                        onClick={(e) => {
+                            e.stopPropagation(); // Prevent accordion from toggling
+                            if(confirm("Are you sure you want to delete this chat? This cannot be undone.")) {
+                                handleDeleteChat(session.id);
+                            }
+                        }}
+                    >
+                        <Trash2 className="w-4 h-4 mr-1" />
+                        Delete
+                    </Button>
+                  </div>
                 </AccordionContent>
               </AccordionItem>
             ))

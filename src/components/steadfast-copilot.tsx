@@ -70,6 +70,9 @@ export function SteadfastCopilot() {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // FIX: Initialization flag to prevent data loss on window toggle
+  const [hasInitialized, setHasInitialized] = useState(false);
+
   const { profile, setProfile, updateProfile } = useUserProfile();
 
   const [forceWebSearch, setForceWebSearch] = useState(false);
@@ -90,7 +93,6 @@ export function SteadfastCopilot() {
 
   const handleNewChat = useCallback(async (showToast = true) => {
     try {
-      // Create session in DB immediately
       const newSessionData = await api.post('/api/copilot/new-session', {});
       
       setMessages([]); 
@@ -112,7 +114,6 @@ export function SteadfastCopilot() {
           toast({ title: "New Chat Started", description: "Previous conversation saved to history." });
       }
       
-      // Refresh history list
       const data = await api.get('/api/copilot/preload');
       if (data.history) {
         setHistory(data.history);
@@ -139,26 +140,29 @@ export function SteadfastCopilot() {
             setIsNewChat(false);
             setActiveTab('chat');
         } else {
-            // If no last session exists, create one strictly
             handleNewChat(false);
         }
+        // FIX: Mark as initialized so we don't reload on toggle
+        setHasInitialized(true);
     } catch (error) {
         console.error('[loadInitialData] Error loading initial data:', error);
         toast({ title: 'Error', description: 'Could not load session data.', variant: 'destructive' });
-        // Fallback to local new chat state if API fails
         setMessages([]);
         setConversationState(DEFAULT_CONVERSATION_STATE);
+        setHasInitialized(true);
     }
   }, [toast, handleNewChat]);
 
+  // FIX: Only load data if window is open AND we haven't done so yet
   useEffect(() => {
-    if (isOpen) {
+    if (isOpen && !hasInitialized) {
         loadInitialData();
-    } else {
+    } else if (!isOpen) {
+        // When collapsing, clear inputs but KEEP state/messages in memory
         setInput('');
         setSelectedFile(null);
     }
-  }, [isOpen, loadInitialData]);
+  }, [isOpen, hasInitialized, loadInitialData]);
 
   useEffect(() => {
     if (messages.length > 0) {
@@ -187,8 +191,7 @@ export function SteadfastCopilot() {
       timestamp: new Date(),
     };
     
-    const currentMessages = [...messages, userMessage];
-    setMessages(currentMessages);
+    setMessages(prev => [...prev, userMessage]);
     setInput('');
     setSelectedFile(null);
     if (fileInputRef.current) fileInputRef.current.value = '';
@@ -198,34 +201,38 @@ export function SteadfastCopilot() {
 
     const executeAction = async () => {
         try {
-            // 2. Ensure Active Session & Persist User Message
+            // 2. Ensure Active Session exists
             let currentSessionId = activeSession?.id;
 
             if (!currentSessionId) {
-                // Should logically be handled by handleNewChat, but safety net:
                 const newSess = await api.post('/api/copilot/new-session', {});
                 currentSessionId = newSess.sessionId;
                 setActiveSession(prev => prev ? { ...prev, id: newSess.sessionId } : newSess);
             }
 
-            // SAVE USER MESSAGE TO DB
-            await api.post('/api/copilot/message', {
-                sessionId: currentSessionId,
-                message: userMessage
-            });
-
-            // 3. Get AI Response (Server Action Bridge)
+            // 3. Get AI Response via Server Action (The "Brain" - handles formatting)
             const response = await getAssistantResponse(
+              currentSessionId!, // Pass ID for persistence inside the server action
               userInput,
-              currentMessages,
+              messages,
               conversationState,
               fileDataForAction,
               forceWebSearch,
               includeVideos,
-              level,
-              (languageFrontendToBackend as any)[languageHint] || 'english'
+              // Updated: Pass preference object as the single 8th argument
+              {
+                name: profile?.name,
+                gradeLevel: level, // Use local level to respect UI selection
+                preferredLanguage: (languageFrontendToBackend as any)[languageHint] || 'english',
+                interests: profile?.interests,
+              }
             );
             
+            // Check for valid response
+            if (!response || !response.processedText) {
+                throw new Error("Received invalid response from assistant.");
+            }
+
             const assistantMessage: Message = {
               id: `model-${Date.now()}`,
               role: 'model', 
@@ -234,18 +241,11 @@ export function SteadfastCopilot() {
               timestamp: new Date(),
             };
 
-            // 4. Update UI with AI Message
+            // 4. Update UI
             setMessages(prev => [...prev, assistantMessage]);
             setConversationState(response.state);
 
-            // 5. SAVE AI MESSAGE & STATE TO DB
-            await api.post('/api/copilot/message', {
-                sessionId: currentSessionId,
-                message: assistantMessage,
-                conversationState: response.state // Save state so context isn't lost on reload
-            });
-
-            // 6. Update Session Title if Topic Changed
+            // 5. Update Session Title if Topic Changed (Local & Persist)
             if (response.topic && activeSession && activeSession.title !== response.topic) {
                 const updatedSession: ChatSession = {
                   ...activeSession,
@@ -253,10 +253,7 @@ export function SteadfastCopilot() {
                 };
                 setActiveSession(updatedSession);
                 
-                // Persist Title Change (USING POST INSTEAD OF PATCH TO FIX TYPE ERROR)
-                await api.post(`/api/copilot/session/${currentSessionId}/title`, { title: response.topic });
-
-                // Refresh history
+                // Refresh history silently
                 const data = await api.get('/api/copilot/preload');
                 if (data.history) setHistory(data.history);
             }
@@ -312,11 +309,37 @@ export function SteadfastCopilot() {
       setSelectedFile(null);
       if (fileInputRef.current) fileInputRef.current.value = '';
       setActiveTab('chat');
+      // Update initialized flag because we explicitly loaded a new session
+      setHasInitialized(true);
       toast({ title: "Chat Loaded", description: `Continuing session: "${sessionData.title || 'Untitled'}"` });
     } catch (error) {
         console.error('[handleContinueChat] API error resuming chat:', error);
         toast({ title: "Error", description: "Could not fetch the chat session.", variant: "destructive" });
         handleNewChat(false);
+    }
+  };
+
+  // NEW: Logic to delete a chat session
+  const handleDeleteChat = async (sessionId: string) => {
+    try {
+        // Optimistically update UI
+        setHistory(prev => prev.filter(s => s.id !== sessionId));
+        
+        // Call backend delete endpoint
+        await api.post(`/api/copilot/session/${sessionId}/delete`, {});
+        
+        // If the deleted session was active, reset to new chat
+        if (activeSession?.id === sessionId) {
+            handleNewChat(false);
+        }
+        
+        toast({ title: "Chat Deleted", description: "The conversation has been removed." });
+    } catch (error) {
+        console.error('Error deleting chat:', error);
+        toast({ title: "Error", description: "Could not delete chat session.", variant: "destructive" });
+        // Revert optimistic update on error
+        const data = await api.get('/api/copilot/preload');
+        if (data.history) setHistory(data.history);
     }
   };
 
@@ -378,7 +401,7 @@ export function SteadfastCopilot() {
         toast({
           variant: "destructive",
           title: "File Too Large",
-          description: `Please select a file smaller than ${MAX_FILE_SIZE_MB}MB.`,
+          description: `File size must be less than ${MAX_FILE_SIZE_MB}MB`
         });
         if (fileInputRef.current) fileInputRef.current.value = '';
         setSelectedFile(null);
@@ -450,6 +473,7 @@ export function SteadfastCopilot() {
                       searchQuery={searchQuery}
                       setSearchQuery={setSearchQuery}
                       handleContinueChat={handleContinueChat}
+                      handleDeleteChat={handleDeleteChat} // Passed delete handler
                   />
               </TabsContent>
           </Tabs>

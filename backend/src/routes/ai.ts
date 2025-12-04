@@ -5,11 +5,11 @@ import prisma from '../utils/prismaClient';
 import { getRedisClient } from '../lib/redis';
 import pinecone from '../lib/vectorClient';
 import { OpenAI } from 'openai';
-import { ChatCompletionMessageParam } from 'openai/resources/chat/completions'; // Import the correct type
+import { ChatCompletionMessageParam } from 'openai/resources/chat/completions';
 import { promptBuilder } from '../lib/promptBuilder';
 import { summarizationQueue, embeddingQueue } from '../workers';
 import { ChatSession, UserProfile, ConversationState } from '../lib/types';
-import { Prisma } from '@prisma/client'; // Import Prisma namespace
+import { Prisma } from '@prisma/client';
 
 const router = Router();
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
@@ -63,7 +63,7 @@ const getOrCreateStudentProfile = async (studentId: string) => {
       profileCompleted: false,
       preferences: {},
       favoriteShows: [],
-      topInterests: [], // Add this line
+      topInterests: [],
     },
   });
 };
@@ -130,7 +130,7 @@ router.post('/new-session', schoolAuthMiddleware, async (req: AuthedRequest, res
     // Find the currently active session for this user
     const currentlyActiveSession = await prisma.chatSession.findFirst({
       where: { studentId: profile.userId, isActive: true },
-      include: { messages: true }, // Include messages to check if it's empty
+      include: { messages: true }, 
     });
     
     // Deactivate all previous active sessions
@@ -142,11 +142,9 @@ router.post('/new-session', schoolAuthMiddleware, async (req: AuthedRequest, res
     // If the previously active session had messages, enqueue it for embedding
     if (currentlyActiveSession && currentlyActiveSession.messages.length > 0) {
       console.log(`[new-session] Enqueueing previous session ${currentlyActiveSession.id} for embedding.`);
-      // Add to summarization queue (if needed, based on your worker setup)
       if (summarizationQueue) {
         summarizationQueue.add('summarization-jobs', { sessionId: currentlyActiveSession.id, studentId: studentUserId });
       }
-      // Add to embedding queue
       if (embeddingQueue) {
         embeddingQueue.add('embedding-jobs', {
           sessionId: currentlyActiveSession.id, studentId: studentUserId,
@@ -204,14 +202,12 @@ router.post('/chat', schoolAuthMiddleware, rateLimiter, async (req: AuthedReques
 
     const allSessionMessages = [...currentMessages, studentMessage];
 
-    // FIX: Explicitly typed the messages array and correctly map the roles to satisfy the OpenAI library.
     const messagesForAI: ChatCompletionMessageParam[] = [
       { role: 'system', content: promptBuilder.buildSystemContext(session.student, session, frontendConversationState) },
       ...allSessionMessages.map((msg): ChatCompletionMessageParam => {
         if (msg.role === 'user') {
           return { role: 'user', content: msg.content };
         }
-        // Map all other roles from our DB (e.g., 'model', 'ai') to the 'assistant' role for the API
         return { role: 'assistant', content: msg.content };
       }),
     ];
@@ -257,7 +253,6 @@ router.post('/chat', schoolAuthMiddleware, rateLimiter, async (req: AuthedReques
       conversationState: frontendConversationState
     });
 
-    // Only add to embedding queue if pinecone is initialized
     if (pineconeIndex) {
       if (embeddingQueue) embeddingQueue.add('embedding-jobs', { sessionId, studentId, message, aiResponse });
     }
@@ -350,7 +345,44 @@ router.get('/session/:id', schoolAuthMiddleware, async (req: AuthedRequest, res:
   }
 });
 
-// 6. Search Past Chats (GET /search)
+// 6. Delete Chat (POST /session/:id/delete) - NEW ENDPOINT
+router.post('/session/:id/delete', schoolAuthMiddleware, async (req: AuthedRequest, res: Response) => {
+  try {
+    const studentUserId = req.user!.id;
+    const sessionId = req.params.id;
+
+    // Verify session belongs to user
+    const session = await prisma.chatSession.findUnique({
+      where: { id: sessionId },
+    });
+
+    if (!session) return res.status(404).send({ message: 'Session not found.' });
+    
+    // We check via studentId foreign key or profile look up logic if needed, but assuming session.studentId matches profile.userId
+    // It's safer to verify ownership:
+    const profile = await getOrCreateStudentProfile(studentUserId);
+    if (session.studentId !== profile.userId) {
+        return res.status(403).send({ message: 'Unauthorized to delete this session.' });
+    }
+
+    // Delete messages first (cascade usually handles this but being explicit is safe)
+    await prisma.chatMessage.deleteMany({
+      where: { sessionId: sessionId },
+    });
+
+    // Delete session
+    await prisma.chatSession.delete({
+      where: { id: sessionId },
+    });
+
+    res.status(200).send({ message: 'Session deleted successfully.' });
+  } catch (error) {
+    console.error('[Backend] Error deleting session:', error);
+    res.status(500).send({ message: 'Internal server error' });
+  }
+});
+
+// 7. Search Past Chats (GET /search)
 router.get('/search', schoolAuthMiddleware, async (req: AuthedRequest, res: Response) => {
   try {
     const studentId = req.user!.id;
@@ -436,7 +468,7 @@ router.get('/search', schoolAuthMiddleware, async (req: AuthedRequest, res: Resp
   }
 });
 
-// 7. Student and Global Memory Routes
+// 8. Student and Global Memory Routes
 router.get('/memory/student', schoolAuthMiddleware, async (req: AuthedRequest, res: Response) => {
   try {
     const studentId = req.user!.id;
@@ -465,8 +497,6 @@ router.post('/memory/update', schoolAuthMiddleware, async (req: AuthedRequest, r
     const { type, data } = req.body;
     if (type === 'progress') {
       const { subject, topic, mastery } = data;
-      // FIX: Reverted to use the 'id' for the where clause, which is more likely to match the schema
-      // This avoids the error about the non-existent compound key.
       await prisma.progress.upsert({
         where: { id: data.id || '' },
         update: { subject, topic, mastery },
@@ -487,7 +517,7 @@ router.post('/memory/update', schoolAuthMiddleware, async (req: AuthedRequest, r
   }
 });
 
-// 8. Learning Preferences Routes
+// 9. Learning Preferences Routes
 router.get('/preferences', schoolAuthMiddleware, async (req: AuthedRequest, res: Response) => {
   try {
     const studentId = req.user!.id;

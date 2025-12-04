@@ -37,6 +37,7 @@ export const youtubeSearchFlow = defineFlow(
   async (input: { query: string }): Promise<YoutubeSearchFlowOutput[]> => {
     try {
       console.log(`🚀 Performing YouTube search for: "${input.query}"`);
+      // Setting "video" type filter explicitly
       const response = await youtubeSearch.GetListByKeyword(input.query, false, 5, [{ type: 'video' }]);
 
       if (!response || !response.items || response.items.length === 0) {
@@ -47,10 +48,10 @@ export const youtubeSearchFlow = defineFlow(
       // Map and clean the results to match our defined output schema
       const cleanedResults: YoutubeSearchFlowOutput[] = response.items.map((video: YouTubeSearchAPIResult) => ({
         id: video.id,
-        title: video.title,
-        channel: video.channel?.name,
-        channelTitle: video.channel?.name, // Mapped channel name to channelTitle
-        thumbnailUrl: video.thumbnail?.url,
+        title: video.title || 'Untitled Video',
+        channel: video.channel?.name || 'Unknown Channel',
+        channelTitle: video.channel?.name || 'Unknown Channel', // Mapped channel name to channelTitle
+        thumbnailUrl: video.thumbnail?.url || '',
         videoId: video.id, // Mapped id to videoId
       }));
 

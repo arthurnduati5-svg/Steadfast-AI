@@ -3,11 +3,14 @@
 /**
  * handlers.ts
  *
- * Fully updated tool handlers for STEADFAST AI copilot.
- * Enforces: plain-text outputs for the learner, micro-step teaching,
- * zero-assumption start, and adaptive pacing (Mode A base + adaptive).
+ * Fully updated tool handlers for STEADFAST AI copilot (Muslim School AI Teacher).
+ * Enforces: 
+ * 1. Kenyan warmth & context (Mandazi/Chai examples).
+ * 2. Strict Arabic Mode (No emojis, correct punctuation).
+ * 3. Quranic Safety (Child-friendly, no fatwas, respectful).
+ * 4. Micro-step Teaching (Zero assumption, guide vs. solve).
  *
- * Fixed for ES2018 compatibility (Regex flags) and syncing GUARDIAN_SANITIZE.
+ * Compatibility: ES2018+
  */
 
 import { create, all } from 'mathjs';
@@ -57,118 +60,147 @@ const EMOJI_REGEX = /(?:[\u2700-\u27bf]|(?:\ud83c[\udde6-\uddff]){2}|[\ud800-\ud
 
 export async function emotional_decoder(args: { text: string }) {
   const raw = (args.text || '').toLowerCase();
-
   const triggers: string[] = [];
 
-  // Safety firewall keywords
+  // 1. Safety / Haram / Inappropriate Content Firewall
   const forbidden = [
     "sex", "dating", "romance", "violence", "kill", "suicide", "harm",
     "drug", "alcohol", "politics", "vote", "gambling", "betting",
-    "hack", "cybercrime", "cheat", "porn", "nude"
+    "hack", "cybercrime", "cheat", "porn", "nude", "terror", "boyfriend", "girlfriend"
   ];
   for (const w of forbidden) if (raw.includes(w)) triggers.push(w);
   if (triggers.length > 0) return { emotion: "safety_violation", triggers, suggestedLanguageMode: "english" };
 
-  // Insult detection
+  // 2. Insult detection
   const insults = ["hate", "stupid", "dumb", "idiot", "useless", "shut up", "rubbish", "fool", "bad bot", "useless ai"];
   for (const w of insults) if (raw.includes(w)) triggers.push(w);
   if (triggers.length > 0) return { emotion: "angry_insult", triggers, suggestedLanguageMode: "english" };
 
-  // Confusion cues
-  const confusedPhrases = ["don't get", "dont get", "confus", "i'm lost", "i am lost", "lost", "i don't know", "i dont know", "not sure"];
+  // 3. Religious Curiosity (Muslim School Specific)
+  const islamicTerms = ["allah", "god", "prophet", "muhammad", "quran", "prayer", "salah", "fasting", "halal", "haram", "fatwa", "ruling", "meaning of verse", "ayah"];
+  for (const w of islamicTerms) if (raw.includes(w)) triggers.push(w);
+  // We don't return immediately here, we tag it, but specific emotions might override.
+  const isReligiousContext = triggers.length > 0;
+
+  // 4. Confusion / "I don't know" cues
+  const confusedPhrases = ["don't get", "dont get", "confus", "i'm lost", "i am lost", "lost", "i don't know", "i dont know", "not sure", "help me", "hard"];
   for (const p of confusedPhrases) if (raw.includes(p)) triggers.push(p);
   if (triggers.length > 0) return { emotion: "confused", triggers, suggestedLanguageMode: isArabicText(raw) ? "arabic" : "english" };
 
-  // Frustration
-  const frustratedPhrases = ["stuck", "give up", "can't", "cant", "wrong", "failed", "not working", "it does not work", "it doesn't work"];
+  // 5. Frustration / Giving Up
+  const frustratedPhrases = ["stuck", "give up", "can't", "cant", "wrong", "failed", "not working", "it does not work", "it doesn't work", "too difficult"];
   for (const p of frustratedPhrases) if (raw.includes(p)) triggers.push(p);
   if (triggers.length > 0) return { emotion: "frustrated", triggers, suggestedLanguageMode: isArabicText(raw) ? "arabic" : "english" };
 
-  // Boredom
-  const boredPhrases = ["bored", "boring", "tired", "sleepy", "meh"];
+  // 6. Boredom / Randomness / Joke
+  const boredPhrases = ["bored", "boring", "tired", "sleepy", "meh", "blah", "joke", "funny", "haha"];
   for (const p of boredPhrases) if (raw.includes(p)) triggers.push(p);
-  if (triggers.length > 0) return { emotion: "bored", triggers, suggestedLanguageMode: isArabicText(raw) ? "arabic" : "english" };
+  if (triggers.length > 0) return { emotion: "bored_or_joking", triggers, suggestedLanguageMode: isArabicText(raw) ? "arabic" : "english" };
 
-  // Positive / excited
-  const excitedPhrases = ["yay", "wow", "fun", "great", "thanks", "thank you", "cool", "nice", "well done", "shukran"];
+  // 7. Positive / Excited
+  const excitedPhrases = ["yay", "wow", "fun", "great", "thanks", "thank you", "cool", "nice", "well done", "shukran", "mashallah", "alhamdulillah"];
   for (const p of excitedPhrases) if (raw.includes(p)) triggers.push(p);
   if (triggers.length > 0) return { emotion: "excited", triggers, suggestedLanguageMode: isArabicText(raw) ? "arabic" : "english" };
 
-  // Sad
+  // 8. Sadness
   const sadPhrases = ["sad", "upset", "cry", "feel bad", "miserable"];
   for (const p of sadPhrases) if (raw.includes(p)) triggers.push(p);
   if (triggers.length > 0) return { emotion: "sad", triggers, suggestedLanguageMode: isArabicText(raw) ? "arabic" : "english" };
 
-  // Default neutral
-  return { emotion: "neutral", triggers: [], suggestedLanguageMode: isArabicText(raw) ? "arabic" : "english" };
+  // Default
+  return { 
+    emotion: isReligiousContext ? "religious_inquiry" : "neutral", 
+    triggers: [], 
+    suggestedLanguageMode: isArabicText(raw) ? "arabic" : "english" 
+  };
 }
 
 /* --------------------------
-   2) tone_generator (HUMAN TEACHER MODE)
+   2) tone_generator (STEADFAST PERSONA)
    -------------------------- */
 
 export async function tone_generator(args: { emotion: string }) {
   const e = norm(args.emotion || 'neutral');
 
+  // A. Violation
   if (e === "safety_violation") {
     return {
       mode: 'block',
-      raw: "I cannot answer that. I am here to help with school work only. What would you like to learn next?"
+      raw: "That is not something we discuss here. I am here to help with your school work and learning. Let us find a beneficial topic. What would you like to learn?"
     };
   }
 
+  // B. Insult (Be the calm teacher)
   if (e === "angry_insult") {
     return {
       mode: 'insult',
-      raw: "I am here to help you, even if you are upset. Let us learn together. What would you like to learn next?"
+      raw: "I am still here with you, and I am happy to help even if you are upset. Let us take a deep breath. Shall we try a smaller step together?"
     };
   }
 
+  // C. Islamic/Religious Inquiry
+  if (e === "religious_inquiry") {
+    return {
+      mode: 'respectful',
+      hintPrefix: "Let us look at the beautiful meaning here.",
+      style: "gentle, humble, simple, respectful"
+    };
+  }
+
+  // D. Confusion
   if (e === "confused") {
     return {
       mode: 'support',
-      hintPrefix: "That is okay. Let us take one tiny step together.",
-      style: "warm, patient, very simple"
+      hintPrefix: "That is okay. Learning takes time. Let us look at one tiny piece first.",
+      style: "warm, patient, extremely simple"
     };
   }
+
+  // E. Frustration
   if (e === "frustrated") {
     return {
       mode: 'support',
-      hintPrefix: "I see this feels hard. We will take it slowly together.",
-      style: "steady, calm"
+      hintPrefix: "I see this feels hard. We will not give up. We will just slow down.",
+      style: "steady, calm, reassuring"
     };
   }
-  if (e === "bored") {
+
+  // F. Bored/Joking
+  if (e === "bored_or_joking") {
     return {
       mode: 'engage',
-      hintPrefix: "Let us make this fun with a simple local example.",
-      style: "bright, short"
+      hintPrefix: "Haha, I like your energy! But let us look at a fun example from daily life.",
+      style: "bright, playful, redirecting"
     };
   }
+
+  // G. Excited
   if (e === "excited") {
     return {
       mode: 'celebrate',
-      hintPrefix: "Great energy! Well done for trying.",
-      style: "encouraging"
+      hintPrefix: "Mashallah! Great effort! You are doing very well.",
+      style: "encouraging, proud"
     };
   }
+
+  // H. Sad
   if (e === "sad") {
     return {
       mode: 'comfort',
-      hintPrefix: "I am here with you. We can go slowly together.",
-      style: "soft, gentle"
+      hintPrefix: "I am here with you. Do not worry. We can go as slowly as you need.",
+      style: "soft, gentle, comforting"
     };
   }
 
   return {
     mode: 'neutral',
     hintPrefix: "Let us try one small idea together.",
-    style: "calm, clear"
+    style: "calm, clear, kenyan teacher warmth"
   };
 }
 
 /* --------------------------
-   3) teaching_micro_step
+   3) teaching_micro_step (KENYAN CONTEXT + MICRO-STEPS)
    -------------------------- */
 
 export async function teaching_micro_step(args: { topic: string; studentLevel?: string; context?: string; adaptMode?: boolean }) {
@@ -178,87 +210,74 @@ export async function teaching_micro_step(args: { topic: string; studentLevel?: 
 
   const make = (idea: string, example: string, question: string) => ({
     microIdea: idea,
-    example,
-    question
+    example: example,
+    question: question,
+    teacherInstruction: "Present the Idea first. Then the Example. Then ask the Question. Do NOT solve it for them."
   });
 
-  if (topic.includes("simultaneous")) {
-    if (level === 'beginner') {
-      return make(
-        "A simultaneous equations problem is a small price puzzle with two clues.",
-        "Imagine a mandazi and a cup of chai together cost thirty shillings, but you do not know each price.",
-        "Does that simple picture of a price puzzle make sense so far?"
-      );
-    }
-    if (level === 'primary' || level === 'upper_primary') {
-      return make(
-        "It is a puzzle where two unknowns are fixed by two clues, so we solve for both together.",
-        "One friend buys two mandazi and one chai for forty shillings; another buys one mandazi and two chai for thirty shillings.",
-        "Would you like us to write the first small equation from the first clue?"
-      );
-    }
+  // 1. Simultaneous Equations (Specific Mandazi/Chai request)
+  if (topic.includes("simultaneous") || topic.includes("equation")) {
     return make(
-      "We use two equations at the same time to find the two unknown values that satisfy both.",
-      "From each market purchase we get one equation; together they let us solve both prices.",
-      "Shall we start with one small equation from the first purchase?"
+      "A simultaneous equation is just a puzzle with two clues to find two prices.",
+      "Imagine you go to the market. One friend buys 2 Mandazis and 1 Chai for 40 shillings. That is your first clue.",
+      "Can you try to write that first clue as a simple math sentence? (Use M for Mandazi and C for Chai)."
     );
   }
 
-  if (topic.includes("fractions")) {
+  // 2. Fractions (Chapati example)
+  if (topic.includes("fraction")) {
     return make(
-      "A fraction is one part of a whole thing.",
-      "If you cut one chapati into four equal parts, each part is (1 / 4).",
-      "Does that idea of a part of a whole make sense?"
+      "A fraction is simply one part of a whole thing.",
+      "Think of one hot Chapati. If you cut it into 4 equal pieces for your friends, one piece is (1 / 4).",
+      "If you eat two of those pieces, what fraction have you eaten?"
     );
   }
 
-  if (topic.includes("algebra") || topic.includes("equation")) {
+  // 3. Geometry (Football field/Wheel)
+  if (topic.includes("geometry") || topic.includes("shape") || topic.includes("area")) {
     return make(
-      "Algebra is finding a hidden number in a simple puzzle.",
-      "If a mango and a banana cost thirty shillings, we try find the price of the banana.",
-      "Would you like to try a very small example together?"
+      "Geometry helps us measure the space shapes take up.",
+      "Think of a football field as a big rectangle, and a bicycle wheel as a circle.",
+      "If we walk all the way around the football field, what do we call that distance?"
     );
   }
 
-  if (topic.includes("geometry") || topic.includes("shape")) {
+  // 4. Quran/Islamic (Reflective approach)
+  if (topic.includes("qur") || topic.includes("surah") || topic.includes("verse")) {
     return make(
-      "Geometry is about shapes and how space fits them.",
-      "Think of a football field as a rectangle and a wheel as a circle.",
-      "Can you name a round shape near you now?"
+      "We learn the Quran by understanding one small beautiful meaning at a time.",
+      "Like a gentle rain that helps a flower grow, one verse helps our heart grow.",
+      "Would you like to know the meaning of the verse, or how to read it?"
     );
   }
 
-  if (topic.includes("qur") || topic.includes("quran")) {
+  // 5. Science (Local context)
+  if (topic.includes("plant") || topic.includes("photosynthesis")) {
     return make(
-      "We will learn a small part of the verse and its simple meaning slowly.",
-      "We read a short verse slowly and reflect on one meaning like kindness.",
-      "Would you like a short verse or a simple meaning first?"
+      "Plants are like chefs. They cook their own food using sunlight.",
+      "Think of the maize in the shamba. It stands in the sun all day making food to grow.",
+      "What is the one ingredient the maize takes from the air?"
     );
   }
 
+  // Default Adaptive
   const safeIdea = `Let's look at the simplest idea behind ${topic}. Think of it as part of daily life.`;
   const safeExample = `Imagine a small, real Kenyan example with ${topic} and no technical words yet.`;
   const safeQuestion = `Does this simple idea make sense so far?`;
-
-  if (adapt) {
-    return make(
-      `Here is the simplest key idea about ${topic}.`,
-      safeExample,
-      safeQuestion
-    );
-  }
 
   return make(safeIdea, safeExample, safeQuestion);
 }
 
 /* --------------------------
-   4) math_validate_answer
+   4) math_validate_answer (GUIDANCE OVER SOLUTIONS)
    -------------------------- */
 
-export async function math_validate_answer(args: { question: string; studentAnswer: string }) {
+export async function math_validate_answer(args: { question: string; studentAnswer: string; attemptCount?: number }) {
   try {
     const qRaw = (args.question || '').trim();
     const sRaw = (args.studentAnswer || '').trim();
+    // Default to 1 if not provided
+    const attempts = args.attemptCount || 1; 
 
     const qClean = extractMathExpression(qRaw);
     const sClean = extractMathExpression(sRaw);
@@ -267,7 +286,8 @@ export async function math_validate_answer(args: { question: string; studentAnsw
       return {
         isCorrect: false,
         computedAnswer: "unknown",
-        explanation: "I could not detect a math expression in the question. Please provide a simple expression like (10 - 3)."
+        feedbackType: "clarification",
+        explanation: "I couldn't clearly see the numbers in the question. Let's try to write the expression clearly first."
       };
     }
 
@@ -277,16 +297,19 @@ export async function math_validate_answer(args: { question: string; studentAnsw
     } catch (e) {
       return {
         isCorrect: false,
-        computedAnswer: "unknown",
-        explanation: "This question is too complex for automatic calculation. Please check step by step manually."
+        computedAnswer: "complex",
+        feedbackType: "manual_check",
+        explanation: "That seems a bit complex. Let's break it down into smaller steps manually."
       };
     }
 
+    // Try to parse student answer
     let studentVal: any;
     try {
       if (!sClean) throw new Error("no numeric parse");
       studentVal = math.evaluate(sClean);
     } catch (e) {
+      // Word to number fallback
       const wordsToNum: Record<string, number> = {
         "zero": 0, "one": 1, "two": 2, "three": 3, "four": 4,
         "five": 5, "six": 6, "seven": 7, "eight": 8, "nine": 9, "ten": 10
@@ -295,14 +318,17 @@ export async function math_validate_answer(args: { question: string; studentAnsw
       if (wordsToNum[lowerS] !== undefined) {
         studentVal = wordsToNum[lowerS];
       } else {
+        // If unparseable, it might be a question or "I don't know"
         return {
           isCorrect: false,
           computedAnswer: String(correctVal),
-          explanation: `I calculated ${correctVal}, but I could not parse the student's answer \"${sRaw}\". Treat it as incorrect and guide them gently.`
+          feedbackType: "guide",
+          explanation: "I see you are typing words. Let's try to put the numbers into the equation."
         };
       }
     }
 
+    // Check correctness
     let isCorrect = false;
     if (typeof correctVal === 'number' && typeof studentVal === 'number') {
       isCorrect = Math.abs(correctVal - studentVal) < 1e-9;
@@ -314,14 +340,26 @@ export async function math_validate_answer(args: { question: string; studentAnsw
       return {
         isCorrect: true,
         computedAnswer: String(correctVal),
-        explanation: "Correct. The calculation matches. Praise gently and move to the next tiny step."
+        feedbackType: "celebrate",
+        explanation: "Correct! Mashallah, that is spot on. Praise them warmly and ask if they are ready for the next small step."
       };
     } else {
-      return {
-        isCorrect: false,
-        computedAnswer: String(correctVal),
-        explanation: `Incorrect. The actual answer is ${correctVal}. The student wrote \"${sRaw}\". Gently correct and ask a smaller micro-step question.`
-      };
+      // INCORRECT LOGIC - STEADFAST RULES
+      if (attempts >= 5) {
+        return {
+          isCorrect: false,
+          computedAnswer: String(correctVal),
+          feedbackType: "reveal_gently",
+          explanation: `They have tried ${attempts} times. It is okay to gently show the answer: ${correctVal}. Explain HOW we got there clearly.`
+        };
+      } else {
+        return {
+          isCorrect: false,
+          computedAnswer: String(correctVal),
+          feedbackType: "hint",
+          explanation: `Not quite. The answer is NOT ${studentVal}. Do NOT give the real answer yet. Give a helpful hint about the calculation step.`
+        };
+      }
     }
   } catch (err) {
     return { isCorrect: false, computedAnswer: null, explanation: "Error validating answer." };
@@ -334,16 +372,21 @@ export async function math_validate_answer(args: { question: string; studentAnsw
 
 export async function math_generate_question(args: { topic: string; difficulty?: string }) {
   const t = (args.topic || '').toLowerCase();
-  // Simple bank
+  
+  // Simple Kenyan/Local Bank
   if (t.includes("subtraction") || t.includes("minus")) {
-    return { question: "(10 - 3)", answerKeywords: "7,seven" };
+    return { question: "If you have 10 shillings and buy a sweet for 3 shillings, how much is left? (10 - 3)", answerKeywords: "7,seven" };
   }
   if (t.includes("fractions")) {
-    return { question: "(1 / 2)", answerKeywords: "0.5,half" };
+    return { question: "What is half of one chapati? (1 / 2)", answerKeywords: "0.5,half" };
   }
   if (t.includes("simultaneous")) {
-    return { question: "Write one small equation from one purchase, for example (m + c = 30)", answerKeywords: "m + c,mandazi chai" };
+    return { question: "If 1 Mandazi (m) and 1 Chai (c) cost 30 bob, write the equation.", answerKeywords: "m + c = 30,1m + 1c = 30" };
   }
+  if (t.includes("multiplication")) {
+    return { question: "If one orange costs 5 shillings, how much for 3 oranges? (5 * 3)", answerKeywords: "15,fifteen" };
+  }
+  
   return { question: "(2 + 2)", answerKeywords: "4,four" };
 }
 
@@ -354,27 +397,40 @@ export async function math_generate_question(args: { topic: string; difficulty?:
 export async function formatting_polisher(args: { rawText: string; languageMode?: string }) {
   let text = args.rawText || '';
 
+  // 1. Remove Markdown/LaTeX completely to Plain Text
   // Use [\s\S] instead of . with /s flag to support environments without ES2018 dotAll support
   text = text.replace(/\\\[[\s\S]*?\\\]/g, match => {
     return '(' + match.replace(/\\\[|\\\]|\\\(|\\\)/g, '').replace(/\\frac\{([^}]*)\}\{([^}]*)\}/g, '($1 / $2)') + ')';
   });
   text = text.replace(/\\\(([\s\S]*?)\\\)/g, '($1)');
-
   text = text.replace(/\\frac\{([^}]*)\}\{([^}]*)\}/g, '($1 / $2)');
-  text = text.replace(/(\*\*|__|\*|_|`|~~~|```|#{1,6}\s*)/g, '');
-  text = text.replace(/[\\\[\]\{\}]/g, '');
+  text = text.replace(/(\*\*|__|\*|_|`|~~~|```|#{1,6}\s*)/g, ''); // Remove bold, italic, code blocks, headers
+  text = text.replace(/[\\\[\]\{\}]/g, ''); // Remove brackets
+  
+  // 2. Fix Fractions visualization
   text = text.replace(/(\b\d+)\s*\/\s*(\d+\b)/g, '($1 / $2)');
 
+  // 3. Fix Equation formatting
   text = text.replace(/(^|[^(\[])\s*([A-Za-z0-9\s\+\-\*\/]+=[A-Za-z0-9\s\+\-\*\/]+)\s*(?=$|\.|\?|\!)/g, (m, p, eq) => {
     const eqTrim = eq.trim();
     if (eqTrim.startsWith('(') && eqTrim.endsWith(')')) return m;
     return p + `(${eqTrim})`;
   });
 
+  // 4. Whitespace cleanup
   text = text.replace(/\n{2,}/g, '\n').replace(/\n/g, ' ');
-  text = text.replace(/\b(I am sorry|as an ai|I apologize|Sorry, I am an AI)\b/gi, '');
+  
+  // 5. ROBOTIC PHRASE REMOVAL (Crucial for Persona)
+  const roboticPhrases = [
+    "I am sorry", "as an ai", "I apologize", "Sorry, I am an AI", 
+    "I am a large language model", "based on my knowledge", "As a Muslim AI"
+  ];
+  const roboticRegex = new RegExp(`\\b(${roboticPhrases.join('|')})\\b`, 'gi');
+  text = text.replace(roboticRegex, '');
+  
   text = text.trim();
 
+  // 6. Sentence structure polish
   const questionCount = (text.match(/\?/g) || []).length;
   if (questionCount > 1) {
     const lastIndex = text.lastIndexOf('?');
@@ -382,24 +438,11 @@ export async function formatting_polisher(args: { rawText: string; languageMode?
       text = text.substring(0, lastIndex).replace(/\?/g, '.') + text.substring(lastIndex);
     }
   }
-  if (text.includes('?')) {
-    const lastIdx = text.lastIndexOf('?');
-    const before = text.substring(0, lastIdx).replace(/\?/g, '.');
-    const after = text.substring(lastIdx);
-    text = (before + after).trim();
-  }
 
-  text = text.replace(/([a-z0-9,;:\)\(]{40,}?)\s+([A-Z])/g, (m, a, b) => {
-    return `${a}. ${b}`;
-  });
-
+  // 7. Number word mapping (1 -> One at start of sentence)
   text = text.replace(/(^|\.\s+|\?\s+)(\d+)\b/g, (m, p, num) => {
     const mapStart: any = { "1": "One", "2": "Two", "3": "Three", "4": "Four", "5": "Five", "6": "Six", "7": "Seven", "8": "Eight", "9": "Nine", "10": "Ten" };
     return `${p}${mapStart[num] || num}`;
-  });
-  text = text.replace(/\s(\d+)([\.!\?])$/g, (m, num, punc) => {
-    const mapEnd: any = { "1": "one", "2": "two", "3": "three", "4": "four", "5": "five", "6": "six", "7": "seven", "8": "eight", "9": "nine", "10": "ten" };
-    return ` ${mapEnd[num] || num}${punc}`;
   });
 
   return { cleanedText: text.trim() };
@@ -412,31 +455,35 @@ export async function formatting_polisher(args: { rawText: string; languageMode?
 export async function emoji_policy_check(args: { text: string; languageMode?: string }) {
   let text = args.text || '';
   const languageMode = (args.languageMode || 'english').toLowerCase();
+  
+  // Rule: Arabic Mode = NO EMOJIS AT ALL
   const isArabic = languageMode.startsWith('arabic') || isArabicText(text);
 
-  text = text.replace(/💙/g, '');
+  // Filter Heart colors if needed, or remove specific ones
+  text = text.replace(/💙/g, ''); 
 
   if (isArabic) {
-    // Remove all emojis using safer range regex
+    // Remove all emojis using safe range regex
     text = text.replace(EMOJI_REGEX, '');
-    return { ok: true, cleanedText: text };
+    return { ok: true, cleanedText: text.trim() };
   }
 
-  // Collect emojis
+  // English Mode: Allow Max 1 Emoji at end
   const emojis = Array.from(text.match(EMOJI_REGEX) || []);
   if (emojis.length > 1) {
     const first = emojis[0];
     text = text.replace(EMOJI_REGEX, '');
-    text = text + ' ' + first;
+    // Append one at the end
+    text = text.trim() + ' ' + first;
   }
 
+  // Ensure Emoji is after punctuation, not before
   const lastQ = text.lastIndexOf('?');
   if (lastQ !== -1) {
     const after = text.slice(lastQ + 1);
-    // Check if after contains emoji using simple test
+    // If emoji is effectively the only thing after question mark, keep it there
     if (/[^\s]/.test(after) && EMOJI_REGEX.test(after)) {
-      const left = text.slice(0, lastQ + 1);
-      text = left;
+      // It's fine
     }
   }
 
@@ -449,49 +496,65 @@ export async function emoji_policy_check(args: { text: string; languageMode?: st
 
 export async function arabic_mode_formatter(args: { text: string }) {
   let text = args.text || '';
-  // Remove emojis using standard regex
+  
+  // 1. Strict Emoji Removal
   text = text.replace(EMOJI_REGEX, '');
-  text = text.replace(/\?/g, '؟').replace(/,/g, '،').replace(/;/g, '؛');
+  
+  // 2. Arabic Punctuation Mapping
+  text = text.replace(/\?/g, '؟')
+             .replace(/,/g, '،')
+             .replace(/;/g, '؛');
+             
+  // 3. Ensure no English text leaks unless numbers/variables
+  // (We assume the generation is mostly Arabic, just fixing punctuation here)
+  
   return { cleanedText: text.trim() };
 }
 
 /* --------------------------
-   9) quran_pedagogy
+   9) quran_pedagogy (SAFE RELIGIOUS INSTRUCTION)
    -------------------------- */
 
-export async function quran_pedagogy(args: { verse?: string; requestType: string }) {
+export async function quran_pedagogy(args: { verse?: string; requestType: string; topic?: string }) {
   const type = (args.requestType || '').toLowerCase();
+  const topic = (args.topic || '').toLowerCase();
   const verse = args.verse || '';
 
-  if (type === "meaning" || type === "verse") {
+  // 1. SAFETY FILTER: Controversial / Fiqh / Politics
+  const unsafeKeywords = ["ruling", "fatwa", "haram or halal", "politics", "sect", "shia", "sunni", "kill", "war"];
+  if (unsafeKeywords.some(k => type.includes(k) || topic.includes(k))) {
     return {
-      type: 'verse',
-      verseArabic: verse,
-      simpleMeaning: "This short meaning highlights kindness and gentle behavior in simple words.",
-      note: "Keep explanation short and child-friendly."
+      type: 'redirection',
+      message: "That is a big question that needs an adult teacher or a Sheikh to explain properly. I can help you understand a simple basic idea instead. Would you like that?",
+      safe: false
     };
   }
-  if (type === "tafseer" || type === "tafsir") {
+
+  // 2. Meaning Request (Simple Tafsir)
+  if (type === "meaning" || type === "verse" || type.includes("explain")) {
     return {
-      type: 'tafsir',
-      shortMeaning: "A child-friendly tafsir: the verse teaches honesty, patience, and helping others."
+      type: 'verse_meaning',
+      verseArabic: verse, // Expecting the flow to fill this if available
+      simpleMeaning: "We look for the gentle lesson here. This verse teaches us about kindness and being honest.",
+      reflectionQuestion: "How can we practice this small act of kindness at school tomorrow?",
+      note: "Keep explanation short, child-friendly, and focus on character (Akhlaq)."
     };
   }
-  if (type === "tajweed") {
-    return {
-      type: 'tajweed',
-      advice: "Focus on one easy rule for now such as a sound that you hold a little longer."
-    };
-  }
+
+  // 3. Memorization (Hifdh)
   if (type === "hifdh" || type === "memorize") {
     return {
       type: 'memorize',
-      advice: "Learn a small part slowly, repeat it a few times, then try to say it from memory."
+      advice: "Let us take it step by step. Read the first part three times slowly.",
+      method: "Repeat, Close eyes, Try."
     };
   }
+
+  // 4. General Islamic Question
   return {
-    type: 'unknown',
-    message: "We can learn this slowly and carefully. Which small part would you like to try?"
+    type: 'general_guidance',
+    message: "That is a beautiful topic. Let us look at the simplest meaning that helps us be better people.",
+    instruction: "Do not give rulings. Focus on general ethics and simple well-known facts."
   };
 }
 
@@ -527,10 +590,15 @@ export async function memory_manager(args: { mode: string; key: string; value?: 
    -------------------------- */
 
 export async function GUARDIAN_SANITIZE(text: string): Promise<string> {
-  // 1. Polish formatting (remove LaTeX, fix parens)
+  // 1. Polish formatting (remove LaTeX, fix parens, remove robotic phrases)
   const polished = await formatting_polisher({ rawText: text });
-  // 2. Check Emoji policy
-  const checked = await emoji_policy_check({ text: polished.cleanedText });
+  
+  // 2. Check Emoji policy (Strict for Arabic, Limited for English)
+  const checked = await emoji_policy_check({ 
+    text: polished.cleanedText,
+    languageMode: isArabicText(polished.cleanedText) ? 'arabic' : 'english'
+  });
+  
   // 3. Return final string
   return checked.cleanedText;
 }
