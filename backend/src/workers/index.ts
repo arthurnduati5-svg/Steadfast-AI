@@ -2,11 +2,12 @@ import { Queue, Worker, Job } from 'bullmq';
 import { OpenAI } from 'openai';
 import prisma from '../utils/prismaClient';
 import pinecone from '../lib/vectorClient';
-import { getRedisClient } from '../lib/redis'; // Corrected import
-import { RedisClientType } from 'redis'; // Import RedisClientType
+import { getRedisClient } from '../lib/redis';
+import { RedisClientType } from 'redis';
+import { analyzeAndTrackProgress } from '../lib/personalization'; // Import personalization logic
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-const pineconeIndex = pinecone.Index(process.env.PINECONE_INDEX || '');
+const pineconeIndex = pinecone ? pinecone.Index(process.env.PINECONE_INDEX || '') : null;
 
 // --- Job Data Interfaces ---
 interface SummarizationJobData {
@@ -25,8 +26,14 @@ interface RefreshCacheJobData {
   studentId: string;
 }
 
+// NEW: Personalization Job Data
+interface PersonalizationJobData {
+  studentId: string;
+  userMessage: string;
+  aiResponse: string;
+}
+
 // --- No-op Queue Implementation for when Redis is unavailable ---
-// This class now correctly mimics the generic structure of bullmq's Queue
 class NoopQueue<DataType = any, ResultType = any, NameType extends string = string> {
   name: string;
   constructor(name: string, _opts?: any) {
@@ -36,7 +43,6 @@ class NoopQueue<DataType = any, ResultType = any, NameType extends string = stri
   
   async add(name: NameType, data: DataType, _opts?: any): Promise<Job<DataType, ResultType, NameType>> {
     console.warn(`NoopQueue: Redis not connected. Job '${name}' for queue '${this.name}' skipped.`);
-    // Return a simple mock object that satisfies the Job interface for type-checking.
     return {
       id: 'noop-job-' + Math.random().toString(36).substring(7),
       name,
@@ -56,20 +62,24 @@ class NoopWorker<T> {
     console.warn(`NoopWorker: Redis is not available. Worker '${this.name}' will not run.`);
   }
   close() { return Promise.resolve(); }
+  on() { return this; } // Mock event listener
 }
 
 let redisConnection: RedisClientType | null = null;
 
+// Initialize Redis connection for workers
+// Note: In production, we might want to wait or retry, but for now we follow the existing pattern
 getRedisClient().then((client: RedisClientType | null) => {
   redisConnection = client;
 }).catch((error: any) => {
   console.error("Failed to initialize Redis client for workers:", error);
-  // redisConnection will remain null, so Noop queues/workers will be used.
 });
+
+const redisConfig = redisConnection ? { connection: redisConnection } : undefined;
 
 // --- Summarization Worker ---
 export const summarizationQueue = redisConnection ? 
-  new Queue<SummarizationJobData, any, 'summarization-jobs'>('summarization-jobs', { connection: redisConnection }) :
+  new Queue<SummarizationJobData, any, 'summarization-jobs'>('summarization-jobs', redisConfig) :
   new NoopQueue<SummarizationJobData, any, 'summarization-jobs'>('summarization-jobs');
 
 export const summarizationWorker = redisConnection ? 
@@ -88,28 +98,32 @@ export const summarizationWorker = redisConnection ?
 
       await prisma.chatSession.update({ where: { id: sessionId }, data: { topic } });
 
-      const embeddingResponse = await openai.embeddings.create({ model: 'text-embedding-ada-002', input: topic });
-      const embedding = embeddingResponse.data[0]?.embedding;
+      if (pineconeIndex) {
+        const embeddingResponse = await openai.embeddings.create({ model: 'text-embedding-ada-002', input: topic });
+        const embedding = embeddingResponse.data[0]?.embedding;
 
-      if (embedding) {
-        await pineconeIndex.upsert([{ id: sessionId, values: embedding, metadata: { studentId, topic, type: 'session_summary' } }]);
-        console.log(`Session ${sessionId} summarized and embedded.`);
+        if (embedding) {
+          await pineconeIndex.upsert([{ id: sessionId, values: embedding, metadata: { studentId, topic, type: 'session_summary' } }]);
+          console.log(`Session ${sessionId} summarized and embedded.`);
+        }
       }
     } catch (error) {
       console.error(`Error in summarization worker for session ${sessionId}:`, error);
     }
-  }, { connection: redisConnection }) :
+  }, redisConfig) :
   new NoopWorker<SummarizationJobData>('summarization-jobs', async () => {});
 
 
 // --- Embedding Worker ---
 export const embeddingQueue = redisConnection ? 
-  new Queue<EmbeddingJobData, any, 'embedding-jobs'>('embedding-jobs', { connection: redisConnection }) :
+  new Queue<EmbeddingJobData, any, 'embedding-jobs'>('embedding-jobs', redisConfig) :
   new NoopQueue<EmbeddingJobData, any, 'embedding-jobs'>('embedding-jobs');
 
 export const embeddingWorker = redisConnection ? 
   new Worker<EmbeddingJobData>('embedding-jobs', async job => {
     const { sessionId, studentId, message, aiResponse } = job.data;
+    if (!pineconeIndex) return; // Skip if vector DB is not configured
+
     try {
       const [messageEmbedding, aiResponseEmbedding] = await Promise.all([
         openai.embeddings.create({ model: 'text-embedding-ada-002', input: message }),
@@ -122,7 +136,7 @@ export const embeddingWorker = redisConnection ?
       await pineconeIndex.upsert([messageVector, aiResponseVector]);
 
       const session = await prisma.chatSession.findUnique({ where: { id: sessionId } });
-      if (session?.topic === 'Untitled') {
+      if (session?.topic === 'New Chat') { // Changed 'Untitled' to 'New Chat' to match default
         summarizationQueue.add('summarization-jobs', { sessionId, studentId });
       }
       
@@ -130,12 +144,12 @@ export const embeddingWorker = redisConnection ?
     } catch (error) {
       console.error(`Error in embedding worker for session ${sessionId}:`, error);
     }
-  }, { connection: redisConnection }) :
+  }, redisConfig) :
   new NoopWorker<EmbeddingJobData>('embedding-jobs', async () => {});
 
 // --- Refresh Cache Worker ---
 export const refreshCacheQueue = redisConnection ? 
-  new Queue<RefreshCacheJobData, any, 'refresh-cache-jobs'>('refresh-cache-jobs', { connection: redisConnection }) :
+  new Queue<RefreshCacheJobData, any, 'refresh-cache-jobs'>('refresh-cache-jobs', redisConfig) :
   new NoopQueue<RefreshCacheJobData, any, 'refresh-cache-jobs'>('refresh-cache-jobs');
 
 export const refreshCacheWorker = redisConnection ? 
@@ -154,11 +168,27 @@ export const refreshCacheWorker = redisConnection ?
         await redis.set(`session:history:${studentId}`, JSON.stringify(history));
         await redis.expire(`session:history:${studentId}`, 43200);
         console.log(`Cache refreshed for student ${studentId}.`);
-      } else {
-        console.warn('Redis client not available. Skipping cache refresh.');
       }
     } catch (error) {
       console.error(`Error in refresh cache worker for student ${studentId}:`, error);
     }
-  }, { connection: redisConnection }) :
+  }, redisConfig) :
   new NoopWorker<RefreshCacheJobData>('refresh-cache-jobs', async () => {});
+
+// --- Personalization Engine Worker (NEW) ---
+export const personalizationQueue = redisConnection ? 
+  new Queue<PersonalizationJobData, any, 'personalization-jobs'>('personalization-jobs', redisConfig) :
+  new NoopQueue<PersonalizationJobData, any, 'personalization-jobs'>('personalization-jobs');
+
+export const personalizationWorker = redisConnection ? 
+  new Worker<PersonalizationJobData>('personalization-jobs', async job => {
+    const { studentId, userMessage, aiResponse } = job.data;
+    try {
+      // Analyze and track progress/mistakes
+      await analyzeAndTrackProgress(studentId, userMessage, aiResponse);
+      console.log(`Personalization processed for student ${studentId}.`);
+    } catch (error) {
+      console.error(`Error in personalization worker for student ${studentId}:`, error);
+    }
+  }, redisConfig) :
+  new NoopWorker<PersonalizationJobData>('personalization-jobs', async () => {});

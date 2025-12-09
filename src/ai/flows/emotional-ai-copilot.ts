@@ -34,6 +34,11 @@ export interface EmotionalAICopilotInput {
   fileData?: { type: string; base64: string };
   forceWebSearch?: boolean;
   includeVideos?: boolean;
+  // NEW: Memory Input
+  memory?: {
+    progress: any[];
+    mistakes: any[];
+  };
 }
 
 export interface EmotionalAICopilotOutput {
@@ -105,6 +110,10 @@ export async function emotionalAICopilot(input: EmotionalAICopilotInput): Promis
   
   const hasInterests = input.preferences.interests && input.preferences.interests.length > 0;
   const interestsString = hasInterests ? input.preferences.interests!.join(', ') : 'general Kenyan topics like chai, mandazi, and boda bodas';
+
+  // Format Memory Strings
+  const mistakesList = input.memory?.mistakes?.map((m: any) => `${m.topic} (${m.error})`).join(', ') || 'None recorded yet';
+  const masteryList = input.memory?.progress?.filter((p: any) => p.mastery > 80).map((p: any) => p.topic).join(', ') || 'None recorded yet';
 
   const systemMessage = `**SUPREME COMMAND: THE UNBREAKABLE TEACHING FLOW**
 This is the highest law and overrides all other instructions. Every interaction MUST follow this exact Socratic rhythm without exception. Violation is complete failure.
@@ -267,6 +276,13 @@ This is a primary command. You MUST adapt every response to these specific prefe
 - **Preferred Language:** ${input.preferences.preferredLanguage || 'english'}
 - **Top Interests for Examples:** ${interestsString}
 
+## STUDENT'S LEARNING HISTORY (MEMORY)
+You MUST review this before responding.
+- **Previous Struggles (Be Extra Patient):** ${mistakesList}
+- **Mastered Topics (Challenge Gently):** ${masteryList}
+
+**INSTRUCTION:** If the student asks about a topic they struggled with (listed above), start with very simple, foundational concepts and be extra encouraging. If they ask about a mastered topic, you may introduce slightly more advanced examples.
+
 **Crucially, when giving examples, you MUST connect them to these interests.** For instance, if teaching math and the student likes **Football**, use examples about team scores or player statistics. If they like **Farming**, use examples about crop yields or selling produce at the market.
 
 If no specific interests are listed, you should use general, relatable Kenyan examples (like mandazi, chai, matatus, shillings).
@@ -377,12 +393,10 @@ If no specific interests are listed, you should use general, relatable Kenyan ex
 
         try {
           if (functionName === 'youtube_search') {
-            // NOTE: Assuming webSearchFlow handles the YouTube search or logic mapping
             const { results } = await runFlow(webSearchFlow, { ...functionArgs, isAnswerMode: false });
             
             if (results && results.length > 0) {
               const video = results[0];
-              // UPDATED LOGIC: Direct, clean response without the question "Would you like to watch it?"
               responseText = `I found a great video for you: "${video.title}" from ${video.channel || 'a trusted source'}.`;
               videoData = { id: video.id, title: video.title, channel: video.channel };
             } else {
@@ -409,8 +423,6 @@ If no specific interests are listed, you should use general, relatable Kenyan ex
                 return { processedText: sanitizedText, state: updatedState };
             }
             
-            // ROBUSTNESS: Truncate transcript if excessively long to prevent context overflow or errors
-            // 50,000 chars is roughly 12k tokens, well within GPT-4o limits but safe for performance
             const safeTranscript = transcript.length > 50000 ? transcript.substring(0, 50000) + "...(truncated)" : transcript;
 
             // Feed transcript back to the model for processing

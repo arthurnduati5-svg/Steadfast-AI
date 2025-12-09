@@ -50,6 +50,12 @@ const languageBackendToFrontend = {
   'english_sw': 'English + Swahili Mix',
 };
 
+// Interface for Student Memory (Progress & Mistakes)
+interface StudentMemory {
+  progress: any[];
+  mistakes: any[];
+}
+
 export function SteadfastCopilot() {
   const { toast } = useToast();
   const [isOpen, setIsOpen] = useState(false);
@@ -62,6 +68,9 @@ export function SteadfastCopilot() {
   const [isNewChat, setIsNewChat] = useState(true);
   const [conversationState, setConversationState] = useState<ConversationState>(DEFAULT_CONVERSATION_STATE);
   const [searchQuery, setSearchQuery] = useState('');
+
+  // NEW: State to store fetched student memory
+  const [studentMemory, setStudentMemory] = useState<StudentMemory>({ progress: [], mistakes: [] });
 
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -91,6 +100,21 @@ export function SteadfastCopilot() {
     }, 100);
   }, []);
 
+  // Fetch Memory Function
+  const fetchMemory = useCallback(async () => {
+    try {
+      const data = await api.get('/api/copilot/memory/student');
+      if (data) {
+        setStudentMemory({
+          progress: data.progress || [],
+          mistakes: data.mistakes || []
+        });
+      }
+    } catch (error) {
+      console.error('[Copilot] Failed to fetch student memory:', error);
+    }
+  }, []);
+
   const handleNewChat = useCallback(async (showToast = true) => {
     try {
       const newSessionData = await api.post('/api/copilot/new-session', {});
@@ -118,11 +142,13 @@ export function SteadfastCopilot() {
       if (data.history) {
         setHistory(data.history);
       }
+      // Refresh memory on new chat to ensure fresh context
+      fetchMemory();
     } catch (error) {
         console.error('[handleNewChat] Error starting new chat:', error);
         toast({ title: "Error", description: "Could not start a new chat.", variant: "destructive" });
     }
-  }, [toast]);
+  }, [toast, fetchMemory]);
   
   const loadInitialData = useCallback(async () => {
     try {
@@ -142,6 +168,10 @@ export function SteadfastCopilot() {
         } else {
             handleNewChat(false);
         }
+        
+        // Fetch personalized memory
+        await fetchMemory();
+
         // FIX: Mark as initialized so we don't reload on toggle
         setHasInitialized(true);
     } catch (error) {
@@ -151,7 +181,7 @@ export function SteadfastCopilot() {
         setConversationState(DEFAULT_CONVERSATION_STATE);
         setHasInitialized(true);
     }
-  }, [toast, handleNewChat]);
+  }, [toast, handleNewChat, fetchMemory]);
 
   // FIX: Only load data if window is open AND we haven't done so yet
   useEffect(() => {
@@ -191,7 +221,8 @@ export function SteadfastCopilot() {
       timestamp: new Date(),
     };
     
-    setMessages(prev => [...prev, userMessage]);
+    const currentMessages = [...messages, userMessage];
+    setMessages(currentMessages);
     setInput('');
     setSelectedFile(null);
     if (fileInputRef.current) fileInputRef.current.value = '';
@@ -212,20 +243,22 @@ export function SteadfastCopilot() {
 
             // 3. Get AI Response via Server Action (The "Brain" - handles formatting)
             const response = await getAssistantResponse(
-              currentSessionId!, // Pass ID for persistence inside the server action
-              userInput,
-              messages,
-              conversationState,
-              fileDataForAction,
-              forceWebSearch,
-              includeVideos,
-              // Updated: Pass preference object as the single 8th argument
+              currentSessionId!, // Arg 1: Session ID
+              userInput,         // Arg 2: Message
+              currentMessages,   // Arg 3: History
+              conversationState, // Arg 4: State
+              fileDataForAction, // Arg 5: File
+              forceWebSearch,    // Arg 6: Web Search
+              includeVideos,     // Arg 7: Videos
+              // Arg 8: Preferences Object
               {
                 name: profile?.name,
-                gradeLevel: level, // Use local level to respect UI selection
+                gradeLevel: level, // Use local state to allow immediate UI overrides
                 preferredLanguage: (languageFrontendToBackend as any)[languageHint] || 'english',
-                interests: profile?.interests,
-              }
+                interests: profile?.interests
+              },
+              // Arg 9: Student Memory (Personalization) - REQUIRED FIX
+              studentMemory
             );
             
             // Check for valid response
@@ -245,6 +278,18 @@ export function SteadfastCopilot() {
             setMessages(prev => [...prev, assistantMessage]);
             setConversationState(response.state);
 
+            // Persist the message to backend via API
+            await api.post('/api/copilot/message', {
+                sessionId: currentSessionId,
+                message: userMessage,
+                conversationState: response.state 
+            });
+            await api.post('/api/copilot/message', {
+                sessionId: currentSessionId,
+                message: assistantMessage,
+                conversationState: response.state 
+            });
+
             // 5. Update Session Title if Topic Changed (Local & Persist)
             if (response.topic && activeSession && activeSession.title !== response.topic) {
                 const updatedSession: ChatSession = {
@@ -253,10 +298,32 @@ export function SteadfastCopilot() {
                 };
                 setActiveSession(updatedSession);
                 
-                // Refresh history silently
+                // FIX: Use api.post directly to call PATCH endpoint logic on backend
+                // or if backend strictly requires PATCH, use fetch to bypass api wrapper limitation
+                try {
+                    // Try fetch for PATCH since api wrapper might lack it
+                    await fetch(`/api/copilot/session/${currentSessionId}`, {
+                        method: 'PATCH',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            // Add authorization header if needed, but usually handled by cookie/proxy in Next.js
+                        },
+                        body: JSON.stringify({ title: response.topic })
+                    });
+                } catch (patchErr) {
+                    console.warn("Failed to patch session title:", patchErr);
+                }
+                
                 const data = await api.get('/api/copilot/preload');
                 if (data.history) setHistory(data.history);
             }
+
+            // 6. Silently refresh memory (Personalization engine runs in background)
+            // Giving a small delay to allow backend worker to process
+            setTimeout(() => {
+                fetchMemory();
+            }, 2000);
+
         } catch (error: any) {
             console.error("Server Action failed:", error);
             const errorMessage: Message = {
@@ -309,8 +376,11 @@ export function SteadfastCopilot() {
       setSelectedFile(null);
       if (fileInputRef.current) fileInputRef.current.value = '';
       setActiveTab('chat');
-      // Update initialized flag because we explicitly loaded a new session
       setHasInitialized(true);
+      
+      // Refresh memory context
+      fetchMemory();
+      
       toast({ title: "Chat Loaded", description: `Continuing session: "${sessionData.title || 'Untitled'}"` });
     } catch (error) {
         console.error('[handleContinueChat] API error resuming chat:', error);
@@ -473,7 +543,7 @@ export function SteadfastCopilot() {
                       searchQuery={searchQuery}
                       setSearchQuery={setSearchQuery}
                       handleContinueChat={handleContinueChat}
-                      handleDeleteChat={handleDeleteChat} // Passed delete handler
+                      handleDeleteChat={handleDeleteChat} 
                   />
               </TabsContent>
           </Tabs>

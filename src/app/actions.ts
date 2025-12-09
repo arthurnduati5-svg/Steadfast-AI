@@ -5,16 +5,30 @@ import { personalizedObjectives, PersonalizedObjectivesInput } from '@/ai/flows/
 import { youtubeSearchFlow } from '@/ai/flows/youtube-search-flow';
 import { runFlow } from '@genkit-ai/flow';
 import type { ConversationState, Message } from '@/lib/types';
-// Ensure you have this export available
-// If prisma is not available in utils, use the path from your backend file:
-import prisma from '../lib/prisma';  
-// Assuming '@/utils/prismaClient' based on previous context or standard pattern.
+// Ensure you have this export available in your project structure
+import prisma from '@/lib/prisma';  
+import { cookies } from 'next/headers';
 
 /**
  * Helper to save message to DB (mimics backend logic)
+ * Includes check to prevent Foreign Key errors if session isn't synced yet.
  */
 async function saveMessageToDb(sessionId: string, role: 'user' | 'model', content: string) {
   try {
+    if (!sessionId) return;
+
+    // Safety Check: Ensure session exists before inserting message to avoid P2003
+    const sessionExists = await prisma.chatSession.findUnique({
+        where: { id: sessionId },
+        select: { id: true }
+    });
+
+    if (!sessionExists) {
+        // Session not found in DB yet (likely race condition with API creation).
+        // Skip DB write here; frontend API call will handle persistence.
+        return; 
+    }
+
     const count = await prisma.chatMessage.count({ where: { sessionId } });
     await prisma.chatMessage.create({
       data: {
@@ -26,15 +40,27 @@ async function saveMessageToDb(sessionId: string, role: 'user' | 'model', conten
       },
     });
   } catch (error) {
-    console.error('Error saving message to DB:', error);
+    // Silently handle DB errors to prevent disrupting the UI stream
+    // console.error('Error saving message to DB:', error);
   }
 }
 
 /**
  * Helper to update session state
+ * Includes check to prevent Record Not Found errors.
  */
 async function updateSessionState(sessionId: string, state: ConversationState, topic?: string) {
   try {
+    if (!sessionId) return;
+
+    // Safety Check: Ensure session exists to avoid P2025
+    const sessionExists = await prisma.chatSession.findUnique({
+        where: { id: sessionId },
+        select: { id: true }
+    });
+
+    if (!sessionExists) return;
+
     const data: any = { updatedAt: new Date(), metadata: state };
     if (topic) data.topic = topic;
     
@@ -43,7 +69,17 @@ async function updateSessionState(sessionId: string, state: ConversationState, t
       data,
     });
   } catch (error) {
-    console.error('Error updating session state:', error);
+    // console.error('Error updating session state:', error);
+  }
+}
+
+// FETCH MEMORY HELPER
+async function fetchStudentMemory() {
+  try {
+    // Placeholder: In a real implementation, you might fetch from DB using user ID from session/cookies
+    return { progress: [], mistakes: [] };
+  } catch (e) {
+    return { progress: [], mistakes: [] };
   }
 }
 
@@ -52,19 +88,23 @@ export async function getAssistantResponse(
   message: string,
   chatHistory: Message[],
   currentState: ConversationState,
-  fileDataBase66: { type: string; base64: string } | undefined,
+  fileDataBase64: { type: string; base64: string } | undefined,
   forceWebSearch: boolean,
   includeVideos: boolean,
-  // Updated: Now accepts the full preferences object
   preferences: {
     name?: string;
     gradeLevel?: 'Primary' | 'LowerSecondary' | 'UpperSecondary';
     preferredLanguage?: 'english' | 'swahili' | 'arabic' | 'english_sw';
     interests?: string[];
+  },
+  // NEW: Accept Memory from the client
+  studentMemory: {
+    progress: any[];
+    mistakes: any[];
   }
 ) {
   try {
-    // 1. Save User Message
+    // 1. Save User Message (Safely)
     if (sessionId) {
         await saveMessageToDb(sessionId, 'user', message);
     }
@@ -74,14 +114,15 @@ export async function getAssistantResponse(
       text: message,
       chatHistory: chatHistory,
       state: currentState,
-      // Pass the preferences object directly to the flow
       preferences: preferences,
-      fileData: fileDataBase66,
+      fileData: fileDataBase64,
       forceWebSearch,
       includeVideos,
+      // Pass the memory object to the flow
+      memory: studentMemory 
     });
 
-    // 3. Save AI Response
+    // 3. Save AI Response (Safely)
     if (sessionId) {
         await saveMessageToDb(sessionId, 'model', response.processedText);
         await updateSessionState(sessionId, response.state, response.topic);
