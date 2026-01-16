@@ -12,8 +12,19 @@ interface HistoryTabProps {
   searchQuery: string;
   setSearchQuery: (query: string) => void;
   handleContinueChat: (session: any) => void;
-  // NEW: Callback for deletion
   handleDeleteChat: (sessionId: string) => void;
+}
+
+// ✅ HELPER: Strip Markdown images/links for clean text preview
+function cleanMessagePreview(content: string): string {
+    if (!content) return '';
+    // Replace Markdown images [![alt](img)](url) with [Video]
+    let cleaned = content.replace(/\[!\[.*?\]\(.*?\)\]\(.*?\)/g, '[Video]');
+    // Replace standard links [text](url) with text
+    cleaned = cleaned.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '$1');
+    // Remove bold/italic markers
+    cleaned = cleaned.replace(/[*_]{1,3}([^*_]+)[*_]{1,3}/g, '$1');
+    return cleaned;
 }
 
 export const HistoryTab: React.FC<HistoryTabProps> = ({
@@ -57,7 +68,8 @@ export const HistoryTab: React.FC<HistoryTabProps> = ({
               <AccordionItem value={session.id} key={session.id}>
                 <AccordionTrigger>
                   <div>
-                    <p className="font-semibold text-left">{session.topic || session.title}</p>
+                    {/* ✅ CRITICAL FIX: Prioritize 'title' (live update) over 'topic' (database default) */}
+                    <p className="font-semibold text-left">{session.title || session.topic || 'New Chat'}</p>
                     <p className="text-xs text-muted-foreground text-left">
                       {new Date(session.updatedAt || session.createdAt).toLocaleDateString()}
                     </p>
@@ -68,7 +80,8 @@ export const HistoryTab: React.FC<HistoryTabProps> = ({
                     {/* Use optional chaining and provide a default empty array */}
                     {(session.messages || []).slice(0, 2).map((msg: Message, index: number) => (
                       <p key={msg.id || index} className="truncate">
-                        <strong>{msg.role}:</strong> {msg.content}
+                        {/* ✅ CLEAN PREVIEW: Removes raw Markdown code from the sidebar preview */}
+                        <strong>{msg.role}:</strong> {cleanMessagePreview(msg.content)}
                       </p>
                     ))}
                     {(session.messages || []).length > 2 && <p>...</p>}

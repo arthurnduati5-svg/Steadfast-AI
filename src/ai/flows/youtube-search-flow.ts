@@ -2,31 +2,35 @@ import { defineFlow } from '@genkit-ai/flow';
 import { z } from 'zod';
 import * as youtubeSearch from 'youtube-search-api';
 
-// Define the expected raw structure from the youtube-search-api
 interface YouTubeSearchAPIResult {
   id: string;
   title: string;
-  channel?: {
-    name?: string;
-  };
-  thumbnail: {
-    url: string;
-    width: number;
-    height: number;
-  };
+  channel?: { name?: string; };
+  thumbnail: { url: string; width: number; height: number; };
 }
 
-// Define the clean output schema for our flow
 export const YoutubeSearchFlowOutputSchema = z.object({
   id: z.string(),
   title: z.string(),
   channel: z.string().optional(),
-  channelTitle: z.string().optional(), // Added channelTitle
+  channelTitle: z.string().optional(),
   thumbnailUrl: z.string().optional(),
-  videoId: z.string(), // Added videoId
+  videoId: z.string(),
 });
 
 export type YoutubeSearchFlowOutput = z.infer<typeof YoutubeSearchFlowOutputSchema>;
+
+// 🛑 STRICT EDUCATIONAL FILTER
+const BANNED_KEYWORDS = [
+  "official video", "lyrics", "music video", "song", "mp3", 
+  "remix", "cover", "vevo", "karaoke", "concert", "live performance",
+  "album", "single", "ft.", "feat."
+];
+
+function isEducational(video: YouTubeSearchAPIResult): boolean {
+  const text = (video.title + " " + (video.channel?.name || "")).toLowerCase();
+  return !BANNED_KEYWORDS.some(keyword => text.includes(keyword));
+}
 
 export const youtubeSearchFlow = defineFlow(
   {
@@ -36,31 +40,38 @@ export const youtubeSearchFlow = defineFlow(
   },
   async (input: { query: string }): Promise<YoutubeSearchFlowOutput[]> => {
     try {
-      console.log(`🚀 Performing YouTube search for: "${input.query}"`);
-      // Setting "video" type filter explicitly
-      const response = await youtubeSearch.GetListByKeyword(input.query, false, 5, [{ type: 'video' }]);
+      console.log(`[🔍 DEEP TRACE] 🚀 YouTube search: "${input.query}"`);
+      
+      // Request 10 videos so we have enough buffer after filtering
+      const response = await youtubeSearch.GetListByKeyword(input.query, false, 10, [{ type: 'video' }]);
 
       if (!response || !response.items || response.items.length === 0) {
-        console.warn('⚠️ No YouTube video results found.');
         return [];
       }
 
-      // Map and clean the results to match our defined output schema
-      const cleanedResults: YoutubeSearchFlowOutput[] = response.items.map((video: YouTubeSearchAPIResult) => ({
-        id: video.id,
-        title: video.title || 'Untitled Video',
-        channel: video.channel?.name || 'Unknown Channel',
-        channelTitle: video.channel?.name || 'Unknown Channel', // Mapped channel name to channelTitle
-        thumbnailUrl: video.thumbnail?.url || '',
-        videoId: video.id, // Mapped id to videoId
-      }));
+      // Filter and Map
+      const cleanedResults: YoutubeSearchFlowOutput[] = response.items
+        .filter(isEducational) // ✅ APPLY HARD FILTER
+        .map((video: YouTubeSearchAPIResult) => {
+          let safeChannel = video.channel?.name || '';
+          if (safeChannel === 'Unknown Channel' || safeChannel === 'undefined') safeChannel = '';
 
-      console.log(`✅ Found ${cleanedResults.length} YouTube videos.`);
+          return {
+            id: video.id,
+            title: video.title || 'Educational Video',
+            channel: safeChannel,
+            channelTitle: safeChannel,
+            thumbnailUrl: video.thumbnail?.url || `https://img.youtube.com/vi/${video.id}/0.jpg`, // Fallback
+            videoId: video.id,
+          };
+        })
+        .slice(0, 3); // Return top 3 filtered results
+
+      console.log(`[🔍 DEEP TRACE] ✅ Found ${cleanedResults.length} Educational videos.`);
       return cleanedResults;
 
     } catch (error) {
-      console.error('❌ Error in youtubeSearchFlow:', error);
-      // Return an empty array on error to ensure the calling function doesn't break
+      console.error('[🔍 DEEP TRACE] ❌ Error in youtubeSearchFlow:', error);
       return [];
     }
   }

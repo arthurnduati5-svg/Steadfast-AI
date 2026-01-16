@@ -55,7 +55,7 @@ Based on this, create a list of daily objectives.`;
     messages: [
       { role: 'system', content: systemMessage },
     ],
-    model: 'gpt-4o',
+    model: 'gpt-4o-mini',
   });
 
   const objectivesString = completion.choices[0].message.content || '';

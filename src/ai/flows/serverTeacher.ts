@@ -10,6 +10,7 @@
  * - Strict sanitation: no markdown, no LaTeX, no symbols
  * - Uses your existing toolRouter + polisher chain
  */
+// export const runtime = 'edge';
 
 import { z } from 'genkit';
 import { toolRouter } from '../tools/handlers';
@@ -98,10 +99,24 @@ export default async function serverTeacher(
     } as any);
 
   const studentLang = input.preferences?.preferredLanguage || 'english';
-  const userMsg = input.text.trim().toLowerCase();
+  const userMsg = input.text.trim();
 
   // -----------------------
-  // 1. Ask LLM for *structured* pieces only
+  // 1. EMOTIONAL & TONE ANALYSIS (Persona Layer)
+  // -----------------------
+  // First, we check how the student is feeling
+  const decoderResult = await toolRouter('emotional_decoder', { text: userMsg });
+  const toneResult = await toolRouter('tone_generator', { emotion: decoderResult.emotion });
+
+  // If it's a safety violation or an insult, we use the specific persona response immediately
+  if (decoderResult.emotion === 'safety_violation' || decoderResult.emotion === 'angry_insult') {
+    let response = toneResult.raw;
+    response = sanitizeHard(response);
+    return { text: response, state };
+  }
+
+  // -----------------------
+  // 2. TEACHING CONTENT (Logic Layer)
   // -----------------------
   const structured = await toolRouter('teaching_micro_step', {
     topic: userMsg,
@@ -110,36 +125,40 @@ export default async function serverTeacher(
     adaptMode: state.adaptMode === 'challenge',
   });
 
-  const tone = structured.tone || 'Let us take a small step.';
-  const micro = structured.microIdea || 'Here is the simplest idea.';
-  const example =
-    structured.example || 'Think of a simple Kenyan life example.';
-  const question = structured.question || 'Does that make sense?';
+  // Assemble the parts based on handlers.ts return structure
+  const tonePrefix = toneResult.hintPrefix || 'Let us look at this together.';
+  const microIdea = structured.microIdea || 'Here is a simple way to think about it.';
+  const example = structured.example || '';
+  const question = structured.question || 'Does that make sense so far?';
 
   // -----------------------
-  // 2. Build server text
+  // 3. ASSEMBLE SERVER TEXT
   // -----------------------
-  const draft = `${tone} ${micro} ${example} ${
+  // We combine the Teacher's Emotional Response + The Lesson + The Question
+  const draft = `${tonePrefix} ${microIdea} ${example} ${
     question.endsWith('?') ? question : question + '?'
   }`;
 
   // -----------------------
-  // 3. Polisher chain
+  // 4. POLISHER CHAIN (Enforcement Layer)
   // -----------------------
   let polished = draft;
 
+  // Formatting (removes robotic AI phrases and fixes fraction visuals)
   const p1 = await toolRouter('formatting_polisher', {
     rawText: polished,
     languageMode: studentLang,
   });
   polished = p1.cleanedText ?? polished;
 
+  // Emoji Policy (limits to 1 in English, 0 in Arabic)
   const p2 = await toolRouter('emoji_policy_check', {
     text: polished,
     languageMode: studentLang,
   });
   polished = p2.cleanedText ?? polished;
 
+  // Arabic Mode (fixes punctuation and removes all English bleed)
   const wantsArabic =
     studentLang.toLowerCase().startsWith('arabic') ||
     /[\u0600-\u06FF]/.test(polished);
@@ -149,6 +168,7 @@ export default async function serverTeacher(
     polished = p3.cleanedText ?? polished;
   }
 
+  // Final hard sanitation to ensure 100% plain text
   polished = sanitizeHard(polished);
 
   return {

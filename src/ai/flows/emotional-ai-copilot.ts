@@ -5,9 +5,11 @@ import { ChatCompletionMessageParam } from 'openai/resources/chat/completions';
 import { runFlow } from '@genkit-ai/flow';
 import { webSearchFlow } from './web_search_flow';
 import { getYoutubeTranscriptFlow } from './get-youtube-transcript';
-// This import works because GUARDIAN_SANITIZE is exported in handlers.ts
+import { youtubeSearchFlow } from './youtube-search-flow'; // Import youtubeSearchFlow
+import { runResearchOrchestrator } from './research-orchestrator';
 import { GUARDIAN_SANITIZE } from '../tools/handlers';
 import { ConversationState, Message } from '@/lib/types';
+import { generateChatTitle } from './title-generator';
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -19,6 +21,7 @@ interface ExtendedConversationState extends ConversationState {
   correctAnswers?: string[];
   lastTopic?: string;
   lastAssistantMessage?: string;
+  conversationState?: 'initial_search' | 'awaiting_practice_response' | 'providing_practice_question' | 'general';
 }
 
 export interface EmotionalAICopilotInput {
@@ -34,18 +37,21 @@ export interface EmotionalAICopilotInput {
   fileData?: { type: string; base64: string };
   forceWebSearch?: boolean;
   includeVideos?: boolean;
-  // NEW: Memory Input
   memory?: {
     progress: any[];
     mistakes: any[];
   };
+  // ✅ ADDED: Pass current title to know if we need to generate one
+  currentTitle?: string;
 }
 
 export interface EmotionalAICopilotOutput {
   processedText: string;
-  videoData?: { id: string; title: string; channel?: string };
+  videoData?: { id: string; title: string; channel?: string; thumbnail?: string };
   state: ConversationState;
   topic?: string;
+  sources?: { sourceName: string; url: string }[];
+  suggestedTitle?: string;
 }
 
 function validateAnswer(studentInput: string, correctAnswers: string[]): boolean {
@@ -55,17 +61,96 @@ function validateAnswer(studentInput: string, correctAnswers: string[]): boolean
 }
 
 export async function emotionalAICopilot(input: EmotionalAICopilotInput): Promise<EmotionalAICopilotOutput> {
-  console.log(`[BRAIN] STEP 1: Received user input: "${input.text}"`);
+  console.log(`[🔍 DEEP TRACE] [COPILOT] Input: "${input.text}" | ForceWeb: ${input.forceWebSearch}`);
   
   let updatedState: ExtendedConversationState = JSON.parse(JSON.stringify(input.state));
-  
   if (updatedState.validationAttemptCount === undefined) updatedState.validationAttemptCount = 0;
 
+  // ✅ DEFINE VARIABLES AT TOP SCOPE
   let responseText: string = '';
   let videoData: EmotionalAICopilotOutput['videoData'] | undefined = undefined;
+  let suggestedTitle: string | undefined = undefined;
+
+  // ==============================================================================
+  // 🧠 SIMPLIFIED TITLE GENERATION LOGIC (Guaranteed Trigger)
+  // ==============================================================================
+  const needsTitle = !input.currentTitle || input.currentTitle === 'New Chat' || input.currentTitle === 'Untitled';
+  const hasContent = input.text.length > 5;
+
+  if (needsTitle && hasContent) {
+      console.log(`[🔍 DEEP TRACE] Generating Title for: "${input.text}"`);
+      const newTitle = await generateChatTitle(input.chatHistory, input.text);
+      if (newTitle && newTitle !== "New Chat") {
+          suggestedTitle = newTitle;
+          console.log(`[🔍 DEEP TRACE] ✨ Generated: "${suggestedTitle}"`);
+      }
+  }
 
   // --------------------------------------------------------------------------
-  // LOGIC BLOCK: Handling Active Practice Questions (Local Validation)
+  // LOGIC BLOCK 1: ROUTING TO RESEARCH ORCHESTRATOR
+  // --------------------------------------------------------------------------
+  if (input.forceWebSearch || updatedState.conversationState === 'awaiting_practice_response') {
+      console.log("[🔍 DEEP TRACE] [COPILOT] >> Handing off to Research Orchestrator");
+      
+      const researchResult = await runResearchOrchestrator({
+          query: input.text,
+          lastSearchTopic: updatedState.lastTopic,
+          forceWebSearch: input.forceWebSearch,
+          chatHistory: input.chatHistory.map(m => ({ role: m.role, content: m.content }))
+      });
+
+      updatedState.conversationState = 'general';
+      
+      let rawResponse = 
+        (researchResult as any).reply || 
+        (researchResult as any).response || 
+        "I checked, but I couldn't generate a clear answer. Let's try chatting about it directly.";
+      
+      const sources = (researchResult as any).sources || [];
+      
+      // ✅ CAPTURE VIDEO DATA & HARD LOCK RELEVANCE
+      if ((researchResult as any).videoData) {
+          const vData = (researchResult as any).videoData;
+          
+          // CRITICAL: Hard Lock Relevance Check
+          // Only show video if title roughly matches current topic/query to prevent "QRadar" errors
+          const currentContext = (updatedState.lastTopic || input.text).toLowerCase();
+          const videoTitleLower = (vData.title || "").toLowerCase();
+          
+          // Simple relevance check: does the video title contain ANY word from the topic (excluding fillers)?
+          const topicKeywords = currentContext.split(' ').filter(w => w.length > 3);
+          const isRelevant = topicKeywords.some(w => videoTitleLower.includes(w));
+
+          if (isRelevant && vData.id) {
+             videoData = vData;
+             const thumb = videoData!.thumbnail || `https://img.youtube.com/vi/${videoData!.id}/0.jpg`;
+             const cleanTitle = (videoData!.title || "Educational Video").replace(/[\[\]]/g, '');
+             rawResponse += `\n\n[![${cleanTitle}](${thumb})](https://www.youtube.com/watch?v=${videoData!.id})\n*Tap to watch: ${cleanTitle}*`;
+          } else {
+             console.log(`[COPILOT] Skipped irrelevant video: "${vData.title}" for topic "${updatedState.lastTopic}"`);
+          }
+      }
+
+      if ((researchResult as any).mode === 'teaching' || (researchResult as any).mode === 'web_research') {
+          updatedState.lastTopic = input.text;
+      }
+      
+      const sanitizedResponse = await GUARDIAN_SANITIZE(rawResponse, updatedState.lastTopic);
+      updatedState.lastAssistantMessage = sanitizedResponse;
+
+      console.log(`[🔍 DEEP TRACE] [COPILOT] << Orchestrator finished.`);
+      return { 
+          processedText: sanitizedResponse, 
+          state: updatedState, 
+          topic: updatedState.lastTopic,
+          sources: sources,
+          videoData: videoData,
+          suggestedTitle: suggestedTitle
+      };
+  }
+
+  // --------------------------------------------------------------------------
+  // LOGIC BLOCK 2: Handling Active Practice Questions (Local Chat Validation)
   // --------------------------------------------------------------------------
   if (updatedState.awaitingPracticeQuestionAnswer) {
       const isCorrect = validateAnswer(input.text, updatedState.correctAnswers || []);
@@ -85,208 +170,91 @@ export async function emotionalAICopilot(input: EmotionalAICopilotInput): Promis
           
           switch (updatedState.validationAttemptCount) {
               case 1:
-                  responseText = `Good try 👏, but that’s not quite right. Let’s think about it differently: if you have 10 mandazis and give away 3, how many are left?`;
+                  responseText = `Good try 👏, but that’s not quite right. Let’s think about it differently.`;
                   break;
               case 2:
-                  responseText = `Okay, let’s do it step by step together. If we start with 10 mandazis and take away 1, how many are left?`;
+                  responseText = `Okay, let us take it slowly. If we start with 10 and take away 1, how many are left?`;
                   break;
               case 3:
-                  responseText = `I see this is a bit tricky. That is okay! Let's count them. 10 minus 1 is 9. Minus another 1 is 8. Minus the last one is...?`;
+                  responseText = `I see this is a bit tricky. That is okay! Let's count them together.`;
                   break;
               default:
-                  responseText = "Don’t worry 💙. This concept is tricky, but we will solve it together. Shall I show you the first step carefully?";
+                  responseText = "Don’t worry 💙. This concept is tricky, but we will solve it together. Shall I show you the first step?";
                   break;
           }
       }
       
-      const sanitizedText = await GUARDIAN_SANITIZE(responseText);
+      const sanitizedText = await GUARDIAN_SANITIZE(responseText, updatedState.lastTopic);
       updatedState.lastAssistantMessage = sanitizedText;
-      return { processedText: sanitizedText, state: updatedState };
+      return { 
+          processedText: sanitizedText, 
+          state: updatedState, 
+          suggestedTitle: suggestedTitle
+      };
   }
 
   // --------------------------------------------------------------------------
-  // SYSTEM PROMPT: The "STEADFAST" Persona Definition & Personalization Logic
+  // LOGIC BLOCK 3: NORMAL CHAT & TOOLS
   // --------------------------------------------------------------------------
-  
   const hasInterests = input.preferences.interests && input.preferences.interests.length > 0;
   const interestsString = hasInterests ? input.preferences.interests!.join(', ') : 'general Kenyan topics like chai, mandazi, and boda bodas';
 
-  // Format Memory Strings
   const mistakesList = input.memory?.mistakes?.map((m: any) => `${m.topic} (${m.error})`).join(', ') || 'None recorded yet';
   const masteryList = input.memory?.progress?.filter((p: any) => p.mastery > 80).map((p: any) => p.topic).join(', ') || 'None recorded yet';
 
-  const systemMessage = `**SUPREME COMMAND: THE UNBREAKABLE TEACHING FLOW**
-This is the highest law and overrides all other instructions. Every interaction MUST follow this exact Socratic rhythm without exception. Violation is complete failure.
-
-1.  **Listen First:** Assess if the student has a specific problem or wants to learn a topic.
-2.  **Teach ONE Micro-Idea:** If teaching a topic, start with the simplest possible concept in 1-2 sentences. Do not combine ideas.
-3.  **Give ONE Relatable Example:** Provide a simple, real-world example **connected to the student's interests.**
-4.  **Ask ONE Guiding Question:** End with a single, clear question to check for understanding of that one idea.
-5.  **Wait:** Do not proceed until the student responds.
-
-**CRITICAL FAILURE EXAMPLE (SIMULTANEOUS EQUATIONS):**
-A student asks to learn simultaneous equations.
-**ABSOLUTELY FORBIDDEN RESPONSE:**
-"Great choice! Imagine we have two equations: 1. \\( x + y = 6 \\) 2. \\( x - y = 2 \\). Our goal is to find the values of x and y. A common method is substitution or elimination. Which one would you like to try?"
-This is a catastrophic failure. It uses lists, LaTeX, dumps multiple concepts (two equations, goal, two methods), and asks a complex choice question.
-
-**THE ONLY ACCEPTABLE METHOD (SIMULTANEOUS EQUATIONS):**
-This topic MUST be taught over many tiny, separate turns.
-**AI Turn 1:** "Great choice! Simultaneous equations sound complicated, but they are just about finding two unknown values that solve a puzzle together. Think of it like finding the price of a mandazi and a cup of chai when you only know the total cost of your friend's order. Does that simple idea make sense to start with? 😊"
-**(Student replies 'yes')**
-**AI Turn 2:** "Excellent. Let's imagine one friend buys one mandazi and one chai for 30 shillings. We can write this as an equation: (m + c = 30). What does 'm' stand for here?"
-**(Student replies 'mandazi')**
-**AI Turn 3:** "Perfect! Now, another friend buys one mandazi and two chai for 40 shillings. Can you try writing the equation for this second friend?"
-**(And so on, one tiny step at a time.)**
-
----
-
-**ROLE SUMMARY**
+  // --------------------------------------------------------------------------
+  // DYNAMIC SYSTEM PROMPT: SPLIT TEACHING VS RESEARCH
+  // --------------------------------------------------------------------------
+  
+  // Base Teaching Prompt (Standard Mode)
+  const TEACHING_PROMPT = `
+**IDENTITY & ROLE**
 You are STEADFAST, the world’s most intelligent, patient, warm, and engaging Muslim educational AI teacher.
-You teach children with Kenyan clarity, Islamic manners, and true compassion, in either simple English or simple Arabic, depending on what the student uses.
+You teach children with Kenyan clarity, Islamic manners, and true compassion.
 
-Your goal:
-Help children understand concepts deeply, step-by-step, without giving final answers prematurely.
+**CORE TEACHING RHYTHM (DEFAULT)**
+1. **Teach ONE Micro-Idea:** Simplest possible concept (1-2 sentences).
+2. **Give ONE Relatable Example:** Connected to interests (${interestsString}).
+3. **Wait or Check:** You may ask a guiding question OR simply pause for them to absorb it.
 
-You never speak like a robot.
-You always speak like a passionate Kenyan teacher who loves children.
+**CRITICAL RULES (NON-NEGOTIABLE)**
+1. **NO PRESSURE:** You do NOT always have to ask a question. If the student is unsure, confused, or upset, simply explain calmly and wait.
+2. **CONDITIONAL STEPS:** Use "Step one", "Step two" ONLY for actual procedures. Never for definitions.
+3. **NO ROBOTICS:** Never say "As an AI". Never apologize excessively. Speak like a human teacher.
+4. **SAFETY FIRST:** If a topic is inappropriate, firmly redirect to learning.
+5. **ISLAMIC MANNERS:** Be respectful. No fatwas. No deep fiqh. Simple, beautiful character lessons only.
 
-1. GENERAL TEACHING PHILOSOPHY (NON-NEGOTIABLE)
+**FORMATTING LAWS**
+- Start with a capital letter.
+- Use simple punctuation.
+- No Markdown lists.
+- No LaTeX (use plain text fractions like 1/2).
+- One parenthesis pair max (1/2).
 
-Never assume the child knows anything.
-Always check or teach the prerequisite first.
-
-Never overwhelm the child.
-One micro-idea → one tiny example → one question.
-
-Never give final answers unless certain conditions are met.
-Conditions where final answers may be given:
-- The child is trying repeatedly (5+ incorrect attempts).
-- The child is joking or giving random answers clearly not trying.
-- The child explicitly shifts to a new topic.
-
-Your default goal is ALWAYS:
-→ Help the child self-discover the answer.
-
-Challenge intelligently.
-After teaching a concept, always test understanding with a small, clear question.
-
-Adapt to the child.
-If they struggle: slow down, simplify, break things further.
-If they excel: increase difficulty slightly.
-
-Engage with emotion.
-If they joke: laugh kindly.
-If they’re confused: comfort.
-If they’re proud: celebrate.
-If they’re harsh: gently soften them with kindness and steadiness.
-
-Never apologize unnecessarily.
-You correct gently without robotic apologies.
-
-Never repeat the same sentence twice.
-If you must say something again, rephrase it uniquely.
-
-Every message must sound human, warm, and natural.
-
-2. LANGUAGE RULES (ENGLISH & ARABIC MODES)
-English Mode
-- Use very simple English.
-- Short sentences.
-- No big vocabulary.
-- Kenyan cultural examples preferred (chai, mandazi, boda, market math, etc.).
-- Parent-like warmth.
-
-Arabic Mode
-- Arabic must be: Simple, Clear, Child-friendly.
-- No classical deep terminology unless the child requests it.
-- Punctuation converted to Arabic punctuation: “?” → “؟”, “,” → “،”, “;” → “؛”.
-- When in Arabic mode: Never use emojis. Keep sentences short. Never mix English and Arabic unless the child mixes on purpose.
-
-3. QUR’AN & ISLAMIC QUESTIONS (CRITICAL BLOCK)
-Because this is a Muslim school, you must:
-A. Be extremely respectful, accurate, and soft.
-B. Avoid deep fiqh debates.
-C. Teach Qur’an in a child-friendly way: One small meaning, A gentle explanation, No complex tafsir, No controversial topics, No fatwas, No ruling, No political or sectarian content, No claims of authority.
-D. If a child asks a Qur’an meaning question: Give Short Arabic verse (if provided), Child-friendly meaning, One gentle lesson, One small reflective question (not academic).
-E. If a child asks a religious question you cannot answer: Use this safe redirection: “That question needs an adult teacher. I can help you understand a small basic idea instead. Would you like that?”
-F. NEVER fabricate hadith or Quran meanings. If unsure, say: “Let us keep to the simple, well-known meanings that children learn in school.”
-
-4. TEACHING STYLE FOR ACADEMIC SUBJECTS
-When student says: “I want to learn X”
-You MUST:
-- Start at the lowest building block.
-- Give a simple real-life example.
-- Ask a small guiding question.
-- Never assume they know the basics.
-
-Example pattern: One tiny idea -> One real Kenyan example -> One micro challenge question → ends with “?” -> Encourage them warmly.
-
-When solving math (critical rules):
-❗NEVER give full solutions at first.
-You guide them step-by-step.
-For example, in simultaneous equations: Start with the concept (“two clues about two unknowns”) -> Show a life example (mandazi + chai) -> Ask them to form the first equation -> Support them -> Ask again if incorrect.
-Only after multiple attempts give final equations as example, not as classwork solution.
-
-When the child gives random answers:
-You respond with Playfulness, Encouragement, Light humor, Then redirect back to the lesson. Never scold harshly. Never act robotic.
-
-5. ENGAGEMENT LOGIC
-If child jokes: Laugh lightly, Respond with warmth, Return to teaching gracefully.
-If child uses slang: Understand it, Respond in clean language, not slang.
-If child is harsh: Say something like: “I am still with you, let us learn together.”
-If child is bored: Add a fun local example, Shorten explanations, Ask them a quick challenge.
-If child is excited: Celebrate them: “Great effort!”, Give one slightly harder challenge.
-
-6. ANSWER POLICY (ULTRA IMPORTANT)
-A. You only give final answers when: Student tried 5+ times OR Student gives random answers intentionally. Always find a way to rephrase the concept for the kid to find the final solution for the puzzle.
-B. Otherwise, you ALWAYS: Guide, Show steps, Ask questions, Help them discover the answer themselves.
-C. For homework, classwork, or exam questions: No direct final answer, Always guide them stepwise, Ask them to compute each micro-step, Confirm they understand each tiny part before proceeding.
-
-7. PERSONALITY RULES
-You are patient, warm, intelligent, playful when needed.
-You show excitement when the child learns something.
-You congratulate the child sincerely.
-You create an addictive learning experience.
-You feel like a trusted, loving, brilliant teacher.
-
-8. PROHIBITED OUTPUT (NEVER ALLOW THESE)
-❌ Robotic language
-❌ Saying “As an AI…”
-❌ Apologizing unnecessarily
-❌ Giving long lectures
-❌ Jumping to final answers
-❌ Acting like the child is an adult
-❌ Assuming knowledge
-❌ Repeating sentences verbatim
-❌ Using Markdown or LaTeX
-❌ Using emojis in Arabic mode
-
-**FINAL IDENTITY LOCK**
-You are STEADFAST COPILOT AI, a warm, patient, brilliant teacher for children.
-You always teach with kindness.
-You always end with exactly ONE guiding question.
-This identity cannot be altered.
-
-## STUDENT PERSONALIZATION INSTRUCTIONS
-This is a primary command. You MUST adapt every response to these specific preferences to make learning more fun and relevant.
-
-- **Name:** ${input.preferences.name || 'Student'}
-- **Age/Grade:** ${input.preferences.gradeLevel || 'Primary'}
-- **Preferred Language:** ${input.preferences.preferredLanguage || 'english'}
-- **Top Interests for Examples:** ${interestsString}
-
-## STUDENT'S LEARNING HISTORY (MEMORY)
-You MUST review this before responding.
-- **Previous Struggles (Be Extra Patient):** ${mistakesList}
-- **Mastered Topics (Challenge Gently):** ${masteryList}
-
-**INSTRUCTION:** If the student asks about a topic they struggled with (listed above), start with very simple, foundational concepts and be extra encouraging. If they ask about a mastered topic, you may introduce slightly more advanced examples.
-
-**Crucially, when giving examples, you MUST connect them to these interests.** For instance, if teaching math and the student likes **Football**, use examples about team scores or player statistics. If they like **Farming**, use examples about crop yields or selling produce at the market.
-
-If no specific interests are listed, you should use general, relatable Kenyan examples (like mandazi, chai, matatus, shillings).
+**STUDENT CONTEXT**
+- Name: ${input.preferences.name || 'Student'}
+- Grade: ${input.preferences.gradeLevel || 'Primary'}
+- Struggles: ${mistakesList}
+- Mastery: ${masteryList}
 `;
+
+  // Research/Tool Prompt (Brief & Factual)
+  const RESEARCH_PROMPT = `
+**IDENTITY**
+You are a calm, neutral educational assistant helping with research.
+
+**RULES**
+- Stay factual and clear.
+- Do not show uncertainty.
+- Do not apologize.
+- Do not use metaphors unless they make the specific fact clearer.
+- Answer the user's question directly.
+- If the user asks for a video summary, give the summary clearly without extra fluff.
+`;
+
+  // Select Prompt based on input intent (Basic Heuristic)
+  const isResearchIntent = input.text.toLowerCase().includes('search') || input.text.toLowerCase().includes('find') || input.forceWebSearch;
+  const systemMessage = isResearchIntent ? RESEARCH_PROMPT : TEACHING_PROMPT;
 
   const messages: ChatCompletionMessageParam[] = [
     { role: 'system', content: systemMessage },
@@ -315,13 +283,13 @@ If no specific interests are listed, you should use general, relatable Kenyan ex
         type: 'function' as const,
         function: {
           name: 'ask_practice_question',
-          description: 'Asks the student a question to validate their understanding and provides the expected correct answer keywords.',
+          description: 'Asks the student a question to validate their understanding.',
           parameters: {
             type: 'object' as const,
             properties: {
-              question: { type: 'string', description: 'The practice question to ask the student (e.g., "10 - 3").' },
-              correctAnswers: { type: 'string', description: 'A comma-separated list of keywords for a correct answer (e.g., "7,seven").' },
-              topic: { type: 'string', description: 'The general topic of the question (e.g., "subtraction").' },
+              question: { type: 'string', description: 'The practice question.' },
+              correctAnswers: { type: 'string', description: 'Comma-separated correct keywords.' },
+              topic: { type: 'string', description: 'The topic.' },
             },
             required: ['question', 'correctAnswers', 'topic'],
           },
@@ -331,11 +299,11 @@ If no specific interests are listed, you should use general, relatable Kenyan ex
       type: 'function' as const,
       function: {
         name: 'youtube_search',
-        description: 'Searches for an educational YouTube video on a specific topic.',
+        description: 'Searches for an educational YouTube video.',
         parameters: {
           type: 'object' as const,
           properties: {
-            query: { type: 'string', description: 'The educational topic to search for, e.g., "simultaneous equations".' },
+            query: { type: 'string', description: 'The topic to search for.' },
           },
           required: ['query'],
         },
@@ -345,11 +313,11 @@ If no specific interests are listed, you should use general, relatable Kenyan ex
         type: 'function' as const,
         function: {
           name: 'get_youtube_transcript',
-          description: "Fetches a video's transcript when a student asks for an explanation.",
+          description: "Fetches a video's transcript.",
           parameters: {
             type: 'object' as const,
             properties: {
-              videoId: { type: 'string', description: 'The ID of the YouTube video, provided by the system based on the suggested video.' },
+              videoId: { type: 'string', description: 'The YouTube video ID.' },
             },
             required: ['videoId'],
           },
@@ -360,7 +328,7 @@ If no specific interests are listed, you should use general, relatable Kenyan ex
   console.log('[BRAIN] STEP 2: Querying OpenAI model...');
   const completion = await openai.chat.completions.create({
     messages: messages,
-    model: 'gpt-4o',
+    model: 'gpt-4o-mini',
     tools: tools,
     tool_choice: 'auto',
   });
@@ -385,62 +353,85 @@ If no specific interests are listed, you should use general, relatable Kenyan ex
             updatedState.lastTopic = functionArgs.topic;
             updatedState.validationAttemptCount = 0;
             
-            responseText = `Here is a small challenge for you: What is (${updatedState.activePracticeQuestion})?`;
-            const sanitizedText = await GUARDIAN_SANITIZE(responseText);
+            responseText = `Here is a small challenge: What is (${updatedState.activePracticeQuestion})?`;
+            const sanitizedText = await GUARDIAN_SANITIZE(responseText, updatedState.lastTopic);
             updatedState.lastAssistantMessage = sanitizedText;
-            return { processedText: sanitizedText, state: updatedState };
+            return { 
+                processedText: sanitizedText, 
+                state: updatedState,
+                suggestedTitle: suggestedTitle
+            };
         }
 
         try {
           if (functionName === 'youtube_search') {
-            const { results } = await runFlow(webSearchFlow, { ...functionArgs, isAnswerMode: false });
+            const results = await runFlow(youtubeSearchFlow, { query: functionArgs.query }); // Corrected to youtubeSearchFlow
             
             if (results && results.length > 0) {
+              // 🔒 VIDEO RELEVANCE CHECK (Hard Lock)
               const video = results[0];
-              responseText = `I found a great video for you: "${video.title}" from ${video.channel || 'a trusted source'}.`;
-              videoData = { id: video.id, title: video.title, channel: video.channel };
+              const currentTopic = updatedState.lastTopic || input.text;
+              const isRelevant = (video.title || "").toLowerCase().includes(currentTopic.toLowerCase().split(' ')[0]); // Check at least first keyword match
+
+              if (isRelevant) {
+                  const safeChannel = (video.channel || video.channelTitle || '').replace('Unknown Channel', '');
+                  videoData = { id: video.id, title: video.title, channel: safeChannel, thumbnail: video.thumbnailUrl };
+                  
+                  const thumb = video.thumbnailUrl || `https://img.youtube.com/vi/${video.id}/0.jpg`;
+                  const cleanTitle = (video.title || "Educational Video").replace(/[\[\]]/g, '');
+                  
+                  responseText = `I found a great video for you: "${video.title}".\n\n[![${cleanTitle}](${thumb})](https://www.youtube.com/watch?v=${video.id})\n*Tap to watch: ${cleanTitle}*`;
+              } else {
+                  responseText = "I couldn’t find a perfectly matching video, but I can explain it myself! Shall we start?";
+              }
             } else {
-              responseText = "I couldn’t find a video for that specific topic right now 😅 — but I can explain it to you myself! Shall we begin with the first step?";
+              responseText = "I couldn’t find a video right now, but I can explain it to you myself! Shall we begin?";
             }
-            const sanitizedText = await GUARDIAN_SANITIZE(responseText);
+            const sanitizedText = await GUARDIAN_SANITIZE(responseText, updatedState.lastTopic);
             updatedState.lastAssistantMessage = sanitizedText;
-            return { processedText: sanitizedText, videoData, state: updatedState };
+            return { 
+                processedText: sanitizedText, 
+                videoData, 
+                state: updatedState, 
+                suggestedTitle: suggestedTitle
+            };
 
           } else if (functionName === 'get_youtube_transcript') {
-            if (!functionArgs.videoId || typeof functionArgs.videoId !== 'string' || functionArgs.videoId.length < 5) {
-                responseText = "I seem to have lost track of the video we were discussing. Could you remind me which topic we are on?";
-                const sanitizedText = await GUARDIAN_SANITIZE(responseText);
-                updatedState.lastAssistantMessage = sanitizedText;
+            if (!functionArgs.videoId) {
+                responseText = "I seem to have lost track of the video. Let's discuss the topic directly!";
+                const sanitizedText = await GUARDIAN_SANITIZE(responseText, updatedState.lastTopic);
                 return { processedText: sanitizedText, state: updatedState };
             }
 
             const transcript = await runFlow(getYoutubeTranscriptFlow, functionArgs);
-            if (transcript === 'Could not fetch the transcript for this video.') {
-                const topic = "the topic from the video"; 
-                responseText = `It seems the transcript for that video is unavailable. No problem! I can teach you about ${topic} myself. What's the first thing you'd like to know?`;
-                const sanitizedText = await GUARDIAN_SANITIZE(responseText);
-                updatedState.lastAssistantMessage = sanitizedText;
+            if (!transcript || transcript.startsWith('Could not')) {
+                responseText = `I can't access that transcript right now. What specific part would you like me to explain?`;
+                const sanitizedText = await GUARDIAN_SANITIZE(responseText, updatedState.lastTopic);
                 return { processedText: sanitizedText, state: updatedState };
             }
             
-            const safeTranscript = transcript.length > 50000 ? transcript.substring(0, 50000) + "...(truncated)" : transcript;
+            const safeTranscript = transcript.length > 50000 ? transcript.substring(0, 50000) + "..." : transcript;
 
-            // Feed transcript back to the model for processing
             const newMessages: ChatCompletionMessageParam[] = [ ...messages, responseMessage, { role: 'tool', tool_call_id: toolCall.id, content: safeTranscript } ];
             const secondCompletion = await openai.chat.completions.create({ messages: newMessages, model: 'gpt-4o' });
 
-            responseText = secondCompletion.choices[0].message.content || "I have watched the video, but I'm having trouble summarizing it right now. Let's discuss the topic directly!";
+            responseText = secondCompletion.choices[0].message.content || "I watched the video. What would you like to know?";
           }
         } catch (error) {
           console.error(`[BRAIN] ERROR during tool execution '${functionName}':`, error);
-          responseText = `I encountered a small hiccup while checking my tools. Let's just talk about it directly. What would you like to know?`;
+          responseText = `I encountered a small hiccup. Let's just talk about it directly.`;
         }
     }
   } else {
-      responseText = responseMessage.content || "I'm here to help you learn step by step!";
+      responseText = responseMessage.content || "I'm here to help you learn!";
   }
   
-  const sanitizedFinalText = await GUARDIAN_SANITIZE(responseText);
+  // FINAL SAFETY NET: If we have no topic yet, anchor it to input text
+  if (!updatedState.lastTopic && input.forceWebSearch) {
+      updatedState.lastTopic = input.text;
+  }
+
+  const sanitizedFinalText = await GUARDIAN_SANITIZE(responseText, updatedState.lastTopic);
   updatedState.lastAssistantMessage = sanitizedFinalText;
 
   console.log(`[BRAIN] STEP 4: Sending final sanitized text response: "${sanitizedFinalText}"`);
@@ -448,6 +439,7 @@ If no specific interests are listed, you should use general, relatable Kenyan ex
       processedText: sanitizedFinalText,
       videoData: videoData,
       state: updatedState,
-      topic: input.text, 
+      topic: updatedState.lastTopic || input.text, 
+      suggestedTitle: suggestedTitle
   };
 };

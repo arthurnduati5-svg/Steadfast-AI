@@ -50,7 +50,6 @@ const languageBackendToFrontend = {
   'english_sw': 'English + Swahili Mix',
 };
 
-// Interface for Student Memory (Progress & Mistakes)
 interface StudentMemory {
   progress: any[];
   mistakes: any[];
@@ -69,7 +68,6 @@ export function SteadfastCopilot() {
   const [conversationState, setConversationState] = useState<ConversationState>(DEFAULT_CONVERSATION_STATE);
   const [searchQuery, setSearchQuery] = useState('');
 
-  // NEW: State to store fetched student memory
   const [studentMemory, setStudentMemory] = useState<StudentMemory>({ progress: [], mistakes: [] });
 
   const [input, setInput] = useState('');
@@ -79,7 +77,6 @@ export function SteadfastCopilot() {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // FIX: Initialization flag to prevent data loss on window toggle
   const [hasInitialized, setHasInitialized] = useState(false);
 
   const { profile, setProfile, updateProfile } = useUserProfile();
@@ -100,7 +97,6 @@ export function SteadfastCopilot() {
     }, 100);
   }, []);
 
-  // Fetch Memory Function
   const fetchMemory = useCallback(async () => {
     try {
       const data = await api.get('/api/copilot/memory/student');
@@ -115,6 +111,14 @@ export function SteadfastCopilot() {
     }
   }, []);
 
+  // FORCE REFRESH HISTORY (Helper)
+  const refreshHistory = async () => {
+      try {
+        const data = await api.get('/api/copilot/preload');
+        if (data.history) setHistory(data.history);
+      } catch (e) { console.error("History refresh failed", e); }
+  };
+
   const handleNewChat = useCallback(async (showToast = true) => {
     try {
       const newSessionData = await api.post('/api/copilot/new-session', {});
@@ -124,7 +128,7 @@ export function SteadfastCopilot() {
       setSelectedFile(null);
       setActiveSession({ 
         id: newSessionData.sessionId, 
-        title: newSessionData.topic || 'New Chat', 
+        title: 'New Chat', // Explicitly reset title
         messages: [],
         createdAt: newSessionData.createdAt,
         updatedAt: newSessionData.updatedAt,
@@ -137,18 +141,12 @@ export function SteadfastCopilot() {
       if (showToast) {
           toast({ title: "New Chat Started", description: "Previous conversation saved to history." });
       }
-      
-      const data = await api.get('/api/copilot/preload');
-      if (data.history) {
-        setHistory(data.history);
-      }
-      // Refresh memory on new chat to ensure fresh context
-      fetchMemory();
+      refreshHistory();
     } catch (error) {
         console.error('[handleNewChat] Error starting new chat:', error);
         toast({ title: "Error", description: "Could not start a new chat.", variant: "destructive" });
     }
-  }, [toast, fetchMemory]);
+  }, [toast]);
   
   const loadInitialData = useCallback(async () => {
     try {
@@ -169,26 +167,20 @@ export function SteadfastCopilot() {
             handleNewChat(false);
         }
         
-        // Fetch personalized memory
         await fetchMemory();
-
-        // FIX: Mark as initialized so we don't reload on toggle
         setHasInitialized(true);
     } catch (error) {
         console.error('[loadInitialData] Error loading initial data:', error);
-        toast({ title: 'Error', description: 'Could not load session data.', variant: 'destructive' });
         setMessages([]);
         setConversationState(DEFAULT_CONVERSATION_STATE);
         setHasInitialized(true);
     }
-  }, [toast, handleNewChat, fetchMemory]);
+  }, [handleNewChat, fetchMemory]);
 
-  // FIX: Only load data if window is open AND we haven't done so yet
   useEffect(() => {
     if (isOpen && !hasInitialized) {
         loadInitialData();
     } else if (!isOpen) {
-        // When collapsing, clear inputs but KEEP state/messages in memory
         setInput('');
         setSelectedFile(null);
     }
@@ -212,7 +204,6 @@ export function SteadfastCopilot() {
     const userInput = input;
     const fileToUpload = selectedFile;
     
-    // 1. Optimistic UI Update
     const userMessage: Message = {
       id: `user-${Date.now()}`,
       role: 'user',
@@ -232,7 +223,6 @@ export function SteadfastCopilot() {
 
     const executeAction = async () => {
         try {
-            // 2. Ensure Active Session exists
             let currentSessionId = activeSession?.id;
 
             if (!currentSessionId) {
@@ -241,27 +231,23 @@ export function SteadfastCopilot() {
                 setActiveSession(prev => prev ? { ...prev, id: newSess.sessionId } : newSess);
             }
 
-            // 3. Get AI Response via Server Action (The "Brain" - handles formatting)
             const response = await getAssistantResponse(
-              currentSessionId!, // Arg 1: Session ID
-              userInput,         // Arg 2: Message
-              currentMessages,   // Arg 3: History
-              conversationState, // Arg 4: State
-              fileDataForAction, // Arg 5: File
-              forceWebSearch,    // Arg 6: Web Search
-              includeVideos,     // Arg 7: Videos
-              // Arg 8: Preferences Object
+              currentSessionId!,
+              userInput,
+              currentMessages,
+              conversationState,
+              fileDataForAction,
+              forceWebSearch,
+              includeVideos,
               {
                 name: profile?.name,
-                gradeLevel: level, // Use local state to allow immediate UI overrides
+                gradeLevel: level,
                 preferredLanguage: (languageFrontendToBackend as any)[languageHint] || 'english',
                 interests: profile?.interests
               },
-              // Arg 9: Student Memory (Personalization) - REQUIRED FIX
               studentMemory
             );
             
-            // Check for valid response
             if (!response || !response.processedText) {
                 throw new Error("Received invalid response from assistant.");
             }
@@ -274,11 +260,9 @@ export function SteadfastCopilot() {
               timestamp: new Date(),
             };
 
-            // 4. Update UI
             setMessages(prev => [...prev, assistantMessage]);
             setConversationState(response.state);
 
-            // Persist the message to backend via API
             await api.post('/api/copilot/message', {
                 sessionId: currentSessionId,
                 message: userMessage,
@@ -290,46 +274,42 @@ export function SteadfastCopilot() {
                 conversationState: response.state 
             });
 
-            // 5. Update Session Title if Topic Changed (Local & Persist)
-            if (response.topic && activeSession && activeSession.title !== response.topic) {
-                const updatedSession: ChatSession = {
-                  ...activeSession,
-                  title: response.topic,
-                };
-                setActiveSession(updatedSession);
+            // 🚀 CRITICAL FIX: INSTANT UI TITLE UPDATE + API SAVE
+            const newTitle = (response as any).suggestedTitle;
+
+            if (newTitle && currentSessionId && activeSession?.title !== newTitle && newTitle !== "New Chat" && newTitle !== "undefined") {
+                console.log(`[FRONTEND LOG] 🚨 UPDATING TITLE: "${newTitle}"`);
                 
-                // FIX: Use api.post directly to call PATCH endpoint logic on backend
-                // or if backend strictly requires PATCH, use fetch to bypass api wrapper limitation
-                try {
-                    // Try fetch for PATCH since api wrapper might lack it
-                    await fetch(`/api/copilot/session/${currentSessionId}`, {
-                        method: 'PATCH',
-                        headers: {
-                            'Content-Type': 'application/json',
-                            // Add authorization header if needed, but usually handled by cookie/proxy in Next.js
-                        },
-                        body: JSON.stringify({ title: response.topic })
-                    });
-                } catch (patchErr) {
-                    console.warn("Failed to patch session title:", patchErr);
-                }
+                // 1. Force UI Update Immediately (No Waiting)
+                setActiveSession(prev => prev ? { ...prev, title: newTitle } : null);
                 
-                const data = await api.get('/api/copilot/preload');
-                if (data.history) setHistory(data.history);
+                setHistory(prevHistory => 
+                   prevHistory.map(session => 
+                      session.id === currentSessionId 
+                        ? { ...session, title: newTitle } 
+                        : session
+                   )
+                );
+                
+                // 2. Persist via API (Background)
+                api.patch(`/api/copilot/session/${currentSessionId}`, { title: newTitle })
+                   .then(() => {
+                       // 3. Double-check consistency (Optional but safe)
+                       refreshHistory();
+                   })
+                   .catch(err => console.warn("Failed to patch session title:", err));
             }
 
-            // 6. Silently refresh memory (Personalization engine runs in background)
-            // Giving a small delay to allow backend worker to process
             setTimeout(() => {
                 fetchMemory();
             }, 2000);
 
         } catch (error: any) {
-            console.error("Server Action failed:", error);
+            console.error("Action Failed:", error);
             const errorMessage: Message = {
               id: `model-error-${Date.now()}`,
               role: 'model',
-              content: error.message || "Sorry, an unexpected error occurred. Please try again.",
+              content: "Sorry, I encountered an error. Please try again.",
               timestamp: new Date(),
             };
             setMessages(prev => [...prev, errorMessage]);
@@ -377,8 +357,6 @@ export function SteadfastCopilot() {
       if (fileInputRef.current) fileInputRef.current.value = '';
       setActiveTab('chat');
       setHasInitialized(true);
-      
-      // Refresh memory context
       fetchMemory();
       
       toast({ title: "Chat Loaded", description: `Continuing session: "${sessionData.title || 'Untitled'}"` });
@@ -389,27 +367,18 @@ export function SteadfastCopilot() {
     }
   };
 
-  // NEW: Logic to delete a chat session
   const handleDeleteChat = async (sessionId: string) => {
     try {
-        // Optimistically update UI
         setHistory(prev => prev.filter(s => s.id !== sessionId));
-        
-        // Call backend delete endpoint
         await api.post(`/api/copilot/session/${sessionId}/delete`, {});
-        
-        // If the deleted session was active, reset to new chat
         if (activeSession?.id === sessionId) {
             handleNewChat(false);
         }
-        
         toast({ title: "Chat Deleted", description: "The conversation has been removed." });
     } catch (error) {
         console.error('Error deleting chat:', error);
         toast({ title: "Error", description: "Could not delete chat session.", variant: "destructive" });
-        // Revert optimistic update on error
-        const data = await api.get('/api/copilot/preload');
-        if (data.history) setHistory(data.history);
+        refreshHistory(); // Revert on error
     }
   };
 

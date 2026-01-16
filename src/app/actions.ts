@@ -5,27 +5,22 @@ import { personalizedObjectives, PersonalizedObjectivesInput } from '@/ai/flows/
 import { youtubeSearchFlow } from '@/ai/flows/youtube-search-flow';
 import { runFlow } from '@genkit-ai/flow';
 import type { ConversationState, Message } from '@/lib/types';
-// Ensure you have this export available in your project structure
-import prisma from '@/lib/prisma';  
+import prisma from '@/lib/prisma';
 import { cookies } from 'next/headers';
 
 /**
  * Helper to save message to DB (mimics backend logic)
- * Includes check to prevent Foreign Key errors if session isn't synced yet.
  */
 async function saveMessageToDb(sessionId: string, role: 'user' | 'model', content: string) {
   try {
     if (!sessionId) return;
 
-    // Safety Check: Ensure session exists before inserting message to avoid P2003
     const sessionExists = await prisma.chatSession.findUnique({
         where: { id: sessionId },
         select: { id: true }
     });
 
     if (!sessionExists) {
-        // Session not found in DB yet (likely race condition with API creation).
-        // Skip DB write here; frontend API call will handle persistence.
         return; 
     }
 
@@ -40,43 +35,40 @@ async function saveMessageToDb(sessionId: string, role: 'user' | 'model', conten
       },
     });
   } catch (error) {
-    // Silently handle DB errors to prevent disrupting the UI stream
     // console.error('Error saving message to DB:', error);
   }
 }
 
 /**
- * Helper to update session state
- * Includes check to prevent Record Not Found errors.
+ * Helper to update session state and title
  */
-async function updateSessionState(sessionId: string, state: ConversationState, topic?: string) {
-  try {
-    if (!sessionId) return;
+async function updateSessionState(sessionId: string, state: ConversationState, topic?: string, title?: string) {
+  if (!sessionId) return;
+  
+  // 🔍 LOGGING: Checking what we are trying to save
+  console.log(`[ACTION LOG] Attempting DB Update. ID: ${sessionId}, Title: "${title}"`);
 
-    // Safety Check: Ensure session exists to avoid P2025
-    const sessionExists = await prisma.chatSession.findUnique({
-        where: { id: sessionId },
-        select: { id: true }
-    });
-
-    if (!sessionExists) return;
-
-    const data: any = { updatedAt: new Date(), metadata: state };
-    if (topic) data.topic = topic;
-    
-    await prisma.chatSession.update({
-      where: { id: sessionId },
-      data,
-    });
-  } catch (error) {
-    // console.error('Error updating session state:', error);
+  const data: any = { updatedAt: new Date(), metadata: state };
+  
+  // ✅ UPDATE TITLE IF PROVIDED
+  if (title && title !== "New Chat") {
+      data.topic = title; // Map 'title' to 'topic' column
   }
+  
+  // UPDATE INTERNAL TOPIC (If separate from title)
+  if (topic && !title) {
+      data.topic = topic;
+  }
+  
+  await prisma.chatSession.update({
+    where: { id: sessionId },
+    data,
+  });
 }
 
 // FETCH MEMORY HELPER
 async function fetchStudentMemory() {
   try {
-    // Placeholder: In a real implementation, you might fetch from DB using user ID from session/cookies
     return { progress: [], mistakes: [] };
   } catch (e) {
     return { progress: [], mistakes: [] };
@@ -97,7 +89,6 @@ export async function getAssistantResponse(
     preferredLanguage?: 'english' | 'swahili' | 'arabic' | 'english_sw';
     interests?: string[];
   },
-  // NEW: Accept Memory from the client
   studentMemory: {
     progress: any[];
     mistakes: any[];
@@ -109,7 +100,25 @@ export async function getAssistantResponse(
         await saveMessageToDb(sessionId, 'user', message);
     }
 
-    // 2. Generate Response using the Brain
+    // ✅ FETCH CURRENT TITLE TO PASS TO AI
+    // This allows the AI to know if it needs to generate a title (if current is 'New Chat')
+    let currentTitle = 'New Chat';
+    if (sessionId) {
+        try {
+            const currentSession = await prisma.chatSession.findUnique({
+                where: { id: sessionId },
+                select: { topic: true }
+            });
+            if (currentSession?.topic) {
+                currentTitle = currentSession.topic;
+            }
+        } catch (e) {
+            // Ignore DB read error, default to New Chat
+        }
+    }
+
+    // 2. Run AI
+    console.log("[ACTION LOG] Calling Emotional AI...");
     const response = await emotionalAICopilot({
       text: message,
       chatHistory: chatHistory,
@@ -118,14 +127,27 @@ export async function getAssistantResponse(
       fileData: fileDataBase64,
       forceWebSearch,
       includeVideos,
-      // Pass the memory object to the flow
-      memory: studentMemory 
+      memory: studentMemory,
+      currentTitle: currentTitle // ✅ Pass Current Title
     });
 
-    // 3. Save AI Response (Safely)
+    console.log(`[ACTION LOG] AI Finished. Suggested Title: "${response.suggestedTitle}"`);
+
+    // 3. Save AI Response & Try Update Title
     if (sessionId) {
         await saveMessageToDb(sessionId, 'model', response.processedText);
-        await updateSessionState(sessionId, response.state, response.topic);
+        
+        // 🛡️ CRITICAL FIX: TRY/CATCH AROUND DB UPDATE
+        try {
+            await updateSessionState(
+                sessionId, 
+                response.state, 
+                response.topic, 
+                response.suggestedTitle 
+            );
+        } catch (dbError) {
+            console.warn("⚠️ [ACTION LOG] DB Write Failed (RLS/Auth). Returning title to Client for fallback save.");
+        }
     }
 
     return {
@@ -133,9 +155,11 @@ export async function getAssistantResponse(
       videoData: response.videoData ?? undefined,
       state: response.state,
       topic: response.topic,
+      // 🚀 CRITICAL: Return this so Frontend can save it via API if DB failed here
+      suggestedTitle: response.suggestedTitle 
     };
   } catch (err) {
-    console.error('[SERVER ACTION BRIDGE ERROR]', err);
+    console.error('[SERVER ACTION FATAL ERROR]', err);
     return {
       processedText: 'I am sorry, but something went wrong while processing that. Could you try again?',
       videoData: undefined,

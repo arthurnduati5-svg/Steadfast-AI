@@ -7,13 +7,12 @@ import pinecone from '../lib/vectorClient';
 import { OpenAI } from 'openai';
 import { ChatCompletionMessageParam } from 'openai/resources/chat/completions';
 import { promptBuilder } from '../lib/promptBuilder';
-import { summarizationQueue, embeddingQueue, personalizationQueue } from '../workers'; // Added personalizationQueue
+import { summarizationQueue, embeddingQueue, personalizationQueue } from '../workers'; 
 import { ChatSession, UserProfile, ConversationState } from '../lib/types';
 import { Prisma } from '@prisma/client';
 
 const router = Router();
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-// Ensure pineconeIndex is only initialized if pinecone is available
 const pineconeIndex = pinecone ? pinecone.Index(process.env.PINECONE_INDEX || '') : null;
 
 type AuthedRequest = Request & { user?: any };
@@ -35,7 +34,6 @@ const getOrCreateStudentProfile = async (studentId: string) => {
   const redis = await getRedisClient();
   const cacheKey = `profile:${studentId}`;
 
-  // 1. Check Cache (Fail Safe)
   if (redis) {
     try {
       const cachedProfile = await redis.get(cacheKey);
@@ -44,22 +42,19 @@ const getOrCreateStudentProfile = async (studentId: string) => {
         return JSON.parse(cachedProfile);
       }
     } catch (err) {
-      // If Redis fails here, just log and continue to DB
       console.warn('[Profile] Redis read failed, falling back to DB.');
     }
   }
 
-  // 2. Fetch from DB (Cache Miss)
   console.log(`[Profile] Fetching from DB for ${studentId}...`);
   let profile = await prisma.studentProfile.findUnique({
     where: { userId: studentId },
   });
 
   if (profile) {
-    // Populate Cache (Fail Safe)
     if (redis) {
       try {
-        await redis.set(cacheKey, JSON.stringify(profile), { EX: 86400 }); // 24h expiration
+        await redis.set(cacheKey, JSON.stringify(profile), { EX: 86400 });
       } catch (err) {
         console.warn('[Profile] Failed to cache profile:', err);
       }
@@ -67,7 +62,6 @@ const getOrCreateStudentProfile = async (studentId: string) => {
     return profile;
   }
 
-  // 3. Create Profile if missing
   console.log(`[Profile] No profile found. Creating...`);
   const MAIN_SYSTEM_API_URL = process.env.MAIN_SYSTEM_API_URL;
   const INTERNAL_API_KEY = process.env.INTERNAL_API_KEY;
@@ -97,7 +91,6 @@ const getOrCreateStudentProfile = async (studentId: string) => {
     },
   });
 
-  // Populate Cache with new profile (Fail Safe)
   if (redis) {
     try {
       await redis.set(cacheKey, JSON.stringify(newProfile), { EX: 86400 });
@@ -168,19 +161,16 @@ router.post('/new-session', schoolAuthMiddleware, async (req: AuthedRequest, res
     const studentUserId = req.user!.id;
     const profile = await getOrCreateStudentProfile(studentUserId);
 
-    // Find the currently active session for this user
     const currentlyActiveSession = await prisma.chatSession.findFirst({
       where: { studentId: profile.userId, isActive: true },
       include: { messages: true }, 
     });
     
-    // Deactivate all previous active sessions
     await prisma.chatSession.updateMany({
       where: { studentId: profile.userId, isActive: true },
       data: { isActive: false },
     });
 
-    // If the previously active session had messages, enqueue it for embedding
     if (currentlyActiveSession && currentlyActiveSession.messages.length > 0) {
       console.log(`[new-session] Enqueueing previous session ${currentlyActiveSession.id} for embedding.`);
       if (summarizationQueue) {
@@ -218,7 +208,7 @@ router.post('/new-session', schoolAuthMiddleware, async (req: AuthedRequest, res
   }
 });
 
-// 3. Sending a Message (POST /chat) - Deprecated route name but kept logic
+// 3. Sending a Message (POST /chat)
 router.post('/chat', schoolAuthMiddleware, rateLimiter, async (req: AuthedRequest, res: Response) => {
   try {
     const studentId = req.user!.id;
@@ -294,11 +284,9 @@ router.post('/chat', schoolAuthMiddleware, rateLimiter, async (req: AuthedReques
       conversationState: frontendConversationState
     });
 
-    // --- ASYNC JOBS ---
     if (pineconeIndex && embeddingQueue) {
       embeddingQueue.add('embedding-jobs', { sessionId, studentId, message, aiResponse });
     }
-    // TRIGGER PERSONALIZATION (NEW)
     if (personalizationQueue) {
       personalizationQueue.add('personalization-jobs', { studentId, userMessage: message, aiResponse });
     }
@@ -309,7 +297,7 @@ router.post('/chat', schoolAuthMiddleware, rateLimiter, async (req: AuthedReques
   }
 });
 
-// Route for saving single message (used by UI when using server actions)
+// Route for saving single message
 router.post('/message', schoolAuthMiddleware, rateLimiter, async (req: AuthedRequest, res: Response) => {
   try {
     const studentId = req.user!.id;
@@ -343,11 +331,7 @@ router.post('/message', schoolAuthMiddleware, rateLimiter, async (req: AuthedReq
         data: { metadata: frontendConversationState, updatedAt: new Date() },
     });
 
-    // --- TRIGGER PERSONALIZATION ---
-    // If this is an AI response being saved (role='model'), analyze it against context
     if (message.role === 'model' && personalizationQueue) {
-       // Ideally we need the user's last message to provide context.
-       // We try to find the last user message in this session.
        const lastUserMsg = await prisma.chatMessage.findFirst({
          where: { sessionId, role: 'user' },
          orderBy: { timestamp: 'desc' }
@@ -369,28 +353,38 @@ router.post('/message', schoolAuthMiddleware, rateLimiter, async (req: AuthedReq
   }
 });
 
-// Route to update a session (e.g., title change)
+// ✅ CRITICAL: UPDATED SESSION PATCH ROUTE (Fixes Title Saving)
 router.patch('/session/:id', schoolAuthMiddleware, async (req: AuthedRequest, res: Response) => {
     try {
       const studentUserId = req.user!.id;
       const sessionId = req.params.id;
       const { title } = req.body; 
+
+      console.log(`[Backend] PATCH /session/${sessionId} - Updating Title: "${title}"`);
+
       const session = await prisma.chatSession.findFirst({
         where: { id: sessionId, studentId: studentUserId },
       });
+      
       if (!session) {
         return res.status(404).send({ message: 'Session not found.' });
       }
+
       const dataToUpdate: any = {
         updatedAt: new Date(),
       };
+      
       if (title) {
-        dataToUpdate.topic = title;
+        dataToUpdate.topic = title; // 'topic' column holds the title
       }
+
       const updatedSession = await prisma.chatSession.update({
         where: { id: sessionId },
         data: dataToUpdate,
       });
+
+      console.log(`[Backend] Session updated successfully. New Topic: "${updatedSession.topic}"`);
+
       res.status(200).json({
         message: 'Session updated successfully',
         session: updatedSession,
@@ -601,32 +595,27 @@ router.get('/search', schoolAuthMiddleware, async (req: AuthedRequest, res: Resp
   }
 });
 
-// 8. Student and Global Memory Routes
+// 8. Memory Routes
 router.get('/memory/student', schoolAuthMiddleware, async (req: AuthedRequest, res: Response) => {
   try {
     const studentId = req.user!.id;
     
-    // REDIS CACHE for Memory
     const redis = await getRedisClient();
     const cacheKey = `memory:${studentId}`;
     if (redis) {
       try {
         const cachedMemory = await redis.get(cacheKey);
-        if (cachedMemory) {
-          console.log(`[Memory] Cache HIT for ${studentId}`);
-          return res.status(200).send(JSON.parse(cachedMemory));
-        }
+        if (cachedMemory) return res.status(200).send(JSON.parse(cachedMemory));
       } catch (e) { console.warn('[Memory] Redis read failed', e); }
     }
 
     const progress = await prisma.progress.findMany({ where: { studentId } });
     const mistakes = await prisma.mistake.findMany({ where: { studentId } });
-    
     const memoryData = { progress, mistakes };
 
     if (redis) {
       try {
-        await redis.set(cacheKey, JSON.stringify(memoryData), { EX: 3600 }); // 1h cache
+        await redis.set(cacheKey, JSON.stringify(memoryData), { EX: 3600 });
       } catch (e) { console.warn('[Memory] Redis write failed', e); }
     }
 
@@ -668,12 +657,10 @@ router.post('/memory/update', schoolAuthMiddleware, async (req: AuthedRequest, r
       return res.status(400).send({ message: 'Invalid memory type' });
     }
 
-    // Invalidate Redis Cache for Memory
     const redis = await getRedisClient();
     if (redis) {
       try {
         await redis.del(`memory:${studentId}`);
-        console.log(`[Memory] Cache invalidated for ${studentId}`);
       } catch (e) { console.warn('[Memory] Redis invalidation failed', e); }
     }
 
@@ -684,30 +671,20 @@ router.post('/memory/update', schoolAuthMiddleware, async (req: AuthedRequest, r
   }
 });
 
-// 9. Learning Preferences Routes
+// 9. Preferences Routes
 router.get('/preferences', schoolAuthMiddleware, async (req: AuthedRequest, res: Response) => {
   try {
     const studentId = req.user!.id;
-    console.log(`[Backend] Fetching preferences for studentId: ${studentId}`);
-    const preferences = await prisma.copilotPreferences.findUnique({
-      where: { userId: studentId },
-    });
+    const preferences = await prisma.copilotPreferences.findUnique({ where: { userId: studentId } });
 
     if (preferences) {
-      console.log(`[Backend] Found preferences for ${studentId}:`, preferences);
       res.status(200).json({
         preferredLanguage: preferences.preferredLanguage,
-        interests: preferences.interests || [], // Ensure it's an array
+        interests: preferences.interests || [],
         lastUpdatedAt: preferences.lastUpdatedAt.toISOString(),
       });
     } else {
-      console.log(`[Backend] No preferences found for ${studentId}. Returning defaults.`);
-      // Return default empty preferences
-      res.status(200).json({
-        preferredLanguage: 'english',
-        interests: [],
-        lastUpdatedAt: null,
-      });
+      res.status(200).json({ preferredLanguage: 'english', interests: [], lastUpdatedAt: null });
     }
   } catch (error) {
     console.error('[Backend] Error fetching preferences:', error);
@@ -720,20 +697,9 @@ router.post('/preferences/update', schoolAuthMiddleware, async (req: AuthedReque
     const studentId = req.user!.id;
     const { preferredLanguage, interests } = req.body; 
 
-    console.log(`[Backend] Updating preferences for studentId: ${studentId}`);
-    console.log(`[Backend] Received data: Language: ${preferredLanguage}, Interests:`, interests);
-
-    // Validation
     const allowedLanguages = ['english', 'swahili', 'english_sw'];
     if (!preferredLanguage || !allowedLanguages.includes(preferredLanguage)) {
-      console.warn(`[Backend] Invalid preferredLanguage received for ${studentId}: ${preferredLanguage}`);
       return res.status(400).json({ message: 'Invalid or missing preferredLanguage.' });
-    }
-
-    const allowedInterests = ['Football', 'Farming', 'Cooking', 'Music', 'Coding', 'Drawing', 'Science', 'Nature', 'Animals'];
-    if (!Array.isArray(interests) || interests.length > 5 || interests.some((interest: string) => !allowedInterests.includes(interest))) {
-      console.warn(`[Backend] Invalid interests received for ${studentId}:`, interests);
-      return res.status(400).json({ message: 'Interests must be an array with up to 5 allowed items.' });
     }
 
     await prisma.studentProfile.upsert({
@@ -748,20 +714,15 @@ router.post('/preferences/update', schoolAuthMiddleware, async (req: AuthedReque
       create: { userId: studentId, preferredLanguage, interests: interests as Prisma.JsonArray },
     });
 
-    // --- REDIS LOGIC: Invalidate cache after update ---
     const redis = await getRedisClient();
     if (redis) {
       try {
-        const cacheKey = `profile:${studentId}`;
-        await redis.del(cacheKey);
-        console.log(`[Profile] Cache invalidated for ${studentId} after preferences update.`);
+        await redis.del(`profile:${studentId}`);
       } catch (redisError) {
         console.error('[Profile] Error invalidating Redis cache:', redisError);
       }
     }
-    // --------------------------------------------------
 
-    console.log(`[Backend] Preferences updated for ${studentId}:`, updatedPreferences);
     res.status(200).json({
       message: 'Preferences updated successfully',
       preferredLanguage: updatedPreferences.preferredLanguage,

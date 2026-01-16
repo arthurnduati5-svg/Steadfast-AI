@@ -1,15 +1,16 @@
 'use client';
 
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Bot, User } from 'lucide-react';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import type { Message } from '@/lib/types';
 import { cn } from '@/lib/utils';
-import YouTubePlayer from './ui/youtube-player';
-import { ChatInputBar } from './chat-input-bar';
-import { ConversationState } from '@/app/actions'; // Adjust this import if ConversationState is now in @/lib/types
+import YouTubePlayer from './ui/youtube-player'; 
+import { ChatInputBar } from './chat-input-bar'; 
+import { ConversationState } from '@/lib/types';
+import ReactMarkdown from 'react-markdown'; 
 
 const MessageBubble: React.FC<{ message: Message; isResearchModeActive: boolean }> = ({ message, isResearchModeActive }) => {
     const isUser = message.role === 'user';
@@ -33,24 +34,61 @@ const MessageBubble: React.FC<{ message: Message; isResearchModeActive: boolean 
               ? 'rounded-br-none bg-primary text-primary-foreground'
               : 'rounded-bl-none bg-muted'
           )}
-          // Using inline style to ensure white-space is preserved for newlines
-          style={{ whiteSpace: 'pre-wrap' }} 
+          // 🛑 REMOVED 'whiteSpace: pre-wrap' to prevent Markdown spacing conflicts
         >
           {message.content && (
-            // ==================================================================
-            // THE FIX: DANGEROUS HTML IS GONE. THIS IS NOW 100% SAFE.
-            // This renders message.content as plain text, preventing any
-            // Markdown or HTML from being executed.
-            // ==================================================================
-            <p className={cn('mb-2', hasVideo ? 'p-2' : '')}>
-              {message.content} 
-            </p>
+            <div className={cn('mb-1', hasVideo ? 'p-2' : '')}>
+              {/* ✅ RENDER TEXT & VIDEO THUMBNAILS VIA MARKDOWN */}
+              <ReactMarkdown
+                components={{
+                  // 1. Image Renderer (Video Thumbnails)
+                  img: ({node, ...props}) => {
+                    return (
+                      <img 
+                        {...props} 
+                        className="rounded-lg shadow-md my-2 w-full h-auto cursor-pointer hover:opacity-90 transition-opacity" 
+                        style={{ maxHeight: '200px', objectFit: 'cover' }}
+                        onClick={(e) => {
+                          // Try to find parent link to open video
+                          const parent = (node as any)?.parent;
+                          const link = parent?.properties?.href;
+                          if (link) {
+                            e.preventDefault(); // Stop default anchor behavior if we handle it here
+                            window.open(link, '_blank');
+                          }
+                        }}
+                      />
+                    );
+                  },
+                  // 2. Link Renderer
+                  a: ({node, ...props}) => (
+                    <a 
+                      {...props} 
+                      target="_blank" 
+                      rel="noopener noreferrer" 
+                      className="text-blue-600 dark:text-blue-400 underline font-medium hover:text-blue-800"
+                    />
+                  ),
+                  // 3. Paragraph Renderer (Fix spacing)
+                  p: ({node, ...props}) => (
+                    <p {...props} className="mb-2 last:mb-0 leading-relaxed" />
+                  ),
+                  // 4. List Support
+                  ul: ({node, ...props}) => <ul {...props} className="list-disc ml-4 mb-2" />,
+                  ol: ({node, ...props}) => <ol {...props} className="list-decimal ml-4 mb-2" />,
+                  li: ({node, ...props}) => <li {...props} className="mb-1" />
+                }}
+              >
+                {message.content}
+              </ReactMarkdown>
+            </div>
           )}
           
+          {/* Active Video Player (Only appears during live session) */}
           {hasVideo && message.videoData && (
             <div className="mt-0">
               <YouTubePlayer videoId={message.videoData.id} />
-              <p className="text-xs text-muted-foreground mt-2 px-2">{message.videoData.title}</p>
+              <p className="text-xs text-muted-foreground mt-2 px-2 pb-2">{message.videoData.title}</p>
             </div>
           )}
 
@@ -69,7 +107,6 @@ const MessageBubble: React.FC<{ message: Message; isResearchModeActive: boolean 
     );
 };
 
-// Interface remains the same, no changes needed here
 interface ChatTabProps {
     messages: Message[];
     studentName: string;
@@ -79,7 +116,7 @@ interface ChatTabProps {
     handleRemoveFile: () => void;
     input: string;
     setInput: (value: string) => void;
-    handleSendMessage: (e: React.FormEvent) => void; // Simplified signature
+    handleSendMessage: (e: React.FormEvent) => void;
     isLoading: boolean;
     handleFileChange: (event: React.ChangeEvent<HTMLInputElement>) => void;
     fileInputRef: React.RefObject<HTMLInputElement>;
@@ -95,7 +132,6 @@ interface ChatTabProps {
     isNewChat: boolean;
 }
 
-// The component itself remains largely the same, just rendering safely now
 export const ChatTab: React.FC<ChatTabProps> = ({
     messages,
     studentName,
@@ -123,27 +159,36 @@ export const ChatTab: React.FC<ChatTabProps> = ({
     return (
         <div className="flex h-full flex-col">
             <ScrollArea className="flex-1" ref={scrollAreaRef}>
-                <div className="p-4 flex flex-col space-y-2">
+                <div className="p-4 flex flex-col space-y-4">
                     {messages.length === 0 && isNewChat ? (
-                        <Card className="bg-muted/50 text-center">
+                        <Card className="bg-muted/50 text-center border-none shadow-none mt-8">
                             <CardHeader>
-                                <CardTitle>Hello {studentName}</CardTitle>
+                                <CardTitle className="text-xl">Hello {studentName} 👋</CardTitle>
                             </CardHeader>
                             <CardContent>
                                 <p className="text-muted-foreground">
-                                    {displayedWelcomeText}
+                                    {displayedWelcomeText || "How can I help you today?"}
                                 </p>
                             </CardContent>
                         </Card>
                     ) : (
-                        messages.map((msg, index) => <MessageBubble key={msg.id || index} message={msg} isResearchModeActive={conversationState.researchModeActive} />)
+                        messages.map((msg, index) => (
+                            <MessageBubble 
+                                key={msg.id || index} 
+                                message={msg} 
+                                isResearchModeActive={conversationState.researchModeActive} 
+                            />
+                        ))
                     )}
                 </div>
             </ScrollArea>
             <ChatInputBar
                 input={input}
                 setInput={setInput}
-                handleSendMessage={handleSendMessage}
+                handleSendMessage={(e) => {
+                    // Pass event to parent handler
+                    handleSendMessage(e);
+                }}
                 isLoading={isLoading}
                 selectedFile={selectedFile}
                 handleFileChange={handleFileChange}
