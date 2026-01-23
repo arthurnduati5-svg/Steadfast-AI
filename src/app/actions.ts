@@ -128,7 +128,11 @@ export async function getAssistantResponse(
       forceWebSearch,
       includeVideos,
       memory: studentMemory,
-      currentTitle: currentTitle // ✅ Pass Current Title
+      currentTitle: currentTitle,
+      studentProfile: {
+        name: preferences.name || 'Student', // Ensure name is passed
+        gradeLevel: preferences.gradeLevel || 'Primary' // Ensure grade is passed
+      }
     });
 
     console.log(`[ACTION LOG] AI Finished. Suggested Title: "${response.suggestedTitle}"`);
@@ -154,8 +158,8 @@ export async function getAssistantResponse(
       processedText: response.processedText,
       videoData: response.videoData ?? undefined,
       state: response.state,
-      topic: response.topic,
-      // 🚀 CRITICAL: Return this so Frontend can save it via API if DB failed here
+      // ✅ VITAL FIX: Pass suggestedTitle as 'topic' so frontend detects it
+      topic: response.suggestedTitle || response.topic,
       suggestedTitle: response.suggestedTitle 
     };
   } catch (err) {

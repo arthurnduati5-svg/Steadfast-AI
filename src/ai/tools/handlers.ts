@@ -1,4 +1,3 @@
-// src/ai/tools/handlers.ts
 'use server';
 
 /**
@@ -7,10 +6,11 @@
  * PRODUCTION GRADE - HIGH CONCURRENCY OPTIMIZED
  * 
  * Features:
- * 1. STATELESS: No global variables. Context is passed via Redis/Args.
+ * 1. STATELESS: No global variables. Context/Interests passed via Args.
  * 2. PRE-COMPILED REGEX: Defined once, reused forever.
  * 3. O(1) LOOKUPS: Content maps instead of array iterations.
  * 4. REDIS ACTIVE: Fault-tolerant connection using getRedisClient.
+ * 5. SANITIZER V2: Fixes phantom '?', double (( )), robotic phrasing, and regex bugs.
  */
 
 import { create, all } from 'mathjs';
@@ -31,20 +31,20 @@ const math = create(all, {});
    SECTION 1: HIGH-PERFORMANCE CONSTANTS & REGEX (PRE-COMPILED)
    ============================================================================ */
 
-// 1. Safety & Emotion Regex (Pre-compiled for speed)
+// 1. Safety & Emotion Regex
 const REGEX_EMOJI = /(?:[\u2700-\u27bf]|(?:\ud83c[\udde6-\uddff]){2}|[\ud800-\udbff][\udc00-\udfff]|[\u0023-\u0039]\ufe0f?\u20e3|\u3299|\u3297|\u303d|\u3030|\u24c2|\ud83c[\udd70-\udd71]|\ud83c[\udd7e-\udd7f]|\ud83c\udd8e|\ud83c[\udd91-\udd9a]|\ud83c[\udde6-\uddff]|\ud83c[\ude01-\ude02]|\ud83c\ude1a|\ud83c\ude2f|\ud83c[\ude32-\ude3a]|\ud83c[\ude50-\ude51]|\u203c|\u2049|[\u25aa-\u25ab]|\u25b6|\u25c0|[\u25fb-\u25fe]|\u00a9|\u00ae|\u2122|\u2139|\ud83c\udc04|[\u2600-\u26FF]|\u2b05|\u2b06|\u2b07|\u2b1b|\u2b1c|\u2b50|\u2b55|\u231a|\u231b|\u2328|\u23cf|[\u23e9-\u23f3]|[\u23f8-\u23fa]|\ud83c\udccf|\u2934|\u2935|[\u2190-\u21ff])/g;
 const REGEX_ARABIC = /[\u0600-\u06FF]/;
 const REGEX_MATH_CLEAN = /[^0-9a-zA-Z\.\+\-\*\/\^\(\)=]/g;
 const REGEX_ROBOTIC = /\b(I am sorry|as an ai|I apologize|Sorry, I am an AI|I am a large language model|based on my knowledge|As a Muslim AI)\b/gi;
 
 // 2. Optimized Grammar Regex
-// Only adds a period if ", and" is followed by a pronoun/determiner. Preserves "apples, oranges, and bananas".
 const REGEX_GRAMMAR_SOFT = /, and (the|it|he|she|we|they|this|that|I|you)/gi; 
 const REGEX_FILLERS = /\b(in order to|it is important to note that|as you can see|basically|essentially)\b/gi;
 
 // 3. Step & Metaphor Triggers
 const REGEX_STEPS = /solve|calculate|work out|find the value|steps|procedure|process|how do we|how to|simplify|divide|multiply|add|subtract/i;
 const REGEX_METAPHOR_BLOCK = /^(what is|define|meaning of|explain|clarify)/i;
+const REGEX_STRUCTURE_LEAK = /(Micro-Idea|Relatable Example|Check|Concept|Real Life|Question):\s*/gi;
 
 /* ============================================================================
    SECTION 2: STATELESS HELPERS (PURE FUNCTIONS)
@@ -64,16 +64,13 @@ function shouldUseExample(topic: string): boolean {
   }
   
   // Fallback for general subjects
-  return ["ratio", "percentage", "word problem", "physics", "chemistry", "science"].some(k => t.includes(k));
+  return ["ratio", "percentage", "word problem", "physics", "chemistry", "science", "biology"].some(k => t.includes(k));
 }
 
 function shouldUseMetaphor(input: string): boolean {
   return !!input && !REGEX_METAPHOR_BLOCK.test(input);
 }
 
-/** 
- * Async wrapper for Arabic check to keep export signature 
- */
 export async function isArabicText(text: string): Promise<boolean> {
   if (!text) return false;
   return REGEX_ARABIC.test(text);
@@ -96,17 +93,17 @@ interface TeachingContext {
 
 /**
  * Pure function to refine AI Output.
- * Stateless: relies entirely on arguments passed in.
  */
 function generateTeachingResponse(rawResponse: string, context: TeachingContext): string {
   let response = rawResponse;
 
   // 1. Conditional Steps
   if (!(context.isProblemSolving && shouldUseSteps(context.userInput))) {
+    // Only strip explicit numbering if NOT solving a problem
     response = response.replace(/Step\s+(one|two|three|four|five|\d+):?/gi, '').trim();
   }
 
-  // 2. Grammar Simplification (Optimized)
+  // 2. Grammar Simplification
   response = response.replace(REGEX_GRAMMAR_SOFT, '. $1');
   response = response.replace(REGEX_FILLERS, '');
   response = response.replace(/; /g, '. ');
@@ -130,7 +127,6 @@ function generateTeachingResponse(rawResponse: string, context: TeachingContext)
   }
 
   // 6. Context Anchor
-  // Stateless check: We anchor to the topic passed in arguments
   if (context.topic && !response.toLowerCase().includes(context.topic.toLowerCase())) {
     response = `We are talking about ${context.topic}. ${response}`;
   }
@@ -139,28 +135,55 @@ function generateTeachingResponse(rawResponse: string, context: TeachingContext)
 }
 
 /* ============================================================================
-   SECTION 4: HARD LOCK SANITIZER (FAST & SAFE)
+   SECTION 4: HARD LOCK SANITIZER (FIXED & UPGRADED)
    ============================================================================ */
 
 function sanitizeOutputHard(text: string, currentTopic?: string): string {
   let output = text;
 
-  // 1. Fast cleanup
+  // 1. Remove Internal Labels
+  output = output.replace(REGEX_STRUCTURE_LEAK, '');
+
+  // 2. Fast cleanup
   output = output.replace(/^[^A-Za-z0-9]+/, ''); 
   
-  // 2. Parentheses Hygiene (Iterative check restricted to 3 loops max to prevent hang)
-  let loopCount = 0;
-  while (/\(\([^()]*\)\)/.test(output) && loopCount < 3) {
-    output = output.replace(/\(\(([^()]*)\)\)/g, '($1)');
-    loopCount++;
+  // 3. PARENTHESES HYGIENE (PART 4 - "Only ONE pair", "No words inside")
+  // Loop to fix nested double parens ((x)) -> (x)
+  // It runs up to 5 times to ensure deep nesting is removed
+  for (let i = 0; i < 5; i++) {
+      if (/\(\(/.test(output)) {
+          output = output.replace(/\(\(([^()]*)\)\)/g, '($1)'); 
+          output = output.replace(/\(\s+/g, '(').replace(/\s+\)/g, ')');
+      } else {
+          break; 
+      }
   }
-  output = output.replace(/\(([^0-9/+\-*= ]+)\)/g, '$1');
+  
+  // Ensure content inside parens is math-only or simple variables
+  // Allowed: numbers, operators, %, degrees, variables x,y,z
+  // If it matches text words (not math), it strips the parens.
+  output = output.replace(/\(([^0-9/+\-*=xXyYza-z%°\., ]+)\)/g, '$1'); 
 
-  // 3. LaTeX/Math Cleanup
-  output = output.replace(/\\frac/g, '').replace(/frac/g, '').replace(/[{}]/g, '').replace(/\\/g, '');
-  output = output.replace(/(\d+)\s*\/\s*(\d+)/g, '($1/$2)');
+  // 4. STEP FORMATTER (RELAXED)
+  // Only convert explicit numbering "1.", "2." to "Step one"
+  // Do NOT convert "First," or "Next," unless it's a list.
+  output = output.replace(/(^|\s)1\.\s/g, '$1Step one: ');
+  output = output.replace(/(^|\s)2\.\s/g, '$1Step two: ');
+  output = output.replace(/(^|\s)3\.\s/g, '$1Step three: ');
 
-  // 4. Grammar Hard Locks
+  // 5. GLOBAL LATEX CLEANUP (PART 4 - "No LaTeX")
+  output = output.replace(/\\frac/g, ''); 
+  output = output.replace(/\\sqrt/g, ''); 
+  output = output.replace(/\\times/g, ''); 
+  output = output.replace(/\\div/g, ''); 
+  output = output.replace(/[{}]/g, '');
+  output = output.replace(/\\/g, '');
+  
+  // Normalize simple fractions: 1/2 -> (1/2) if missing parens
+  // Only applies if it's a standalone fraction like " 1/2 "
+  output = output.replace(/(^|\s)(\d+)\/(\d+)(\s|$)/g, '$1($2/$3)$4');
+
+  // 6. Grammar Hard Locks
   const replacements: Record<string, string> = {
     "in order to": "to",
     "at this point in time": "now",
@@ -168,14 +191,28 @@ function sanitizeOutputHard(text: string, currentTopic?: string): string {
     "it is important to note that": ""
   };
   
-  // Fast loop over keys
   Object.keys(replacements).forEach(key => {
     output = output.replace(new RegExp(key, 'gi'), replacements[key]);
   });
 
-  // 5. Final Anchor (If topic provided)
+  // 7. Phantom Question Mark Killer
+  if (output.endsWith('?')) {
+    const segments = output.split(/[.!?]/);
+    const lastSentence = segments[segments.length - 2]?.trim().toLowerCase() || ""; 
+    const questionStarters = ["who", "what", "where", "when", "why", "how", "can", "could", "should", "is", "are", "do", "does", "did", "will", "would", "shall", "may"];
+    
+    // If it's a long sentence ending in ? without a starter, it's likely a hallucination
+    if (lastSentence.length > 0 && !questionStarters.some(s => lastSentence.startsWith(s))) {
+       output = output.slice(0, -1) + "."; 
+    }
+  }
+
+  // 8. Final Anchor
   if (currentTopic && !output.toLowerCase().includes(currentTopic.toLowerCase())) {
-    output = `${output}\n\n(Context: We are discussing ${currentTopic}.)`;
+     // Only add context if the message is substantial enough to need anchoring
+     if (output.length > 100) {
+        output = `${output}\n\n(Context: We are discussing ${currentTopic}.)`;
+     }
   }
 
   return output.trim();
@@ -183,16 +220,24 @@ function sanitizeOutputHard(text: string, currentTopic?: string): string {
 
 
 /* ============================================================================
-   SECTION 5: TOOLS IMPLEMENTATION (SCALABLE)
+   SECTION 5: TOOLS IMPLEMENTATION
    ============================================================================ */
 
-/* --- 1. Emotional Decoder --- */
+/* --- 1. Emotional Decoder (SAFETY FIREWALL) --- */
 export async function emotional_decoder(args: { text: string }) {
   const raw = norm(args.text);
   
-  // Optimized O(1) keyword checking logic
-  const forbidden = ["sex", "dating", "romance", "violence", "kill", "suicide", "harm", "drug", "alcohol", "politics", "gambling", "porn", "nude", "terror", "bhang", "weed"];
-  if (forbidden.some(w => raw.includes(w))) return { emotion: "safety_violation", triggers: [raw], suggestedLanguageMode: "english" };
+  // ⛔ STRICT MUSLIM SCHOOL FIREWALL
+  const forbidden = [
+    "sex", "sodomy", "diddy", "gay", "lesbian", "homosexual", 
+    "dating", "romance", "boyfriend", "girlfriend", "kiss",
+    "violence", "kill", "suicide", "harm", "drug", "alcohol", "bhang", "weed",
+    "music", "musician", "song", "rapper", "concert", "celebrity", "gossip"
+  ];
+  
+  if (forbidden.some(w => raw.includes(w))) {
+      return { emotion: "safety_violation", triggers: [raw], suggestedLanguageMode: "english" };
+  }
 
   const insults = ["stupid", "dumb", "idiot", "useless", "shut up", "fool"];
   if (insults.some(w => raw.includes(w))) return { emotion: "angry_insult", triggers: [raw], suggestedLanguageMode: "english" };
@@ -203,7 +248,6 @@ export async function emotional_decoder(args: { text: string }) {
   const confusion = ["don't get", "confus", "lost", "don't know", "not sure", "help me"];
   if (confusion.some(w => raw.includes(w))) return { emotion: "confused", triggers: [], suggestedLanguageMode: "english" };
 
-  // Default
   return { emotion: "neutral", triggers: [], suggestedLanguageMode: "english" };
 }
 
@@ -211,50 +255,59 @@ export async function emotional_decoder(args: { text: string }) {
 export async function tone_generator(args: { emotion: string }) {
   const e = norm(args.emotion);
   
-  const map: Record<string, any> = {
-    "safety_violation": { mode: 'block', raw: "Ai! My child, let's stop right there. I am your teacher. Focus on your growth." },
-    "angry_insult": { mode: 'insult', raw: "Listen to me. Using such words doesn't make you look strong. Let us take a breath and try again." },
-    "religious_inquiry": { mode: 'respectful', hintPrefix: "Bismillah. Let us look at the wisdom behind this.", style: "gentle, humble" },
-    "confused": { mode: 'support', hintPrefix: "That is okay. Even the fastest runner started by crawling. Let's look at one piece.", style: "warm, simple" },
-    "excited": { mode: 'celebrate', hintPrefix: "Mashallah! Now that is the spirit of a winner!", style: "encouraging" }
-  };
+  if (e === "safety_violation") {
+      return { 
+          mode: 'block', 
+          raw: "I am your teacher, and we are here to focus on your education and future. Let us leave those topics aside and focus on something beneficial like Science, Math, or History. What subject shall we learn?"
+      };
+  }
 
-  return map[e] || { mode: 'neutral', hintPrefix: "Let us look at this clearly.", style: "calm, kenyan teacher warmth" };
+  return { mode: 'neutral', hintPrefix: "Let us look at this clearly.", style: "calm, kenyan teacher warmth" };
 }
 
-/* --- 3. Teaching Micro Step (High Throughput) --- */
-export async function teaching_micro_step(args: { topic: string; studentInput?: string }) {
+/* --- 3. Teaching Micro Step (STRICT PERSONALIZATION) --- */
+export async function teaching_micro_step(args: { topic: string; studentInput?: string; studentInterests?: string[] }) {
   const topic = (args.topic || 'general').toLowerCase();
   
-  // 1. Fast Content Lookup from Imported Map
+  // 1. Content Strategy - Default
   let content = {
     microIdea: `Let's look at the heart of ${topic}.`,
     example: `Imagine we see ${topic} in our daily life.`,
     question: `Does this make sense?`
   };
 
-  // Check the Map keys
-  for (const [key, val] of CURRICULUM_MAP) {
-    if (topic.includes(key)) {
-      content = val;
-      break;
+  // 2. Override Logic: Prefer Student Interests over Static Map
+  const hasInterests = args.studentInterests && args.studentInterests.length > 0;
+  
+  // If no specific interests, try to use the static Kenyan map
+  if (!hasInterests) {
+    for (const [key, val] of CURRICULUM_MAP) {
+      if (topic.includes(key)) {
+        content = val;
+        break;
+      }
     }
   }
 
-  // 2. Apply Controller Logic
   const ctx: TeachingContext = {
     userInput: args.studentInput || "",
     topic: topic,
-    isProblemSolving: REGEX_STEPS.test(topic), // Fast regex check
+    isProblemSolving: REGEX_STEPS.test(topic),
     studentUncertain: (args.studentInput || "").includes("unsure")
   };
+
+  // 3. Instruction Injection
+  // If interests exist, we FORCE the LLM to ignore the generic/static example 
+  // and generate a fresh one based on the interest.
+  const interestInstruction = hasInterests
+      ? `IGNORE GENERIC EXAMPLES. Generate a specific ${args.studentInterests![0]} related example for ${topic}.`
+      : "Present Idea. Then Example. Then Question.";
 
   return {
     microIdea: generateTeachingResponse(content.microIdea, ctx),
     example: generateTeachingResponse(content.example, ctx),
     question: generateTeachingResponse(content.question, ctx),
-    teacherInstruction: "Present Idea. Then Example. Then Question. Do NOT solve.",
-    // Return the topic so the calling flow knows what context was used
+    teacherInstruction: interestInstruction,
     usedTopic: topic 
   };
 }
@@ -279,7 +332,6 @@ export async function math_validate_answer(args: { question: string; studentAnsw
 
     if (studentVal === null) return { isCorrect: false, explanation: "Please write the number." };
 
-    // Epsilon check for floats
     const isCorrect = Math.abs(correctVal - studentVal) < 0.0000001;
 
     if (isCorrect) {
@@ -319,7 +371,7 @@ export async function memory_manager(args: { mode: string; key: string; value?: 
   // ACTIVATE REDIS: Use the robust singleton
   const redis = await getRedisClient();
   
-  // FAULT TOLERANCE: If Redis is null (down/connecting), fail gracefully
+  // FAULT TOLERANCE
   if (!redis) {
     console.warn('[MemoryManager] Redis unavailable, skipping memory operation.');
     return { ok: false, error: 'DB Unavailable' };
@@ -394,7 +446,7 @@ export async function arabic_mode_formatter(args: { text: string }) {
 }
 
 export async function emoji_policy_check(args: any) {
-  return { ok: true, cleanedText: args.text }; // Handled in Sanitize now
+  return { ok: true, cleanedText: args.text }; 
 }
 
 export async function ask_practice_question(args: any) {
@@ -415,18 +467,15 @@ export async function toolRouter(functionName: string, args: any, context?: { st
     case 'emotional_decoder': return emotional_decoder(args);
     case 'tone_generator': return tone_generator(args);
     
-    // Note: teaching_micro_step logic is self-contained. 
-    // The FLOW orchestrator should capture the 'usedTopic' from its return 
-    // and pass it to GUARDIAN_SANITIZE if needed.
+    // Pass args for personalization
     case 'teaching_micro_step': return teaching_micro_step(args);
     
     case 'math_validate_answer': return math_validate_answer(args);
     case 'math_generate_question': return math_generate_question(args);
-    case 'formatting_polisher': return formatting_polisher(args); // Pass args.contextTopic if available
+    case 'formatting_polisher': return formatting_polisher(args); 
     
     case 'memory_manager': return memory_manager(args, context);
     
-    // Guardian now accepts optional topic for anchoring
     case 'GUARDIAN_SANITIZE': return GUARDIAN_SANITIZE(args.text, args.topic);
     
     case 'youtube_search': return youtube_search_tool(args);

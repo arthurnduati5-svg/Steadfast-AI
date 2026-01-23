@@ -5,11 +5,13 @@ import prisma from '../utils/prismaClient';
 import { getRedisClient } from '../lib/redis';
 import pinecone from '../lib/vectorClient';
 import { OpenAI } from 'openai';
-import { ChatCompletionMessageParam } from 'openai/resources/chat/completions';
-import { promptBuilder } from '../lib/promptBuilder';
 import { summarizationQueue, embeddingQueue, personalizationQueue } from '../workers'; 
-import { ChatSession, UserProfile, ConversationState } from '../lib/types';
+import { ConversationState } from '../lib/types';
 import { Prisma } from '@prisma/client';
+
+// ✅ IMPORT THE BRAIN & PREFERENCE SERVICE
+import { emotionalAICopilot } from '../../../src/ai/flows/emotional-ai-copilot'; 
+import { getOrCreateCopilotPreferences } from '../services/aiPreferenceService';
 
 const router = Router();
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
@@ -30,117 +32,105 @@ const DEFAULT_CONVERSATION_STATE: ConversationState = {
   usedExamples: [],
 };
 
-const getOrCreateStudentProfile = async (studentId: string) => {
-  const redis = await getRedisClient();
-  const cacheKey = `profile:${studentId}`;
-
-  if (redis) {
-    try {
-      const cachedProfile = await redis.get(cacheKey);
-      if (cachedProfile) {
-        console.log(`[Profile] Cache HIT for ${studentId}`);
-        return JSON.parse(cachedProfile);
-      }
-    } catch (err) {
-      console.warn('[Profile] Redis read failed, falling back to DB.');
+// --- HELPER: BACKGROUND TOPIC GENERATOR ---
+const generateTopicInBackground = async (sessionId: string, firstMessage: string) => {
+  try {
+    const topicCompletion = await openai.chat.completions.create({
+      model: 'gpt-3.5-turbo',
+      messages: [{ role: 'user', content: `Summarize this in 3-5 words for a title (no quotes): "${firstMessage}"` }],
+      temperature: 0.3,
+      max_tokens: 15,
+    });
+    const suggestedTopic = topicCompletion.choices?.[0]?.message?.content?.trim().replace(/^"|"$/g, '');
+    
+    if (suggestedTopic) {
+      await prisma.chatSession.update({
+        where: { id: sessionId },
+        data: { topic: suggestedTopic }
+      });
     }
+  } catch (error) {
+    console.error(`[Background] Topic generation failed for ${sessionId}`, error);
   }
-
-  console.log(`[Profile] Fetching from DB for ${studentId}...`);
-  let profile = await prisma.studentProfile.findUnique({
-    where: { userId: studentId },
-  });
-
-  if (profile) {
-    if (redis) {
-      try {
-        await redis.set(cacheKey, JSON.stringify(profile), { EX: 86400 });
-      } catch (err) {
-        console.warn('[Profile] Failed to cache profile:', err);
-      }
-    }
-    return profile;
-  }
-
-  console.log(`[Profile] No profile found. Creating...`);
-  const MAIN_SYSTEM_API_URL = process.env.MAIN_SYSTEM_API_URL;
-  const INTERNAL_API_KEY = process.env.INTERNAL_API_KEY;
-  let studentData = null;
-  if (!MAIN_SYSTEM_API_URL || !INTERNAL_API_KEY) {
-    console.warn('[Profile] MAIN_SYSTEM_API_URL or INTERNAL_API_KEY is not configured. Creating default profile.');
-    studentData = { name: 'Test Student', email: `${studentId}@example.com`, grade: 'Not specified' };
-  } else {
-    try {
-      const response = await fetch(`${MAIN_SYSTEM_API_URL}/api/internal/students/${studentId}`, { headers: { 'x-internal-api-key': INTERNAL_API_KEY } });
-      if (response.ok) studentData = await response.json();
-    } catch (error) {
-      console.error(`[Profile] Error fetching from main system for ${studentId}:`, error);
-    }
-  }
-
-  const newProfile = await prisma.studentProfile.create({
-    data: {
-      userId: studentId,
-      name: studentData?.name || 'Unknown Student',
-      email: studentData?.email || 'unknown@example.com',
-      gradeLevel: studentData?.grade || 'Not specified',
-      profileCompleted: false,
-      preferences: {},
-      favoriteShows: [],
-      topInterests: [],
-    },
-  });
-
-  if (redis) {
-    try {
-      await redis.set(cacheKey, JSON.stringify(newProfile), { EX: 86400 });
-    } catch (err) {
-      console.warn('[Profile] Failed to cache new profile:', err);
-    }
-  }
-
-  return newProfile;
 };
 
-// 1. Preload Logic (GET /preload)
+// ✅ ROBUST PROFILE GETTER (UPSERT)
+const getOrCreateStudentProfile = async (studentId: string) => {
+  try {
+    const redis = await getRedisClient();
+    const cacheKey = `profile:${studentId}`;
+
+    if (redis) {
+      try {
+        const cachedProfile = await redis.get(cacheKey);
+        if (cachedProfile) return JSON.parse(cachedProfile);
+      } catch (err) { console.warn('[Profile] Redis read failed', err); }
+    }
+
+    const profile = await prisma.studentProfile.upsert({
+      where: { userId: studentId },
+      update: {}, 
+      create: {
+        userId: studentId,
+        name: 'Student', 
+        email: `${studentId}@school.com`,
+        gradeLevel: 'Primary',
+        profileCompleted: false,
+        preferences: {},
+        favoriteShows: [],
+        topInterests: [],
+      },
+    });
+
+    if (redis) await redis.set(cacheKey, JSON.stringify(profile), { EX: 86400 });
+    return profile;
+
+  } catch (dbError) {
+    console.error(`[Profile] CRITICAL DB ERROR for ${studentId}:`, dbError);
+    throw dbError; 
+  }
+};
+
+// ============================================================================
+// 1. PRELOAD LOGIC (GET /preload)
+// ============================================================================
 router.get('/preload', schoolAuthMiddleware, async (req: AuthedRequest, res: Response) => {
   try {
     const studentUserId = req.user!.id;
-    const profile = await getOrCreateStudentProfile(studentUserId);
+    
+    await getOrCreateStudentProfile(studentUserId);
 
-    const lastSession = await prisma.chatSession.findFirst({
-      where: { studentId: profile.userId, messages: { some: {} } },
-      orderBy: { updatedAt: 'desc' },
-      include: { messages: { orderBy: { timestamp: 'asc' } } },
-    });
+    const [lastSession, history] = await Promise.all([
+        prisma.chatSession.findFirst({
+            where: { studentId: studentUserId, messages: { some: {} } },
+            orderBy: { updatedAt: 'desc' },
+            include: { messages: { orderBy: { timestamp: 'asc' } } },
+        }),
+        prisma.chatSession.findMany({
+            where: { studentId: studentUserId, messages: { some: {} } },
+            take: 10,
+            orderBy: { updatedAt: 'desc' },
+            include: { messages: { orderBy: { timestamp: 'asc' }, take: 1 } },
+        })
+    ]);
 
-    const history = await prisma.chatSession.findMany({
-      where: { 
-        studentId: profile.userId, 
-        id: { not: lastSession?.id },
-        messages: { some: {} }
-      },
-      take: 10,
-      orderBy: { updatedAt: 'desc' },
-      include: { 
-        messages: {
-          orderBy: { timestamp: 'asc' },
-          take: 1,
-        },
-      },
-    });
+    const filteredHistory = history.filter(h => h.id !== lastSession?.id);
 
     res.status(200).send({
       ready: true,
       studentId: studentUserId,
       lastSession: lastSession ? { 
         ...lastSession, 
-        messages: lastSession.messages.map(msg => ({...msg, timestamp: msg.timestamp.toISOString()})), 
+        messages: lastSession.messages.map((msg: any) => ({
+            ...msg, 
+            timestamp: msg.timestamp.toISOString(),
+            videoData: (msg.metadata as any)?.videoData 
+        })), 
         createdAt: lastSession.createdAt.toISOString(),
         updatedAt: lastSession.updatedAt.toISOString(),
-        conversationState: (lastSession.metadata as any || DEFAULT_CONVERSATION_STATE) as ConversationState 
+        conversationState: (lastSession.metadata as any || DEFAULT_CONVERSATION_STATE) 
       } : null,
-      history: history.map(session => ({
+      history: filteredHistory.map((session: any) => ({
         id: session.id,
         title: session.topic || 'New Chat',
         createdAt: session.createdAt.toISOString(), 
@@ -150,44 +140,30 @@ router.get('/preload', schoolAuthMiddleware, async (req: AuthedRequest, res: Res
     });
 
   } catch (error) {
-    console.error('[Backend] Error in preload:', error);
-    res.status(500).send({ message: 'Internal server error' });
+    console.error('[Backend] CRITICAL 500 in /preload:', error);
+    res.status(500).send({ message: 'Internal server error', details: String(error) });
   }
 });
 
-// 2. Starting a New Chat (POST /new-session)
+// ============================================================================
+// 2. NEW SESSION (POST /new-session)
+// ============================================================================
 router.post('/new-session', schoolAuthMiddleware, async (req: AuthedRequest, res: Response) => {
   try {
     const studentUserId = req.user!.id;
-    const profile = await getOrCreateStudentProfile(studentUserId);
 
-    const currentlyActiveSession = await prisma.chatSession.findFirst({
-      where: { studentId: profile.userId, isActive: true },
-      include: { messages: true }, 
-    });
+    await getOrCreateStudentProfile(studentUserId);
     
-    await prisma.chatSession.updateMany({
-      where: { studentId: profile.userId, isActive: true },
-      data: { isActive: false },
-    });
-
-    if (currentlyActiveSession && currentlyActiveSession.messages.length > 0) {
-      console.log(`[new-session] Enqueueing previous session ${currentlyActiveSession.id} for embedding.`);
-      if (summarizationQueue) {
-        summarizationQueue.add('summarization-jobs', { sessionId: currentlyActiveSession.id, studentId: studentUserId });
-      }
-      if (embeddingQueue) {
-        embeddingQueue.add('embedding-jobs', {
-          sessionId: currentlyActiveSession.id, studentId: studentUserId,
-          message: '',
-          aiResponse: ''
+    try {
+        await prisma.chatSession.updateMany({
+            where: { studentId: studentUserId, isActive: true },
+            data: { isActive: false },
         });
-      }
-    }
+    } catch (e) { console.warn('[New Session] Archive warning:', e); }
 
     const newSession = await prisma.chatSession.create({
       data: { 
-        studentId: profile.userId, 
+        studentId: studentUserId, 
         topic: 'New Chat',
         isActive: true,
         metadata: DEFAULT_CONVERSATION_STATE,
@@ -203,208 +179,188 @@ router.post('/new-session', schoolAuthMiddleware, async (req: AuthedRequest, res
     });
 
   } catch (error) {
-    console.error('[Backend] Error in new-session:', error);
+    console.error('[Backend] Error in /new-session:', error);
     res.status(500).send({ message: 'Internal server error' });
   }
 });
 
-// 3. Sending a Message (POST /chat)
+// ============================================================================
+// 3. CHAT ROUTE (POST /chat) - VIDEO & TITLE PERSISTENCE
+// ============================================================================
 router.post('/chat', schoolAuthMiddleware, rateLimiter, async (req: AuthedRequest, res: Response) => {
   try {
     const studentId = req.user!.id;
-    const { message, sessionId, conversationState: frontendConversationState } = req.body;
+    const { message, sessionId, conversationState } = req.body;
 
     if (!sessionId) return res.status(400).send({ message: 'Session ID is required.' });
 
-    const session = await prisma.chatSession.findUnique({
-      where: { id: sessionId },
-      include: { student: true }
-    });
+    await getOrCreateStudentProfile(studentId);
+
+    const [session, preferences] = await Promise.all([
+      prisma.chatSession.findUnique({
+        where: { id: sessionId },
+        include: { 
+            student: { select: { name: true, gradeLevel: true, userId: true } }, 
+            messages: { orderBy: { timestamp: 'asc' }, take: 30 } 
+        } 
+      }),
+      getOrCreateCopilotPreferences(studentId)
+    ]);
 
     if (!session || session.student.userId !== studentId) {
         return res.status(404).send({ message: 'Session not found.' });
     }
 
-    const currentMessages = await prisma.chatMessage.findMany({ where: { sessionId }, orderBy: { timestamp: 'asc' } });
-
-    const studentMessage = await prisma.chatMessage.create({
-      data: { sessionId, role: 'user', content: message, timestamp: new Date(), messageNumber: currentMessages.length + 1 },
+    await prisma.chatMessage.create({
+      data: { sessionId, role: 'user', content: message, timestamp: new Date(), messageNumber: session.messages.length + 1 },
     });
 
-    const allSessionMessages = [...currentMessages, studentMessage];
-
-    const messagesForAI: ChatCompletionMessageParam[] = [
-      { role: 'system', content: promptBuilder.buildSystemContext(session.student, session, frontendConversationState) },
-      ...allSessionMessages.map((msg): ChatCompletionMessageParam => {
-        if (msg.role === 'user') {
-          return { role: 'user', content: msg.content };
-        }
-        return { role: 'assistant', content: msg.content };
-      }),
-    ];
-
-    const aiCompletion = await openai.chat.completions.create({ model: 'gpt-4o', messages: messagesForAI, temperature: 0.7, max_tokens: 1000 });
-    const aiResponse = aiCompletion.choices?.[0]?.message?.content || 'I am sorry, I could not generate a response.';
-    
-    const aiMessage = await prisma.chatMessage.create({
-      data: { sessionId, role: 'model', content: aiResponse, timestamp: new Date(), messageNumber: allSessionMessages.length + 1 },
+    const aiResult = await emotionalAICopilot({
+        text: message,
+        chatHistory: session.messages.map(m => ({ 
+            id: m.id,
+            role: m.role as "user" | "model", 
+            content: m.content,
+            timestamp: m.timestamp 
+        })),
+        state: conversationState || DEFAULT_CONVERSATION_STATE,
+        studentProfile: {
+            name: session.student.name || 'Student',
+            gradeLevel: session.student.gradeLevel || 'Primary'
+        },
+        preferences: {
+            preferredLanguage: preferences.preferredLanguage as any,
+            interests: preferences.interests
+        },
+        memory: { progress: [], mistakes: [] },
+        currentTitle: session.topic || undefined 
     });
 
-    let updatedTopic = session.topic;
-    if (session.topic === 'New Chat' && allSessionMessages.length === 1) { 
-      try {
-        console.log(`[Backend] Generating topic for session ${sessionId}...`);
-        const topicGenerationPrompt = `Based on the user's first question: "${message}", create a short, descriptive title (4 words max) for this chat. Do not use quotes or the word "chat".`;
-        const topicCompletion = await openai.chat.completions.create({
-          model: 'gpt-3.5-turbo',
-          messages: [{ role: 'user', content: topicGenerationPrompt }],
-          temperature: 0.4,
-          max_tokens: 20,
-        });
-        const suggestedTopic = topicCompletion.choices?.[0]?.message?.content?.trim().replace(/^"|"$/g, '');
-        if (suggestedTopic && !['new chat', 'untitled', 'no title'].some(t => suggestedTopic.toLowerCase().includes(t))) {
-          updatedTopic = suggestedTopic;
-          console.log(`[Backend] New topic generated: "${updatedTopic}"`);
-        }
-      } catch (topicError) {
-        console.error('[Backend] Error generating topic:', topicError);
-      }
+    // Write AI Response with Metadata
+    const savedAiMsg = await prisma.chatMessage.create({
+      data: { 
+          sessionId, 
+          role: 'model', 
+          content: aiResult.processedText, 
+          timestamp: new Date(), 
+          messageNumber: session.messages.length + 2,
+          metadata: aiResult.videoData ? { videoData: aiResult.videoData } : undefined
+      },
+    });
+
+    // 4. Update Session Metadata & Title (CRITICAL FIX)
+    const updateData: any = {
+        metadata: aiResult.state as any, 
+        updatedAt: new Date(),
+    };
+
+    // Only update title if the AI suggested a new one AND it wasn't already set
+    if (aiResult.suggestedTitle && session.topic === 'New Chat') {
+        updateData.topic = aiResult.suggestedTitle;
     }
 
     await prisma.chatSession.update({
-      where: { id: sessionId },
-      data: { updatedAt: new Date(), metadata: frontendConversationState, topic: updatedTopic },
+        where: { id: sessionId },
+        data: updateData
     });
 
     res.status(200).send({
-      response: aiResponse,
-      messageId: aiMessage.id,
+      response: aiResult.processedText,
+      messageId: savedAiMsg.id,
       sessionId: session.id,
-      topic: updatedTopic,
-      conversationState: frontendConversationState
+      topic: aiResult.suggestedTitle || session.topic,
+      conversationState: aiResult.state,
+      videoData: aiResult.videoData
     });
 
+    // Background Tasks
+    if (session.messages.length === 0 && session.topic === 'New Chat') {
+       generateTopicInBackground(sessionId, message);
+    }
     if (pineconeIndex && embeddingQueue) {
-      embeddingQueue.add('embedding-jobs', { sessionId, studentId, message, aiResponse });
+      embeddingQueue.add('embedding-jobs', { sessionId, studentId, message, aiResponse: aiResult.processedText });
     }
     if (personalizationQueue) {
-      personalizationQueue.add('personalization-jobs', { studentId, userMessage: message, aiResponse });
+      personalizationQueue.add('personalization-jobs', { studentId, userMessage: message, aiResponse: aiResult.processedText });
     }
 
   } catch (error) {
-    console.error('[Backend] Error in AI chat:', error);
+    console.error('[Backend] Error in /chat:', error);
     res.status(500).send({ message: 'Internal server error' });
   }
 });
 
-// Route for saving single message
+// --- HELPER ROUTES ---
+
 router.post('/message', schoolAuthMiddleware, rateLimiter, async (req: AuthedRequest, res: Response) => {
   try {
-    const studentId = req.user!.id;
-    const { message, sessionId, conversationState: frontendConversationState } = req.body;
+    const { message, sessionId, conversationState } = req.body;
+    if (!sessionId) return res.status(400).send({ message: 'Session ID required.' });
 
-    if (!sessionId) {
-        return res.status(400).send({ message: 'Session ID is required.' });
-    }
-
-    const session = await prisma.chatSession.findFirst({
-        where: { id: sessionId, studentId }, 
-    });
-
-    if (!session) {
-        return res.status(404).send({ message: 'Session not found.' });
-    }
-
-    const messageNumber = await prisma.chatMessage.count({ where: { sessionId } });
-    await prisma.chatMessage.create({
-      data: { 
-        sessionId, 
-        role: message.role, 
-        content: message.content, 
-        timestamp: new Date(message.timestamp), 
-        messageNumber: messageNumber + 1 
-      },
-    });
+    const count = await prisma.chatMessage.count({ where: { sessionId } });
     
-    await prisma.chatSession.update({
-        where: { id: sessionId },
-        data: { metadata: frontendConversationState, updatedAt: new Date() },
-    });
-
-    if (message.role === 'model' && personalizationQueue) {
-       const lastUserMsg = await prisma.chatMessage.findFirst({
-         where: { sessionId, role: 'user' },
-         orderBy: { timestamp: 'desc' }
-       });
-       
-       if (lastUserMsg) {
-         personalizationQueue.add('personalization-jobs', { 
-           studentId, 
-           userMessage: lastUserMsg.content, 
-           aiResponse: message.content 
-         });
-       }
-    }
+    await Promise.all([
+        prisma.chatMessage.create({
+            data: { sessionId, role: message.role, content: message.content, timestamp: new Date(message.timestamp), messageNumber: count + 1 },
+        }),
+        prisma.chatSession.update({
+            where: { id: sessionId },
+            data: { metadata: conversationState, updatedAt: new Date() },
+        })
+    ]);
 
     res.status(200).send({ message: 'Message saved' });
   } catch (error) {
-    console.error('[Backend] Error in saving message:', error);
+    console.error('[Backend] Error saving message:', error);
     res.status(500).send({ message: 'Internal server error' });
   }
 });
 
-// ✅ CRITICAL: UPDATED SESSION PATCH ROUTE (Fixes Title Saving)
+// ✅ SESSION PATCH (HARD DEBUG VERSION WITH DETAILED LOGS)
 router.patch('/session/:id', schoolAuthMiddleware, async (req: AuthedRequest, res: Response) => {
-    try {
-      const studentUserId = req.user!.id;
-      const sessionId = req.params.id;
-      const { title } = req.body; 
+  try {
+    const studentUserId = req.user!.id;
+    const { title } = req.body; 
+    const sessionId = req.params.id;
 
-      console.log(`[Backend] PATCH /session/${sessionId} - Updating Title: "${title}"`);
+    console.log(`[BACKEND PATCH] 🚀 Starting Title Update. Session: ${sessionId} | User: ${studentUserId}`);
+    console.log(`[BACKEND PATCH] New Title Received: "${title}"`);
 
-      const session = await prisma.chatSession.findFirst({
-        where: { id: sessionId, studentId: studentUserId },
-      });
-      
-      if (!session) {
+    // 1. Verify Session Exists & Belongs to User
+    const existingSession = await prisma.chatSession.findFirst({
+        where: { id: sessionId, studentId: studentUserId }
+    });
+
+    if (!existingSession) {
+        console.error(`[BACKEND PATCH] ❌ ERROR: Session NOT FOUND or NOT OWNED by user ${studentUserId}`);
         return res.status(404).send({ message: 'Session not found.' });
-      }
-
-      const dataToUpdate: any = {
-        updatedAt: new Date(),
-      };
-      
-      if (title) {
-        dataToUpdate.topic = title; // 'topic' column holds the title
-      }
-
-      const updatedSession = await prisma.chatSession.update({
-        where: { id: sessionId },
-        data: dataToUpdate,
-      });
-
-      console.log(`[Backend] Session updated successfully. New Topic: "${updatedSession.topic}"`);
-
-      res.status(200).json({
-        message: 'Session updated successfully',
-        session: updatedSession,
-      });
-    } catch (error) {
-      console.error('[Backend] Error updating session:', error);
-      res.status(500).send({ message: 'Internal server error' });
     }
+
+    console.log(`[BACKEND PATCH] ✅ Session found. Current Title: "${existingSession.topic}". Attempting DB Write...`);
+
+    // 2. Perform Update (Hard Error if fails)
+    const updated = await prisma.chatSession.update({
+      where: { id: sessionId },
+      data: { topic: title, updatedAt: new Date() },
+    });
+
+    console.log(`[BACKEND PATCH] ✅ Success! DB Updated. New Title Stored: "${updated.topic}"`);
+    res.status(200).json({ message: 'Session updated', session: updated });
+
+  } catch (error) {
+    console.error('[BACKEND PATCH] 💥 CRITICAL DB ERROR:', error);
+    res.status(500).send({ message: 'Internal server error', error: String(error) });
+  }
 });
 
-// 4. History (GET /history)
 router.get('/history', schoolAuthMiddleware, async (req: AuthedRequest, res: Response) => {
   try {
     const studentUserId = req.user!.id;
-    const profile = await getOrCreateStudentProfile(studentUserId);
     const { page = '1', limit = '10', search } = req.query;
-    const pageNum = parseInt(page as string, 10), limitNum = parseInt(limit as string, 10);
+    const pageNum = parseInt(page as string), limitNum = parseInt(limit as string);
     const skip = (pageNum - 1) * limitNum;
 
-    const whereClause: any = { studentId: profile.userId, messages: { some: {} } };
+    const whereClause: any = { studentId: studentUserId, messages: { some: {} } };
     if (search) {
       whereClause.OR = [
         { topic: { contains: search as string, mode: 'insensitive' } },
@@ -412,52 +368,51 @@ router.get('/history', schoolAuthMiddleware, async (req: AuthedRequest, res: Res
       ];
     }
 
-    const [history, total] = await prisma.$transaction([
+    const [total, history] = await Promise.all([
+        prisma.chatSession.count({ where: whereClause }),
         prisma.chatSession.findMany({ 
-            where: whereClause, 
-            skip, 
-            take: limitNum, 
-            orderBy: { updatedAt: 'desc' }, 
-            include: { 
-                messages: {
-                    orderBy: { timestamp: 'asc' },
-                    take: 1
-                }
-            } 
-        }),
-        prisma.chatSession.count({ where: whereClause })
+            where: whereClause, skip, take: limitNum, orderBy: { updatedAt: 'desc' }, 
+            include: { messages: { orderBy: { timestamp: 'asc' }, take: 1 } } 
+        })
     ]);
 
+    // SELF-HEALING HISTORY: Rename old "New Chat" sessions using first message
+    const sessionsWithTitles = await Promise.all(history.map(async (s) => {
+        let title = s.topic || 'New Chat';
+        if (title === 'New Chat' && s.messages.length > 0) {
+            const firstMsg = s.messages[0].content;
+            const smartTitle = firstMsg.split(' ').slice(0, 5).join(' ') + (firstMsg.length > 30 ? '...' : '');
+            await prisma.chatSession.update({ where: { id: s.id }, data: { topic: smartTitle } });
+            title = smartTitle;
+        }
+        return {
+            id: s.id,
+            title: title,
+            updatedAt: s.updatedAt.toISOString(),
+            createdAt: s.createdAt.toISOString(),
+            firstMessage: s.messages[0]?.content || null
+        };
+    }));
+
     res.status(200).send({
-        sessions: history.map(session => ({
-            id: session.id,
-            title: session.topic || 'New Chat',
-            updatedAt: session.updatedAt.toISOString(),
-            createdAt: session.createdAt.toISOString(),
-            firstMessage: session.messages[0]?.content || null
-        })),
+        sessions: sessionsWithTitles,
         pagination: { page: pageNum, limit: limitNum, total, totalPages: Math.ceil(total / limitNum) }
     });
   } catch (error) {
-    console.error('[Backend] Error fetching history:', error);
     res.status(500).send({ message: 'Internal server error' });
   }
 });
 
-// 5. Resume Chat (GET /session/:id)
 router.get('/session/:id', schoolAuthMiddleware, async (req: AuthedRequest, res: Response) => {
   try {
     const studentUserId = req.user!.id;
-    const profile = await getOrCreateStudentProfile(studentUserId);
-    const sessionId = req.params.id;
-
-    await prisma.chatSession.updateMany({
-      where: { studentId: profile.userId, isActive: true, id: { not: sessionId } },
+    prisma.chatSession.updateMany({
+      where: { studentId: studentUserId, isActive: true, id: { not: req.params.id } },
       data: { isActive: false },
-    });
+    }).catch(e => {});
 
     const session = await prisma.chatSession.update({
-      where: { id: sessionId, studentId: profile.userId },
+      where: { id: req.params.id, studentId: studentUserId },
       data: { isActive: true },
       include: { messages: { orderBy: { timestamp: 'asc' } } },
     });
@@ -466,229 +421,88 @@ router.get('/session/:id', schoolAuthMiddleware, async (req: AuthedRequest, res:
 
     res.status(200).send({
       ...session,
-      messages: session.messages.map(msg => ({ ...msg, timestamp: msg.timestamp.toISOString() })),
-      createdAt: session.createdAt.toISOString(),
-      updatedAt: session.updatedAt.toISOString(),
-      conversationState: (session.metadata as any || DEFAULT_CONVERSATION_STATE) as ConversationState
+      messages: session.messages.map((msg: any) => ({
+          ...msg, 
+          timestamp: msg.timestamp.toISOString(),
+          // ✅ RETURN SAVED VIDEO DATA
+          videoData: (msg.metadata as any)?.videoData 
+      })),
+      conversationState: (session.metadata as any || DEFAULT_CONVERSATION_STATE)
     });
   } catch (error) {
-    console.error('[Backend] Error resuming chat session:', error);
     res.status(500).send({ message: 'Internal server error' });
   }
 });
 
-// 6. Delete Chat (POST /session/:id/delete)
 router.post('/session/:id/delete', schoolAuthMiddleware, async (req: AuthedRequest, res: Response) => {
   try {
-    const studentUserId = req.user!.id;
-    const sessionId = req.params.id;
-
-    const session = await prisma.chatSession.findUnique({
-      where: { id: sessionId },
+    const { count } = await prisma.chatSession.deleteMany({
+        where: { id: req.params.id, studentId: req.user!.id }
     });
-
-    if (!session) return res.status(404).send({ message: 'Session not found.' });
-    
-    const profile = await getOrCreateStudentProfile(studentUserId);
-    if (session.studentId !== profile.userId) {
-        return res.status(403).send({ message: 'Unauthorized to delete this session.' });
-    }
-
-    await prisma.chatMessage.deleteMany({
-      where: { sessionId: sessionId },
-    });
-
-    await prisma.chatSession.delete({
-      where: { id: sessionId },
-    });
-
-    res.status(200).send({ message: 'Session deleted successfully.' });
+    if (count === 0) return res.status(404).send({ message: 'Session not found' });
+    res.status(200).send({ message: 'Session deleted' });
   } catch (error) {
-    console.error('[Backend] Error deleting session:', error);
     res.status(500).send({ message: 'Internal server error' });
   }
 });
 
-// 7. Search Past Chats (GET /search)
 router.get('/search', schoolAuthMiddleware, async (req: AuthedRequest, res: Response) => {
   try {
     const studentId = req.user!.id;
-    const { q: queryParam, mode: modeParam } = req.query as any;
-    const query = queryParam as string;
-    const mode = (modeParam as string) || 'hybrid';
-
-    if (!query || typeof query !== 'string') {
-      return res.status(400).send({ message: 'Search query (q) is required.' });
-    }
+    const { q: query, mode = 'hybrid' } = req.query as any;
+    if (!query) return res.status(400).send({ message: 'Query required' });
 
     let results: any[] = [];
+    const promises = [];
 
     if (mode === 'keyword' || mode === 'hybrid') {
-      const keywordSessions = await prisma.chatSession.findMany({
-        where: {
-          studentId,
-          messages: { some: {} },
-          OR: [
-            { topic: { contains: query, mode: 'insensitive' } },
-            { messages: { some: { content: { contains: query, mode: 'insensitive' } } } },
-          ],
-        },
-        select: { id: true, topic: true, metadata: true, updatedAt: true },
-        take: 10,
-      });
-
-      results.push(
-        ...keywordSessions.map((session) => ({
-          id: session.id,
-          topic: session.topic,
-          summary: (session.metadata as any)?.summary || session.topic,
-          updatedAt: session.updatedAt,
-          source: 'keyword',
-          relevance: 0.5,
-        })),
-      );
+        promises.push(
+            prisma.chatSession.findMany({
+                where: {
+                    studentId,
+                    messages: { some: {} },
+                    OR: [
+                        { topic: { contains: query, mode: 'insensitive' } },
+                        { messages: { some: { content: { contains: query, mode: 'insensitive' } } } }
+                    ]
+                },
+                select: { id: true, topic: true, updatedAt: true },
+                take: 10
+            }).then(sess => sess.map(s => ({ ...s, source: 'keyword', relevance: 0.5 })))
+        );
     }
 
-    if (mode === 'semantic' || mode === 'hybrid') {
-      const embeddingResponse = await openai.embeddings.create({
-        model: 'text-embedding-ada-002',
-        input: query,
-      });
-      const queryEmbedding = embeddingResponse.data?.[0]?.embedding;
-
-      if (queryEmbedding && pineconeIndex) {
-        const pineconeResults = await pineconeIndex.query({
-          vector: queryEmbedding,
-          topK: 10,
-          filter: { studentId: { $eq: studentId }, type: { $eq: 'session_summary' } },
-        });
-
-        const semanticSessionIds = pineconeResults.matches?.map((m: any) => m.id) || [];
-        if (semanticSessionIds.length > 0) {
-          const semanticSessions = await prisma.chatSession.findMany({
-            where: { id: { in: semanticSessionIds } },
-            select: { id: true, topic: true, metadata: true, updatedAt: true },
-          });
-
-          semanticSessions.forEach((session) => {
-            const match = pineconeResults.matches?.find((m: any) => m.id === session.id);
-            results.push({
-              id: session.id,
-              topic: session.topic,
-              summary: (session.metadata as any)?.summary || session.topic,
-              updatedAt: session.updatedAt,
-              source: 'semantic',
-              relevance: match?.score || 0,
-            });
-          });
-        }
-      }
+    if ((mode === 'semantic' || mode === 'hybrid') && pineconeIndex) {
+        promises.push(
+            openai.embeddings.create({ model: 'text-embedding-ada-002', input: query })
+            .then(async (emb) => {
+                const vec = emb.data[0].embedding;
+                const matches = await pineconeIndex.query({
+                    vector: vec, topK: 10, filter: { studentId: { $eq: studentId } }
+                });
+                const ids = matches.matches?.map(m => m.id) || [];
+                if (ids.length === 0) return [];
+                const sessions = await prisma.chatSession.findMany({ where: { id: { in: ids } }, select: { id: true, topic: true, updatedAt: true } });
+                return sessions.map(s => ({ ...s, source: 'semantic', relevance: 0.8 }));
+            })
+        );
     }
 
-    const uniqueResults = Array.from(new Map(results.map((item) => [item.id, item])).values());
-    uniqueResults.sort((a, b) => (b.relevance || 0) - (a.relevance || 0));
+    const searchResults = await Promise.all(promises);
+    const unique = Array.from(new Map(searchResults.flat().map(item => [item.id, item])).values());
+    res.status(200).send(unique.slice(0, 10));
 
-    res.status(200).send(uniqueResults.slice(0, 10));
   } catch (error) {
-    console.error('Error searching past chats:', error);
     res.status(500).send({ message: 'Internal server error' });
   }
 });
 
-// 8. Memory Routes
-router.get('/memory/student', schoolAuthMiddleware, async (req: AuthedRequest, res: Response) => {
-  try {
-    const studentId = req.user!.id;
-    
-    const redis = await getRedisClient();
-    const cacheKey = `memory:${studentId}`;
-    if (redis) {
-      try {
-        const cachedMemory = await redis.get(cacheKey);
-        if (cachedMemory) return res.status(200).send(JSON.parse(cachedMemory));
-      } catch (e) { console.warn('[Memory] Redis read failed', e); }
-    }
-
-    const progress = await prisma.progress.findMany({ where: { studentId } });
-    const mistakes = await prisma.mistake.findMany({ where: { studentId } });
-    const memoryData = { progress, mistakes };
-
-    if (redis) {
-      try {
-        await redis.set(cacheKey, JSON.stringify(memoryData), { EX: 3600 });
-      } catch (e) { console.warn('[Memory] Redis write failed', e); }
-    }
-
-    res.status(200).send(memoryData);
-  } catch (error) {
-    console.error('Error fetching student memory:', error);
-    res.status(500).send({ message: 'Internal server error' });
-  }
-});
-
-router.get('/memory/global', schoolAuthMiddleware, async (req: AuthedRequest, res: Response) => {
-  try {
-    const globalMemory = await prisma.globalMemory.findMany();
-    res.status(200).send({ globalMemory });
-  } catch (error) {
-    console.error('Error fetching global memory:', error);
-    res.status(500).send({ message: 'Internal server error' });
-  }
-});
-
-router.post('/memory/update', schoolAuthMiddleware, async (req: AuthedRequest, res: Response) => {
-  try {
-    const studentId = req.user!.id;
-    const { type, data } = req.body;
-    
-    if (type === 'progress') {
-      const { subject, topic, mastery } = data;
-      await prisma.progress.upsert({
-        where: { id: data.id || '' },
-        update: { subject, topic, mastery },
-        create: { studentId, subject, topic, mastery },
-      });
-    } else if (type === 'mistake') {
-      const { topic, error, attempts } = data;
-      await prisma.mistake.create({
-        data: { studentId, topic, error, attempts: attempts || 1 },
-      });
-    } else {
-      return res.status(400).send({ message: 'Invalid memory type' });
-    }
-
-    const redis = await getRedisClient();
-    if (redis) {
-      try {
-        await redis.del(`memory:${studentId}`);
-      } catch (e) { console.warn('[Memory] Redis invalidation failed', e); }
-    }
-
-    res.status(200).send({ message: 'Memory updated successfully' });
-  } catch (error) {
-    console.error('Error updating memory:', error);
-    res.status(500).send({ message: 'Internal server error' });
-  }
-});
-
-// 9. Preferences Routes
 router.get('/preferences', schoolAuthMiddleware, async (req: AuthedRequest, res: Response) => {
   try {
-    const studentId = req.user!.id;
-    const preferences = await prisma.copilotPreferences.findUnique({ where: { userId: studentId } });
-
-    if (preferences) {
-      res.status(200).json({
-        preferredLanguage: preferences.preferredLanguage,
-        interests: preferences.interests || [],
-        lastUpdatedAt: preferences.lastUpdatedAt.toISOString(),
-      });
-    } else {
-      res.status(200).json({ preferredLanguage: 'english', interests: [], lastUpdatedAt: null });
-    }
+    const prefs = await getOrCreateCopilotPreferences(req.user!.id);
+    res.status(200).json(prefs);
   } catch (error) {
-    console.error('[Backend] Error fetching preferences:', error);
-    res.status(500).send({ message: 'Internal server error' });
+    res.status(500).send({ message: 'Error fetching preferences' });
   }
 });
 
@@ -697,42 +511,51 @@ router.post('/preferences/update', schoolAuthMiddleware, async (req: AuthedReque
     const studentId = req.user!.id;
     const { preferredLanguage, interests } = req.body; 
 
-    const allowedLanguages = ['english', 'swahili', 'english_sw'];
-    if (!preferredLanguage || !allowedLanguages.includes(preferredLanguage)) {
-      return res.status(400).json({ message: 'Invalid or missing preferredLanguage.' });
-    }
-
-    await prisma.studentProfile.upsert({
-      where: { userId: studentId },
-      update: {},
-      create: { userId: studentId, preferredLanguage: 'english', topInterests: [] },
-    });
-
-    const updatedPreferences = await prisma.copilotPreferences.upsert({
+    await prisma.copilotPreferences.upsert({
       where: { userId: studentId },
       update: { preferredLanguage, interests: interests as Prisma.JsonArray },
       create: { userId: studentId, preferredLanguage, interests: interests as Prisma.JsonArray },
     });
 
     const redis = await getRedisClient();
-    if (redis) {
-      try {
-        await redis.del(`profile:${studentId}`);
-      } catch (redisError) {
-        console.error('[Profile] Error invalidating Redis cache:', redisError);
-      }
-    }
+    if (redis) await redis.del(`copilot:preferences:${studentId}`);
 
-    res.status(200).json({
-      message: 'Preferences updated successfully',
-      preferredLanguage: updatedPreferences.preferredLanguage,
-      interests: updatedPreferences.interests,
-      lastUpdatedAt: updatedPreferences.lastUpdatedAt.toISOString(),
-    });
+    res.status(200).json({ message: 'Preferences updated' });
   } catch (error) {
-    console.error('[Backend] Error updating preferences:', error);
     res.status(500).send({ message: 'Internal server error' });
   }
+});
+
+router.get('/memory/student', schoolAuthMiddleware, async (req: AuthedRequest, res: Response) => {
+    try {
+        const studentId = req.user!.id;
+        const redis = await getRedisClient();
+        if (redis) {
+            const cached = await redis.get(`memory:${studentId}`);
+            if (cached) return res.status(200).send(JSON.parse(cached));
+        }
+        const [progress, mistakes] = await Promise.all([
+            prisma.progress.findMany({ where: { studentId } }),
+            prisma.mistake.findMany({ where: { studentId } })
+        ]);
+        if (redis) await redis.set(`memory:${studentId}`, JSON.stringify({ progress, mistakes }), { EX: 3600 });
+        res.status(200).send({ progress, mistakes });
+    } catch (e) { res.status(500).send({ message: 'Error' }); }
+});
+
+router.post('/memory/update', schoolAuthMiddleware, async (req: AuthedRequest, res: Response) => {
+    try {
+        const { type, data } = req.body;
+        const studentId = req.user!.id;
+        if (type === 'progress') {
+            await prisma.progress.upsert({ where: { id: data.id || 'new' }, create: { ...data, studentId }, update: data });
+        } else if (type === 'mistake') {
+            await prisma.mistake.create({ data: { ...data, studentId } });
+        }
+        const redis = await getRedisClient();
+        if (redis) await redis.del(`memory:${studentId}`);
+        res.status(200).send({ message: 'Updated' });
+    } catch (e) { res.status(500).send({ message: 'Error' }); }
 });
 
 export default router;

@@ -111,7 +111,29 @@ export function SteadfastCopilot() {
     }
   }, []);
 
-  // FORCE REFRESH HISTORY (Helper)
+  // Separate function to fetch profile explicitly
+  const fetchProfile = useCallback(async () => {
+    setIsProfileLoading(true);
+    try {
+        const preferencesData = await api.get('/api/copilot/preferences');
+        const frontendPreferredLanguage = (languageBackendToFrontend as any)[preferencesData.preferredLanguage] || 'English';
+
+        setProfile({
+          preferredLanguage: frontendPreferredLanguage,
+          interests: preferencesData.interests || [],
+          name: profile?.name || 'Student',
+          gradeLevel: profile?.gradeLevel || 'Primary',
+          favoriteShows: profile?.favoriteShows || [],
+        });
+        return preferencesData;
+    } catch (error) {
+        console.error('Error fetching preferences:', error);
+        return null;
+    } finally {
+        setIsProfileLoading(false);
+    }
+  }, [profile, setProfile]);
+
   const refreshHistory = async () => {
       try {
         const data = await api.get('/api/copilot/preload');
@@ -128,7 +150,7 @@ export function SteadfastCopilot() {
       setSelectedFile(null);
       setActiveSession({ 
         id: newSessionData.sessionId, 
-        title: 'New Chat', // Explicitly reset title
+        title: 'New Chat', 
         messages: [],
         createdAt: newSessionData.createdAt,
         updatedAt: newSessionData.updatedAt,
@@ -150,6 +172,9 @@ export function SteadfastCopilot() {
   
   const loadInitialData = useCallback(async () => {
     try {
+        // ✅ CRITICAL FIX: Ensure Profile is Loaded First
+        await fetchProfile();
+
         const data = await api.get('/api/copilot/preload');
         if (data.history) setHistory(data.history);
 
@@ -157,6 +182,8 @@ export function SteadfastCopilot() {
             const messagesWithParsedDates = data.lastSession.messages.map((m: any) => ({
                 ...m,
                 timestamp: new Date(m.timestamp),
+                // ✅ Ensure video data persists
+                videoData: m.videoData || undefined
             }));
             setMessages(messagesWithParsedDates);
             setActiveSession(data.lastSession);
@@ -175,7 +202,7 @@ export function SteadfastCopilot() {
         setConversationState(DEFAULT_CONVERSATION_STATE);
         setHasInitialized(true);
     }
-  }, [handleNewChat, fetchMemory]);
+  }, [handleNewChat, fetchMemory, fetchProfile]);
 
   useEffect(() => {
     if (isOpen && !hasInitialized) {
@@ -231,6 +258,9 @@ export function SteadfastCopilot() {
                 setActiveSession(prev => prev ? { ...prev, id: newSess.sessionId } : newSess);
             }
 
+            // ✅ Ensure we send the latest interests
+            const currentInterests = profile?.interests || [];
+
             const response = await getAssistantResponse(
               currentSessionId!,
               userInput,
@@ -240,10 +270,10 @@ export function SteadfastCopilot() {
               forceWebSearch,
               includeVideos,
               {
-                name: profile?.name,
+                name: profile?.name || 'Student',
                 gradeLevel: level,
                 preferredLanguage: (languageFrontendToBackend as any)[languageHint] || 'english',
-                interests: profile?.interests
+                interests: currentInterests // Pass loaded interests
               },
               studentMemory
             );
@@ -263,24 +293,27 @@ export function SteadfastCopilot() {
             setMessages(prev => [...prev, assistantMessage]);
             setConversationState(response.state);
 
-            await api.post('/api/copilot/message', {
-                sessionId: currentSessionId,
-                message: userMessage,
-                conversationState: response.state 
-            });
-            await api.post('/api/copilot/message', {
-                sessionId: currentSessionId,
-                message: assistantMessage,
-                conversationState: response.state 
-            });
+            // POST MESSAGES TO DB
+            await Promise.all([
+                api.post('/api/copilot/message', {
+                    sessionId: currentSessionId,
+                    message: userMessage,
+                    conversationState: response.state 
+                }),
+                api.post('/api/copilot/message', {
+                    sessionId: currentSessionId,
+                    message: assistantMessage,
+                    conversationState: response.state 
+                })
+            ]);
 
-            // 🚀 CRITICAL FIX: INSTANT UI TITLE UPDATE + API SAVE
-            const newTitle = (response as any).suggestedTitle;
-
-            if (newTitle && currentSessionId && activeSession?.title !== newTitle && newTitle !== "New Chat" && newTitle !== "undefined") {
-                console.log(`[FRONTEND LOG] 🚨 UPDATING TITLE: "${newTitle}"`);
+            // ✅ CRITICAL FIX: FORCE SAVE TITLE IF CHANGED
+            const newTitle = (response as any).topic; 
+            
+            if (newTitle && currentSessionId && activeSession?.title !== newTitle && newTitle !== "New Chat") {
+                console.log(`[FRONTEND] Force-Saving Title: "${newTitle}"`);
                 
-                // 1. Force UI Update Immediately (No Waiting)
+                // 1. Optimistic Update (Immediate UI Refresh)
                 setActiveSession(prev => prev ? { ...prev, title: newTitle } : null);
                 
                 setHistory(prevHistory => 
@@ -291,13 +324,9 @@ export function SteadfastCopilot() {
                    )
                 );
                 
-                // 2. Persist via API (Background)
-                api.patch(`/api/copilot/session/${currentSessionId}`, { title: newTitle })
-                   .then(() => {
-                       // 3. Double-check consistency (Optional but safe)
-                       refreshHistory();
-                   })
-                   .catch(err => console.warn("Failed to patch session title:", err));
+                // 2. FORCE SAVE API CALL (Bypasses Server Action RLS issues)
+                // This hits the route we just hardened in ai.ts
+                await api.patch(`/api/copilot/session/${currentSessionId}`, { title: newTitle });
             }
 
             setTimeout(() => {
@@ -347,6 +376,7 @@ export function SteadfastCopilot() {
       const messagesWithParsedDates = sessionData.messages.map((m: any) => ({
           ...m,
           timestamp: new Date(m.timestamp),
+          videoData: m.videoData || undefined
       }));
       setMessages(messagesWithParsedDates);
       setActiveSession(sessionData);
@@ -382,28 +412,6 @@ export function SteadfastCopilot() {
     }
   };
 
-  const fetchProfile = async () => {
-    setIsProfileLoading(true);
-    try {
-        const preferencesData = await api.get('/api/copilot/preferences');
-        const frontendPreferredLanguage = (languageBackendToFrontend as any)[preferencesData.preferredLanguage] || 'English';
-
-        setProfile({
-          preferredLanguage: frontendPreferredLanguage,
-          interests: preferencesData.interests || [],
-          name: profile?.name,
-          gradeLevel: profile?.gradeLevel,
-          favoriteShows: profile?.favoriteShows || [],
-        });
-
-    } catch (error) {
-        console.error('Error fetching preferences:', error);
-        toast({ title: "Error", description: "Could not fetch preferences.", variant: "destructive" });
-    } finally {
-        setIsProfileLoading(false);
-    }
-  };
-
   const handleSavePreferences = async (data: any) => {
     setIsSavingProfile(true);
     try {
@@ -412,7 +420,7 @@ export function SteadfastCopilot() {
           preferredLanguage: backendPreferredLanguage,
           interests: data.interests || [],
         };
-        const savedPreferences = await api.post('/api/copilot/preferences', payload);
+        const savedPreferences = await api.post('/api/copilot/preferences/update', payload); // Updated Endpoint
         const frontendPreferredLanguage = (languageBackendToFrontend as any)[savedPreferences.preferredLanguage] || 'English';
         updateProfile({
           preferredLanguage: frontendPreferredLanguage,

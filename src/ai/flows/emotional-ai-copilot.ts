@@ -5,17 +5,24 @@ import { ChatCompletionMessageParam } from 'openai/resources/chat/completions';
 import { runFlow } from '@genkit-ai/flow';
 import { webSearchFlow } from './web_search_flow';
 import { getYoutubeTranscriptFlow } from './get-youtube-transcript';
-import { youtubeSearchFlow } from './youtube-search-flow'; // Import youtubeSearchFlow
+import { youtubeSearchFlow } from './youtube-search-flow'; 
 import { runResearchOrchestrator } from './research-orchestrator';
 import { GUARDIAN_SANITIZE } from '../tools/handlers';
-import { ConversationState, Message } from '@/lib/types';
 import { generateChatTitle } from './title-generator';
+
+// ✅ Import Scope Guardian
+import { isOutOfScope, getDynamicScopeResponse } from '../tools/scope-guardian';
+
+// ✅ NEW: Import Multilingual Governance
+import { getLanguageGovernance } from '../tools/multilingual-governance';
+
+// ✅ Relative Import
+import { ConversationState, Message } from '../../lib/types'; 
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
-// Extend ConversationState to include ONLY the missing properties.
 interface ExtendedConversationState extends ConversationState {
   activePracticeQuestion?: string;
   correctAnswers?: string[];
@@ -28,21 +35,22 @@ export interface EmotionalAICopilotInput {
   text: string;
   chatHistory: Message[];
   state: ConversationState;
+  studentProfile: {
+    name: string;
+    gradeLevel: string;
+  };
   preferences: {
-    name?: string;
-    gradeLevel?: 'Primary' | 'LowerSecondary' | 'UpperSecondary';
     preferredLanguage?: 'english' | 'swahili' | 'arabic' | 'english_sw';
-    interests?: string[];
+    interests?: string[]; 
   };
   fileData?: { type: string; base64: string };
   forceWebSearch?: boolean;
   includeVideos?: boolean;
-  memory?: {
-    progress: any[];
-    mistakes: any[];
-  };
-  // ✅ ADDED: Pass current title to know if we need to generate one
   currentTitle?: string;
+  memory?: {
+    progress?: any[];
+    mistakes?: any[];
+  };
 }
 
 export interface EmotionalAICopilotOutput {
@@ -61,36 +69,54 @@ function validateAnswer(studentInput: string, correctAnswers: string[]): boolean
 }
 
 export async function emotionalAICopilot(input: EmotionalAICopilotInput): Promise<EmotionalAICopilotOutput> {
-  console.log(`[🔍 DEEP TRACE] [COPILOT] Input: "${input.text}" | ForceWeb: ${input.forceWebSearch}`);
+  const rawInterests = input.preferences?.interests || [];
+  console.log(`[🔍 TRACE] Student: ${input.studentProfile.name} | Interests: ${rawInterests.join(', ')}`);
   
+  // ==============================================================================
+  // 🔒 SCOPE GUARDIAN (SAFETY LOCK)
+  // ==============================================================================
+  if (isOutOfScope(input.text)) {
+      console.log(`[🛡️ SCOPE GUARDIAN] Blocked input: "${input.text}"`);
+      
+      return {
+          processedText: getDynamicScopeResponse(input.text),
+          state: input.state,
+          topic: input.state.lastSearchTopic?.[0] || "General", 
+          suggestedTitle: input.currentTitle,
+          videoData: undefined,
+          sources: []
+      };
+  }
+
+  // --- Normal Flow Continues Below ---
+
   let updatedState: ExtendedConversationState = JSON.parse(JSON.stringify(input.state));
   if (updatedState.validationAttemptCount === undefined) updatedState.validationAttemptCount = 0;
+  if (updatedState.awaitingPracticeQuestionAnswer === undefined) updatedState.awaitingPracticeQuestionAnswer = false;
 
-  // ✅ DEFINE VARIABLES AT TOP SCOPE
   let responseText: string = '';
   let videoData: EmotionalAICopilotOutput['videoData'] | undefined = undefined;
   let suggestedTitle: string | undefined = undefined;
 
   // ==============================================================================
-  // 🧠 SIMPLIFIED TITLE GENERATION LOGIC (Guaranteed Trigger)
+  // 1. TITLE GENERATION (SMART UPDATE)
   // ==============================================================================
-  const needsTitle = !input.currentTitle || input.currentTitle === 'New Chat' || input.currentTitle === 'Untitled';
-  const hasContent = input.text.length > 5;
-
-  if (needsTitle && hasContent) {
-      console.log(`[🔍 DEEP TRACE] Generating Title for: "${input.text}"`);
+  const isGenericTitle = !input.currentTitle || 
+                         input.currentTitle === 'New Chat' || 
+                         input.currentTitle === 'Untitled';
+  
+  if (isGenericTitle && input.text.length > 1) {
       const newTitle = await generateChatTitle(input.chatHistory, input.text);
-      if (newTitle && newTitle !== "New Chat") {
+      if (newTitle && newTitle !== "New Chat" && newTitle !== "General Discussion") {
           suggestedTitle = newTitle;
-          console.log(`[🔍 DEEP TRACE] ✨ Generated: "${suggestedTitle}"`);
       }
   }
 
-  // --------------------------------------------------------------------------
-  // LOGIC BLOCK 1: ROUTING TO RESEARCH ORCHESTRATOR
-  // --------------------------------------------------------------------------
+  // ==============================================================================
+  // 2. RESEARCH ORCHESTRATOR ROUTING
+  // ==============================================================================
   if (input.forceWebSearch || updatedState.conversationState === 'awaiting_practice_response') {
-      console.log("[🔍 DEEP TRACE] [COPILOT] >> Handing off to Research Orchestrator");
+      console.log("[🔍 TRACE] Handing off to Research Orchestrator");
       
       const researchResult = await runResearchOrchestrator({
           query: input.text,
@@ -108,26 +134,21 @@ export async function emotionalAICopilot(input: EmotionalAICopilotInput): Promis
       
       const sources = (researchResult as any).sources || [];
       
-      // ✅ CAPTURE VIDEO DATA & HARD LOCK RELEVANCE
+      // VIDEO HANDLING
       if ((researchResult as any).videoData) {
           const vData = (researchResult as any).videoData;
-          
-          // CRITICAL: Hard Lock Relevance Check
-          // Only show video if title roughly matches current topic/query to prevent "QRadar" errors
           const currentContext = (updatedState.lastTopic || input.text).toLowerCase();
           const videoTitleLower = (vData.title || "").toLowerCase();
           
-          // Simple relevance check: does the video title contain ANY word from the topic (excluding fillers)?
-          const topicKeywords = currentContext.split(' ').filter(w => w.length > 3);
-          const isRelevant = topicKeywords.some(w => videoTitleLower.includes(w));
+          const stopWords = ['about', 'what', 'how', 'when', 'why', 'video', 'show', 'me'];
+          const topicKeywords = currentContext.split(' ').filter(w => w.length > 3 && !stopWords.includes(w));
+          
+          const isRelevant = topicKeywords.some(w => videoTitleLower.includes(w)) || videoTitleLower.includes(currentContext);
 
           if (isRelevant && vData.id) {
              videoData = vData;
-             const thumb = videoData!.thumbnail || `https://img.youtube.com/vi/${videoData!.id}/0.jpg`;
              const cleanTitle = (videoData!.title || "Educational Video").replace(/[\[\]]/g, '');
-             rawResponse += `\n\n[![${cleanTitle}](${thumb})](https://www.youtube.com/watch?v=${videoData!.id})\n*Tap to watch: ${cleanTitle}*`;
-          } else {
-             console.log(`[COPILOT] Skipped irrelevant video: "${vData.title}" for topic "${updatedState.lastTopic}"`);
+             rawResponse += `\n\n[Watch Video: ${cleanTitle}](https://www.youtube.com/watch?v=${vData.id})`;
           }
       }
 
@@ -138,121 +159,62 @@ export async function emotionalAICopilot(input: EmotionalAICopilotInput): Promis
       const sanitizedResponse = await GUARDIAN_SANITIZE(rawResponse, updatedState.lastTopic);
       updatedState.lastAssistantMessage = sanitizedResponse;
 
-      console.log(`[🔍 DEEP TRACE] [COPILOT] << Orchestrator finished.`);
       return { 
           processedText: sanitizedResponse, 
           state: updatedState, 
-          topic: updatedState.lastTopic,
-          sources: sources,
-          videoData: videoData,
+          topic: updatedState.lastTopic, 
+          sources: sources, 
+          videoData: videoData, 
           suggestedTitle: suggestedTitle
       };
   }
 
-  // --------------------------------------------------------------------------
-  // LOGIC BLOCK 2: Handling Active Practice Questions (Local Chat Validation)
-  // --------------------------------------------------------------------------
+  // ==============================================================================
+  // 3. PRACTICE QUESTION LOGIC
+  // ==============================================================================
   if (updatedState.awaitingPracticeQuestionAnswer) {
       const isCorrect = validateAnswer(input.text, updatedState.correctAnswers || []);
 
       if (isCorrect) {
           const topic = updatedState.lastTopic || 'that';
-          responseText = `Excellent 🌟! Mashallah, yes, that’s right — you solved it. This shows you understand ${topic}. Are you ready to try another small step?`;
-          
+          responseText = `Excellent 🌟! Mashallah, yes. You understand ${topic}. Ready for the next step?`;
           updatedState.awaitingPracticeQuestionAnswer = false;
           updatedState.validationAttemptCount = 0;
           updatedState.activePracticeQuestion = undefined;
           updatedState.correctAnswers = [];
-          updatedState.lastTopic = undefined;
-          
       } else {
           updatedState.validationAttemptCount = (updatedState.validationAttemptCount || 0) + 1;
-          
-          switch (updatedState.validationAttemptCount) {
-              case 1:
-                  responseText = `Good try 👏, but that’s not quite right. Let’s think about it differently.`;
-                  break;
-              case 2:
-                  responseText = `Okay, let us take it slowly. If we start with 10 and take away 1, how many are left?`;
-                  break;
-              case 3:
-                  responseText = `I see this is a bit tricky. That is okay! Let's count them together.`;
-                  break;
-              default:
-                  responseText = "Don’t worry 💙. This concept is tricky, but we will solve it together. Shall I show you the first step?";
-                  break;
-          }
+          responseText = updatedState.validationAttemptCount > 1 
+            ? "Let us take it slowly. Let's count together." 
+            : "Good try, but let's look closer.";
       }
       
       const sanitizedText = await GUARDIAN_SANITIZE(responseText, updatedState.lastTopic);
       updatedState.lastAssistantMessage = sanitizedText;
-      return { 
-          processedText: sanitizedText, 
-          state: updatedState, 
-          suggestedTitle: suggestedTitle
-      };
+      return { processedText: sanitizedText, state: updatedState, suggestedTitle: suggestedTitle };
   }
 
-  // --------------------------------------------------------------------------
-  // LOGIC BLOCK 3: NORMAL CHAT & TOOLS
-  // --------------------------------------------------------------------------
-  const hasInterests = input.preferences.interests && input.preferences.interests.length > 0;
-  const interestsString = hasInterests ? input.preferences.interests!.join(', ') : 'general Kenyan topics like chai, mandazi, and boda bodas';
-
-  const mistakesList = input.memory?.mistakes?.map((m: any) => `${m.topic} (${m.error})`).join(', ') || 'None recorded yet';
-  const masteryList = input.memory?.progress?.filter((p: any) => p.mastery > 80).map((p: any) => p.topic).join(', ') || 'None recorded yet';
-
-  // --------------------------------------------------------------------------
-  // DYNAMIC SYSTEM PROMPT: SPLIT TEACHING VS RESEARCH
-  // --------------------------------------------------------------------------
+  // ==============================================================================
+  // 4. DYNAMIC SYSTEM PROMPT (MULTILINGUAL GOVERNANCE)
+  // ==============================================================================
   
-  // Base Teaching Prompt (Standard Mode)
-  const TEACHING_PROMPT = `
-**IDENTITY & ROLE**
-You are STEADFAST, the world’s most intelligent, patient, warm, and engaging Muslim educational AI teacher.
-You teach children with Kenyan clarity, Islamic manners, and true compassion.
+  const languageMode = input.preferences?.preferredLanguage || 'english';
+  
+  // ✅ LOG GOVERNANCE LOADING (VERIFY STRICT RULES ARE ACTIVE)
+  console.log(`[GOVERNANCE] Loading Strict Rules for: ${languageMode}`);
 
-**CORE TEACHING RHYTHM (DEFAULT)**
-1. **Teach ONE Micro-Idea:** Simplest possible concept (1-2 sentences).
-2. **Give ONE Relatable Example:** Connected to interests (${interestsString}).
-3. **Wait or Check:** You may ask a guiding question OR simply pause for them to absorb it.
+  // ✅ NEW: Fetch Governed Prompt based on Language + Interests
+  const TEACHING_PROMPT = getLanguageGovernance(languageMode, rawInterests);
 
-**CRITICAL RULES (NON-NEGOTIABLE)**
-1. **NO PRESSURE:** You do NOT always have to ask a question. If the student is unsure, confused, or upset, simply explain calmly and wait.
-2. **CONDITIONAL STEPS:** Use "Step one", "Step two" ONLY for actual procedures. Never for definitions.
-3. **NO ROBOTICS:** Never say "As an AI". Never apologize excessively. Speak like a human teacher.
-4. **SAFETY FIRST:** If a topic is inappropriate, firmly redirect to learning.
-5. **ISLAMIC MANNERS:** Be respectful. No fatwas. No deep fiqh. Simple, beautiful character lessons only.
-
-**FORMATTING LAWS**
-- Start with a capital letter.
-- Use simple punctuation.
-- No Markdown lists.
-- No LaTeX (use plain text fractions like 1/2).
-- One parenthesis pair max (1/2).
-
-**STUDENT CONTEXT**
-- Name: ${input.preferences.name || 'Student'}
-- Grade: ${input.preferences.gradeLevel || 'Primary'}
-- Struggles: ${mistakesList}
-- Mastery: ${masteryList}
-`;
-
-  // Research/Tool Prompt (Brief & Factual)
   const RESEARCH_PROMPT = `
-**IDENTITY**
-You are a calm, neutral educational assistant helping with research.
+  **IDENTITY**
+  Calm, neutral research assistant.
+  **RULES**
+  - Factual, clear, direct.
+  - No metaphors unless helpful.
+  - Direct answers.
+  `;
 
-**RULES**
-- Stay factual and clear.
-- Do not show uncertainty.
-- Do not apologize.
-- Do not use metaphors unless they make the specific fact clearer.
-- Answer the user's question directly.
-- If the user asks for a video summary, give the summary clearly without extra fluff.
-`;
-
-  // Select Prompt based on input intent (Basic Heuristic)
   const isResearchIntent = input.text.toLowerCase().includes('search') || input.text.toLowerCase().includes('find') || input.forceWebSearch;
   const systemMessage = isResearchIntent ? RESEARCH_PROMPT : TEACHING_PROMPT;
 
@@ -278,54 +240,16 @@ You are a calm, neutral educational assistant helping with research.
       }
   }
 
+  // ==============================================================================
+  // 5. TOOLS & EXECUTION
+  // ==============================================================================
   const tools = [
-    {
-        type: 'function' as const,
-        function: {
-          name: 'ask_practice_question',
-          description: 'Asks the student a question to validate their understanding.',
-          parameters: {
-            type: 'object' as const,
-            properties: {
-              question: { type: 'string', description: 'The practice question.' },
-              correctAnswers: { type: 'string', description: 'Comma-separated correct keywords.' },
-              topic: { type: 'string', description: 'The topic.' },
-            },
-            required: ['question', 'correctAnswers', 'topic'],
-          },
-        },
-    },
-    {
-      type: 'function' as const,
-      function: {
-        name: 'youtube_search',
-        description: 'Searches for an educational YouTube video.',
-        parameters: {
-          type: 'object' as const,
-          properties: {
-            query: { type: 'string', description: 'The topic to search for.' },
-          },
-          required: ['query'],
-        },
-      },
-    },
-    {
-        type: 'function' as const,
-        function: {
-          name: 'get_youtube_transcript',
-          description: "Fetches a video's transcript.",
-          parameters: {
-            type: 'object' as const,
-            properties: {
-              videoId: { type: 'string', description: 'The YouTube video ID.' },
-            },
-            required: ['videoId'],
-          },
-        },
-      },
+    { type: 'function' as const, function: { name: 'ask_practice_question', description: 'Ask validation question.', parameters: { type: 'object' as const, properties: { question: { type: 'string' }, correctAnswers: { type: 'string' }, topic: { type: 'string' } }, required: ['question', 'correctAnswers', 'topic'] } } },
+    { type: 'function' as const, function: { name: 'youtube_search', description: 'Search educational video.', parameters: { type: 'object' as const, properties: { query: { type: 'string' } }, required: ['query'] } } },
+    { type: 'function' as const, function: { name: 'get_youtube_transcript', description: "Fetch transcript.", parameters: { type: 'object' as const, properties: { videoId: { type: 'string' } }, required: ['videoId'] } } },
   ];
 
-  console.log('[BRAIN] STEP 2: Querying OpenAI model...');
+  console.log('[BRAIN] Querying OpenAI...');
   const completion = await openai.chat.completions.create({
     messages: messages,
     model: 'gpt-4o-mini',
@@ -334,112 +258,79 @@ You are a calm, neutral educational assistant helping with research.
   });
 
   const responseMessage = completion.choices[0].message;
-  console.log('[BRAIN] STEP 3: Received raw response from OpenAI:', JSON.stringify(responseMessage, null, 2));
 
   if (responseMessage.tool_calls && responseMessage.tool_calls.length > 0) {
-    console.log('[BRAIN] STEP 4: AI decided to use a tool.');
     const toolCall = responseMessage.tool_calls[0];
+    const functionName = (toolCall as any).function.name;
+    const args = JSON.parse((toolCall as any).function.arguments);
 
-    if (toolCall.type === 'function') {
-        const functionName = toolCall.function.name;
-        const functionArgs = JSON.parse(toolCall.function.arguments);
-  
-        console.log(`[BRAIN] STEP 5: Executing '${functionName}' with arguments:`, functionArgs);
-  
-        if (functionName === 'ask_practice_question') {
-            updatedState.awaitingPracticeQuestionAnswer = true;
-            updatedState.activePracticeQuestion = functionArgs.question;
-            updatedState.correctAnswers = functionArgs.correctAnswers.split(',').map((a: string) => a.trim().toLowerCase());
-            updatedState.lastTopic = functionArgs.topic;
-            updatedState.validationAttemptCount = 0;
-            
-            responseText = `Here is a small challenge: What is (${updatedState.activePracticeQuestion})?`;
-            const sanitizedText = await GUARDIAN_SANITIZE(responseText, updatedState.lastTopic);
-            updatedState.lastAssistantMessage = sanitizedText;
-            return { 
-                processedText: sanitizedText, 
-                state: updatedState,
-                suggestedTitle: suggestedTitle
-            };
-        }
+    if (functionName === 'ask_practice_question') {
+        updatedState.awaitingPracticeQuestionAnswer = true;
+        updatedState.activePracticeQuestion = args.question;
+        updatedState.correctAnswers = args.correctAnswers.split(',').map((a: string) => a.trim().toLowerCase());
+        updatedState.lastTopic = args.topic;
+        updatedState.validationAttemptCount = 0;
+        responseText = `Here is a small challenge: What is (${updatedState.activePracticeQuestion})?`;
+    }
 
+    else if (functionName === 'youtube_search') {
         try {
-          if (functionName === 'youtube_search') {
-            const results = await runFlow(youtubeSearchFlow, { query: functionArgs.query }); // Corrected to youtubeSearchFlow
+            const results = await runFlow(youtubeSearchFlow, { query: args.query });
             
             if (results && results.length > 0) {
-              // 🔒 VIDEO RELEVANCE CHECK (Hard Lock)
-              const video = results[0];
-              const currentTopic = updatedState.lastTopic || input.text;
-              const isRelevant = (video.title || "").toLowerCase().includes(currentTopic.toLowerCase().split(' ')[0]); // Check at least first keyword match
+                const video = results[0];
+                const currentTopic = updatedState.lastTopic || input.text;
+                const vidTitleLower = (video.title || "").toLowerCase();
+                const contextLower = currentTopic.toLowerCase();
 
-              if (isRelevant) {
-                  const safeChannel = (video.channel || video.channelTitle || '').replace('Unknown Channel', '');
-                  videoData = { id: video.id, title: video.title, channel: safeChannel, thumbnail: video.thumbnailUrl };
-                  
-                  const thumb = video.thumbnailUrl || `https://img.youtube.com/vi/${video.id}/0.jpg`;
-                  const cleanTitle = (video.title || "Educational Video").replace(/[\[\]]/g, '');
-                  
-                  responseText = `I found a great video for you: "${video.title}".\n\n[![${cleanTitle}](${thumb})](https://www.youtube.com/watch?v=${video.id})\n*Tap to watch: ${cleanTitle}*`;
-              } else {
-                  responseText = "I couldn’t find a perfectly matching video, but I can explain it myself! Shall we start?";
-              }
+                // FUZZY MATCH
+                const stopWords = ['what', 'how', 'when', 'video', 'about'];
+                const keywords = contextLower.split(' ').filter(w => w.length > 3 && !stopWords.includes(w));
+                const isRelevant = keywords.some(k => vidTitleLower.includes(k)) || vidTitleLower.includes(contextLower);
+
+                if (isRelevant) {
+                    const safeChannel = (video.channel || video.channelTitle || '').replace('Unknown Channel', '');
+                    videoData = { id: video.id, title: video.title, channel: safeChannel, thumbnail: video.thumbnailUrl };
+                    
+                    const cleanTitle = (video.title || "Video").replace(/[\[\]]/g, '');
+                    // ✅ Text Link Only
+                    responseText = `I found a great video for you: "${video.title}".\n\n[Watch Video: ${cleanTitle}](https://www.youtube.com/watch?v=${video.id})`;
+                } else {
+                    responseText = "Let me explain this to you step by step myself!";
+                }
             } else {
-              responseText = "I couldn’t find a video right now, but I can explain it to you myself! Shall we begin?";
+                responseText = "Let's explore this topic directly together.";
             }
-            const sanitizedText = await GUARDIAN_SANITIZE(responseText, updatedState.lastTopic);
-            updatedState.lastAssistantMessage = sanitizedText;
-            return { 
-                processedText: sanitizedText, 
-                videoData, 
-                state: updatedState, 
-                suggestedTitle: suggestedTitle
-            };
+        } catch (error) {
+            console.error('[BRAIN] Video Search Error:', error);
+            responseText = "Let's just talk about this directly.";
+        }
+    }
 
-          } else if (functionName === 'get_youtube_transcript') {
-            if (!functionArgs.videoId) {
-                responseText = "I seem to have lost track of the video. Let's discuss the topic directly!";
-                const sanitizedText = await GUARDIAN_SANITIZE(responseText, updatedState.lastTopic);
-                return { processedText: sanitizedText, state: updatedState };
-            }
-
-            const transcript = await runFlow(getYoutubeTranscriptFlow, functionArgs);
+    else if (functionName === 'get_youtube_transcript') {
+        if (!args.videoId) {
+            responseText = "Let's discuss the topic directly!";
+        } else {
+            const transcript = await runFlow(getYoutubeTranscriptFlow, args);
             if (!transcript || transcript.startsWith('Could not')) {
                 responseText = `I can't access that transcript right now. What specific part would you like me to explain?`;
-                const sanitizedText = await GUARDIAN_SANITIZE(responseText, updatedState.lastTopic);
-                return { processedText: sanitizedText, state: updatedState };
+            } else {
+                const safeTranscript = transcript.length > 50000 ? transcript.substring(0, 50000) + "..." : transcript;
+                const newMessages: ChatCompletionMessageParam[] = [ ...messages, responseMessage, { role: 'tool', tool_call_id: toolCall.id, content: safeTranscript } ];
+                const secondCompletion = await openai.chat.completions.create({ messages: newMessages, model: 'gpt-4o' });
+                responseText = secondCompletion.choices[0].message.content || "I watched the video. What would you like to know?";
             }
-            
-            const safeTranscript = transcript.length > 50000 ? transcript.substring(0, 50000) + "..." : transcript;
-
-            const newMessages: ChatCompletionMessageParam[] = [ ...messages, responseMessage, { role: 'tool', tool_call_id: toolCall.id, content: safeTranscript } ];
-            const secondCompletion = await openai.chat.completions.create({ messages: newMessages, model: 'gpt-4o' });
-
-            responseText = secondCompletion.choices[0].message.content || "I watched the video. What would you like to know?";
-          }
-        } catch (error) {
-          console.error(`[BRAIN] ERROR during tool execution '${functionName}':`, error);
-          responseText = `I encountered a small hiccup. Let's just talk about it directly.`;
         }
     }
   } else {
-      responseText = responseMessage.content || "I'm here to help you learn!";
+      responseText = responseMessage.content || "I'm here to help!";
   }
   
-  // FINAL SAFETY NET: If we have no topic yet, anchor it to input text
-  if (!updatedState.lastTopic && input.forceWebSearch) {
-      updatedState.lastTopic = input.text;
-  }
+  if (!updatedState.lastTopic && input.forceWebSearch) updatedState.lastTopic = input.text;
 
+  // Pass user interests to sanitizer for fine-tuning
   const sanitizedFinalText = await GUARDIAN_SANITIZE(responseText, updatedState.lastTopic);
   updatedState.lastAssistantMessage = sanitizedFinalText;
 
-  console.log(`[BRAIN] STEP 4: Sending final sanitized text response: "${sanitizedFinalText}"`);
-  return {
-      processedText: sanitizedFinalText,
-      videoData: videoData,
-      state: updatedState,
-      topic: updatedState.lastTopic || input.text, 
-      suggestedTitle: suggestedTitle
-  };
+  return { processedText: sanitizedFinalText, videoData, state: updatedState, topic: updatedState.lastTopic || input.text, suggestedTitle };
 };
