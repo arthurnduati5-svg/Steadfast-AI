@@ -1,0 +1,254 @@
+'use server';
+import OpenAI from 'openai';
+import { runFlow } from '@genkit-ai/flow';
+import { getYoutubeTranscriptFlow } from './get-youtube-transcript';
+import { youtubeSearchFlow } from './youtube-search-flow';
+import { runResearchOrchestrator } from './research-orchestrator';
+import { GUARDIAN_SANITIZE } from '../tools/handlers';
+import { generateChatTitle } from './title-generator';
+// ✅ Import Scope Guardian
+import { isOutOfScope, getDynamicScopeResponse } from '../tools/scope-guardian';
+// ✅ NEW: Import Multilingual Governance
+import { getLanguageGovernance } from '../tools/multilingual-governance';
+const openai = new OpenAI({
+    apiKey: process.env.OPENAI_API_KEY,
+});
+function validateAnswer(studentInput, correctAnswers) {
+    const userAnswer = studentInput.trim().toLowerCase();
+    if (userAnswer.length === 0)
+        return false;
+    return correctAnswers.some(ans => userAnswer.includes(ans.toLowerCase()));
+}
+export async function emotionalAICopilot(input) {
+    const rawInterests = input.preferences?.interests || [];
+    console.log(`[🔍 TRACE] Student: ${input.studentProfile.name} | Interests: ${rawInterests.join(', ')}`);
+    // ==============================================================================
+    // 🔒 SCOPE GUARDIAN (SAFETY LOCK)
+    // ==============================================================================
+    if (isOutOfScope(input.text)) {
+        console.log(`[🛡️ SCOPE GUARDIAN] Blocked input: "${input.text}"`);
+        return {
+            processedText: getDynamicScopeResponse(input.text),
+            state: input.state,
+            topic: input.state.lastSearchTopic?.[0] || "General",
+            suggestedTitle: input.currentTitle,
+            videoData: undefined,
+            sources: []
+        };
+    }
+    // --- Normal Flow Continues Below ---
+    let updatedState = JSON.parse(JSON.stringify(input.state));
+    if (updatedState.validationAttemptCount === undefined)
+        updatedState.validationAttemptCount = 0;
+    if (updatedState.awaitingPracticeQuestionAnswer === undefined)
+        updatedState.awaitingPracticeQuestionAnswer = false;
+    let responseText = '';
+    let videoData = undefined;
+    let suggestedTitle = undefined;
+    // ==============================================================================
+    // 1. TITLE GENERATION (SMART UPDATE)
+    // ==============================================================================
+    const isGenericTitle = !input.currentTitle ||
+        input.currentTitle === 'New Chat' ||
+        input.currentTitle === 'Untitled';
+    if (isGenericTitle && input.text.length > 1) {
+        const newTitle = await generateChatTitle(input.chatHistory, input.text);
+        if (newTitle && newTitle !== "New Chat" && newTitle !== "General Discussion") {
+            suggestedTitle = newTitle;
+        }
+    }
+    // ==============================================================================
+    // 2. RESEARCH ORCHESTRATOR ROUTING
+    // ==============================================================================
+    if (input.forceWebSearch || updatedState.conversationState === 'awaiting_practice_response') {
+        console.log("[🔍 TRACE] Handing off to Research Orchestrator");
+        const researchResult = await runResearchOrchestrator({
+            query: input.text,
+            lastSearchTopic: updatedState.lastTopic,
+            forceWebSearch: input.forceWebSearch,
+            chatHistory: input.chatHistory.map(m => ({ role: m.role, content: m.content }))
+        });
+        updatedState.conversationState = 'general';
+        let rawResponse = researchResult.reply ||
+            researchResult.response ||
+            "I checked, but I couldn't generate a clear answer. Let's try chatting about it directly.";
+        const sources = researchResult.sources || [];
+        // VIDEO HANDLING
+        if (researchResult.videoData) {
+            const vData = researchResult.videoData;
+            const currentContext = (updatedState.lastTopic || input.text).toLowerCase();
+            const videoTitleLower = (vData.title || "").toLowerCase();
+            const stopWords = ['about', 'what', 'how', 'when', 'why', 'video', 'show', 'me'];
+            const topicKeywords = currentContext.split(' ').filter(w => w.length > 3 && !stopWords.includes(w));
+            const isRelevant = topicKeywords.some(w => videoTitleLower.includes(w)) || videoTitleLower.includes(currentContext);
+            if (isRelevant && vData.id) {
+                videoData = vData;
+                const cleanTitle = (videoData.title || "Educational Video").replace(/[\[\]]/g, '');
+                rawResponse += `\n\n[Watch Video: ${cleanTitle}](https://www.youtube.com/watch?v=${vData.id})`;
+            }
+        }
+        if (researchResult.mode === 'teaching' || researchResult.mode === 'web_research') {
+            updatedState.lastTopic = input.text;
+        }
+        const sanitizedResponse = await GUARDIAN_SANITIZE(rawResponse, updatedState.lastTopic);
+        updatedState.lastAssistantMessage = sanitizedResponse;
+        return {
+            processedText: sanitizedResponse,
+            state: updatedState,
+            topic: updatedState.lastTopic,
+            sources: sources,
+            videoData: videoData,
+            suggestedTitle: suggestedTitle
+        };
+    }
+    // ==============================================================================
+    // 3. PRACTICE QUESTION LOGIC
+    // ==============================================================================
+    if (updatedState.awaitingPracticeQuestionAnswer) {
+        const isCorrect = validateAnswer(input.text, updatedState.correctAnswers || []);
+        if (isCorrect) {
+            const topic = updatedState.lastTopic || 'that';
+            responseText = `Excellent 🌟! Mashallah, yes. You understand ${topic}. Ready for the next step?`;
+            updatedState.awaitingPracticeQuestionAnswer = false;
+            updatedState.validationAttemptCount = 0;
+            updatedState.activePracticeQuestion = undefined;
+            updatedState.correctAnswers = [];
+        }
+        else {
+            updatedState.validationAttemptCount = (updatedState.validationAttemptCount || 0) + 1;
+            responseText = updatedState.validationAttemptCount > 1
+                ? "Let us take it slowly. Let's count together."
+                : "Good try, but let's look closer.";
+        }
+        const sanitizedText = await GUARDIAN_SANITIZE(responseText, updatedState.lastTopic);
+        updatedState.lastAssistantMessage = sanitizedText;
+        return { processedText: sanitizedText, state: updatedState, suggestedTitle: suggestedTitle };
+    }
+    // ==============================================================================
+    // 4. DYNAMIC SYSTEM PROMPT (MULTILINGUAL GOVERNANCE)
+    // ==============================================================================
+    const languageMode = input.preferences?.preferredLanguage || 'english';
+    // ✅ LOG GOVERNANCE LOADING (VERIFY STRICT RULES ARE ACTIVE)
+    console.log(`[GOVERNANCE] Loading Strict Rules for: ${languageMode}`);
+    // ✅ NEW: Fetch Governed Prompt based on Language + Interests
+    const TEACHING_PROMPT = getLanguageGovernance(languageMode, rawInterests);
+    const RESEARCH_PROMPT = `
+  **IDENTITY**
+  Calm, neutral research assistant.
+  **RULES**
+  - Factual, clear, direct.
+  - No metaphors unless helpful.
+  - Direct answers.
+  `;
+    const isResearchIntent = input.text.toLowerCase().includes('search') || input.text.toLowerCase().includes('find') || input.forceWebSearch;
+    const systemMessage = isResearchIntent ? RESEARCH_PROMPT : TEACHING_PROMPT;
+    const messages = [
+        { role: 'system', content: systemMessage },
+        ...input.chatHistory.map(msg => ({
+            role: (msg.role === 'model' ? 'assistant' : msg.role),
+            content: msg.content
+        })),
+        { role: 'user', content: input.text },
+    ];
+    if (input.fileData) {
+        const lastMsgIndex = messages.length - 1;
+        if (messages[lastMsgIndex].role === 'user') {
+            messages[lastMsgIndex] = {
+                role: 'user',
+                content: [
+                    { type: 'text', text: input.text },
+                    { type: 'image_url', image_url: { url: `data:${input.fileData.type};base64,${input.fileData.base64}` } }
+                ]
+            };
+        }
+    }
+    // ==============================================================================
+    // 5. TOOLS & EXECUTION
+    // ==============================================================================
+    const tools = [
+        { type: 'function', function: { name: 'ask_practice_question', description: 'Ask validation question.', parameters: { type: 'object', properties: { question: { type: 'string' }, correctAnswers: { type: 'string' }, topic: { type: 'string' } }, required: ['question', 'correctAnswers', 'topic'] } } },
+        { type: 'function', function: { name: 'youtube_search', description: 'Search educational video.', parameters: { type: 'object', properties: { query: { type: 'string' } }, required: ['query'] } } },
+        { type: 'function', function: { name: 'get_youtube_transcript', description: "Fetch transcript.", parameters: { type: 'object', properties: { videoId: { type: 'string' } }, required: ['videoId'] } } },
+    ];
+    console.log('[BRAIN] Querying OpenAI...');
+    const completion = await openai.chat.completions.create({
+        messages: messages,
+        model: 'gpt-4o-mini',
+        tools: tools,
+        tool_choice: 'auto',
+    });
+    const responseMessage = completion.choices[0].message;
+    if (responseMessage.tool_calls && responseMessage.tool_calls.length > 0) {
+        const toolCall = responseMessage.tool_calls[0];
+        const functionName = toolCall.function.name;
+        const args = JSON.parse(toolCall.function.arguments);
+        if (functionName === 'ask_practice_question') {
+            updatedState.awaitingPracticeQuestionAnswer = true;
+            updatedState.activePracticeQuestion = args.question;
+            updatedState.correctAnswers = args.correctAnswers.split(',').map((a) => a.trim().toLowerCase());
+            updatedState.lastTopic = args.topic;
+            updatedState.validationAttemptCount = 0;
+            responseText = `Here is a small challenge: What is (${updatedState.activePracticeQuestion})?`;
+        }
+        else if (functionName === 'youtube_search') {
+            try {
+                const results = await runFlow(youtubeSearchFlow, { query: args.query });
+                if (results && results.length > 0) {
+                    const video = results[0];
+                    const currentTopic = updatedState.lastTopic || input.text;
+                    const vidTitleLower = (video.title || "").toLowerCase();
+                    const contextLower = currentTopic.toLowerCase();
+                    // FUZZY MATCH
+                    const stopWords = ['what', 'how', 'when', 'video', 'about'];
+                    const keywords = contextLower.split(' ').filter(w => w.length > 3 && !stopWords.includes(w));
+                    const isRelevant = keywords.some(k => vidTitleLower.includes(k)) || vidTitleLower.includes(contextLower);
+                    if (isRelevant) {
+                        const safeChannel = (video.channel || video.channelTitle || '').replace('Unknown Channel', '');
+                        videoData = { id: video.id, title: video.title, channel: safeChannel, thumbnail: video.thumbnailUrl };
+                        const cleanTitle = (video.title || "Video").replace(/[\[\]]/g, '');
+                        // ✅ Text Link Only
+                        responseText = `I found a great video for you: "${video.title}".\n\n[Watch Video: ${cleanTitle}](https://www.youtube.com/watch?v=${video.id})`;
+                    }
+                    else {
+                        responseText = "Let me explain this to you step by step myself!";
+                    }
+                }
+                else {
+                    responseText = "Let's explore this topic directly together.";
+                }
+            }
+            catch (error) {
+                console.error('[BRAIN] Video Search Error:', error);
+                responseText = "Let's just talk about this directly.";
+            }
+        }
+        else if (functionName === 'get_youtube_transcript') {
+            if (!args.videoId) {
+                responseText = "Let's discuss the topic directly!";
+            }
+            else {
+                const transcript = await runFlow(getYoutubeTranscriptFlow, args);
+                if (!transcript || transcript.startsWith('Could not')) {
+                    responseText = `I can't access that transcript right now. What specific part would you like me to explain?`;
+                }
+                else {
+                    const safeTranscript = transcript.length > 50000 ? transcript.substring(0, 50000) + "..." : transcript;
+                    const newMessages = [...messages, responseMessage, { role: 'tool', tool_call_id: toolCall.id, content: safeTranscript }];
+                    const secondCompletion = await openai.chat.completions.create({ messages: newMessages, model: 'gpt-4o' });
+                    responseText = secondCompletion.choices[0].message.content || "I watched the video. What would you like to know?";
+                }
+            }
+        }
+    }
+    else {
+        responseText = responseMessage.content || "I'm here to help!";
+    }
+    if (!updatedState.lastTopic && input.forceWebSearch)
+        updatedState.lastTopic = input.text;
+    // Pass user interests to sanitizer for fine-tuning
+    const sanitizedFinalText = await GUARDIAN_SANITIZE(responseText, updatedState.lastTopic);
+    updatedState.lastAssistantMessage = sanitizedFinalText;
+    return { processedText: sanitizedFinalText, videoData, state: updatedState, topic: updatedState.lastTopic || input.text, suggestedTitle };
+}
+;
+//# sourceMappingURL=emotional-ai-copilot.js.map

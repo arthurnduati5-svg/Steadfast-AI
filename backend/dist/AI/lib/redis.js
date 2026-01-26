@@ -1,0 +1,61 @@
+import { createClient } from 'redis';
+import 'dotenv/config';
+const REDIS_URL = process.env.REDIS_URL || "redis://default:BTBiyWPQQzFYUFHDZrjnmNhRdnuQoLRd@caboose.proxy.rlwy.net:44313";
+let clientInstance = null;
+let isConnecting = false;
+// Initialize client immediately but don't connect yet
+const client = createClient({
+    url: REDIS_URL,
+    // CRITICAL: Fail fast if disconnected. 
+    // Don't queue commands in memory (which causes hangs/crashes if Redis is down)
+    disableOfflineQueue: true,
+    socket: {
+        connectTimeout: 5000, // Give up after 5 seconds
+        reconnectStrategy: (retries) => {
+            // Exponential backoff: wait longer between retries, max 3 seconds
+            // If retries > 10, stop trying for a while (return error) to stop log spam
+            if (retries > 10) {
+                console.warn('[Redis] Too many reconnect attempts. Cooling down.');
+                return 5000;
+            }
+            return Math.min(retries * 100, 3000);
+        }
+    }
+});
+// Global error handler to prevent crashing the process
+client.on('error', (err) => {
+    // Suppress the log spam for common connectivity issues
+    if (err.message.includes('ECONNRESET') || err.message.includes('Socket closed')) {
+        // Silent fail or low-level debug
+        // console.debug('[Redis] Connection lost (handled).'); 
+    }
+    else {
+        console.error('[Redis] Client Error:', err.message);
+    }
+});
+client.on('connect', () => console.log('[Redis] Connected.'));
+client.on('ready', () => console.log('[Redis] Ready.'));
+client.on('end', () => { });
+export async function getRedisClient() {
+    // If ready, return immediately
+    if (client.isOpen && client.isReady) {
+        return client;
+    }
+    // If already connecting, return null (fallback to DB) rather than queueing
+    if (isConnecting) {
+        return null;
+    }
+    try {
+        isConnecting = true;
+        await client.connect();
+        isConnecting = false;
+        return client;
+    }
+    catch (error) {
+        isConnecting = false;
+        // Don't throw. Return null so the app falls back to the Database.
+        console.warn('[Redis] Connection failed. Using Database fallback.');
+        return null;
+    }
+}
+//# sourceMappingURL=redis.js.map

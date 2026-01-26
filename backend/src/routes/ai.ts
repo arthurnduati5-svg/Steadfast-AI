@@ -10,7 +10,7 @@ import { ConversationState } from '../lib/types';
 import { Prisma } from '@prisma/client';
 
 // ✅ IMPORT THE BRAIN & PREFERENCE SERVICE
-import { emotionalAICopilot } from '../../../src/ai/flows/emotional-ai-copilot'; 
+import { emotionalAICopilot } from '@/ai/flows/emotional-ai-copilot'; 
 import { getOrCreateCopilotPreferences } from '../services/aiPreferenceService';
 
 const router = Router();
