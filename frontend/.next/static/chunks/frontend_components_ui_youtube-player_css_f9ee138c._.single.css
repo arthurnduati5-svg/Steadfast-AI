@@ -1,0 +1,76 @@
+/* [project]/frontend/components/ui/youtube-player.css [app-client] (css) */
+.youtube-player {
+  resize: none;
+  background-color: #000;
+  border-radius: 1rem;
+  width: 100%;
+  padding-top: 56.25%;
+  transition: width .1s, height .1s;
+  position: relative;
+  overflow: hidden;
+}
+
+.youtube-iframe {
+  pointer-events: auto;
+  width: 100%;
+  height: 100%;
+  position: absolute;
+  top: 0;
+  left: 0;
+}
+
+.youtube-player.dragging .youtube-iframe {
+  pointer-events: none !important;
+}
+
+.youtube-player.mini-player {
+  resize: both;
+  border: 1px solid #ffffff1a;
+  width: 450px;
+  min-width: 280px;
+  max-width: 95vw;
+  height: 254px;
+  min-height: 160px;
+  max-height: 95vh;
+  overflow: hidden;
+  box-shadow: 0 10px 30px #00000080;
+  border-radius: .5rem !important;
+  padding-top: 0 !important;
+}
+
+.video-controls {
+  z-index: 20;
+  opacity: 0;
+  background: linear-gradient(#000000d9 0%, #0000 100%);
+  justify-content: flex-end;
+  align-items: center;
+  width: 100%;
+  height: 36px;
+  padding: 0 8px;
+  transition: opacity .2s ease-in-out;
+  display: flex;
+  position: absolute;
+  top: 0;
+  left: 0;
+}
+
+.youtube-player:hover .video-controls, .youtube-player.mini-player .video-controls, .youtube-player.dragging .video-controls {
+  opacity: 1;
+}
+
+.video-controls Button {
+  border-radius: 4px;
+  justify-content: center;
+  align-items: center;
+  width: 28px;
+  height: 28px;
+  display: flex;
+  color: #fff !important;
+  background-color: #00000080 !important;
+}
+
+.video-controls Button:hover {
+  background-color: #000000e6 !important;
+}
+
+/*# sourceMappingURL=frontend_components_ui_youtube-player_css_f9ee138c._.single.css.map*/

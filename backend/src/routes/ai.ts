@@ -5,12 +5,12 @@ import prisma from '../utils/prismaClient';
 import { getRedisClient } from '../lib/redis';
 import pinecone from '../lib/vectorClient';
 import { OpenAI } from 'openai';
-import { summarizationQueue, embeddingQueue, personalizationQueue } from '../workers'; 
+import { runSummarizationTask, runEmbeddingTask, runPersonalizationTask } from '../workers';
 import { ConversationState } from '../lib/types';
 import { Prisma } from '@prisma/client';
 
 // ✅ IMPORT THE BRAIN & PREFERENCE SERVICE
-import { emotionalAICopilot } from '@/ai/flows/emotional-ai-copilot'; 
+import { emotionalAICopilot } from '@/ai/flows/emotional-ai-copilot';
 import { getOrCreateCopilotPreferences } from '../services/aiPreferenceService';
 
 const router = Router();
@@ -42,7 +42,7 @@ const generateTopicInBackground = async (sessionId: string, firstMessage: string
       max_tokens: 15,
     });
     const suggestedTopic = topicCompletion.choices?.[0]?.message?.content?.trim().replace(/^"|"$/g, '');
-    
+
     if (suggestedTopic) {
       await prisma.chatSession.update({
         where: { id: sessionId },
@@ -69,10 +69,10 @@ const getOrCreateStudentProfile = async (studentId: string) => {
 
     const profile = await prisma.studentProfile.upsert({
       where: { userId: studentId },
-      update: {}, 
+      update: {},
       create: {
         userId: studentId,
-        name: 'Student', 
+        name: 'Student',
         email: `${studentId}@school.com`,
         gradeLevel: 'Primary',
         profileCompleted: false,
@@ -87,7 +87,7 @@ const getOrCreateStudentProfile = async (studentId: string) => {
 
   } catch (dbError) {
     console.error(`[Profile] CRITICAL DB ERROR for ${studentId}:`, dbError);
-    throw dbError; 
+    throw dbError;
   }
 };
 
@@ -97,21 +97,21 @@ const getOrCreateStudentProfile = async (studentId: string) => {
 router.get('/preload', schoolAuthMiddleware, async (req: AuthedRequest, res: Response) => {
   try {
     const studentUserId = req.user!.id;
-    
+
     await getOrCreateStudentProfile(studentUserId);
 
     const [lastSession, history] = await Promise.all([
-        prisma.chatSession.findFirst({
-            where: { studentId: studentUserId, messages: { some: {} } },
-            orderBy: { updatedAt: 'desc' },
-            include: { messages: { orderBy: { timestamp: 'asc' } } },
-        }),
-        prisma.chatSession.findMany({
-            where: { studentId: studentUserId, messages: { some: {} } },
-            take: 10,
-            orderBy: { updatedAt: 'desc' },
-            include: { messages: { orderBy: { timestamp: 'asc' }, take: 1 } },
-        })
+      prisma.chatSession.findFirst({
+        where: { studentId: studentUserId, messages: { some: {} } },
+        orderBy: { updatedAt: 'desc' },
+        include: { messages: { orderBy: { timestamp: 'asc' } } },
+      }),
+      prisma.chatSession.findMany({
+        where: { studentId: studentUserId, messages: { some: {} } },
+        take: 10,
+        orderBy: { updatedAt: 'desc' },
+        include: { messages: { orderBy: { timestamp: 'asc' }, take: 1 } },
+      })
     ]);
 
     const filteredHistory = history.filter(h => h.id !== lastSession?.id);
@@ -119,21 +119,21 @@ router.get('/preload', schoolAuthMiddleware, async (req: AuthedRequest, res: Res
     res.status(200).send({
       ready: true,
       studentId: studentUserId,
-      lastSession: lastSession ? { 
-        ...lastSession, 
+      lastSession: lastSession ? {
+        ...lastSession,
         messages: lastSession.messages.map((msg: any) => ({
-            ...msg, 
-            timestamp: msg.timestamp.toISOString(),
-            videoData: (msg.metadata as any)?.videoData 
-        })), 
+          ...msg,
+          timestamp: msg.timestamp.toISOString(),
+          videoData: (msg.metadata as any)?.videoData
+        })),
         createdAt: lastSession.createdAt.toISOString(),
         updatedAt: lastSession.updatedAt.toISOString(),
-        conversationState: (lastSession.metadata as any || DEFAULT_CONVERSATION_STATE) 
+        conversationState: (lastSession.metadata as any || DEFAULT_CONVERSATION_STATE)
       } : null,
       history: filteredHistory.map((session: any) => ({
         id: session.id,
         title: session.topic || 'New Chat',
-        createdAt: session.createdAt.toISOString(), 
+        createdAt: session.createdAt.toISOString(),
         updatedAt: session.updatedAt.toISOString(),
         firstMessage: session.messages[0]?.content || null,
       }))
@@ -153,23 +153,23 @@ router.post('/new-session', schoolAuthMiddleware, async (req: AuthedRequest, res
     const studentUserId = req.user!.id;
 
     await getOrCreateStudentProfile(studentUserId);
-    
+
     try {
-        await prisma.chatSession.updateMany({
-            where: { studentId: studentUserId, isActive: true },
-            data: { isActive: false },
-        });
+      await prisma.chatSession.updateMany({
+        where: { studentId: studentUserId, isActive: true },
+        data: { isActive: false },
+      });
     } catch (e) { console.warn('[New Session] Archive warning:', e); }
 
     const newSession = await prisma.chatSession.create({
-      data: { 
-        studentId: studentUserId, 
+      data: {
+        studentId: studentUserId,
         topic: 'New Chat',
         isActive: true,
         metadata: DEFAULT_CONVERSATION_STATE,
       },
     });
-    
+
     res.status(200).send({
       sessionId: newSession.id,
       topic: newSession.topic,
@@ -199,16 +199,16 @@ router.post('/chat', schoolAuthMiddleware, rateLimiter, async (req: AuthedReques
     const [session, preferences] = await Promise.all([
       prisma.chatSession.findUnique({
         where: { id: sessionId },
-        include: { 
-            student: { select: { name: true, gradeLevel: true, userId: true } }, 
-            messages: { orderBy: { timestamp: 'asc' }, take: 30 } 
-        } 
+        include: {
+          student: { select: { name: true, gradeLevel: true, userId: true } },
+          messages: { orderBy: { timestamp: 'asc' }, take: 30 }
+        }
       }),
       getOrCreateCopilotPreferences(studentId)
     ]);
 
     if (!session || session.student.userId !== studentId) {
-        return res.status(404).send({ message: 'Session not found.' });
+      return res.status(404).send({ message: 'Session not found.' });
     }
 
     await prisma.chatMessage.create({
@@ -216,52 +216,52 @@ router.post('/chat', schoolAuthMiddleware, rateLimiter, async (req: AuthedReques
     });
 
     const aiResult = await emotionalAICopilot({
-        text: message,
-        chatHistory: session.messages.map(m => ({ 
-            id: m.id,
-            role: m.role as "user" | "model", 
-            content: m.content,
-            timestamp: m.timestamp 
-        })),
-        state: conversationState || DEFAULT_CONVERSATION_STATE,
-        studentProfile: {
-            name: session.student.name || 'Student',
-            gradeLevel: session.student.gradeLevel || 'Primary'
-        },
-        preferences: {
-            preferredLanguage: preferences.preferredLanguage as any,
-            interests: preferences.interests
-        },
-        memory: { progress: [], mistakes: [] },
-        currentTitle: session.topic || undefined 
+      text: message,
+      chatHistory: session.messages.map(m => ({
+        id: m.id,
+        role: m.role as "user" | "model",
+        content: m.content,
+        timestamp: m.timestamp
+      })),
+      state: conversationState || DEFAULT_CONVERSATION_STATE,
+      studentProfile: {
+        name: session.student.name || 'Student',
+        gradeLevel: session.student.gradeLevel || 'Primary'
+      },
+      preferences: {
+        preferredLanguage: preferences.preferredLanguage as any,
+        interests: preferences.interests
+      },
+      memory: { progress: [], mistakes: [] },
+      currentTitle: session.topic || undefined
     });
 
     // Write AI Response with Metadata
     const savedAiMsg = await prisma.chatMessage.create({
-      data: { 
-          sessionId, 
-          role: 'model', 
-          content: aiResult.processedText, 
-          timestamp: new Date(), 
-          messageNumber: session.messages.length + 2,
-          metadata: aiResult.videoData ? { videoData: aiResult.videoData } : undefined
+      data: {
+        sessionId,
+        role: 'model',
+        content: aiResult.processedText,
+        timestamp: new Date(),
+        messageNumber: session.messages.length + 2,
+        metadata: aiResult.videoData ? { videoData: aiResult.videoData } : undefined
       },
     });
 
     // 4. Update Session Metadata & Title (CRITICAL FIX)
     const updateData: any = {
-        metadata: aiResult.state as any, 
-        updatedAt: new Date(),
+      metadata: aiResult.state as any,
+      updatedAt: new Date(),
     };
 
     // Only update title if the AI suggested a new one AND it wasn't already set
     if (aiResult.suggestedTitle && session.topic === 'New Chat') {
-        updateData.topic = aiResult.suggestedTitle;
+      updateData.topic = aiResult.suggestedTitle;
     }
 
     await prisma.chatSession.update({
-        where: { id: sessionId },
-        data: updateData
+      where: { id: sessionId },
+      data: updateData
     });
 
     res.status(200).send({
@@ -275,14 +275,16 @@ router.post('/chat', schoolAuthMiddleware, rateLimiter, async (req: AuthedReques
 
     // Background Tasks
     if (session.messages.length === 0 && session.topic === 'New Chat') {
-       generateTopicInBackground(sessionId, message);
+      generateTopicInBackground(sessionId, message);
     }
-    if (pineconeIndex && embeddingQueue) {
-      embeddingQueue.add('embedding-jobs', { sessionId, studentId, message, aiResponse: aiResult.processedText });
+    // Background Tasks (Fire and Forget)
+    if (session.messages.length === 0 && session.topic === 'New Chat') {
+      generateTopicInBackground(sessionId, message);
     }
-    if (personalizationQueue) {
-      personalizationQueue.add('personalization-jobs', { studentId, userMessage: message, aiResponse: aiResult.processedText });
+    if (pineconeIndex) {
+      runEmbeddingTask(sessionId, studentId, message, aiResult.processedText);
     }
+    runPersonalizationTask(studentId, message, aiResult.processedText);
 
   } catch (error) {
     console.error('[Backend] Error in /chat:', error);
@@ -298,15 +300,15 @@ router.post('/message', schoolAuthMiddleware, rateLimiter, async (req: AuthedReq
     if (!sessionId) return res.status(400).send({ message: 'Session ID required.' });
 
     const count = await prisma.chatMessage.count({ where: { sessionId } });
-    
+
     await Promise.all([
-        prisma.chatMessage.create({
-            data: { sessionId, role: message.role, content: message.content, timestamp: new Date(message.timestamp), messageNumber: count + 1 },
-        }),
-        prisma.chatSession.update({
-            where: { id: sessionId },
-            data: { metadata: conversationState, updatedAt: new Date() },
-        })
+      prisma.chatMessage.create({
+        data: { sessionId, role: message.role, content: message.content, timestamp: new Date(message.timestamp), messageNumber: count + 1 },
+      }),
+      prisma.chatSession.update({
+        where: { id: sessionId },
+        data: { metadata: conversationState, updatedAt: new Date() },
+      })
     ]);
 
     res.status(200).send({ message: 'Message saved' });
@@ -320,7 +322,7 @@ router.post('/message', schoolAuthMiddleware, rateLimiter, async (req: AuthedReq
 router.patch('/session/:id', schoolAuthMiddleware, async (req: AuthedRequest, res: Response) => {
   try {
     const studentUserId = req.user!.id;
-    const { title } = req.body; 
+    const { title } = req.body;
     const sessionId = req.params.id;
 
     console.log(`[BACKEND PATCH] 🚀 Starting Title Update. Session: ${sessionId} | User: ${studentUserId}`);
@@ -328,12 +330,12 @@ router.patch('/session/:id', schoolAuthMiddleware, async (req: AuthedRequest, re
 
     // 1. Verify Session Exists & Belongs to User
     const existingSession = await prisma.chatSession.findFirst({
-        where: { id: sessionId, studentId: studentUserId }
+      where: { id: sessionId, studentId: studentUserId }
     });
 
     if (!existingSession) {
-        console.error(`[BACKEND PATCH] ❌ ERROR: Session NOT FOUND or NOT OWNED by user ${studentUserId}`);
-        return res.status(404).send({ message: 'Session not found.' });
+      console.error(`[BACKEND PATCH] ❌ ERROR: Session NOT FOUND or NOT OWNED by user ${studentUserId}`);
+      return res.status(404).send({ message: 'Session not found.' });
     }
 
     console.log(`[BACKEND PATCH] ✅ Session found. Current Title: "${existingSession.topic}". Attempting DB Write...`);
@@ -369,34 +371,34 @@ router.get('/history', schoolAuthMiddleware, async (req: AuthedRequest, res: Res
     }
 
     const [total, history] = await Promise.all([
-        prisma.chatSession.count({ where: whereClause }),
-        prisma.chatSession.findMany({ 
-            where: whereClause, skip, take: limitNum, orderBy: { updatedAt: 'desc' }, 
-            include: { messages: { orderBy: { timestamp: 'asc' }, take: 1 } } 
-        })
+      prisma.chatSession.count({ where: whereClause }),
+      prisma.chatSession.findMany({
+        where: whereClause, skip, take: limitNum, orderBy: { updatedAt: 'desc' },
+        include: { messages: { orderBy: { timestamp: 'asc' }, take: 1 } }
+      })
     ]);
 
     // SELF-HEALING HISTORY: Rename old "New Chat" sessions using first message
     const sessionsWithTitles = await Promise.all(history.map(async (s) => {
-        let title = s.topic || 'New Chat';
-        if (title === 'New Chat' && s.messages.length > 0) {
-            const firstMsg = s.messages[0].content;
-            const smartTitle = firstMsg.split(' ').slice(0, 5).join(' ') + (firstMsg.length > 30 ? '...' : '');
-            await prisma.chatSession.update({ where: { id: s.id }, data: { topic: smartTitle } });
-            title = smartTitle;
-        }
-        return {
-            id: s.id,
-            title: title,
-            updatedAt: s.updatedAt.toISOString(),
-            createdAt: s.createdAt.toISOString(),
-            firstMessage: s.messages[0]?.content || null
-        };
+      let title = s.topic || 'New Chat';
+      if (title === 'New Chat' && s.messages.length > 0) {
+        const firstMsg = s.messages[0].content;
+        const smartTitle = firstMsg.split(' ').slice(0, 5).join(' ') + (firstMsg.length > 30 ? '...' : '');
+        runSummarizationTask(s.id, studentUserId);
+        title = smartTitle;
+      }
+      return {
+        id: s.id,
+        title: title,
+        updatedAt: s.updatedAt.toISOString(),
+        createdAt: s.createdAt.toISOString(),
+        firstMessage: s.messages[0]?.content || null
+      };
     }));
 
     res.status(200).send({
-        sessions: sessionsWithTitles,
-        pagination: { page: pageNum, limit: limitNum, total, totalPages: Math.ceil(total / limitNum) }
+      sessions: sessionsWithTitles,
+      pagination: { page: pageNum, limit: limitNum, total, totalPages: Math.ceil(total / limitNum) }
     });
   } catch (error) {
     res.status(500).send({ message: 'Internal server error' });
@@ -409,7 +411,7 @@ router.get('/session/:id', schoolAuthMiddleware, async (req: AuthedRequest, res:
     prisma.chatSession.updateMany({
       where: { studentId: studentUserId, isActive: true, id: { not: req.params.id } },
       data: { isActive: false },
-    }).catch(e => {});
+    }).catch(e => { });
 
     const session = await prisma.chatSession.update({
       where: { id: req.params.id, studentId: studentUserId },
@@ -422,10 +424,10 @@ router.get('/session/:id', schoolAuthMiddleware, async (req: AuthedRequest, res:
     res.status(200).send({
       ...session,
       messages: session.messages.map((msg: any) => ({
-          ...msg, 
-          timestamp: msg.timestamp.toISOString(),
-          // ✅ RETURN SAVED VIDEO DATA
-          videoData: (msg.metadata as any)?.videoData 
+        ...msg,
+        timestamp: msg.timestamp.toISOString(),
+        // ✅ RETURN SAVED VIDEO DATA
+        videoData: (msg.metadata as any)?.videoData
       })),
       conversationState: (session.metadata as any || DEFAULT_CONVERSATION_STATE)
     });
@@ -437,7 +439,7 @@ router.get('/session/:id', schoolAuthMiddleware, async (req: AuthedRequest, res:
 router.post('/session/:id/delete', schoolAuthMiddleware, async (req: AuthedRequest, res: Response) => {
   try {
     const { count } = await prisma.chatSession.deleteMany({
-        where: { id: req.params.id, studentId: req.user!.id }
+      where: { id: req.params.id, studentId: req.user!.id }
     });
     if (count === 0) return res.status(404).send({ message: 'Session not found' });
     res.status(200).send({ message: 'Session deleted' });
@@ -456,36 +458,36 @@ router.get('/search', schoolAuthMiddleware, async (req: AuthedRequest, res: Resp
     const promises = [];
 
     if (mode === 'keyword' || mode === 'hybrid') {
-        promises.push(
-            prisma.chatSession.findMany({
-                where: {
-                    studentId,
-                    messages: { some: {} },
-                    OR: [
-                        { topic: { contains: query, mode: 'insensitive' } },
-                        { messages: { some: { content: { contains: query, mode: 'insensitive' } } } }
-                    ]
-                },
-                select: { id: true, topic: true, updatedAt: true },
-                take: 10
-            }).then(sess => sess.map(s => ({ ...s, source: 'keyword', relevance: 0.5 })))
-        );
+      promises.push(
+        prisma.chatSession.findMany({
+          where: {
+            studentId,
+            messages: { some: {} },
+            OR: [
+              { topic: { contains: query, mode: 'insensitive' } },
+              { messages: { some: { content: { contains: query, mode: 'insensitive' } } } }
+            ]
+          },
+          select: { id: true, topic: true, updatedAt: true },
+          take: 10
+        }).then(sess => sess.map(s => ({ ...s, source: 'keyword', relevance: 0.5 })))
+      );
     }
 
     if ((mode === 'semantic' || mode === 'hybrid') && pineconeIndex) {
-        promises.push(
-            openai.embeddings.create({ model: 'text-embedding-ada-002', input: query })
-            .then(async (emb) => {
-                const vec = emb.data[0].embedding;
-                const matches = await pineconeIndex.query({
-                    vector: vec, topK: 10, filter: { studentId: { $eq: studentId } }
-                });
-                const ids = matches.matches?.map(m => m.id) || [];
-                if (ids.length === 0) return [];
-                const sessions = await prisma.chatSession.findMany({ where: { id: { in: ids } }, select: { id: true, topic: true, updatedAt: true } });
-                return sessions.map(s => ({ ...s, source: 'semantic', relevance: 0.8 }));
-            })
-        );
+      promises.push(
+        openai.embeddings.create({ model: 'text-embedding-ada-002', input: query })
+          .then(async (emb) => {
+            const vec = emb.data[0].embedding;
+            const matches = await pineconeIndex.query({
+              vector: vec, topK: 10, filter: { studentId: { $eq: studentId } }
+            });
+            const ids = matches.matches?.map(m => m.id) || [];
+            if (ids.length === 0) return [];
+            const sessions = await prisma.chatSession.findMany({ where: { id: { in: ids } }, select: { id: true, topic: true, updatedAt: true } });
+            return sessions.map(s => ({ ...s, source: 'semantic', relevance: 0.8 }));
+          })
+      );
     }
 
     const searchResults = await Promise.all(promises);
@@ -509,7 +511,7 @@ router.get('/preferences', schoolAuthMiddleware, async (req: AuthedRequest, res:
 router.post('/preferences/update', schoolAuthMiddleware, async (req: AuthedRequest, res: Response) => {
   try {
     const studentId = req.user!.id;
-    const { preferredLanguage, interests } = req.body; 
+    const { preferredLanguage, interests } = req.body;
 
     await prisma.copilotPreferences.upsert({
       where: { userId: studentId },
@@ -527,35 +529,35 @@ router.post('/preferences/update', schoolAuthMiddleware, async (req: AuthedReque
 });
 
 router.get('/memory/student', schoolAuthMiddleware, async (req: AuthedRequest, res: Response) => {
-    try {
-        const studentId = req.user!.id;
-        const redis = await getRedisClient();
-        if (redis) {
-            const cached = await redis.get(`memory:${studentId}`);
-            if (cached) return res.status(200).send(JSON.parse(cached));
-        }
-        const [progress, mistakes] = await Promise.all([
-            prisma.progress.findMany({ where: { studentId } }),
-            prisma.mistake.findMany({ where: { studentId } })
-        ]);
-        if (redis) await redis.set(`memory:${studentId}`, JSON.stringify({ progress, mistakes }), { EX: 3600 });
-        res.status(200).send({ progress, mistakes });
-    } catch (e) { res.status(500).send({ message: 'Error' }); }
+  try {
+    const studentId = req.user!.id;
+    const redis = await getRedisClient();
+    if (redis) {
+      const cached = await redis.get(`memory:${studentId}`);
+      if (cached) return res.status(200).send(JSON.parse(cached));
+    }
+    const [progress, mistakes] = await Promise.all([
+      prisma.progress.findMany({ where: { studentId } }),
+      prisma.mistake.findMany({ where: { studentId } })
+    ]);
+    if (redis) await redis.set(`memory:${studentId}`, JSON.stringify({ progress, mistakes }), { EX: 3600 });
+    res.status(200).send({ progress, mistakes });
+  } catch (e) { res.status(500).send({ message: 'Error' }); }
 });
 
 router.post('/memory/update', schoolAuthMiddleware, async (req: AuthedRequest, res: Response) => {
-    try {
-        const { type, data } = req.body;
-        const studentId = req.user!.id;
-        if (type === 'progress') {
-            await prisma.progress.upsert({ where: { id: data.id || 'new' }, create: { ...data, studentId }, update: data });
-        } else if (type === 'mistake') {
-            await prisma.mistake.create({ data: { ...data, studentId } });
-        }
-        const redis = await getRedisClient();
-        if (redis) await redis.del(`memory:${studentId}`);
-        res.status(200).send({ message: 'Updated' });
-    } catch (e) { res.status(500).send({ message: 'Error' }); }
+  try {
+    const { type, data } = req.body;
+    const studentId = req.user!.id;
+    if (type === 'progress') {
+      await prisma.progress.upsert({ where: { id: data.id || 'new' }, create: { ...data, studentId }, update: data });
+    } else if (type === 'mistake') {
+      await prisma.mistake.create({ data: { ...data, studentId } });
+    }
+    const redis = await getRedisClient();
+    if (redis) await redis.del(`memory:${studentId}`);
+    res.status(200).send({ message: 'Updated' });
+  } catch (e) { res.status(500).send({ message: 'Error' }); }
 });
 
 export default router;

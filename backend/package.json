@@ -5,7 +5,7 @@
   "scripts": {
     "build": "npx tsc",
     "start": "node dist/index.js",
-    "dev": "nodemon --exec node --require ts-node/register --require tsconfig-paths/register src/index.ts",
+    "dev": "nodemon --exec npx tsx src/index.ts",
     "test": "echo \"Error: no test specified\" && exit 1",
     "seed": "ts-node prisma/seed.ts"
   },
@@ -16,14 +16,13 @@
   "dependencies": {
     "@pinecone-database/pinecone": "^6.1.2",
     "@prisma/client": "^6.16.3",
-    "@types/ioredis": "^5.0.0",
     "cors": "^2.8.5",
     "dotenv": "^17.2.3",
     "express": "^5.1.0",
-    "ioredis": "^5.8.1",
     "jsonwebtoken": "^9.0.2",
     "openai": "^6.1.0",
     "pino": "^10.0.0",
+    "redis": "^5.10.0",
     "winston": "^3.18.3"
   },
   "devDependencies": {
@@ -41,8 +40,8 @@
     "@types/redis": "^4.0.10",
     "nodemon": "^3.1.4",
     "prisma": "^6.16.3",
-    "ts-node": "^10.9.2",
     "tsconfig-paths": "^4.2.0",
+    "tsx": "^4.21.0",
     "typescript": "^5.5.4"
   }
 }

@@ -1,0 +1,94 @@
+# Project Dependencies
+
+This project consists of two main parts: the Root (Frontend/Next.js/AI) and the Backend.
+Below are the production dependencies required for each.
+
+## 1. Root / Frontend / AI (`./package.json`)
+Install by running `npm install` in the root directory.
+
+- @genkit-ai/dotprompt
+- @genkit-ai/flow
+- @genkit-ai/googleai
+- @genkit-ai/next
+- @hookform/resolvers
+- @prisma/client
+- @radix-ui/react-accordion
+- @radix-ui/react-alert-dialog
+- @radix-ui/react-avatar
+- @radix-ui/react-checkbox
+- @radix-ui/react-collapsible
+- @radix-ui/react-dialog
+- @radix-ui/react-dropdown-menu
+- @radix-ui/react-label
+- @radix-ui/react-menubar
+- @radix-ui/react-popover
+- @radix-ui/react-progress
+- @radix-ui/react-radio-group
+- @radix-ui/react-scroll-area
+- @radix-ui/react-select
+- @radix-ui/react-separator
+- @radix-ui/react-slider
+- @radix-ui/react-slot
+- @radix-ui/react-switch
+- @radix-ui/react-tabs
+- @radix-ui/react-toast
+- @radix-ui/react-tooltip
+- axios
+- bullmq
+- cheerio
+- class-variance-authority
+- clsx
+- date-fns
+- dotenv
+- embla-carousel-react
+- firebase
+- framer-motion
+- genkit
+- genkitx-openai
+- google-search-results-nodejs
+- ioredis
+- jsonwebtoken
+- lucide-react
+- mathjs
+- next
+- openai
+- patch-package
+- puppeteer
+- react
+- react-day-picker
+- react-dom
+- react-hook-form
+- react-markdown
+- react-youtube
+- recharts
+- redis
+- remark-gfm
+- serpapi
+- tailwind-merge
+- tailwindcss-animate
+- youtube-search-api
+- youtube-transcript
+- zod
+
+## 2. Backend (`./backend/package.json`)
+Install by running `cd backend && npm install`.
+
+- @pinecone-database/pinecone
+- @prisma/client
+- @types/ioredis
+- cors
+- dotenv
+- express
+- ioredis
+- jsonwebtoken
+- openai
+- pino
+- winston
+
+## Installation Sumary
+To install everything, run:
+```bash
+npm install
+cd backend
+npm install
+```

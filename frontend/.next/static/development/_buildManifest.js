@@ -1,0 +1,1 @@
+self.__BUILD_MANIFEST = {"__rewrites":{"afterFiles":[{"source":"/api/:path*"}],"beforeFiles":[],"fallback":[]},"/_app":["static/chunks/pages/_app.js"],"/_error":["static/chunks/pages/_error.js"],"/api/auth/mock-token":["static/chunks/pages/api/auth/mock-token.js"],"sortedPages":["/_app","/_error","/api/auth/mock-token"]};self.__BUILD_MANIFEST_CB && self.__BUILD_MANIFEST_CB()

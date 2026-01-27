@@ -1,7 +1,7 @@
 import { createClient, RedisClientType } from 'redis';
 import 'dotenv/config';
 
-const REDIS_URL = process.env.REDIS_URL || "redis://default:BTBiyWPQQzFYUFHDZrjnmNhRdnuQoLRd@caboose.proxy.rlwy.net:44313";
+const REDIS_URL = process.env.REDIS_URL || "redis://default:IPiAvuqGvjkFPREUfxmIgufgeGXomuiU@nozomi.proxy.rlwy.net:54286";
 
 let clientInstance: RedisClientType | null = null;
 let isConnecting = false;
@@ -11,15 +11,16 @@ const client = createClient({
   url: REDIS_URL,
   // CRITICAL: Fail fast if disconnected. 
   // Don't queue commands in memory (which causes hangs/crashes if Redis is down)
-  disableOfflineQueue: true, 
+  disableOfflineQueue: true,
   socket: {
-    connectTimeout: 5000, // Give up after 5 seconds
+    connectTimeout: 15000, // Increased to 15 seconds for remote Railway
+    family: 4,            // Force IPv4 to avoid IPv6 issues on Windows
     reconnectStrategy: (retries) => {
       // Exponential backoff: wait longer between retries, max 3 seconds
       // If retries > 10, stop trying for a while (return error) to stop log spam
       if (retries > 10) {
         console.warn('[Redis] Too many reconnect attempts. Cooling down.');
-        return 5000; 
+        return 5000;
       }
       return Math.min(retries * 100, 3000);
     }
@@ -49,7 +50,7 @@ export async function getRedisClient(): Promise<RedisClientType | null> {
 
   // If already connecting, return null (fallback to DB) rather than queueing
   if (isConnecting) {
-    return null; 
+    return null;
   }
 
   try {
