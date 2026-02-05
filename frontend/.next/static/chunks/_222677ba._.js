@@ -2622,10 +2622,9 @@ var _s = __turbopack_context__.k.signature();
 ;
 ;
 ;
-const ChatInputBar = ({ input, setInput, handleSendMessage, isLoading, selectedFile, handleFileChange, handleRemoveFile, fileInputRef, forceWebSearch, setForceWebSearch, includeVideos, setIncludeVideos, level, setLevel, languageHint, setLanguageHint })=>{
+const ChatInputBar = ({ input, setInput, handleSendMessage, isLoading, selectedFile, handleFileChange, handleRemoveFile, fileInputRef, forceWebSearch, setForceWebSearch, includeVideos, setIncludeVideos, level, setLevel, languageHint, setLanguageHint, isVoiceRecording, setIsVoiceRecording })=>{
     _s();
     const [isMenuOpen, setIsMenuOpen] = (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$index$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["useState"])(false);
-    const [isVoiceRecording, setIsVoiceRecording] = (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$index$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["useState"])(false);
     const [isSearchOptionsMenuOpen, setIsSearchOptionsMenuOpen] = (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$index$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["useState"])(false);
     const plusButtonRef = (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$index$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["useRef"])(null);
     const plusMenuRef = (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$index$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["useRef"])(null);
@@ -2659,14 +2658,63 @@ const ChatInputBar = ({ input, setInput, handleSendMessage, isLoading, selectedF
     const handlePlusClick = ()=>{
         setIsMenuOpen(!isMenuOpen);
     };
-    const handleVoiceClick = ()=>{
-        setIsVoiceRecording(!isVoiceRecording);
-        // In a real implementation, you would use the Web Speech API here.
-        // For now, we just toggle the state.
+    const handleVoiceClick = async ()=>{
         if (!isVoiceRecording) {
-            setInput("Voice input is being transcribed...");
+            // Start recording
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({
+                    audio: true
+                });
+                const mediaRecorder = new MediaRecorder(stream);
+                const audioChunks = [];
+                mediaRecorder.ondataavailable = (event)=>{
+                    audioChunks.push(event.data);
+                };
+                mediaRecorder.onstop = async ()=>{
+                    const audioBlob = new Blob(audioChunks, {
+                        type: 'audio/webm'
+                    });
+                    // Stop all tracks to release microphone
+                    stream.getTracks().forEach((track)=>track.stop());
+                    // Send to STT endpoint
+                    const formData = new FormData();
+                    formData.append('audio', audioBlob, 'recording.webm');
+                    try {
+                        const response = await fetch('/api/copilot/stt', {
+                            method: 'POST',
+                            headers: {
+                                'Authorization': `Bearer ${localStorage.getItem('token')}`
+                            },
+                            body: formData
+                        });
+                        if (response.ok) {
+                            const data = await response.json();
+                            setInput(data.text || '');
+                        } else {
+                            console.error('STT failed:', await response.text());
+                            setInput('');
+                        }
+                    } catch (error) {
+                        console.error('Error sending audio to STT:', error);
+                        setInput('');
+                    }
+                    setIsVoiceRecording(false);
+                };
+                mediaRecorder.start();
+                setIsVoiceRecording(true);
+                // Store the mediaRecorder instance for stopping later
+                window._currentMediaRecorder = mediaRecorder;
+            } catch (error) {
+                console.error('Error accessing microphone:', error);
+                alert('Could not access microphone. Please ensure permissions are granted.');
+            }
         } else {
-            setInput("");
+            // Stop recording
+            const mediaRecorder = window._currentMediaRecorder;
+            if (mediaRecorder && mediaRecorder.state === 'recording') {
+                mediaRecorder.stop();
+            }
+            setIsVoiceRecording(false);
         }
     };
     const handleFileItemClick = ()=>{
@@ -2698,14 +2746,14 @@ const ChatInputBar = ({ input, setInput, handleSendMessage, isLoading, selectedF
                             className: "file-preview-thumbnail"
                         }, void 0, false, {
                             fileName: "[project]/frontend/components/chat-input-bar.tsx",
-                            lineNumber: 126,
+                            lineNumber: 184,
                             columnNumber: 13
                         }, this),
                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
                             children: selectedFile.name
                         }, void 0, false, {
                             fileName: "[project]/frontend/components/chat-input-bar.tsx",
-                            lineNumber: 127,
+                            lineNumber: 185,
                             columnNumber: 13
                         }, this),
                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$frontend$2f$components$2f$ui$2f$button$2e$tsx__$5b$app$2d$client$5d$__$28$ecmascript$29$__["Button"], {
@@ -2717,18 +2765,18 @@ const ChatInputBar = ({ input, setInput, handleSendMessage, isLoading, selectedF
                                 className: "h-4 w-4"
                             }, void 0, false, {
                                 fileName: "[project]/frontend/components/chat-input-bar.tsx",
-                                lineNumber: 129,
+                                lineNumber: 187,
                                 columnNumber: 15
                             }, this)
                         }, void 0, false, {
                             fileName: "[project]/frontend/components/chat-input-bar.tsx",
-                            lineNumber: 128,
+                            lineNumber: 186,
                             columnNumber: 13
                         }, this)
                     ]
                 }, void 0, true, {
                     fileName: "[project]/frontend/components/chat-input-bar.tsx",
-                    lineNumber: 125,
+                    lineNumber: 183,
                     columnNumber: 11
                 }, this),
                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -2751,17 +2799,17 @@ const ChatInputBar = ({ input, setInput, handleSendMessage, isLoading, selectedF
                                                     className: "h-5 w-5"
                                                 }, void 0, false, {
                                                     fileName: "[project]/frontend/components/chat-input-bar.tsx",
-                                                    lineNumber: 138,
+                                                    lineNumber: 196,
                                                     columnNumber: 19
                                                 }, this)
                                             }, void 0, false, {
                                                 fileName: "[project]/frontend/components/chat-input-bar.tsx",
-                                                lineNumber: 137,
+                                                lineNumber: 195,
                                                 columnNumber: 17
                                             }, this)
                                         }, void 0, false, {
                                             fileName: "[project]/frontend/components/chat-input-bar.tsx",
-                                            lineNumber: 136,
+                                            lineNumber: 194,
                                             columnNumber: 15
                                         }, this),
                                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$frontend$2f$components$2f$ui$2f$tooltip$2e$tsx__$5b$app$2d$client$5d$__$28$ecmascript$29$__["TooltipContent"], {
@@ -2769,18 +2817,18 @@ const ChatInputBar = ({ input, setInput, handleSendMessage, isLoading, selectedF
                                                 children: "Add files and web search"
                                             }, void 0, false, {
                                                 fileName: "[project]/frontend/components/chat-input-bar.tsx",
-                                                lineNumber: 142,
+                                                lineNumber: 200,
                                                 columnNumber: 17
                                             }, this)
                                         }, void 0, false, {
                                             fileName: "[project]/frontend/components/chat-input-bar.tsx",
-                                            lineNumber: 141,
+                                            lineNumber: 199,
                                             columnNumber: 15
                                         }, this)
                                     ]
                                 }, void 0, true, {
                                     fileName: "[project]/frontend/components/chat-input-bar.tsx",
-                                    lineNumber: 135,
+                                    lineNumber: 193,
                                     columnNumber: 13
                                 }, this),
                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$framer$2d$motion$2f$dist$2f$es$2f$components$2f$AnimatePresence$2f$index$2e$mjs__$5b$app$2d$client$5d$__$28$ecmascript$29$__["AnimatePresence"], {
@@ -2812,17 +2860,17 @@ const ChatInputBar = ({ input, setInput, handleSendMessage, isLoading, selectedF
                                                                 className: "h-5 w-5"
                                                             }, void 0, false, {
                                                                 fileName: "[project]/frontend/components/chat-input-bar.tsx",
-                                                                lineNumber: 157,
+                                                                lineNumber: 215,
                                                                 columnNumber: 25
                                                             }, this)
                                                         }, void 0, false, {
                                                             fileName: "[project]/frontend/components/chat-input-bar.tsx",
-                                                            lineNumber: 156,
+                                                            lineNumber: 214,
                                                             columnNumber: 23
                                                         }, this)
                                                     }, void 0, false, {
                                                         fileName: "[project]/frontend/components/chat-input-bar.tsx",
-                                                        lineNumber: 155,
+                                                        lineNumber: 213,
                                                         columnNumber: 21
                                                     }, this),
                                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$frontend$2f$components$2f$ui$2f$tooltip$2e$tsx__$5b$app$2d$client$5d$__$28$ecmascript$29$__["TooltipContent"], {
@@ -2830,18 +2878,18 @@ const ChatInputBar = ({ input, setInput, handleSendMessage, isLoading, selectedF
                                                             children: "Add files"
                                                         }, void 0, false, {
                                                             fileName: "[project]/frontend/components/chat-input-bar.tsx",
-                                                            lineNumber: 161,
+                                                            lineNumber: 219,
                                                             columnNumber: 23
                                                         }, this)
                                                     }, void 0, false, {
                                                         fileName: "[project]/frontend/components/chat-input-bar.tsx",
-                                                        lineNumber: 160,
+                                                        lineNumber: 218,
                                                         columnNumber: 21
                                                     }, this)
                                                 ]
                                             }, void 0, true, {
                                                 fileName: "[project]/frontend/components/chat-input-bar.tsx",
-                                                lineNumber: 154,
+                                                lineNumber: 212,
                                                 columnNumber: 19
                                             }, this),
                                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$frontend$2f$components$2f$ui$2f$tooltip$2e$tsx__$5b$app$2d$client$5d$__$28$ecmascript$29$__["Tooltip"], {
@@ -2857,17 +2905,17 @@ const ChatInputBar = ({ input, setInput, handleSendMessage, isLoading, selectedF
                                                                 className: "h-5 w-5"
                                                             }, void 0, false, {
                                                                 fileName: "[project]/frontend/components/chat-input-bar.tsx",
-                                                                lineNumber: 167,
+                                                                lineNumber: 225,
                                                                 columnNumber: 25
                                                             }, this)
                                                         }, void 0, false, {
                                                             fileName: "[project]/frontend/components/chat-input-bar.tsx",
-                                                            lineNumber: 166,
+                                                            lineNumber: 224,
                                                             columnNumber: 23
                                                         }, this)
                                                     }, void 0, false, {
                                                         fileName: "[project]/frontend/components/chat-input-bar.tsx",
-                                                        lineNumber: 165,
+                                                        lineNumber: 223,
                                                         columnNumber: 21
                                                     }, this),
                                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$frontend$2f$components$2f$ui$2f$tooltip$2e$tsx__$5b$app$2d$client$5d$__$28$ecmascript$29$__["TooltipContent"], {
@@ -2875,35 +2923,35 @@ const ChatInputBar = ({ input, setInput, handleSendMessage, isLoading, selectedF
                                                             children: "Toggle Web search"
                                                         }, void 0, false, {
                                                             fileName: "[project]/frontend/components/chat-input-bar.tsx",
-                                                            lineNumber: 171,
+                                                            lineNumber: 229,
                                                             columnNumber: 23
                                                         }, this)
                                                     }, void 0, false, {
                                                         fileName: "[project]/frontend/components/chat-input-bar.tsx",
-                                                        lineNumber: 170,
+                                                        lineNumber: 228,
                                                         columnNumber: 21
                                                     }, this)
                                                 ]
                                             }, void 0, true, {
                                                 fileName: "[project]/frontend/components/chat-input-bar.tsx",
-                                                lineNumber: 164,
+                                                lineNumber: 222,
                                                 columnNumber: 19
                                             }, this)
                                         ]
                                     }, void 0, true, {
                                         fileName: "[project]/frontend/components/chat-input-bar.tsx",
-                                        lineNumber: 147,
+                                        lineNumber: 205,
                                         columnNumber: 17
                                     }, this)
                                 }, void 0, false, {
                                     fileName: "[project]/frontend/components/chat-input-bar.tsx",
-                                    lineNumber: 145,
+                                    lineNumber: 203,
                                     columnNumber: 13
                                 }, this)
                             ]
                         }, void 0, true, {
                             fileName: "[project]/frontend/components/chat-input-bar.tsx",
-                            lineNumber: 134,
+                            lineNumber: 192,
                             columnNumber: 11
                         }, this),
                         forceWebSearch && /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$frontend$2f$components$2f$ui$2f$tooltip$2e$tsx__$5b$app$2d$client$5d$__$28$ecmascript$29$__["Tooltip"], {
@@ -2920,17 +2968,17 @@ const ChatInputBar = ({ input, setInput, handleSendMessage, isLoading, selectedF
                                             className: "h-5 w-5 text-blue-500"
                                         }, void 0, false, {
                                             fileName: "[project]/frontend/components/chat-input-bar.tsx",
-                                            lineNumber: 188,
+                                            lineNumber: 246,
                                             columnNumber: 19
                                         }, this)
                                     }, void 0, false, {
                                         fileName: "[project]/frontend/components/chat-input-bar.tsx",
-                                        lineNumber: 181,
+                                        lineNumber: 239,
                                         columnNumber: 17
                                     }, this)
                                 }, void 0, false, {
                                     fileName: "[project]/frontend/components/chat-input-bar.tsx",
-                                    lineNumber: 180,
+                                    lineNumber: 238,
                                     columnNumber: 15
                                 }, this),
                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$frontend$2f$components$2f$ui$2f$tooltip$2e$tsx__$5b$app$2d$client$5d$__$28$ecmascript$29$__["TooltipContent"], {
@@ -2938,18 +2986,18 @@ const ChatInputBar = ({ input, setInput, handleSendMessage, isLoading, selectedF
                                         children: "Web Search ON — your next messages will be searched online. Click to turn off."
                                     }, void 0, false, {
                                         fileName: "[project]/frontend/components/chat-input-bar.tsx",
-                                        lineNumber: 192,
+                                        lineNumber: 250,
                                         columnNumber: 17
                                     }, this)
                                 }, void 0, false, {
                                     fileName: "[project]/frontend/components/chat-input-bar.tsx",
-                                    lineNumber: 191,
+                                    lineNumber: 249,
                                     columnNumber: 15
                                 }, this)
                             ]
                         }, void 0, true, {
                             fileName: "[project]/frontend/components/chat-input-bar.tsx",
-                            lineNumber: 179,
+                            lineNumber: 237,
                             columnNumber: 13
                         }, this),
                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$frontend$2f$components$2f$ui$2f$textarea$2e$tsx__$5b$app$2d$client$5d$__$28$ecmascript$29$__["Textarea"], {
@@ -2965,7 +3013,7 @@ const ChatInputBar = ({ input, setInput, handleSendMessage, isLoading, selectedF
                             disabled: isLoading
                         }, void 0, false, {
                             fileName: "[project]/frontend/components/chat-input-bar.tsx",
-                            lineNumber: 196,
+                            lineNumber: 254,
                             columnNumber: 11
                         }, this),
                         forceWebSearch && /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$frontend$2f$components$2f$ui$2f$tooltip$2e$tsx__$5b$app$2d$client$5d$__$28$ecmascript$29$__["Tooltip"], {
@@ -2982,17 +3030,17 @@ const ChatInputBar = ({ input, setInput, handleSendMessage, isLoading, selectedF
                                             className: "h-4 w-4"
                                         }, void 0, false, {
                                             fileName: "[project]/frontend/components/chat-input-bar.tsx",
-                                            lineNumber: 219,
+                                            lineNumber: 277,
                                             columnNumber: 19
                                         }, this)
                                     }, void 0, false, {
                                         fileName: "[project]/frontend/components/chat-input-bar.tsx",
-                                        lineNumber: 212,
+                                        lineNumber: 270,
                                         columnNumber: 17
                                     }, this)
                                 }, void 0, false, {
                                     fileName: "[project]/frontend/components/chat-input-bar.tsx",
-                                    lineNumber: 211,
+                                    lineNumber: 269,
                                     columnNumber: 15
                                 }, this),
                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$frontend$2f$components$2f$ui$2f$tooltip$2e$tsx__$5b$app$2d$client$5d$__$28$ecmascript$29$__["TooltipContent"], {
@@ -3000,18 +3048,18 @@ const ChatInputBar = ({ input, setInput, handleSendMessage, isLoading, selectedF
                                         children: "Search options"
                                     }, void 0, false, {
                                         fileName: "[project]/frontend/components/chat-input-bar.tsx",
-                                        lineNumber: 223,
+                                        lineNumber: 281,
                                         columnNumber: 17
                                     }, this)
                                 }, void 0, false, {
                                     fileName: "[project]/frontend/components/chat-input-bar.tsx",
-                                    lineNumber: 222,
+                                    lineNumber: 280,
                                     columnNumber: 15
                                 }, this)
                             ]
                         }, void 0, true, {
                             fileName: "[project]/frontend/components/chat-input-bar.tsx",
-                            lineNumber: 210,
+                            lineNumber: 268,
                             columnNumber: 13
                         }, this),
                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$frontend$2f$components$2f$ui$2f$tooltip$2e$tsx__$5b$app$2d$client$5d$__$28$ecmascript$29$__["Tooltip"], {
@@ -3022,41 +3070,41 @@ const ChatInputBar = ({ input, setInput, handleSendMessage, isLoading, selectedF
                                         variant: "ghost",
                                         size: "icon",
                                         onClick: handleVoiceClick,
-                                        className: "mic-button",
+                                        className: `mic-button ${isVoiceRecording ? 'animate-pulse' : ''}`,
                                         children: /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$lucide$2d$react$2f$dist$2f$esm$2f$icons$2f$mic$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__$3c$export__default__as__Mic$3e$__["Mic"], {
                                             className: `h-5 w-5 ${isVoiceRecording ? 'text-red-500' : ''}`
                                         }, void 0, false, {
                                             fileName: "[project]/frontend/components/chat-input-bar.tsx",
-                                            lineNumber: 231,
-                                            columnNumber: 19
+                                            lineNumber: 294,
+                                            columnNumber: 17
                                         }, this)
                                     }, void 0, false, {
                                         fileName: "[project]/frontend/components/chat-input-bar.tsx",
-                                        lineNumber: 230,
+                                        lineNumber: 288,
                                         columnNumber: 15
                                     }, this)
                                 }, void 0, false, {
                                     fileName: "[project]/frontend/components/chat-input-bar.tsx",
-                                    lineNumber: 229,
+                                    lineNumber: 287,
                                     columnNumber: 13
                                 }, this),
                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$frontend$2f$components$2f$ui$2f$tooltip$2e$tsx__$5b$app$2d$client$5d$__$28$ecmascript$29$__["TooltipContent"], {
                                     children: /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
-                                        children: "Voice input"
+                                        children: isVoiceRecording ? 'Stop recording' : 'Voice input'
                                     }, void 0, false, {
                                         fileName: "[project]/frontend/components/chat-input-bar.tsx",
-                                        lineNumber: 235,
+                                        lineNumber: 298,
                                         columnNumber: 15
                                     }, this)
                                 }, void 0, false, {
                                     fileName: "[project]/frontend/components/chat-input-bar.tsx",
-                                    lineNumber: 234,
+                                    lineNumber: 297,
                                     columnNumber: 13
                                 }, this)
                             ]
                         }, void 0, true, {
                             fileName: "[project]/frontend/components/chat-input-bar.tsx",
-                            lineNumber: 228,
+                            lineNumber: 286,
                             columnNumber: 11
                         }, this),
                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$frontend$2f$components$2f$ui$2f$button$2e$tsx__$5b$app$2d$client$5d$__$28$ecmascript$29$__["Button"], {
@@ -3069,18 +3117,18 @@ const ChatInputBar = ({ input, setInput, handleSendMessage, isLoading, selectedF
                                 className: "h-5 w-5 animate-pulse"
                             }, void 0, false, {
                                 fileName: "[project]/frontend/components/chat-input-bar.tsx",
-                                lineNumber: 245,
+                                lineNumber: 308,
                                 columnNumber: 26
                             }, this) : /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$lucide$2d$react$2f$dist$2f$esm$2f$icons$2f$send$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__$3c$export__default__as__Send$3e$__["Send"], {
                                 className: "h-5 w-5"
                             }, void 0, false, {
                                 fileName: "[project]/frontend/components/chat-input-bar.tsx",
-                                lineNumber: 245,
+                                lineNumber: 308,
                                 columnNumber: 71
                             }, this)
                         }, void 0, false, {
                             fileName: "[project]/frontend/components/chat-input-bar.tsx",
-                            lineNumber: 238,
+                            lineNumber: 301,
                             columnNumber: 11
                         }, this),
                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("input", {
@@ -3091,13 +3139,13 @@ const ChatInputBar = ({ input, setInput, handleSendMessage, isLoading, selectedF
                             accept: "image/jpeg,image/png"
                         }, void 0, false, {
                             fileName: "[project]/frontend/components/chat-input-bar.tsx",
-                            lineNumber: 247,
+                            lineNumber: 310,
                             columnNumber: 11
                         }, this)
                     ]
                 }, void 0, true, {
                     fileName: "[project]/frontend/components/chat-input-bar.tsx",
-                    lineNumber: 133,
+                    lineNumber: 191,
                     columnNumber: 9
                 }, this),
                 forceWebSearch && isSearchOptionsMenuOpen && /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$framer$2d$motion$2f$dist$2f$es$2f$render$2f$components$2f$motion$2f$proxy$2e$mjs__$5b$app$2d$client$5d$__$28$ecmascript$29$__["motion"].div, {
@@ -3124,7 +3172,7 @@ const ChatInputBar = ({ input, setInput, handleSendMessage, isLoading, selectedF
                                     children: "Include videos?"
                                 }, void 0, false, {
                                     fileName: "[project]/frontend/components/chat-input-bar.tsx",
-                                    lineNumber: 264,
+                                    lineNumber: 327,
                                     columnNumber: 15
                                 }, this),
                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$frontend$2f$components$2f$ui$2f$switch$2e$tsx__$5b$app$2d$client$5d$__$28$ecmascript$29$__["Switch"], {
@@ -3133,13 +3181,13 @@ const ChatInputBar = ({ input, setInput, handleSendMessage, isLoading, selectedF
                                     onCheckedChange: setIncludeVideos
                                 }, void 0, false, {
                                     fileName: "[project]/frontend/components/chat-input-bar.tsx",
-                                    lineNumber: 265,
+                                    lineNumber: 328,
                                     columnNumber: 15
                                 }, this)
                             ]
                         }, void 0, true, {
                             fileName: "[project]/frontend/components/chat-input-bar.tsx",
-                            lineNumber: 263,
+                            lineNumber: 326,
                             columnNumber: 13
                         }, this),
                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -3151,7 +3199,7 @@ const ChatInputBar = ({ input, setInput, handleSendMessage, isLoading, selectedF
                                     children: "Level:"
                                 }, void 0, false, {
                                     fileName: "[project]/frontend/components/chat-input-bar.tsx",
-                                    lineNumber: 272,
+                                    lineNumber: 335,
                                     columnNumber: 15
                                 }, this),
                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$frontend$2f$components$2f$ui$2f$select$2e$tsx__$5b$app$2d$client$5d$__$28$ecmascript$29$__["Select"], {
@@ -3165,12 +3213,12 @@ const ChatInputBar = ({ input, setInput, handleSendMessage, isLoading, selectedF
                                                 placeholder: "Select level"
                                             }, void 0, false, {
                                                 fileName: "[project]/frontend/components/chat-input-bar.tsx",
-                                                lineNumber: 275,
+                                                lineNumber: 338,
                                                 columnNumber: 19
                                             }, this)
                                         }, void 0, false, {
                                             fileName: "[project]/frontend/components/chat-input-bar.tsx",
-                                            lineNumber: 274,
+                                            lineNumber: 337,
                                             columnNumber: 17
                                         }, this),
                                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$frontend$2f$components$2f$ui$2f$select$2e$tsx__$5b$app$2d$client$5d$__$28$ecmascript$29$__["SelectContent"], {
@@ -3180,7 +3228,7 @@ const ChatInputBar = ({ input, setInput, handleSendMessage, isLoading, selectedF
                                                     children: "Primary"
                                                 }, void 0, false, {
                                                     fileName: "[project]/frontend/components/chat-input-bar.tsx",
-                                                    lineNumber: 278,
+                                                    lineNumber: 341,
                                                     columnNumber: 19
                                                 }, this),
                                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$frontend$2f$components$2f$ui$2f$select$2e$tsx__$5b$app$2d$client$5d$__$28$ecmascript$29$__["SelectItem"], {
@@ -3188,7 +3236,7 @@ const ChatInputBar = ({ input, setInput, handleSendMessage, isLoading, selectedF
                                                     children: "Lower Secondary"
                                                 }, void 0, false, {
                                                     fileName: "[project]/frontend/components/chat-input-bar.tsx",
-                                                    lineNumber: 279,
+                                                    lineNumber: 342,
                                                     columnNumber: 19
                                                 }, this),
                                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$frontend$2f$components$2f$ui$2f$select$2e$tsx__$5b$app$2d$client$5d$__$28$ecmascript$29$__["SelectItem"], {
@@ -3196,25 +3244,25 @@ const ChatInputBar = ({ input, setInput, handleSendMessage, isLoading, selectedF
                                                     children: "Upper Secondary"
                                                 }, void 0, false, {
                                                     fileName: "[project]/frontend/components/chat-input-bar.tsx",
-                                                    lineNumber: 280,
+                                                    lineNumber: 343,
                                                     columnNumber: 19
                                                 }, this)
                                             ]
                                         }, void 0, true, {
                                             fileName: "[project]/frontend/components/chat-input-bar.tsx",
-                                            lineNumber: 277,
+                                            lineNumber: 340,
                                             columnNumber: 17
                                         }, this)
                                     ]
                                 }, void 0, true, {
                                     fileName: "[project]/frontend/components/chat-input-bar.tsx",
-                                    lineNumber: 273,
+                                    lineNumber: 336,
                                     columnNumber: 15
                                 }, this)
                             ]
                         }, void 0, true, {
                             fileName: "[project]/frontend/components/chat-input-bar.tsx",
-                            lineNumber: 271,
+                            lineNumber: 334,
                             columnNumber: 13
                         }, this),
                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -3226,7 +3274,7 @@ const ChatInputBar = ({ input, setInput, handleSendMessage, isLoading, selectedF
                                     children: "Language hint:"
                                 }, void 0, false, {
                                     fileName: "[project]/frontend/components/chat-input-bar.tsx",
-                                    lineNumber: 285,
+                                    lineNumber: 348,
                                     columnNumber: 15
                                 }, this),
                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$frontend$2f$components$2f$ui$2f$select$2e$tsx__$5b$app$2d$client$5d$__$28$ecmascript$29$__["Select"], {
@@ -3240,12 +3288,12 @@ const ChatInputBar = ({ input, setInput, handleSendMessage, isLoading, selectedF
                                                 placeholder: "Select language"
                                             }, void 0, false, {
                                                 fileName: "[project]/frontend/components/chat-input-bar.tsx",
-                                                lineNumber: 288,
+                                                lineNumber: 351,
                                                 columnNumber: 19
                                             }, this)
                                         }, void 0, false, {
                                             fileName: "[project]/frontend/components/chat-input-bar.tsx",
-                                            lineNumber: 287,
+                                            lineNumber: 350,
                                             columnNumber: 17
                                         }, this),
                                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$frontend$2f$components$2f$ui$2f$select$2e$tsx__$5b$app$2d$client$5d$__$28$ecmascript$29$__["SelectContent"], {
@@ -3255,7 +3303,7 @@ const ChatInputBar = ({ input, setInput, handleSendMessage, isLoading, selectedF
                                                     children: "English"
                                                 }, void 0, false, {
                                                     fileName: "[project]/frontend/components/chat-input-bar.tsx",
-                                                    lineNumber: 291,
+                                                    lineNumber: 354,
                                                     columnNumber: 19
                                                 }, this),
                                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$frontend$2f$components$2f$ui$2f$select$2e$tsx__$5b$app$2d$client$5d$__$28$ecmascript$29$__["SelectItem"], {
@@ -3263,46 +3311,46 @@ const ChatInputBar = ({ input, setInput, handleSendMessage, isLoading, selectedF
                                                     children: "Swahili mix"
                                                 }, void 0, false, {
                                                     fileName: "[project]/frontend/components/chat-input-bar.tsx",
-                                                    lineNumber: 292,
+                                                    lineNumber: 355,
                                                     columnNumber: 19
                                                 }, this)
                                             ]
                                         }, void 0, true, {
                                             fileName: "[project]/frontend/components/chat-input-bar.tsx",
-                                            lineNumber: 290,
+                                            lineNumber: 353,
                                             columnNumber: 17
                                         }, this)
                                     ]
                                 }, void 0, true, {
                                     fileName: "[project]/frontend/components/chat-input-bar.tsx",
-                                    lineNumber: 286,
+                                    lineNumber: 349,
                                     columnNumber: 15
                                 }, this)
                             ]
                         }, void 0, true, {
                             fileName: "[project]/frontend/components/chat-input-bar.tsx",
-                            lineNumber: 284,
+                            lineNumber: 347,
                             columnNumber: 13
                         }, this)
                     ]
                 }, void 0, true, {
                     fileName: "[project]/frontend/components/chat-input-bar.tsx",
-                    lineNumber: 256,
+                    lineNumber: 319,
                     columnNumber: 11
                 }, this)
             ]
         }, void 0, true, {
             fileName: "[project]/frontend/components/chat-input-bar.tsx",
-            lineNumber: 123,
+            lineNumber: 181,
             columnNumber: 7
         }, this)
     }, void 0, false, {
         fileName: "[project]/frontend/components/chat-input-bar.tsx",
-        lineNumber: 122,
+        lineNumber: 180,
         columnNumber: 5
     }, this);
 };
-_s(ChatInputBar, "0aygZVAo1v7LBN4YUow9841EbbQ=");
+_s(ChatInputBar, "ebR3s55uSJeu9NnniFx26L1NmdM=");
 _c = ChatInputBar;
 var _c;
 __turbopack_context__.k.register(_c, "ChatInputBar");
@@ -3338,7 +3386,7 @@ var __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$react$2d$mar
 ;
 ;
 ;
-const MessageBubble = ({ message, isResearchModeActive })=>{
+const MessageBubble = ({ message, isResearchModeActive, isPlayingAudio, onPlayAudio })=>{
     const isUser = message.role === 'user';
     const hasVideo = !!message.videoData;
     return /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -3352,18 +3400,18 @@ const MessageBubble = ({ message, isResearchModeActive })=>{
                         className: "h-5 w-5"
                     }, void 0, false, {
                         fileName: "[project]/frontend/components/chat-tab.tsx",
-                        lineNumber: 24,
-                        columnNumber: 15
+                        lineNumber: 25,
+                        columnNumber: 13
                     }, this)
                 }, void 0, false, {
                     fileName: "[project]/frontend/components/chat-tab.tsx",
-                    lineNumber: 23,
-                    columnNumber: 13
+                    lineNumber: 24,
+                    columnNumber: 11
                 }, this)
             }, void 0, false, {
                 fileName: "[project]/frontend/components/chat-tab.tsx",
-                lineNumber: 22,
-                columnNumber: 11
+                lineNumber: 23,
+                columnNumber: 9
             }, this),
             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
                 className: (0, __TURBOPACK__imported__module__$5b$project$5d2f$AI$2f$lib$2f$utils$2e$ts__$5b$app$2d$client$5d$__$28$ecmascript$29$__["cn"])('rounded-2xl px-4 py-2.5 text-sm break-words w-fit', hasVideo ? 'p-0' : '', 'max-w-[90%] md:max-w-[75%]', isUser ? 'rounded-br-none bg-primary text-primary-foreground' : 'rounded-bl-none bg-muted'),
@@ -3392,8 +3440,8 @@ const MessageBubble = ({ message, isResearchModeActive })=>{
                                         }
                                     }, void 0, false, {
                                         fileName: "[project]/frontend/components/chat-tab.tsx",
-                                        lineNumber: 47,
-                                        columnNumber: 23
+                                        lineNumber: 48,
+                                        columnNumber: 21
                                     }, void 0);
                                 },
                                 // 2. Link Renderer
@@ -3404,8 +3452,8 @@ const MessageBubble = ({ message, isResearchModeActive })=>{
                                         className: "text-blue-600 dark:text-blue-400 underline font-medium hover:text-blue-800"
                                     }, void 0, false, {
                                         fileName: "[project]/frontend/components/chat-tab.tsx",
-                                        lineNumber: 65,
-                                        columnNumber: 21
+                                        lineNumber: 66,
+                                        columnNumber: 19
                                     }, void 0),
                                 // 3. Paragraph Renderer (Fix spacing)
                                 p: ({ node, ...props })=>/*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
@@ -3413,8 +3461,8 @@ const MessageBubble = ({ message, isResearchModeActive })=>{
                                         className: "mb-2 last:mb-0 leading-relaxed"
                                     }, void 0, false, {
                                         fileName: "[project]/frontend/components/chat-tab.tsx",
-                                        lineNumber: 74,
-                                        columnNumber: 21
+                                        lineNumber: 75,
+                                        columnNumber: 19
                                     }, void 0),
                                 // 4. List Support
                                 ul: ({ node, ...props })=>/*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("ul", {
@@ -3422,7 +3470,7 @@ const MessageBubble = ({ message, isResearchModeActive })=>{
                                         className: "list-disc ml-4 mb-2"
                                     }, void 0, false, {
                                         fileName: "[project]/frontend/components/chat-tab.tsx",
-                                        lineNumber: 77,
+                                        lineNumber: 78,
                                         columnNumber: 45
                                     }, void 0),
                                 ol: ({ node, ...props })=>/*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("ol", {
@@ -3430,7 +3478,7 @@ const MessageBubble = ({ message, isResearchModeActive })=>{
                                         className: "list-decimal ml-4 mb-2"
                                     }, void 0, false, {
                                         fileName: "[project]/frontend/components/chat-tab.tsx",
-                                        lineNumber: 78,
+                                        lineNumber: 79,
                                         columnNumber: 45
                                     }, void 0),
                                 li: ({ node, ...props })=>/*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("li", {
@@ -3438,20 +3486,20 @@ const MessageBubble = ({ message, isResearchModeActive })=>{
                                         className: "mb-1"
                                     }, void 0, false, {
                                         fileName: "[project]/frontend/components/chat-tab.tsx",
-                                        lineNumber: 79,
+                                        lineNumber: 80,
                                         columnNumber: 45
                                     }, void 0)
                             },
                             children: message.content
                         }, void 0, false, {
                             fileName: "[project]/frontend/components/chat-tab.tsx",
-                            lineNumber: 42,
-                            columnNumber: 15
+                            lineNumber: 43,
+                            columnNumber: 13
                         }, this)
                     }, void 0, false, {
                         fileName: "[project]/frontend/components/chat-tab.tsx",
-                        lineNumber: 40,
-                        columnNumber: 13
+                        lineNumber: 41,
+                        columnNumber: 11
                     }, this),
                     hasVideo && message.videoData && /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
                         className: "mt-0",
@@ -3460,22 +3508,22 @@ const MessageBubble = ({ message, isResearchModeActive })=>{
                                 videoId: message.videoData.id
                             }, void 0, false, {
                                 fileName: "[project]/frontend/components/chat-tab.tsx",
-                                lineNumber: 90,
-                                columnNumber: 15
+                                lineNumber: 91,
+                                columnNumber: 13
                             }, this),
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
                                 className: "text-xs text-muted-foreground mt-2 px-2 pb-2",
                                 children: message.videoData.title
                             }, void 0, false, {
                                 fileName: "[project]/frontend/components/chat-tab.tsx",
-                                lineNumber: 91,
-                                columnNumber: 15
+                                lineNumber: 92,
+                                columnNumber: 13
                             }, this)
                         ]
                     }, void 0, true, {
                         fileName: "[project]/frontend/components/chat-tab.tsx",
-                        lineNumber: 89,
-                        columnNumber: 13
+                        lineNumber: 90,
+                        columnNumber: 11
                     }, this),
                     message.image && /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("img", {
                         src: message.image.src,
@@ -3483,14 +3531,14 @@ const MessageBubble = ({ message, isResearchModeActive })=>{
                         className: "mt-2 max-w-full rounded-md"
                     }, void 0, false, {
                         fileName: "[project]/frontend/components/chat-tab.tsx",
-                        lineNumber: 96,
-                        columnNumber: 13
+                        lineNumber: 97,
+                        columnNumber: 11
                     }, this)
                 ]
             }, void 0, true, {
                 fileName: "[project]/frontend/components/chat-tab.tsx",
-                lineNumber: 28,
-                columnNumber: 9
+                lineNumber: 29,
+                columnNumber: 7
             }, this),
             isUser && /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$frontend$2f$components$2f$ui$2f$avatar$2e$tsx__$5b$app$2d$client$5d$__$28$ecmascript$29$__["Avatar"], {
                 className: "h-8 w-8 flex-shrink-0",
@@ -3499,24 +3547,24 @@ const MessageBubble = ({ message, isResearchModeActive })=>{
                         className: "h-5 w-5"
                     }, void 0, false, {
                         fileName: "[project]/frontend/components/chat-tab.tsx",
-                        lineNumber: 102,
-                        columnNumber: 15
+                        lineNumber: 103,
+                        columnNumber: 13
                     }, this)
                 }, void 0, false, {
                     fileName: "[project]/frontend/components/chat-tab.tsx",
-                    lineNumber: 101,
-                    columnNumber: 13
+                    lineNumber: 102,
+                    columnNumber: 11
                 }, this)
             }, void 0, false, {
                 fileName: "[project]/frontend/components/chat-tab.tsx",
-                lineNumber: 100,
-                columnNumber: 11
+                lineNumber: 101,
+                columnNumber: 9
             }, this)
         ]
     }, void 0, true, {
         fileName: "[project]/frontend/components/chat-tab.tsx",
-        lineNumber: 20,
-        columnNumber: 7
+        lineNumber: 21,
+        columnNumber: 5
     }, this);
 };
 _c = MessageBubble;
@@ -3542,13 +3590,13 @@ const ChatTab = ({ messages, studentName, displayedWelcomeText, scrollAreaRef, s
                                     ]
                                 }, void 0, true, {
                                     fileName: "[project]/frontend/components/chat-tab.tsx",
-                                    lineNumber: 166,
-                                    columnNumber: 33
+                                    lineNumber: 167,
+                                    columnNumber: 17
                                 }, this)
                             }, void 0, false, {
                                 fileName: "[project]/frontend/components/chat-tab.tsx",
-                                lineNumber: 165,
-                                columnNumber: 29
+                                lineNumber: 166,
+                                columnNumber: 15
                             }, this),
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$frontend$2f$components$2f$ui$2f$card$2e$tsx__$5b$app$2d$client$5d$__$28$ecmascript$29$__["CardContent"], {
                                 children: /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
@@ -3556,36 +3604,36 @@ const ChatTab = ({ messages, studentName, displayedWelcomeText, scrollAreaRef, s
                                     children: displayedWelcomeText || "How can I help you today?"
                                 }, void 0, false, {
                                     fileName: "[project]/frontend/components/chat-tab.tsx",
-                                    lineNumber: 169,
-                                    columnNumber: 33
+                                    lineNumber: 170,
+                                    columnNumber: 17
                                 }, this)
                             }, void 0, false, {
                                 fileName: "[project]/frontend/components/chat-tab.tsx",
-                                lineNumber: 168,
-                                columnNumber: 29
+                                lineNumber: 169,
+                                columnNumber: 15
                             }, this)
                         ]
                     }, void 0, true, {
                         fileName: "[project]/frontend/components/chat-tab.tsx",
-                        lineNumber: 164,
-                        columnNumber: 25
+                        lineNumber: 165,
+                        columnNumber: 13
                     }, this) : messages.map((msg, index)=>/*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(MessageBubble, {
                             message: msg,
                             isResearchModeActive: conversationState.researchModeActive
                         }, msg.id || index, false, {
                             fileName: "[project]/frontend/components/chat-tab.tsx",
-                            lineNumber: 176,
-                            columnNumber: 29
+                            lineNumber: 177,
+                            columnNumber: 15
                         }, this))
                 }, void 0, false, {
                     fileName: "[project]/frontend/components/chat-tab.tsx",
-                    lineNumber: 162,
-                    columnNumber: 17
+                    lineNumber: 163,
+                    columnNumber: 9
                 }, this)
             }, void 0, false, {
                 fileName: "[project]/frontend/components/chat-tab.tsx",
-                lineNumber: 161,
-                columnNumber: 13
+                lineNumber: 162,
+                columnNumber: 7
             }, this),
             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$frontend$2f$components$2f$chat$2d$input$2d$bar$2e$tsx__$5b$app$2d$client$5d$__$28$ecmascript$29$__["ChatInputBar"], {
                 input: input,
@@ -3609,14 +3657,14 @@ const ChatTab = ({ messages, studentName, displayedWelcomeText, scrollAreaRef, s
                 setLanguageHint: setLanguageHint
             }, void 0, false, {
                 fileName: "[project]/frontend/components/chat-tab.tsx",
-                lineNumber: 185,
-                columnNumber: 13
+                lineNumber: 186,
+                columnNumber: 7
             }, this)
         ]
     }, void 0, true, {
         fileName: "[project]/frontend/components/chat-tab.tsx",
-        lineNumber: 160,
-        columnNumber: 9
+        lineNumber: 161,
+        columnNumber: 5
     }, this);
 };
 _c1 = ChatTab;
@@ -4172,6 +4220,8 @@ function SteadfastCopilot() {
     const [level, setLevel] = (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$index$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["useState"])('Primary');
     const [languageHint, setLanguageHint] = (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$index$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["useState"])('English');
     const scrollAreaRef = (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$index$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["useRef"])(null);
+    const audioRef = (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$index$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["useRef"])(null);
+    const [isPlayingAudio, setIsPlayingAudio] = (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$index$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["useState"])(false);
     const scrollToBottom = (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$index$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["useCallback"])({
         "SteadfastCopilot.useCallback[scrollToBottom]": ()=>{
             setTimeout({
@@ -4184,6 +4234,52 @@ function SteadfastCopilot() {
             }["SteadfastCopilot.useCallback[scrollToBottom]"], 100);
         }
     }["SteadfastCopilot.useCallback[scrollToBottom]"], []);
+    const playAIResponse = (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$index$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["useCallback"])({
+        "SteadfastCopilot.useCallback[playAIResponse]": async (text)=>{
+            try {
+                setIsPlayingAudio(true);
+                const response = await fetch('/api/copilot/tts', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${localStorage.getItem('token')}`
+                    },
+                    body: JSON.stringify({
+                        text
+                    })
+                });
+                if (!response.ok) {
+                    throw new Error('TTS request failed');
+                }
+                const audioBlob = await response.blob();
+                const audioUrl = URL.createObjectURL(audioBlob);
+                // Clean up previous audio if exists
+                if (audioRef.current) {
+                    audioRef.current.pause();
+                    audioRef.current = null;
+                }
+                const audio = new Audio(audioUrl);
+                audioRef.current = audio;
+                audio.onended = ({
+                    "SteadfastCopilot.useCallback[playAIResponse]": ()=>{
+                        setIsPlayingAudio(false);
+                        URL.revokeObjectURL(audioUrl);
+                    }
+                })["SteadfastCopilot.useCallback[playAIResponse]"];
+                audio.onerror = ({
+                    "SteadfastCopilot.useCallback[playAIResponse]": ()=>{
+                        setIsPlayingAudio(false);
+                        URL.revokeObjectURL(audioUrl);
+                        console.error('Audio playback error');
+                    }
+                })["SteadfastCopilot.useCallback[playAIResponse]"];
+                await audio.play();
+            } catch (error) {
+                console.error('Error playing TTS audio:', error);
+                setIsPlayingAudio(false);
+            }
+        }
+    }["SteadfastCopilot.useCallback[playAIResponse]"], []);
     const fetchMemory = (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$index$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["useCallback"])({
         "SteadfastCopilot.useCallback[fetchMemory]": async ()=>{
             try {
@@ -4399,6 +4495,8 @@ function SteadfastCopilot() {
                         assistantMessage
                     ]);
                 setConversationState(response.state);
+                // ✅ Play AI response as speech using TTS with "alloy" voice
+                playAIResponse(response.processedText);
                 // POST MESSAGES TO DB
                 await Promise.all([
                     __TURBOPACK__imported__module__$5b$project$5d2f$AI$2f$lib$2f$api$2e$ts__$5b$app$2d$client$5d$__$28$ecmascript$29$__["default"].post('/api/copilot/message', {
@@ -4598,8 +4696,8 @@ function SteadfastCopilot() {
                 onClose: ()=>setView('chat')
             }, void 0, false, {
                 fileName: "[project]/frontend/components/steadfast-copilot.tsx",
-                lineNumber: 468,
-                columnNumber: 18
+                lineNumber: 520,
+                columnNumber: 14
             }, this);
         }
         return /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -4611,22 +4709,57 @@ function SteadfastCopilot() {
                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
                             className: "flex items-center justify-between w-full",
                             children: [
-                                /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$frontend$2f$components$2f$ui$2f$dialog$2e$tsx__$5b$app$2d$client$5d$__$28$ecmascript$29$__["DialogTitle"], {
+                                /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
                                     className: "flex items-center gap-2",
                                     children: [
-                                        /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$lucide$2d$react$2f$dist$2f$esm$2f$icons$2f$bot$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__$3c$export__default__as__Bot$3e$__["Bot"], {
-                                            className: "h-5 w-5 text-primary"
-                                        }, void 0, false, {
+                                        /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$frontend$2f$components$2f$ui$2f$dialog$2e$tsx__$5b$app$2d$client$5d$__$28$ecmascript$29$__["DialogTitle"], {
+                                            className: "flex items-center gap-2",
+                                            children: [
+                                                /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$lucide$2d$react$2f$dist$2f$esm$2f$icons$2f$bot$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__$3c$export__default__as__Bot$3e$__["Bot"], {
+                                                    className: "h-5 w-5 text-primary"
+                                                }, void 0, false, {
+                                                    fileName: "[project]/frontend/components/steadfast-copilot.tsx",
+                                                    lineNumber: 527,
+                                                    columnNumber: 64
+                                                }, this),
+                                                " Steadfast AI"
+                                            ]
+                                        }, void 0, true, {
                                             fileName: "[project]/frontend/components/steadfast-copilot.tsx",
-                                            lineNumber: 474,
-                                            columnNumber: 68
+                                            lineNumber: 527,
+                                            columnNumber: 15
                                         }, this),
-                                        " Steadfast AI"
+                                        isPlayingAudio && /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                            className: "flex items-center gap-1 text-xs text-muted-foreground animate-pulse",
+                                            children: [
+                                                /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("svg", {
+                                                    className: "h-4 w-4",
+                                                    fill: "currentColor",
+                                                    viewBox: "0 0 20 20",
+                                                    children: /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("path", {
+                                                        d: "M10 3a1 1 0 011 1v12a1 1 0 11-2 0V4a1 1 0 011-1zm4 4a1 1 0 011 1v4a1 1 0 11-2 0V8a1 1 0 011-1zm-8 0a1 1 0 011 1v4a1 1 0 11-2 0V8a1 1 0 011-1z"
+                                                    }, void 0, false, {
+                                                        fileName: "[project]/frontend/components/steadfast-copilot.tsx",
+                                                        lineNumber: 531,
+                                                        columnNumber: 21
+                                                    }, this)
+                                                }, void 0, false, {
+                                                    fileName: "[project]/frontend/components/steadfast-copilot.tsx",
+                                                    lineNumber: 530,
+                                                    columnNumber: 19
+                                                }, this),
+                                                "Playing"
+                                            ]
+                                        }, void 0, true, {
+                                            fileName: "[project]/frontend/components/steadfast-copilot.tsx",
+                                            lineNumber: 529,
+                                            columnNumber: 17
+                                        }, this)
                                     ]
                                 }, void 0, true, {
                                     fileName: "[project]/frontend/components/steadfast-copilot.tsx",
-                                    lineNumber: 474,
-                                    columnNumber: 19
+                                    lineNumber: 526,
+                                    columnNumber: 13
                                 }, this),
                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$frontend$2f$components$2f$ui$2f$tooltip$2e$tsx__$5b$app$2d$client$5d$__$28$ecmascript$29$__["TooltipProvider"], {
                                     children: /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$frontend$2f$components$2f$ui$2f$tooltip$2e$tsx__$5b$app$2d$client$5d$__$28$ecmascript$29$__["Tooltip"], {
@@ -4641,48 +4774,48 @@ function SteadfastCopilot() {
                                                         className: "h-5 w-5"
                                                     }, void 0, false, {
                                                         fileName: "[project]/frontend/components/steadfast-copilot.tsx",
-                                                        lineNumber: 477,
-                                                        columnNumber: 119
+                                                        lineNumber: 539,
+                                                        columnNumber: 109
                                                     }, this)
                                                 }, void 0, false, {
                                                     fileName: "[project]/frontend/components/steadfast-copilot.tsx",
-                                                    lineNumber: 477,
-                                                    columnNumber: 51
+                                                    lineNumber: 539,
+                                                    columnNumber: 41
                                                 }, this)
                                             }, void 0, false, {
                                                 fileName: "[project]/frontend/components/steadfast-copilot.tsx",
-                                                lineNumber: 477,
-                                                columnNumber: 27
+                                                lineNumber: 539,
+                                                columnNumber: 17
                                             }, this),
                                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$frontend$2f$components$2f$ui$2f$tooltip$2e$tsx__$5b$app$2d$client$5d$__$28$ecmascript$29$__["TooltipContent"], {
                                                 children: /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
                                                     children: "My Learning Preferences"
                                                 }, void 0, false, {
                                                     fileName: "[project]/frontend/components/steadfast-copilot.tsx",
-                                                    lineNumber: 478,
-                                                    columnNumber: 43
+                                                    lineNumber: 540,
+                                                    columnNumber: 33
                                                 }, this)
                                             }, void 0, false, {
                                                 fileName: "[project]/frontend/components/steadfast-copilot.tsx",
-                                                lineNumber: 478,
-                                                columnNumber: 27
+                                                lineNumber: 540,
+                                                columnNumber: 17
                                             }, this)
                                         ]
                                     }, void 0, true, {
                                         fileName: "[project]/frontend/components/steadfast-copilot.tsx",
-                                        lineNumber: 476,
-                                        columnNumber: 23
+                                        lineNumber: 538,
+                                        columnNumber: 15
                                     }, this)
                                 }, void 0, false, {
                                     fileName: "[project]/frontend/components/steadfast-copilot.tsx",
-                                    lineNumber: 475,
-                                    columnNumber: 19
+                                    lineNumber: 537,
+                                    columnNumber: 13
                                 }, this)
                             ]
                         }, void 0, true, {
                             fileName: "[project]/frontend/components/steadfast-copilot.tsx",
-                            lineNumber: 473,
-                            columnNumber: 15
+                            lineNumber: 525,
+                            columnNumber: 11
                         }, this),
                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
                             className: "mt-4",
@@ -4696,26 +4829,26 @@ function SteadfastCopilot() {
                                         className: "h-4 w-4 mr-1"
                                     }, void 0, false, {
                                         fileName: "[project]/frontend/components/steadfast-copilot.tsx",
-                                        lineNumber: 483,
-                                        columnNumber: 111
+                                        lineNumber: 545,
+                                        columnNumber: 105
                                     }, this),
                                     " New Chat"
                                 ]
                             }, void 0, true, {
                                 fileName: "[project]/frontend/components/steadfast-copilot.tsx",
-                                lineNumber: 483,
-                                columnNumber: 19
+                                lineNumber: 545,
+                                columnNumber: 13
                             }, this)
                         }, void 0, false, {
                             fileName: "[project]/frontend/components/steadfast-copilot.tsx",
-                            lineNumber: 482,
-                            columnNumber: 15
+                            lineNumber: 544,
+                            columnNumber: 11
                         }, this)
                     ]
                 }, void 0, true, {
                     fileName: "[project]/frontend/components/steadfast-copilot.tsx",
-                    lineNumber: 472,
-                    columnNumber: 11
+                    lineNumber: 524,
+                    columnNumber: 9
                 }, this),
                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$frontend$2f$components$2f$ui$2f$tabs$2e$tsx__$5b$app$2d$client$5d$__$28$ecmascript$29$__["Tabs"], {
                     value: activeTab,
@@ -4732,15 +4865,15 @@ function SteadfastCopilot() {
                                             className: "mr-2 h-4 w-4"
                                         }, void 0, false, {
                                             fileName: "[project]/frontend/components/steadfast-copilot.tsx",
-                                            lineNumber: 488,
-                                            columnNumber: 45
+                                            lineNumber: 550,
+                                            columnNumber: 39
                                         }, this),
                                         "Chat"
                                     ]
                                 }, void 0, true, {
                                     fileName: "[project]/frontend/components/steadfast-copilot.tsx",
-                                    lineNumber: 488,
-                                    columnNumber: 19
+                                    lineNumber: 550,
+                                    columnNumber: 13
                                 }, this),
                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$frontend$2f$components$2f$ui$2f$tabs$2e$tsx__$5b$app$2d$client$5d$__$28$ecmascript$29$__["TabsTrigger"], {
                                     value: "history",
@@ -4749,21 +4882,21 @@ function SteadfastCopilot() {
                                             className: "mr-2 h-4 w-4"
                                         }, void 0, false, {
                                             fileName: "[project]/frontend/components/steadfast-copilot.tsx",
-                                            lineNumber: 489,
-                                            columnNumber: 48
+                                            lineNumber: 551,
+                                            columnNumber: 42
                                         }, this),
                                         "History"
                                     ]
                                 }, void 0, true, {
                                     fileName: "[project]/frontend/components/steadfast-copilot.tsx",
-                                    lineNumber: 489,
-                                    columnNumber: 19
+                                    lineNumber: 551,
+                                    columnNumber: 13
                                 }, this)
                             ]
                         }, void 0, true, {
                             fileName: "[project]/frontend/components/steadfast-copilot.tsx",
-                            lineNumber: 487,
-                            columnNumber: 15
+                            lineNumber: 549,
+                            columnNumber: 11
                         }, this),
                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$frontend$2f$components$2f$ui$2f$tabs$2e$tsx__$5b$app$2d$client$5d$__$28$ecmascript$29$__["TabsContent"], {
                             value: "chat",
@@ -4793,13 +4926,13 @@ function SteadfastCopilot() {
                                 displayedWelcomeText: ""
                             }, void 0, false, {
                                 fileName: "[project]/frontend/components/steadfast-copilot.tsx",
-                                lineNumber: 492,
-                                columnNumber: 19
+                                lineNumber: 554,
+                                columnNumber: 13
                             }, this)
                         }, void 0, false, {
                             fileName: "[project]/frontend/components/steadfast-copilot.tsx",
-                            lineNumber: 491,
-                            columnNumber: 15
+                            lineNumber: 553,
+                            columnNumber: 11
                         }, this),
                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$frontend$2f$components$2f$ui$2f$tabs$2e$tsx__$5b$app$2d$client$5d$__$28$ecmascript$29$__["TabsContent"], {
                             value: "history",
@@ -4812,25 +4945,25 @@ function SteadfastCopilot() {
                                 handleDeleteChat: handleDeleteChat
                             }, void 0, false, {
                                 fileName: "[project]/frontend/components/steadfast-copilot.tsx",
-                                lineNumber: 518,
-                                columnNumber: 19
+                                lineNumber: 580,
+                                columnNumber: 13
                             }, this)
                         }, void 0, false, {
                             fileName: "[project]/frontend/components/steadfast-copilot.tsx",
-                            lineNumber: 517,
-                            columnNumber: 15
+                            lineNumber: 579,
+                            columnNumber: 11
                         }, this)
                     ]
                 }, void 0, true, {
                     fileName: "[project]/frontend/components/steadfast-copilot.tsx",
-                    lineNumber: 486,
-                    columnNumber: 11
+                    lineNumber: 548,
+                    columnNumber: 9
                 }, this)
             ]
         }, void 0, true, {
             fileName: "[project]/frontend/components/steadfast-copilot.tsx",
-            lineNumber: 471,
-            columnNumber: 9
+            lineNumber: 523,
+            columnNumber: 7
         }, this);
     };
     return /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["Fragment"], {
@@ -4846,27 +4979,27 @@ function SteadfastCopilot() {
                             children: "Steadfast Copilot AI Chat Interface"
                         }, void 0, false, {
                             fileName: "[project]/frontend/components/steadfast-copilot.tsx",
-                            lineNumber: 535,
-                            columnNumber: 13
+                            lineNumber: 597,
+                            columnNumber: 11
                         }, this),
                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
                             className: "flex flex-col flex-1 min-h-0",
                             children: renderContent()
                         }, void 0, false, {
                             fileName: "[project]/frontend/components/steadfast-copilot.tsx",
-                            lineNumber: 536,
-                            columnNumber: 13
+                            lineNumber: 598,
+                            columnNumber: 11
                         }, this)
                     ]
                 }, void 0, true, {
                     fileName: "[project]/frontend/components/steadfast-copilot.tsx",
-                    lineNumber: 534,
-                    columnNumber: 11
+                    lineNumber: 596,
+                    columnNumber: 9
                 }, this)
             }, void 0, false, {
                 fileName: "[project]/frontend/components/steadfast-copilot.tsx",
-                lineNumber: 533,
-                columnNumber: 9
+                lineNumber: 595,
+                columnNumber: 7
             }, this),
             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
                 className: "fixed bottom-4 right-4 z-30",
@@ -4883,52 +5016,52 @@ function SteadfastCopilot() {
                                         className: "h-7 w-7"
                                     }, void 0, false, {
                                         fileName: "[project]/frontend/components/steadfast-copilot.tsx",
-                                        lineNumber: 545,
-                                        columnNumber: 19
+                                        lineNumber: 607,
+                                        columnNumber: 17
                                     }, this)
                                 }, void 0, false, {
                                     fileName: "[project]/frontend/components/steadfast-copilot.tsx",
-                                    lineNumber: 544,
-                                    columnNumber: 17
+                                    lineNumber: 606,
+                                    columnNumber: 15
                                 }, this)
                             }, void 0, false, {
                                 fileName: "[project]/frontend/components/steadfast-copilot.tsx",
-                                lineNumber: 543,
-                                columnNumber: 15
+                                lineNumber: 605,
+                                columnNumber: 13
                             }, this),
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$frontend$2f$components$2f$ui$2f$tooltip$2e$tsx__$5b$app$2d$client$5d$__$28$ecmascript$29$__["TooltipContent"], {
                                 children: /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
                                     children: "Chat with Steadfast AI"
                                 }, void 0, false, {
                                     fileName: "[project]/frontend/components/steadfast-copilot.tsx",
-                                    lineNumber: 548,
-                                    columnNumber: 31
+                                    lineNumber: 610,
+                                    columnNumber: 29
                                 }, this)
                             }, void 0, false, {
                                 fileName: "[project]/frontend/components/steadfast-copilot.tsx",
-                                lineNumber: 548,
-                                columnNumber: 15
+                                lineNumber: 610,
+                                columnNumber: 13
                             }, this)
                         ]
                     }, void 0, true, {
                         fileName: "[project]/frontend/components/steadfast-copilot.tsx",
-                        lineNumber: 542,
-                        columnNumber: 13
+                        lineNumber: 604,
+                        columnNumber: 11
                     }, this)
                 }, void 0, false, {
                     fileName: "[project]/frontend/components/steadfast-copilot.tsx",
-                    lineNumber: 541,
-                    columnNumber: 11
+                    lineNumber: 603,
+                    columnNumber: 9
                 }, this)
             }, void 0, false, {
                 fileName: "[project]/frontend/components/steadfast-copilot.tsx",
-                lineNumber: 540,
-                columnNumber: 9
+                lineNumber: 602,
+                columnNumber: 7
             }, this)
         ]
     }, void 0, true);
 }
-_s(SteadfastCopilot, "firJB65GTwmHDCsb84tReJZ2Tvc=", false, function() {
+_s(SteadfastCopilot, "LFXm6kw3uY4IL3rP3r7yfwKLi6A=", false, function() {
     return [
         __TURBOPACK__imported__module__$5b$project$5d2f$frontend$2f$hooks$2f$use$2d$toast$2e$ts__$5b$app$2d$client$5d$__$28$ecmascript$29$__["useToast"],
         __TURBOPACK__imported__module__$5b$project$5d2f$frontend$2f$contexts$2f$UserProfileContext$2e$tsx__$5b$app$2d$client$5d$__$28$ecmascript$29$__["useUserProfile"]

@@ -21,6 +21,8 @@ export const MessageSchema = z.object({
   timestamp: z.date().optional(),
   videoData: VideoDataSchema.optional(),
   image: ImageSchema.optional(),
+  isError: z.boolean().optional(),
+  sources: z.array(z.any()).optional(),
 });
 export type Message = z.infer<typeof MessageSchema>;
 
@@ -67,8 +69,8 @@ export const UserProfileSchema = z.object({
   profileCompleted: z.boolean().optional(),
   // The 'preferences' field can still exist if the backend sends a more complex object,
   // but for direct access in frontend components, 'preferredLanguage' and 'interests' are now direct properties.
-  preferences: z.any().optional(), 
-  favoriteShows: z.any().optional(), 
+  preferences: z.any().optional(),
+  favoriteShows: z.any().optional(),
 });
 export type UserProfile = z.infer<typeof UserProfileSchema>;
 

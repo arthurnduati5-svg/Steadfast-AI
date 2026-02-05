@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useRef, useEffect } from 'react';
+import { getMockAuthToken } from '@/lib/mock-auth';
 import { Plus, Mic, Paperclip, Send, X, Globe, Search, ChevronDown } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Button } from './ui/button';
@@ -9,12 +10,14 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from './ui/t
 import { Switch } from './ui/switch';
 import { Label } from './ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
+import { useToast } from '@/hooks/use-toast';
 import './ui/chat-input-bar.css';
 
 interface ChatInputBarProps {
   input: string;
   setInput: (value: string) => void;
-  handleSendMessage: (e: React.FormEvent, forceWebSearch: boolean, includeVideos: boolean) => void;
+  // Updated signature to match SteadfastCopilot
+  handleSendMessage: (e: React.FormEvent | null, overrideText?: string) => void;
   isLoading: boolean;
   selectedFile: File | null;
   handleFileChange: (event: React.ChangeEvent<HTMLInputElement>) => void;
@@ -28,6 +31,14 @@ interface ChatInputBarProps {
   setLevel: (value: 'Primary' | 'LowerSecondary' | 'UpperSecondary') => void;
   languageHint: 'English' | 'Swahili mix';
   setLanguageHint: (value: 'English' | 'Swahili mix') => void;
+  // New props for state lifting
+  isVoiceRecording: boolean;
+  setIsVoiceRecording: (value: boolean) => void;
+  // Enhanced Voice Mode props
+  setIsVoiceProcessing?: (value: boolean) => void;
+  onVoiceAutoSend?: (text: string) => void;
+  // NEW: Trigger for Voice Concierge Overlay
+  onVoiceModeStart?: () => void;
 }
 
 export const ChatInputBar: React.FC<ChatInputBarProps> = ({
@@ -47,9 +58,15 @@ export const ChatInputBar: React.FC<ChatInputBarProps> = ({
   setLevel,
   languageHint,
   setLanguageHint,
+  isVoiceRecording,
+  setIsVoiceRecording,
+  setIsVoiceProcessing,
+  onVoiceAutoSend,
+  onVoiceModeStart
 }) => {
+  const { toast } = useToast();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
-  const [isVoiceRecording, setIsVoiceRecording] = useState(false);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const [isSearchOptionsMenuOpen, setIsSearchOptionsMenuOpen] = useState(false);
 
 
@@ -88,14 +105,142 @@ export const ChatInputBar: React.FC<ChatInputBarProps> = ({
     setIsMenuOpen(!isMenuOpen);
   };
 
-  const handleVoiceClick = () => {
-    setIsVoiceRecording(!isVoiceRecording);
-    // In a real implementation, you would use the Web Speech API here.
-    // For now, we just toggle the state.
+  // ✅ New Effect: Watch for prop changes to handle external stops (e.g. from Overlay)
+  useEffect(() => {
+    if (!isVoiceRecording && mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
+      console.log('[VOICE] 🛑 External stop signal received. Stopping recorder...');
+      mediaRecorderRef.current.stop();
+    }
+  }, [isVoiceRecording]);
+
+  const handleVoiceClick = async () => {
+    // ✅ NEW: If onVoiceModeStart is provided, trigger it and return.
+    if (onVoiceModeStart) {
+      console.log('[VOICE] 🎤 Triggering Voice Concierge Overlay');
+      onVoiceModeStart();
+      return;
+    }
+
+    // FALLBACK LEGACY LOGIC (If prop not provided)
+    // 1. Token check removed for testing as requested
     if (!isVoiceRecording) {
-        setInput("Voice input is being transcribed...");
+      // Start recording
+      try {
+        console.log('[VOICE] 🎤 Requesting microphone access...');
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        console.log('[VOICE] ✅ Microphone access granted');
+
+        const mediaRecorder = new MediaRecorder(stream);
+        const audioChunks: BlobPart[] = [];
+
+        mediaRecorder.ondataavailable = (event) => {
+          if (event.data.size > 0) {
+            audioChunks.push(event.data);
+          }
+        };
+
+        mediaRecorder.onstop = async () => {
+          console.log('[VOICE] 🛑 Recording stopped. Processing audio...');
+          const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+          console.log('[VOICE] 📦 Audio blob created, size:', audioBlob.size);
+
+          // Stop tracks
+          stream.getTracks().forEach(track => track.stop());
+
+          // Show "Thinking..." state immediately
+          if (setIsVoiceProcessing) setIsVoiceProcessing(true);
+          // Stop "Listening" UI
+          setIsVoiceRecording(false);
+
+          // 2. Auth check with Mock Fallback
+          let currentToken = localStorage.getItem('token');
+          if (!currentToken) {
+            console.log('[VOICE] ⚠️ Token missing in localStorage. Fetching mock token...');
+            try {
+              currentToken = await getMockAuthToken();
+              console.log('[VOICE] ✅ Mock token retrieved:', currentToken ? 'Yes' : 'No');
+            } catch (error) {
+              console.error('[VOICE] ❌ Failed to get mock token:', error);
+            }
+          }
+
+          console.log('[VOICE] 🔑 Token for request:', currentToken ? `${currentToken.substring(0, 15)}...` : 'MISSING');
+
+          const formData = new FormData();
+          formData.append('audio', audioBlob, 'recording.webm');
+
+          try {
+            console.log('[VOICE] 📤 Sending audio to STT endpoint...');
+            const response = await fetch('/api/copilot/stt', {
+              method: 'POST',
+              headers: {
+                'Authorization': `Bearer ${currentToken}`,
+              },
+              body: formData,
+            });
+
+            console.log('[VOICE] 📥 STT Response status:', response.status);
+
+            if (response.ok) {
+              const data = await response.json();
+              console.log('[VOICE] 📝 Transcription received:', data.text);
+              if (data.text) {
+                setInput(data.text);
+                // Trigger auto-send if available
+                if (onVoiceAutoSend) {
+                  // Pass text directly to avoid race condition
+                  console.log('[VOICE] 🚀 Auto-sending text to chat...');
+                  onVoiceAutoSend(data.text);
+                }
+              } else {
+                console.warn('[VOICE] ⚠️ Received empty transcription');
+              }
+            } else {
+              // Safer error handling: Read text ONCE
+              const errorBody = await response.text();
+              let errorMsg = `Status ${response.status}`;
+              try {
+                const jsonError = JSON.parse(errorBody);
+                errorMsg = jsonError.details || jsonError.message || errorBody;
+              } catch (e) {
+                errorMsg = errorBody;
+              }
+
+              console.error('[VOICE] ❌ STT failed:', errorMsg);
+
+              if (response.status === 401) {
+                toast({ variant: "destructive", title: "Authentication Error", description: "Please log in again to use voice." });
+              } else {
+                toast({ variant: "destructive", title: "Voice Error", description: "Could not transcribe: " + errorMsg.substring(0, 100) });
+              }
+
+              if (setIsVoiceProcessing) setIsVoiceProcessing(false);
+            }
+          } catch (error: any) {
+            console.error('Error sending audio to STT:', error);
+            toast({ variant: "destructive", title: "Connection Error", description: "Failed to reach server: " + error.message });
+            if (setIsVoiceProcessing) setIsVoiceProcessing(false);
+          }
+        };
+
+        mediaRecorder.start();
+        setIsVoiceRecording(true);
+        console.log('[VOICE] 🔴 Recording started');
+
+        // Store reference
+        mediaRecorderRef.current = mediaRecorder;
+      } catch (error) {
+        console.error('Error accessing microphone:', error);
+        alert('Could not access microphone. Please ensure permissions are granted.');
+      }
     } else {
-        setInput("");
+      // Stop recording
+      if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
+        mediaRecorderRef.current.stop();
+      } else {
+        setIsVoiceRecording(false);
+      }
+      // Note: onstop handler above will handle the state transitions
     }
   };
 
@@ -111,11 +256,8 @@ export const ChatInputBar: React.FC<ChatInputBarProps> = ({
   };
 
   const handleSendMessageWrapper = (e: React.FormEvent) => {
-    handleSendMessage(e, forceWebSearch, includeVideos);
-    // Optionally, turn off search mode after sending if user preference dictates
-    // if (userPreference.turnOffSearchModeAfterSend) {
-    //   setForceWebSearch(false);
-    // }
+    handleSendMessage(e);
+    // forceWebSearch and includeVideos are handled by state in parent
   };
 
   return (
@@ -227,12 +369,18 @@ export const ChatInputBar: React.FC<ChatInputBarProps> = ({
 
           <Tooltip>
             <TooltipTrigger asChild>
-              <Button variant="ghost" size="icon" onClick={handleVoiceClick} className="mic-button">
-                  <Mic className={`h-5 w-5 ${isVoiceRecording ? 'text-red-500' : ''}`} />
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={handleVoiceClick}
+                className={`mic-button ${isVoiceRecording ? 'animate-pulse' : ''}`}
+              // Use props to style active state if needed, though VoiceConcierge will likely hide this InputBar
+              >
+                <Mic className={`h-5 w-5 ${isVoiceRecording ? 'text-red-500' : ''}`} />
               </Button>
             </TooltipTrigger>
             <TooltipContent>
-              <p>Voice input</p>
+              <p>{isVoiceRecording ? 'Stop recording' : 'Voice input'}</p>
             </TooltipContent>
           </Tooltip>
           <Button
@@ -245,11 +393,11 @@ export const ChatInputBar: React.FC<ChatInputBarProps> = ({
             {isLoading ? <Send className="h-5 w-5 animate-pulse" /> : <Send className="h-5 w-5" />}
           </Button>
           <input
-              type="file"
-              ref={fileInputRef}
-              onChange={handleFileChange}
-              className="hidden"
-              accept="image/jpeg,image/png"
+            type="file"
+            ref={fileInputRef}
+            onChange={handleFileChange}
+            className="hidden"
+            accept="image/jpeg,image/png"
           />
         </div>
         {forceWebSearch && isSearchOptionsMenuOpen && (

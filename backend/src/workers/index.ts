@@ -4,6 +4,7 @@ import pinecone from '../lib/vectorClient';
 import { getRedisClient } from '../lib/redis';
 import { analyzeAndTrackProgress } from '../lib/personalization';
 import 'dotenv/config';
+import { logger } from '../utils/logger';
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 const pineconeIndex = pinecone ? pinecone.Index(process.env.PINECONE_INDEX || '') : null;
@@ -51,9 +52,9 @@ export async function runSummarizationTask(sessionId: string, studentId: string)
         }]);
       }
     }
-    console.log(`[Task] Summarization complete for session ${sessionId}`);
+    logger.info({ sessionId }, '[Task] Summarization complete');
   } catch (error) {
-    console.error(`[Task] Summarization failed for session ${sessionId}:`, error);
+    logger.error({ sessionId, error: String(error) }, '[Task] Summarization failed');
   }
 }
 
@@ -85,12 +86,12 @@ export async function runEmbeddingTask(sessionId: string, studentId: string, mes
     // Auto-update topic if it's still 'New Chat'
     const session = await prisma.chatSession.findUnique({ where: { id: sessionId } });
     if (session?.topic === 'New Chat') {
-      runSummarizationTask(sessionId, studentId);
+      await runSummarizationTask(sessionId, studentId);
     }
 
-    console.log(`[Task] Embeddings stored for session ${sessionId}`);
+    logger.info({ sessionId }, '[Task] Embeddings stored');
   } catch (error) {
-    console.error(`[Task] Embedding task failed for session ${sessionId}:`, error);
+    logger.error({ sessionId, error: String(error) }, '[Task] Embedding task failed');
   }
 }
 
@@ -110,10 +111,10 @@ export async function runRefreshCacheTask(studentId: string) {
       await redis.expire(`profile:${studentId}`, 43200); // 12 hours
       await redis.set(`session:history:${studentId}`, JSON.stringify(history));
       await redis.expire(`session:history:${studentId}`, 43200);
-      console.log(`[Task] Cache refreshed for student ${studentId}`);
+      logger.info({ studentId }, '[Task] Cache refreshed');
     }
   } catch (error) {
-    console.error(`[Task] Cache refresh failed for student ${studentId}:`, error);
+    logger.error({ studentId, error: String(error) }, '[Task] Cache refresh failed');
   }
 }
 
@@ -123,10 +124,10 @@ export async function runRefreshCacheTask(studentId: string) {
 export async function runPersonalizationTask(studentId: string, userMessage: string, aiResponse: string) {
   try {
     await analyzeAndTrackProgress(studentId, userMessage, aiResponse);
-    console.log(`[Task] Personalization processed for student ${studentId}`);
+    logger.info({ studentId }, '[Task] Personalization processed');
   } catch (error) {
-    console.error(`[Task] Personalization task failed for student ${studentId}:`, error);
+    logger.error({ studentId, error: String(error) }, '[Task] Personalization task failed');
   }
 }
 
-console.log('[Workers] Background tasks refactored to plain async functions.');
+logger.info('[Workers] Background tasks initialized.');

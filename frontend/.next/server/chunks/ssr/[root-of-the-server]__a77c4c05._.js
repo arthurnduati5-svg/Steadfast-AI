@@ -2564,11 +2564,13 @@ var __TURBOPACK__imported__module__$5b$project$5d2f$AI$2f$ai$2f$flows$2f$youtube
 var __TURBOPACK__imported__module__$5b$project$5d2f$AI$2f$ai$2f$flows$2f$research$2d$orchestrator$2e$ts__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__ = __turbopack_context__.i("[project]/AI/ai/flows/research-orchestrator.ts [app-rsc] (ecmascript)");
 var __TURBOPACK__imported__module__$5b$project$5d2f$AI$2f$ai$2f$tools$2f$handlers$2e$ts__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__ = __turbopack_context__.i("[project]/AI/ai/tools/handlers.ts [app-rsc] (ecmascript)");
 var __TURBOPACK__imported__module__$5b$project$5d2f$AI$2f$ai$2f$flows$2f$title$2d$generator$2e$ts__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__ = __turbopack_context__.i("[project]/AI/ai/flows/title-generator.ts [app-rsc] (ecmascript)");
+var __TURBOPACK__imported__module__$5b$project$5d2f$AI$2f$ai$2f$flows$2f$intent$2d$detector$2e$ts__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__ = __turbopack_context__.i("[project]/AI/ai/flows/intent-detector.ts [app-rsc] (ecmascript)");
 // ✅ Import Scope Guardian
 var __TURBOPACK__imported__module__$5b$project$5d2f$AI$2f$ai$2f$tools$2f$scope$2d$guardian$2e$ts__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__ = __turbopack_context__.i("[project]/AI/ai/tools/scope-guardian.ts [app-rsc] (ecmascript)");
 // ✅ NEW: Import Multilingual Governance
 var __TURBOPACK__imported__module__$5b$project$5d2f$AI$2f$ai$2f$tools$2f$multilingual$2d$governance$2e$ts__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__ = __turbopack_context__.i("[project]/AI/ai/tools/multilingual-governance.ts [app-rsc] (ecmascript)");
 var __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$build$2f$webpack$2f$loaders$2f$next$2d$flight$2d$loader$2f$action$2d$validate$2e$js__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__ = __turbopack_context__.i("[project]/node_modules/next/dist/build/webpack/loaders/next-flight-loader/action-validate.js [app-rsc] (ecmascript)");
+;
 ;
 ;
 ;
@@ -2596,8 +2598,18 @@ async function emotionalAICopilot(input) {
     // ==============================================================================
     if ((0, __TURBOPACK__imported__module__$5b$project$5d2f$AI$2f$ai$2f$tools$2f$scope$2d$guardian$2e$ts__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["isOutOfScope"])(input.text)) {
         console.log(`[🛡️ SCOPE GUARDIAN] Blocked input: "${input.text}"`);
+        const blockText = (0, __TURBOPACK__imported__module__$5b$project$5d2f$AI$2f$ai$2f$tools$2f$scope$2d$guardian$2e$ts__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["getDynamicScopeResponse"])(input.text);
+        // Word+Space pacing for a natural feel even on blocked content
+        if (input.onToken) {
+            const chunks = blockText.match(/(\S+\s*)/g) || [
+                blockText
+            ];
+            for (const chunk of chunks){
+                input.onToken(chunk);
+            }
+        }
         return {
-            processedText: (0, __TURBOPACK__imported__module__$5b$project$5d2f$AI$2f$ai$2f$tools$2f$scope$2d$guardian$2e$ts__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["getDynamicScopeResponse"])(input.text),
+            processedText: blockText,
             state: input.state,
             topic: input.state.lastSearchTopic?.[0] || "General",
             suggestedTitle: input.currentTitle,
@@ -2613,14 +2625,45 @@ async function emotionalAICopilot(input) {
     let videoData = undefined;
     let suggestedTitle = undefined;
     // ==============================================================================
-    // 1. TITLE GENERATION (SMART UPDATE)
+    // 1. FAST PATH: GREETINGS & SHORT CONTINUATIONS (Sub-millisecond)
+    // ==============================================================================
+    const cleanInput = input.text.trim().toLowerCase();
+    const greets = [
+        "hi",
+        "hello",
+        "hey",
+        "jambo",
+        "good morning",
+        "good afternoon"
+    ];
+    const isGreet = greets.some((g)=>cleanInput === g || cleanInput === g + "!");
+    if (isGreet) {
+        const text = "Hello! How can I help you study today?";
+        if (input.onToken) {
+            const chunks = text.match(/(\S+\s*)/g) || [
+                text
+            ];
+            for (const chunk of chunks){
+                input.onToken(chunk);
+            }
+        }
+        return {
+            processedText: text,
+            state: updatedState,
+            topic: updatedState.lastTopic || 'general'
+        };
+    }
+    // ==============================================================================
+    // 2. PARALLEL PRE-PROCESSING (Intent + Title)
     // ==============================================================================
     const isGenericTitle = !input.currentTitle || input.currentTitle === 'New Chat' || input.currentTitle === 'Untitled';
-    if (isGenericTitle && input.text.length > 1) {
-        const newTitle = await (0, __TURBOPACK__imported__module__$5b$project$5d2f$AI$2f$ai$2f$flows$2f$title$2d$generator$2e$ts__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["generateChatTitle"])(input.chatHistory, input.text);
-        if (newTitle && newTitle !== "New Chat" && newTitle !== "General Discussion") {
-            suggestedTitle = newTitle;
-        }
+    console.log('[BRAIN] Detecting Intent & Generating Title in parallel...');
+    const [intent, maybeNewTitle] = await Promise.all([
+        (0, __TURBOPACK__imported__module__$5b$project$5d2f$AI$2f$ai$2f$flows$2f$intent$2d$detector$2e$ts__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["detectResearchIntent"])(input.text, updatedState.lastTopic),
+        isGenericTitle && input.text.length > 3 ? (0, __TURBOPACK__imported__module__$5b$project$5d2f$AI$2f$ai$2f$flows$2f$title$2d$generator$2e$ts__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["generateChatTitle"])(input.chatHistory, input.text) : Promise.resolve(null)
+    ]);
+    if (maybeNewTitle && maybeNewTitle !== "New Chat" && maybeNewTitle !== "General Discussion") {
+        suggestedTitle = maybeNewTitle;
     }
     // ==============================================================================
     // 2. RESEARCH ORCHESTRATOR ROUTING
@@ -2667,6 +2710,12 @@ async function emotionalAICopilot(input) {
         }
         const sanitizedResponse = await (0, __TURBOPACK__imported__module__$5b$project$5d2f$AI$2f$ai$2f$tools$2f$handlers$2e$ts__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["GUARDIAN_SANITIZE"])(rawResponse, updatedState.lastTopic);
         updatedState.lastAssistantMessage = sanitizedResponse;
+        if (input.onToken) {
+            // For research results, we might have a bulk string, so we simulate streaming for UX consistency
+            for (const char of sanitizedResponse){
+                input.onToken(char);
+            }
+        }
         return {
             processedText: sanitizedResponse,
             state: updatedState,
@@ -2694,6 +2743,11 @@ async function emotionalAICopilot(input) {
         }
         const sanitizedText = await (0, __TURBOPACK__imported__module__$5b$project$5d2f$AI$2f$ai$2f$tools$2f$handlers$2e$ts__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["GUARDIAN_SANITIZE"])(responseText, updatedState.lastTopic);
         updatedState.lastAssistantMessage = sanitizedText;
+        if (input.onToken) {
+            for (const char of sanitizedText){
+                input.onToken(char);
+            }
+        }
         return {
             processedText: sanitizedText,
             state: updatedState,
@@ -2716,8 +2770,8 @@ async function emotionalAICopilot(input) {
   - No metaphors unless helpful.
   - Direct answers.
   `;
-    const isResearchIntent = input.text.toLowerCase().includes('search') || input.text.toLowerCase().includes('find') || input.forceWebSearch;
-    const systemMessage = isResearchIntent ? RESEARCH_PROMPT : TEACHING_PROMPT;
+    const shouldUseResearchSystemPrompt = input.text.toLowerCase().includes('search') || input.text.toLowerCase().includes('find') || input.forceWebSearch;
+    const systemMessage = shouldUseResearchSystemPrompt ? RESEARCH_PROMPT : TEACHING_PROMPT;
     const messages = [
         {
             role: 'system',
@@ -2819,14 +2873,52 @@ async function emotionalAICopilot(input) {
             }
         }
     ];
-    console.log('[BRAIN] Querying OpenAI...');
+    console.log('[BRAIN] Querying AI Completion' + (input.onToken ? ' (STREAMING)' : '') + '...');
+    // Part 1: Strict Streaming Path
+    if (input.onToken) {
+        const completion = await openai.chat.completions.create({
+            messages: messages,
+            model: 'gpt-4o-mini',
+            tools: tools,
+            tool_choice: 'auto',
+            stream: true
+        });
+        let fullText = '';
+        let toolCallDetected = false;
+        for await (const chunk of completion){
+            const delta = chunk.choices[0]?.delta;
+            const content = delta?.content || "";
+            if (delta?.tool_calls) {
+                toolCallDetected = true;
+                break; // Switch to tool handling path
+            }
+            if (content) {
+                fullText += content;
+                input.onToken(content);
+            }
+        }
+        if (!toolCallDetected) {
+            const sanitizedFinalText = await (0, __TURBOPACK__imported__module__$5b$project$5d2f$AI$2f$ai$2f$tools$2f$handlers$2e$ts__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["GUARDIAN_SANITIZE"])(fullText, updatedState.lastTopic);
+            updatedState.lastAssistantMessage = sanitizedFinalText;
+            return {
+                processedText: sanitizedFinalText,
+                videoData,
+                state: updatedState,
+                topic: updatedState.lastTopic || input.text,
+                suggestedTitle
+            };
+        }
+    }
+    // Part 2: Non-Streaming Fallback (Tools or simple requests)
     const completion = await openai.chat.completions.create({
-        messages: messages,
+        messages,
         model: 'gpt-4o-mini',
-        tools: tools,
-        tool_choice: 'auto'
+        tools,
+        tool_choice: 'auto',
+        stream: false
     });
-    const responseMessage = completion.choices[0].message;
+    const finalCompletion = completion;
+    const responseMessage = finalCompletion.choices[0].message;
     if (responseMessage.tool_calls && responseMessage.tool_calls.length > 0) {
         const toolCall = responseMessage.tool_calls[0];
         const functionName = toolCall.function.name;
@@ -2912,6 +3004,15 @@ async function emotionalAICopilot(input) {
     // Pass user interests to sanitizer for fine-tuning
     const sanitizedFinalText = await (0, __TURBOPACK__imported__module__$5b$project$5d2f$AI$2f$ai$2f$tools$2f$handlers$2e$ts__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["GUARDIAN_SANITIZE"])(responseText, updatedState.lastTopic);
     updatedState.lastAssistantMessage = sanitizedFinalText;
+    // Yield final sanitized tokens if they haven't been yielded already (tool-call or fallback paths)
+    if (input.onToken) {
+        const chunks = sanitizedFinalText.match(/(\S+\s*)/g) || [
+            sanitizedFinalText
+        ];
+        for (const chunk of chunks){
+            input.onToken(chunk);
+        }
+    }
     return {
         processedText: sanitizedFinalText,
         videoData,
@@ -3243,7 +3344,6 @@ var { g: global, __dirname } = __turbopack_context__;
 __turbopack_context__.s({});
 var __TURBOPACK__imported__module__$5b$project$5d2f$frontend$2f$app$2f$actions$2e$ts__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__ = __turbopack_context__.i("[project]/frontend/app/actions.ts [app-rsc] (ecmascript)");
 ;
-;
 }}),
 "[project]/frontend/.next-internal/server/app/page/actions.js { ACTIONS_MODULE0 => \"[project]/frontend/app/actions.ts [app-rsc] (ecmascript)\" } [app-rsc] (server actions loader, ecmascript) <module evaluation>": ((__turbopack_context__) => {
 "use strict";
@@ -3260,8 +3360,7 @@ var __TURBOPACK__imported__module__$5b$project$5d2f$frontend$2f2e$next$2d$intern
 var { g: global, __dirname } = __turbopack_context__;
 {
 __turbopack_context__.s({
-    "707f687be101932e3a517e3e5724727d27e4ad5343": (()=>__TURBOPACK__imported__module__$5b$project$5d2f$frontend$2f$app$2f$actions$2e$ts__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["getDailyObjectives"]),
-    "7ffb0850d8356f1302247d1a1a0765dd4d440d4972": (()=>__TURBOPACK__imported__module__$5b$project$5d2f$frontend$2f$app$2f$actions$2e$ts__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["getAssistantResponse"])
+    "707f687be101932e3a517e3e5724727d27e4ad5343": (()=>__TURBOPACK__imported__module__$5b$project$5d2f$frontend$2f$app$2f$actions$2e$ts__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["getDailyObjectives"])
 });
 var __TURBOPACK__imported__module__$5b$project$5d2f$frontend$2f$app$2f$actions$2e$ts__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__ = __turbopack_context__.i("[project]/frontend/app/actions.ts [app-rsc] (ecmascript)");
 var __TURBOPACK__imported__module__$5b$project$5d2f$frontend$2f2e$next$2d$internal$2f$server$2f$app$2f$page$2f$actions$2e$js__$7b$__ACTIONS_MODULE0__$3d3e$__$225b$project$5d2f$frontend$2f$app$2f$actions$2e$ts__$5b$app$2d$rsc$5d$__$28$ecmascript$2922$__$7d$__$5b$app$2d$rsc$5d$__$28$server__actions__loader$2c$__ecmascript$29$__$3c$locals$3e$__ = __turbopack_context__.i('[project]/frontend/.next-internal/server/app/page/actions.js { ACTIONS_MODULE0 => "[project]/frontend/app/actions.ts [app-rsc] (ecmascript)" } [app-rsc] (server actions loader, ecmascript) <locals>');
@@ -3272,8 +3371,7 @@ var __TURBOPACK__imported__module__$5b$project$5d2f$frontend$2f2e$next$2d$intern
 var { g: global, __dirname } = __turbopack_context__;
 {
 __turbopack_context__.s({
-    "707f687be101932e3a517e3e5724727d27e4ad5343": (()=>__TURBOPACK__imported__module__$5b$project$5d2f$frontend$2f2e$next$2d$internal$2f$server$2f$app$2f$page$2f$actions$2e$js__$7b$__ACTIONS_MODULE0__$3d3e$__$225b$project$5d2f$frontend$2f$app$2f$actions$2e$ts__$5b$app$2d$rsc$5d$__$28$ecmascript$2922$__$7d$__$5b$app$2d$rsc$5d$__$28$server__actions__loader$2c$__ecmascript$29$__$3c$exports$3e$__["707f687be101932e3a517e3e5724727d27e4ad5343"]),
-    "7ffb0850d8356f1302247d1a1a0765dd4d440d4972": (()=>__TURBOPACK__imported__module__$5b$project$5d2f$frontend$2f2e$next$2d$internal$2f$server$2f$app$2f$page$2f$actions$2e$js__$7b$__ACTIONS_MODULE0__$3d3e$__$225b$project$5d2f$frontend$2f$app$2f$actions$2e$ts__$5b$app$2d$rsc$5d$__$28$ecmascript$2922$__$7d$__$5b$app$2d$rsc$5d$__$28$server__actions__loader$2c$__ecmascript$29$__$3c$exports$3e$__["7ffb0850d8356f1302247d1a1a0765dd4d440d4972"])
+    "707f687be101932e3a517e3e5724727d27e4ad5343": (()=>__TURBOPACK__imported__module__$5b$project$5d2f$frontend$2f2e$next$2d$internal$2f$server$2f$app$2f$page$2f$actions$2e$js__$7b$__ACTIONS_MODULE0__$3d3e$__$225b$project$5d2f$frontend$2f$app$2f$actions$2e$ts__$5b$app$2d$rsc$5d$__$28$ecmascript$2922$__$7d$__$5b$app$2d$rsc$5d$__$28$server__actions__loader$2c$__ecmascript$29$__$3c$exports$3e$__["707f687be101932e3a517e3e5724727d27e4ad5343"])
 });
 var __TURBOPACK__imported__module__$5b$project$5d2f$frontend$2f2e$next$2d$internal$2f$server$2f$app$2f$page$2f$actions$2e$js__$7b$__ACTIONS_MODULE0__$3d3e$__$225b$project$5d2f$frontend$2f$app$2f$actions$2e$ts__$5b$app$2d$rsc$5d$__$28$ecmascript$2922$__$7d$__$5b$app$2d$rsc$5d$__$28$server__actions__loader$2c$__ecmascript$29$__$3c$module__evaluation$3e$__ = __turbopack_context__.i('[project]/frontend/.next-internal/server/app/page/actions.js { ACTIONS_MODULE0 => "[project]/frontend/app/actions.ts [app-rsc] (ecmascript)" } [app-rsc] (server actions loader, ecmascript) <module evaluation>');
 var __TURBOPACK__imported__module__$5b$project$5d2f$frontend$2f2e$next$2d$internal$2f$server$2f$app$2f$page$2f$actions$2e$js__$7b$__ACTIONS_MODULE0__$3d3e$__$225b$project$5d2f$frontend$2f$app$2f$actions$2e$ts__$5b$app$2d$rsc$5d$__$28$ecmascript$2922$__$7d$__$5b$app$2d$rsc$5d$__$28$server__actions__loader$2c$__ecmascript$29$__$3c$exports$3e$__ = __turbopack_context__.i('[project]/frontend/.next-internal/server/app/page/actions.js { ACTIONS_MODULE0 => "[project]/frontend/app/actions.ts [app-rsc] (ecmascript)" } [app-rsc] (server actions loader, ecmascript) <exports>');

@@ -1,6 +1,7 @@
 // backend/src/middleware/schoolAuthMiddleware.ts
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
+import { logger } from '../utils/logger';
 
 // Extend the Express Request type to include our custom 'user' property
 declare global {
@@ -19,11 +20,11 @@ if (!JWT_SECRET) {
 }
 
 export const schoolAuthMiddleware = async (req: Request, res: Response, next: NextFunction) => {
-  console.log(`[AuthMiddleware] - Incoming request for: ${req.method} ${req.originalUrl}`);
+  logger.debug({ method: req.method, url: req.originalUrl }, '[AuthMiddleware] Incoming request');
   try {
     const authHeader = req.headers.authorization;
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      console.warn(`[AuthMiddleware] - No token or invalid format for ${req.originalUrl}`);
+      logger.warn({ url: req.originalUrl }, '[AuthMiddleware] No token or invalid format');
       return res.status(401).json({
         success: false,
         message: 'Authentication required. No token provided or invalid format.'
@@ -36,10 +37,10 @@ export const schoolAuthMiddleware = async (req: Request, res: Response, next: Ne
     try {
       // 1. Verify the JWT token
       decoded = jwt.verify(token, JWT_SECRET) as { userId: string };
-      console.log(`[AuthMiddleware] - Token successfully verified for ${req.originalUrl}. Decoded userId: ${decoded.userId}`);
+      logger.debug({ userId: decoded.userId, url: req.originalUrl }, '[AuthMiddleware] Token verified');
     } catch (error: any) {
       if (error.name === 'TokenExpiredError') {
-        console.warn(`[AuthMiddleware] - Token expired for ${req.originalUrl}`);
+        logger.warn({ url: req.originalUrl }, '[AuthMiddleware] Token expired');
         return res.status(401).json({
           success: false,
           message: 'Token has expired. Please log in again.'
@@ -66,7 +67,7 @@ export const schoolAuthMiddleware = async (req: Request, res: Response, next: Ne
     req.user = {
       id: userId
     };
-    
+
     // 4. Pass control to the next handler
     console.log(`[AuthMiddleware] - Calling next() for ${req.originalUrl}`);
     next();

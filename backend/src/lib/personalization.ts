@@ -1,6 +1,7 @@
 import { OpenAI } from 'openai';
 import prisma from '../utils/prismaClient';
 import { getRedisClient } from './redis';
+import { logger } from '../utils/logger';
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
@@ -9,7 +10,7 @@ interface AnalysisResult {
   topic: string;
   details: string; // The specific error or the concept mastered
   confidenceScore: number; // 0-100
-  suggestedMasteryLevel?: 'Beginner' | 'Developing' | 'Mastered'; 
+  suggestedMasteryLevel?: 'Beginner' | 'Developing' | 'Mastered';
   isRecurringWeakness?: boolean; // NEW: Flag for persistent struggle
 }
 
@@ -19,7 +20,7 @@ export async function analyzeAndTrackProgress(studentId: string, userMessage: st
 
     if (analysis.type === 'neutral' || analysis.confidenceScore < 70) return;
 
-    console.log(`[Personalization] Tracking ${analysis.type} for ${studentId}: ${analysis.topic}`);
+    logger.info({ type: analysis.type, studentId, topic: analysis.topic }, '[Personalization] Tracking interaction');
 
     // --- PROGRESS LOGIC ---
     if (analysis.type === 'progress') {
@@ -37,7 +38,7 @@ export async function analyzeAndTrackProgress(studentId: string, userMessage: st
       // If they show progress in a known weakness area, boost confidence but keep it "Developing" first
       // This prevents "fake mastery" where they get it right once after failing 5 times.
       if (existingProgress && existingProgress.mastery < 30) {
-          masteryIncrement = Math.min(masteryIncrement, 10); // Cap jump if previously weak
+        masteryIncrement = Math.min(masteryIncrement, 10); // Cap jump if previously weak
       }
 
       let newMastery = Math.min(currentMastery + masteryIncrement, 100);
@@ -56,48 +57,48 @@ export async function analyzeAndTrackProgress(studentId: string, userMessage: st
 
       // If they mastered a topic that was a mistake record, we can optionally resolve/delete the mistake
       if (newMastery > 80) {
-          await prisma.mistake.deleteMany({
-              where: { studentId, topic: analysis.topic }
-          });
+        await prisma.mistake.deleteMany({
+          where: { studentId, topic: analysis.topic }
+        });
       }
 
-    // --- MISTAKE & WEAKNESS LOGIC ---
+      // --- MISTAKE & WEAKNESS LOGIC ---
     } else if (analysis.type === 'mistake') {
-      
+
       // Check if this is a recurring struggle
       const existingMistake = await prisma.mistake.findFirst({
-          where: { studentId, topic: analysis.topic }
+        where: { studentId, topic: analysis.topic }
       });
 
       if (existingMistake) {
-          // RECURRING WEAKNESS: Increment attempts to signal persistence
-          await prisma.mistake.update({
-              where: { id: existingMistake.id },
-              data: { 
-                  attempts: { increment: 1 }, 
-                  error: analysis.details // Update with latest specific struggle
-              }
-          });
-          
-          // SIGNIFICANT REGRESSION: If they keep failing, lower their mastery score
-          const existingProgress = await prisma.progress.findFirst({ where: { studentId, topic: analysis.topic } });
-          if (existingProgress) {
-              await prisma.progress.update({
-                  where: { id: existingProgress.id },
-                  data: { mastery: Math.max(existingProgress.mastery - 10, 0) } // Penalty for recurring error
-              });
+        // RECURRING WEAKNESS: Increment attempts to signal persistence
+        await prisma.mistake.update({
+          where: { id: existingMistake.id },
+          data: {
+            attempts: { increment: 1 },
+            error: analysis.details // Update with latest specific struggle
           }
+        });
+
+        // SIGNIFICANT REGRESSION: If they keep failing, lower their mastery score
+        const existingProgress = await prisma.progress.findFirst({ where: { studentId, topic: analysis.topic } });
+        if (existingProgress) {
+          await prisma.progress.update({
+            where: { id: existingProgress.id },
+            data: { mastery: Math.max(existingProgress.mastery - 10, 0) } // Penalty for recurring error
+          });
+        }
 
       } else {
-          // NEW WEAKNESS
-          await prisma.mistake.create({
-            data: {
-              studentId,
-              topic: analysis.topic,
-              error: analysis.details,
-              attempts: 1
-            }
-          });
+        // NEW WEAKNESS
+        await prisma.mistake.create({
+          data: {
+            studentId,
+            topic: analysis.topic,
+            error: analysis.details,
+            attempts: 1
+          }
+        });
       }
     }
 
@@ -108,7 +109,7 @@ export async function analyzeAndTrackProgress(studentId: string, userMessage: st
     }
 
   } catch (error) {
-    console.error('[Personalization] Engine Error:', error);
+    logger.error({ studentId, error: String(error) }, '[Personalization] Engine Error');
   }
 }
 
@@ -140,7 +141,7 @@ async function analyzeInteraction(userMsg: string, aiMsg: string): Promise<Analy
 
   try {
     const completion = await openai.chat.completions.create({
-      model: 'gpt-4o-mini', 
+      model: 'gpt-4o-mini',
       messages: [
         { role: 'system', content: systemPrompt },
         { role: 'user', content: `Student: "${userMsg}"\nAI Teacher: "${aiMsg}"` }
@@ -151,10 +152,10 @@ async function analyzeInteraction(userMsg: string, aiMsg: string): Promise<Analy
 
     const content = completion.choices[0].message.content;
     if (!content) return { type: 'neutral', topic: '', details: '', confidenceScore: 0 };
-    
+
     return JSON.parse(content) as AnalysisResult;
   } catch (e) {
-    console.error('LLM Analysis Failed', e);
+    logger.error({ error: String(e) }, 'LLM Analysis Failed');
     return { type: 'neutral', topic: '', details: '', confidenceScore: 0 };
   }
 }

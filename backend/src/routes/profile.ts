@@ -5,6 +5,7 @@ import prisma from '../utils/prismaClient';
 import _ from 'lodash';
 import { getRedisClient } from '../lib/redis'; // Corrected import
 import { Prisma } from '@prisma/client';
+import { logger } from '../utils/logger';
 
 const router = Router();
 
@@ -18,7 +19,7 @@ router.get('/profile', schoolAuthMiddleware, async (req: Request, res) => {
     }
     res.status(200).send(profile);
   } catch (error: any) {
-    console.error('Error fetching profile:', error);
+    logger.error({ error: error.message, userId: req.user?.id }, 'Error fetching profile');
     res.status(500).send({ message: 'Internal server error.' });
   }
 });
@@ -77,13 +78,13 @@ router.get('/copilot/preferences', schoolAuthMiddleware, async (req: Request, re
   const userId = req.user!.id;
   const cacheKey = `copilot:preferences:${userId}`;
 
-  console.log(`[Backend] Attempting to fetch preferences for userId: ${userId}`);
+  logger.debug({ userId }, '[Backend] Fetching preferences');
 
   let redis;
   try {
     redis = await getRedisClient();
   } catch (error) {
-    console.warn('Redis client not available for preferences retrieval.', error);
+    logger.warn({ error: String(error) }, 'Redis client not available for preferences retrieval');
   }
 
   try {
@@ -91,7 +92,7 @@ router.get('/copilot/preferences', schoolAuthMiddleware, async (req: Request, re
     if (redis) {
       const cachedPreferences = await redis.get(cacheKey);
       if (cachedPreferences) {
-        console.log(`[Backend] Preferences found in cache for userId: ${userId}`);
+        logger.debug({ userId }, '[Backend] Preferences found in cache');
         return res.status(200).json(JSON.parse(cachedPreferences));
       }
     }
@@ -102,7 +103,7 @@ router.get('/copilot/preferences', schoolAuthMiddleware, async (req: Request, re
     });
 
     if (preferences) {
-      console.log(`[Backend] Preferences found in DB for userId: ${userId}`, preferences);
+      logger.debug({ userId }, '[Backend] Preferences found in DB');
       // Store in cache for 30 minutes
       if (redis) {
         await redis.set(cacheKey, JSON.stringify(preferences));
@@ -110,7 +111,7 @@ router.get('/copilot/preferences', schoolAuthMiddleware, async (req: Request, re
       }
       return res.status(200).json(preferences);
     } else {
-      console.log(`[Backend] No preferences found for userId: ${userId}, returning defaults.`);
+      logger.info({ userId }, '[Backend] No preferences found, returning defaults');
       // Return default empty preferences
       return res.status(200).json({
         preferredLanguage: 'english',
@@ -218,7 +219,7 @@ router.delete('/copilot/preferences', schoolAuthMiddleware, async (req: Request,
   } catch (error: any) {
     // If the record doesn't exist, prisma throws an error. We can ignore it.
     if (error.code === 'P2025') {
-        return res.status(200).json({ message: 'Preferences cleared successfully' });
+      return res.status(200).json({ message: 'Preferences cleared successfully' });
     }
     console.error('Error deleting preferences:', error);
     res.status(500).json({ message: 'Internal server error.' });
