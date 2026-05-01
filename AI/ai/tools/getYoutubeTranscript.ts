@@ -1,13 +1,20 @@
+import { runFlow } from '@genkit-ai/flow';
+import { getYoutubeTranscriptFlow } from '../flows/get-youtube-transcript';
 import { GetYoutubeTranscriptInput, GetYoutubeTranscriptOutput } from './toolSchemas';
 
-// Real implementation should fetch transcripts server-side and sanitize them.
 export async function getYoutubeTranscriptTool(input: GetYoutubeTranscriptInput): Promise<GetYoutubeTranscriptOutput> {
-  if (!input || typeof input.videoId !== 'string' || input.videoId.length < 4) {
+  const videoId = String(input?.videoId || '').trim();
+  if (!videoId || videoId.length < 4) {
     return { error: 'Invalid videoId' };
   }
-  // Stub behavior: return a short sample transcript or an error if id unknown
-  if (input.videoId === 'vid123') {
-    return { transcript: 'This is a short sample transcript for the educational video.' };
+
+  try {
+    const transcript = await runFlow(getYoutubeTranscriptFlow, { videoId });
+    if (!transcript || transcript.startsWith('Could not')) {
+      return { error: 'Transcript not available' };
+    }
+    return { transcript };
+  } catch {
+    return { error: 'Transcript not available' };
   }
-  return { error: 'Transcript not available' };
 }

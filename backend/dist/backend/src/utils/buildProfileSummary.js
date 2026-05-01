@@ -1,4 +1,7 @@
-export const buildProfileSummary = (profile) => {
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.buildProfileSummary = void 0;
+const buildProfileSummary = (profile) => {
     let summary = `Student ${profile.name || ''} (ID: ${profile.userId}) is in grade ${profile.gradeLevel || ''}. `;
     if (profile.preferredLanguage) {
         summary += `They prefer to learn in ${profile.preferredLanguage}. `;
@@ -17,4 +20,5 @@ export const buildProfileSummary = (profile) => {
     }
     return summary.trim();
 };
+exports.buildProfileSummary = buildProfileSummary;
 //# sourceMappingURL=buildProfileSummary.js.map

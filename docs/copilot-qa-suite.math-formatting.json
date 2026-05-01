@@ -1,0 +1,121 @@
+{
+  "config": {
+    "name": "copilot_math_formatting_suite",
+    "newSessionPerCase": true,
+    "applyCasePreferences": true,
+    "failOnRepeatedSegments": true,
+    "defaultMaxLatencyMs": 45000
+  },
+  "cases": [
+    {
+      "id": "fraction_addition_plain_text",
+      "prompt": "Teach me how to solve 3/4 + 5/8 in plain text only. No markdown. Then ask one short check question.",
+      "gradeLevel": "Primary",
+      "preferredLanguage": "english",
+      "mustContainAny": ["3/4", "5/8", "question"],
+      "mustNotContain": ["latex", "as an ai language model"],
+      "minWords": 20,
+      "maxQuestions": 2
+    },
+    {
+      "id": "fraction_division_redundant_parens",
+      "prompt": "Solve ((3/4)) divided by ((2/5)) step by step and keep it clean plain text.",
+      "gradeLevel": "Primary",
+      "preferredLanguage": "english",
+      "mustContainAny": ["3/4", "2/5", "divide", "reciprocal"],
+      "mustNotContain": ["latex", "as an ai language model"],
+      "minWords": 16
+    },
+    {
+      "id": "linear_equation_parentheses",
+      "prompt": "Solve 2(x + 3) = 14 and explain each step in simple student wording.",
+      "gradeLevel": "Primary",
+      "preferredLanguage": "english",
+      "mustContainAny": ["x", "14", "step", "equation"],
+      "mustNotContain": ["latex", "as an ai language model"],
+      "minWords": 14
+    },
+    {
+      "id": "simultaneous_equations_clean",
+      "prompt": "Solve this system in plain text: x + y = 10 and x - y = 4. Explain cleanly and briefly.",
+      "gradeLevel": "Secondary",
+      "preferredLanguage": "english",
+      "mustContainAny": ["x", "y", "10", "4"],
+      "mustNotContain": ["latex", "as an ai language model"],
+      "minWords": 16
+    },
+    {
+      "id": "algebra_fraction_equation",
+      "prompt": "Solve x/3 + x/6 = 6 using clear plain text and no robotic wording.",
+      "gradeLevel": "Secondary",
+      "preferredLanguage": "english",
+      "mustContainAny": ["x/3", "x/6", "6"],
+      "mustNotContain": ["latex", "as an ai language model"],
+      "minWords": 14
+    },
+    {
+      "id": "percentage_word_problem",
+      "prompt": "A shirt costs 2400 and has a 15 percent discount. Explain final price and method simply.",
+      "gradeLevel": "Primary",
+      "preferredLanguage": "english",
+      "mustContainAny": ["2400", "15", "discount", "price"],
+      "mustNotContain": ["latex", "as an ai language model"],
+      "minWords": 12
+    },
+    {
+      "id": "order_of_operations_nested",
+      "prompt": "Evaluate 18 - (6 / 3) + (2 * (4 + 1)) and explain order of operations in plain text.",
+      "gradeLevel": "Primary",
+      "preferredLanguage": "english",
+      "mustContainAny": ["18", "6", "3", "order"],
+      "mustNotContain": ["latex", "as an ai language model"],
+      "minWords": 12
+    },
+    {
+      "id": "quadratic_basic_factor",
+      "prompt": "Factor x^2 + 5x + 6 with short steps and student-friendly language.",
+      "gradeLevel": "Secondary",
+      "preferredLanguage": "english",
+      "mustContainAny": ["x^2", "5x", "6", "factor"],
+      "mustNotContain": ["latex", "as an ai language model"],
+      "minWords": 12
+    },
+    {
+      "id": "quran_math_context_bridge",
+      "prompt": "Give one respectful Quran-inspired motivation line for studying math, then solve 7/10 + 1/5.",
+      "gradeLevel": "Secondary",
+      "preferredLanguage": "english",
+      "mustContainAny": ["quran", "math", "7/10", "1/5"],
+      "mustNotContain": ["fatwa", "as an ai language model"],
+      "minWords": 16
+    },
+    {
+      "id": "swahili_fraction_plain",
+      "prompt": "Nisaidie kusolve 5/6 - 1/3 kwa hatua rahisi na plain text.",
+      "gradeLevel": "Primary",
+      "preferredLanguage": "swahili",
+      "mustContainAny": ["5/6", "1/3", "hatua"],
+      "mustNotContain": ["latex", "as an ai language model"],
+      "minWords": 10
+    },
+    {
+      "id": "retry_confusion_followup",
+      "prompt": "Sijaelewa step ya denominator kwenye 3/4 + 1/8, eleza tena kwa sentensi fupi.",
+      "gradeLevel": "Primary",
+      "preferredLanguage": "swahili",
+      "mustContainAny": ["denominator", "3/4", "1/8", "eleza"],
+      "mustNotContain": ["as an ai language model"],
+      "minWords": 8
+    },
+    {
+      "id": "final_answer_no_robotic",
+      "prompt": "What is (3/4) divided by (1/2)? Keep answer natural, plain text, and concise.",
+      "gradeLevel": "Primary",
+      "preferredLanguage": "english",
+      "mustContainAny": ["3/4", "1/2", "answer", "divide"],
+      "mustNotContain": ["as an ai language model", "language model"],
+      "minWords": 8
+    }
+  ]
+}
+

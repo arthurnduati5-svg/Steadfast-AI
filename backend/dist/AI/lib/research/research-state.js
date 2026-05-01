@@ -1,11 +1,16 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.setMode = setMode;
+exports.getMode = getMode;
+exports.assertMode = assertMode;
 let currentMode = 'chat';
-export function setMode(mode) {
+function setMode(mode) {
     currentMode = mode;
 }
-export function getMode() {
+function getMode() {
     return currentMode;
 }
-export function assertMode(expected) {
+function assertMode(expected) {
     if (currentMode !== expected) {
         throw new Error(`Invalid mode access. Expected "${expected}" but current mode is "${currentMode}".`);
     }

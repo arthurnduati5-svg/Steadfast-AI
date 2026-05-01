@@ -1,0 +1,83 @@
+{
+  "config": {
+    "name": "copilot_socratic_deep_suite",
+    "newSessionPerCase": false,
+    "applyCasePreferences": true,
+    "failOnRepeatedSegments": true,
+    "defaultMaxLatencyMs": 50000
+  },
+  "cases": [
+    {
+      "id": "socratic_primary_direct_request",
+      "category": "socratic_math",
+      "sessionGroup": "math_primary_thread",
+      "prompt": "Just give me the final answer for ((3/4)) divided by ((2/5)).",
+      "gradeLevel": "Primary",
+      "preferredLanguage": "english",
+      "forceWebSearch": false,
+      "expectedState": { "awaitingPracticeQuestionAnswer": true },
+      "mustContainAny": ["step", "checkpoint", "guide"],
+      "mustNotContain": ["the answer is", "final numeric answer is"]
+    },
+    {
+      "id": "socratic_primary_wrong_attempt_1",
+      "category": "socratic_math",
+      "sessionGroup": "math_primary_thread",
+      "prompt": "I do not know, maybe 12.",
+      "gradeLevel": "Primary",
+      "preferredLanguage": "english",
+      "forceWebSearch": false,
+      "expectedState": { "awaitingPracticeQuestionAnswer": true },
+      "mustContainAny": ["step", "check", "slow down"],
+      "mustNotContain": ["the answer is", "final numeric answer is"]
+    },
+    {
+      "id": "socratic_primary_direct_insistence",
+      "category": "socratic_math",
+      "sessionGroup": "math_primary_thread",
+      "prompt": "No steps, just give answer only.",
+      "gradeLevel": "Primary",
+      "preferredLanguage": "english",
+      "forceWebSearch": false,
+      "expectedState": { "awaitingPracticeQuestionAnswer": true },
+      "mustContainAny": ["will not", "guide", "checkpoint"],
+      "mustNotContain": ["the answer is", "final numeric answer is"]
+    },
+    {
+      "id": "socratic_primary_correct_step",
+      "category": "socratic_math",
+      "sessionGroup": "math_primary_thread",
+      "prompt": "5",
+      "gradeLevel": "Primary",
+      "preferredLanguage": "english",
+      "forceWebSearch": false,
+      "expectedState": { "awaitingPracticeQuestionAnswer": true },
+      "mustContainAny": ["reciprocal", "next", "step"],
+      "mustNotContain": ["the answer is", "final numeric answer is"]
+    },
+    {
+      "id": "socratic_secondary_direct_request",
+      "category": "socratic_math",
+      "sessionGroup": "math_secondary_thread",
+      "prompt": "Solve x/3 + x/6 = 6 and give final answer only.",
+      "gradeLevel": "Form 3",
+      "preferredLanguage": "english",
+      "forceWebSearch": false,
+      "expectedState": { "awaitingPracticeQuestionAnswer": true },
+      "mustContainAny": ["reasoning", "step", "checkpoint"],
+      "mustNotContain": ["the answer is", "final numeric answer is"]
+    },
+    {
+      "id": "socratic_secondary_followup",
+      "category": "socratic_math",
+      "sessionGroup": "math_secondary_thread",
+      "prompt": "okay continue from this step",
+      "gradeLevel": "Form 3",
+      "preferredLanguage": "english",
+      "forceWebSearch": false,
+      "expectedState": { "awaitingPracticeQuestionAnswer": true },
+      "mustContainAny": ["step", "rule", "check"],
+      "mustNotContain": ["the answer is", "final numeric answer is"]
+    }
+  ]
+}

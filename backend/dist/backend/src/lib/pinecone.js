@@ -1,5 +1,7 @@
-import { Pinecone } from '@pinecone-database/pinecone';
-const pinecone = new Pinecone({
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+const pinecone_1 = require("@pinecone-database/pinecone");
+const pinecone = new pinecone_1.Pinecone({
     apiKey: process.env.PINECONE_API_KEY || '',
     // The environment is now part of the baseUrl.
     // Example: "https://<YOUR_INDEX_NAME>-<YOUR_PROJECT_ID>.svc.<YOUR_ENVIRONMENT>.pinecone.io"
@@ -10,5 +12,5 @@ const pinecone = new Pinecone({
     // For now, I'll remove the `environment` and assume apiKey might suffice or you'll set baseUrl.
     // If you have a specific baseUrl, please update this.
 });
-export default pinecone;
+exports.default = pinecone;
 //# sourceMappingURL=pinecone.js.map

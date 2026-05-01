@@ -1,9 +1,13 @@
-import { clsx } from "clsx";
-import { twMerge } from "tailwind-merge";
-export function cn(...inputs) {
-    return twMerge(clsx(inputs));
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.cn = cn;
+exports.formatMessageContent = formatMessageContent;
+const clsx_1 = require("clsx");
+const tailwind_merge_1 = require("tailwind-merge");
+function cn(...inputs) {
+    return (0, tailwind_merge_1.twMerge)((0, clsx_1.clsx)(inputs));
 }
-export function formatMessageContent(content) {
+function formatMessageContent(content) {
     // Remove stray newlines that might come from the AI
     let cleanContent = content.replace(/\n/g, " ").replace(/\\n/g, " ").replace(/\s+/g, " ").trim();
     // Convert URLs into clickable links with text-primary class

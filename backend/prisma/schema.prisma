@@ -1,6 +1,7 @@
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 generator client {
@@ -16,6 +17,7 @@ model ChatMessage {
   timestamp     DateTime    @default(now())
   messageNumber Int
   metadata      Json?
+  revisionItems RevisionItem[] @relation("RevisionItemSourceMessage")
 
   @@index([sessionId])
   @@index([timestamp])
@@ -33,6 +35,10 @@ model ChatSession {
   metadata  Json?
   createdAt DateTime       @default(now())
   updatedAt DateTime       @updatedAt
+  voiceSessionUsages VoiceSessionUsage[]
+  revisionItems RevisionItem[]
+
+  @@index([studentId, updatedAt])
 }
 
 model Progress {
@@ -43,6 +49,8 @@ model Progress {
   topic     String
   mastery   Int
   updatedAt DateTime       @updatedAt
+
+  @@index([studentId])
 }
 
 model Mistake {
@@ -53,6 +61,8 @@ model Mistake {
   error     String
   attempts  Int            @default(1)
   lastSeen  DateTime       @default(now())
+
+  @@index([studentId, lastSeen])
 }
 
 model GlobalMemory {
@@ -81,6 +91,351 @@ model StudentProfile {
   progress             Progress[]
   mistakes             Mistake[]
   copilotPreferences   CopilotPreferences?
+  voiceUsages          VoiceUsage[]
+  voicePackageGrants   VoicePackageGrant[]
+  voiceSessionUsages   VoiceSessionUsage[]
+  voiceLedgerEntries   VoiceLedgerEntry[]
+  latencyMetrics       TurnLatencyMetric[]
+  revisionCollections  RevisionCollection[]
+  revisionItems        RevisionItem[]
+  mediaAssets          MediaAsset[]
+}
+
+model RevisionCollection {
+  id          String          @id @default(uuid())
+  userId      String
+  student     StudentProfile  @relation(fields: [userId], references: [userId], onDelete: Cascade)
+  title       String
+  subject     String?
+  topic       String?
+  description String?
+  kind        String?
+  bundleSummary String?
+  featuredItemIds Json?
+  coverRef    Json?
+  examFocus   Boolean         @default(false)
+  pinned      Boolean         @default(false)
+  sourceSessionId String?
+  metadata    Json?
+  items       RevisionItem[]
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  @@index([userId, updatedAt])
+  @@index([userId, title])
+  @@index([userId, topic])
+}
+
+model RevisionItem {
+  id              String             @id @default(uuid())
+  userId          String
+  student         StudentProfile     @relation(fields: [userId], references: [userId], onDelete: Cascade)
+  sessionId       String?
+  chatSession     ChatSession?       @relation(fields: [sessionId], references: [id], onDelete: SetNull)
+  sourceMessageId String?
+  sourceMessage   ChatMessage?       @relation("RevisionItemSourceMessage", fields: [sourceMessageId], references: [id], onDelete: SetNull)
+  collectionId    String?
+  collection      RevisionCollection? @relation(fields: [collectionId], references: [id], onDelete: SetNull)
+  title           String
+  summary         String             @db.Text
+  content         String             @db.Text
+  contentType     String
+  subject         String?
+  saveType        String?
+  mediaType       String?
+  topic           String?
+  subtopic        String?
+  tags            String[]           @default([])
+  artifactLabels  String[]           @default([])
+  selectedText    String?            @db.Text
+  studentNote     String?            @db.Text
+  isPinned        Boolean            @default(false)
+  mastery         String?
+  needsPractice   Boolean            @default(false)
+  isMistakeBased  Boolean            @default(false)
+  saveMode        String?
+  lastPracticedAt DateTime?
+  practiceCount   Int                @default(0)
+  reviewStatus    String?
+  lastReviewedAt  DateTime?
+  nextReviewAt    DateTime?
+  reviewCount     Int                @default(0)
+  successCount    Int                @default(0)
+  struggleCount   Int                @default(0)
+  recentOutcome   String?
+  confidenceTrend String?
+  examPriority    Boolean            @default(false)
+  sourceType      String?
+  sourceUrl       String?
+  imageUrl        String?
+  audioUrl        String?
+  videoId         String?
+  videoTitle      String?
+  transcriptSnippet String?          @db.Text
+  audioRecapRef   Json?
+  featuredRank    Int?
+  bundleRole      String?
+  sourceRefs      Json?
+  mediaRefs       Json?
+  metadata        Json?
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+
+  @@index([userId, updatedAt])
+  @@index([userId, collectionId, updatedAt])
+  @@index([userId, subject, updatedAt])
+  @@index([userId, saveType, updatedAt])
+  @@index([sessionId])
+  @@index([sourceMessageId])
+  @@index([contentType, updatedAt])
+  @@index([userId, isPinned, updatedAt])
+  @@index([userId, reviewStatus, nextReviewAt])
+}
+
+model MediaAsset {
+  id           String         @id @default(uuid())
+  userId       String
+  student      StudentProfile @relation(fields: [userId], references: [userId], onDelete: Cascade)
+  assetKind    String
+  title        String
+  summary      String?        @db.Text
+  subject      String?
+  topic        String?
+  tags         String[]       @default([])
+  language     String?
+  sessionId    String?
+  revisionItemId String?
+  sourceUrl    String?
+  videoId      String?
+  dataUrl      String?        @db.Text
+  assetUrl     String?
+  thumbnailUrl String?
+  durationSec  Int?
+  recapText    String?        @db.Text
+  keyPoints    Json?
+  quickChecks  Json?
+  metadata     Json?
+  safetyStatus String?
+  sourceTrust  String?
+  dedupeKey    String?
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+
+  @@index([userId, updatedAt])
+  @@index([userId, assetKind, updatedAt])
+  @@index([revisionItemId])
+  @@index([userId, topic])
+  @@unique([userId, dedupeKey])
+}
+
+model RevisionReviewEvent {
+  id             String   @id @default(uuid())
+  userId         String
+  revisionItemId String
+  sessionId      String?
+  eventType      String
+  outcome        String?
+  metadata       Json?
+  createdAt      DateTime @default(now())
+
+  @@index([userId, createdAt])
+  @@index([revisionItemId, createdAt])
+}
+
+model StudyPlan {
+  id                   String   @id @default(uuid())
+  userId               String
+  title                String
+  scope                String
+  subject              String?
+  topic                String?
+  subjects             Json?
+  dateRangeStart       DateTime?
+  dateRangeEnd         DateTime?
+  summary              String?
+  focusAreas           Json?
+  recommendedBlocks    Json?
+  suggestedCollectionIds Json?
+  suggestedItemIds     Json?
+  metadata             Json?
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  @@index([userId, updatedAt])
+}
+
+model StudyGoal {
+  id          String   @id @default(uuid())
+  userId      String
+  studyPlanId String?
+  title       String
+  description String?
+  goalType    String
+  targetCount Int?
+  currentCount Int     @default(0)
+  status      String   @default("not_started")
+  subject     String?
+  topic       String?
+  dueAt       DateTime?
+  metadata    Json?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([userId, updatedAt])
+  @@index([studyPlanId])
+}
+
+model InterventionEffectEvent {
+  id                    String   @id @default(uuid())
+  userId                String
+  sessionId             String?
+  subject               String?
+  topic                 String?
+  interventionType      String
+  relatedRevisionItemId String?
+  outcome               String?
+  metadata              Json?
+  createdAt             DateTime @default(now())
+
+  @@index([userId, createdAt])
+  @@index([userId, subject, topic])
+}
+
+model MetacognitiveEvent {
+  id                 String   @id @default(uuid())
+  userId             String
+  sessionId          String?
+  revisionItemId     String?
+  sourceMessageId    String?
+  eventType          String
+  confidence         String?
+  problemFraming     String?
+  errorType          String?
+  strategyPreference String?
+  transferReadiness  String?
+  note               String?  @db.Text
+  metadata           Json?
+  createdAt          DateTime @default(now())
+
+  @@index([userId, createdAt])
+  @@index([sessionId, createdAt])
+  @@index([revisionItemId, createdAt])
+  @@index([sourceMessageId, createdAt])
+}
+
+model LearningEffectEvent {
+  id             String   @id @default(uuid())
+  userId         String
+  sessionId      String?
+  subject        String?
+  topic          String?
+  revisionItemId String?
+  messageId      String?
+  eventType      String
+  outcome        String?
+  metadata       Json?
+  createdAt      DateTime @default(now())
+
+  @@index([userId, createdAt])
+  @@index([userId, eventType])
+  @@index([sessionId, createdAt])
+  @@index([revisionItemId, createdAt])
+}
+
+model GrowthWeakTopicState {
+  id                    String   @id
+  userId                String
+  subject               String
+  topic                 String
+  subtopic              String?
+  weaknessScore         Float
+  microMasteryLabel     String
+  status                String
+  weaknessReasonSummary String
+  triggers              Json?
+  lastStruggledAt       DateTime?
+  lastReviewedAt        DateTime?
+  nextReviewAt          DateTime?
+  linkedRevisionIds     Json?
+  linkedMediaIds        Json?
+  linkedMistakePatternIds Json?
+  recommendedAction     String
+  snapshotDate          DateTime @db.Date
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  @@unique([userId, subject, topic, snapshotDate])
+  @@index([userId, snapshotDate])
+  @@index([userId, status, snapshotDate])
+}
+
+model GrowthMistakePatternState {
+  id               String   @id
+  userId           String
+  subject          String
+  patternKey       String
+  title            String
+  description      String
+  examples         Json?
+  recurrenceScore  Float
+  status           String
+  commonContext    String
+  fixReminder      String
+  linkedTopics     Json?
+  linkedRevisionIds Json?
+  lastSeenAt       DateTime?
+  lastImprovedAt   DateTime?
+  snapshotDate     DateTime @db.Date
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@unique([userId, patternKey, snapshotDate])
+  @@index([userId, snapshotDate])
+  @@index([userId, status, snapshotDate])
+}
+
+model GrowthMasteryTrendState {
+  id               String   @id
+  userId           String
+  subject          String
+  topic            String
+  subtopic         String?
+  trendStatus      String
+  microMasteryLabel String
+  confidenceScore  Float
+  evidenceScore    Float
+  trendSummary     String
+  delta            Float?
+  lastSeenAt       DateTime?
+  snapshotDate     DateTime @db.Date
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@unique([userId, subject, topic, snapshotDate])
+  @@index([userId, snapshotDate])
+  @@index([userId, trendStatus, snapshotDate])
+}
+
+model GrowthRecommendationState {
+  id               String   @id
+  userId           String
+  recommendationType String
+  priorityScore    Float
+  sourceType       String
+  title            String
+  reason           String
+  primaryAction    Json
+  secondaryAction  Json?
+  linkedTopic      String?
+  linkedRevisionId String?
+  linkedMediaId    String?
+  expiresAt        DateTime?
+  snapshotDate     DateTime @db.Date
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@index([userId, snapshotDate])
+  @@index([userId, recommendationType, snapshotDate])
 }
 
 model CopilotPreferences {
@@ -91,4 +446,192 @@ model CopilotPreferences {
   interests         Json
   lastUpdatedAt     DateTime       @updatedAt
   createdAt         DateTime       @default(now())
+}
+
+model VoiceUsage {
+  id          String         @id @default(uuid())
+  studentId   String
+  student     StudentProfile @relation(fields: [studentId], references: [userId], onDelete: Cascade)
+  sessionId   String?
+  durationSec Int
+  startedAt   DateTime       @default(now())
+  createdAt   DateTime       @default(now())
+  source      String?
+
+  @@index([studentId, startedAt])
+  @@index([sessionId])
+}
+
+model VoicePackageGrant {
+  id               String           @id @default(uuid())
+  studentId        String
+  student          StudentProfile   @relation(fields: [studentId], references: [userId], onDelete: Cascade)
+  secondsGranted   Int
+  secondsRemaining Int
+  grantedAt        DateTime         @default(now())
+  expiresAt        DateTime?
+  source           String
+  metadata         Json?
+  ledgerEntries    VoiceLedgerEntry[]
+
+  @@index([studentId, grantedAt])
+  @@index([studentId, secondsRemaining, grantedAt])
+  @@index([studentId, expiresAt])
+}
+
+model VoiceSessionUsage {
+  id            String           @id @default(uuid())
+  studentId     String
+  student       StudentProfile   @relation(fields: [studentId], references: [userId], onDelete: Cascade)
+  chatSessionId String?
+  chatSession   ChatSession?     @relation(fields: [chatSessionId], references: [id], onDelete: SetNull)
+  startedAt     DateTime         @default(now())
+  endedAt       DateTime?
+  billedSeconds Int              @default(0)
+  mode          VoiceSessionMode
+  stopReason    String?
+  metadata      Json?
+  ledgerEntries VoiceLedgerEntry[]
+
+  @@index([studentId, startedAt])
+  @@index([chatSessionId])
+  @@index([studentId, endedAt])
+}
+
+model VoiceLedgerEntry {
+  id                  String            @id @default(uuid())
+  studentId           String
+  student             StudentProfile    @relation(fields: [studentId], references: [userId], onDelete: Cascade)
+  createdAt           DateTime          @default(now())
+  type                String
+  secondsDelta        Int
+  relatedSessionId    String?
+  relatedSession      VoiceSessionUsage? @relation(fields: [relatedSessionId], references: [id], onDelete: SetNull)
+  relatedGrantId      String?
+  relatedGrant        VoicePackageGrant? @relation(fields: [relatedGrantId], references: [id], onDelete: SetNull)
+  balanceAfterSeconds Int
+  metadata            Json?
+
+  @@index([studentId, createdAt])
+  @@index([relatedSessionId])
+  @@index([relatedGrantId])
+  @@index([studentId, type, createdAt])
+}
+
+model SafetyAlert {
+  id                  String            @id @default(uuid())
+  studentId           String
+  sessionId           String?
+  messageId           String?
+  category            String
+  severity            SafetySeverity
+  confidence          Float
+  riskScore           Int?
+  excerptRedacted     String            @db.Text
+  status              SafetyAlertStatus @default(open)
+  counselorNotified   Boolean           @default(false)
+  counselorNotifiedAt DateTime?
+  metadata            Json?
+  createdAt           DateTime          @default(now())
+  updatedAt           DateTime          @updatedAt
+
+  @@index([studentId, createdAt])
+  @@index([severity, createdAt])
+  @@index([status, createdAt])
+  @@index([sessionId])
+  @@index([messageId])
+}
+
+model SafetyEventAudit {
+  id         String   @id @default(uuid())
+  actorId    String
+  actorRole  String
+  action     String
+  targetType String
+  targetId   String?
+  metadata   Json?
+  createdAt  DateTime @default(now())
+
+  @@index([actorId, createdAt])
+  @@index([targetType, createdAt])
+  @@index([action, createdAt])
+}
+
+model TurnLatencyMetric {
+  id               String                 @id @default(uuid())
+  studentId        String
+  student          StudentProfile         @relation(fields: [studentId], references: [userId], onDelete: Cascade)
+  sessionId        String?
+  turnId           String
+  responseMode     String                 @default("default")
+  route            String                 @default("copilot_chat")
+  forceWebSearch   Boolean                @default(false)
+  languageMode     String?
+  source           String?
+  sttMs            Int?
+  firstTokenMs     Int?
+  doneMs           Int?
+  totalMs          Int?
+  ttsStartMs       Int?
+  aiMs             Int?
+  inputChars       Int?
+  outputChars      Int?
+  thresholdBreached Boolean               @default(false)
+  thresholdLevel   LatencyThresholdLevel?
+  metadata         Json?
+  createdAt        DateTime               @default(now())
+  updatedAt        DateTime               @updatedAt
+  alerts           LatencyThresholdAlert[]
+
+  @@unique([studentId, turnId])
+  @@index([studentId, createdAt])
+  @@index([sessionId, createdAt])
+  @@index([responseMode, createdAt])
+  @@index([route, createdAt])
+  @@index([thresholdBreached, createdAt])
+}
+
+model LatencyThresholdAlert {
+  id          String                @id @default(uuid())
+  metricId    String
+  metric      TurnLatencyMetric     @relation(fields: [metricId], references: [id], onDelete: Cascade)
+  studentId   String
+  severity    LatencyThresholdLevel
+  thresholdType String
+  thresholdMs Int
+  observedMs  Int
+  acknowledged Boolean              @default(false)
+  metadata    Json?
+  createdAt   DateTime              @default(now())
+  updatedAt   DateTime              @updatedAt
+
+  @@unique([metricId, thresholdType])
+  @@index([studentId, createdAt])
+  @@index([severity, createdAt])
+  @@index([acknowledged, createdAt])
+  @@index([metricId])
+}
+
+enum VoiceSessionMode {
+  listening_only
+  listening_plus_tts
+}
+
+enum SafetySeverity {
+  low
+  medium
+  high
+  critical
+}
+
+enum SafetyAlertStatus {
+  open
+  reviewing
+  resolved
+  dismissed
+}
+
+enum LatencyThresholdLevel {
+  warn
+  critical
 }

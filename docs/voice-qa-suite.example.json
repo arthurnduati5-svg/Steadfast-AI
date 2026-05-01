@@ -1,0 +1,42 @@
+{
+  "stt": [
+    {
+      "name": "arabic_stt_baseline",
+      "file": "qa-fixtures/audio/arabic-sample.webm",
+      "language": "ar",
+      "languageMode": "arabic",
+      "expected": "ما هو تعريف التعلم الشرطي الإجرائي",
+      "maxWer": 0.25
+    },
+    {
+      "name": "swahili_stt_baseline",
+      "file": "qa-fixtures/audio/swahili-sample.webm",
+      "language": "sw",
+      "languageMode": "swahili",
+      "expected": "naomba unielezee operant conditioning kwa mfano rahisi",
+      "maxWer": 0.25
+    }
+  ],
+  "tts": [
+    {
+      "name": "arabic_tts_naturalness",
+      "languageMode": "arabic",
+      "voice": "alloy",
+      "speed": 1.12,
+      "text": "اليوم سنشرح معنى التعزيز الإيجابي بطريقة بسيطة، ثم نعطي مثالًا من الحياة اليومية.",
+      "maxStartMs": 2500,
+      "minCharsPerSec": 7,
+      "maxCharsPerSec": 22
+    },
+    {
+      "name": "swahili_tts_naturalness",
+      "languageMode": "swahili",
+      "voice": "alloy",
+      "speed": 1.12,
+      "text": "Leo tutaeleza operant conditioning kwa mfano wa darasani, kisha nitakuuliza swali fupi la uhakiki.",
+      "maxStartMs": 2500,
+      "minCharsPerSec": 7,
+      "maxCharsPerSec": 22
+    }
+  ]
+}

@@ -1,0 +1,9 @@
+{
+  "name": "steadfast-frontend",
+  "private": true,
+  "scripts": {
+    "dev": "node ../node_modules/next/dist/bin/next dev -p 9000 --turbopack",
+    "build": "node ../node_modules/next/dist/bin/next build",
+    "start": "node ../node_modules/next/dist/bin/next start -p 9000"
+  }
+}

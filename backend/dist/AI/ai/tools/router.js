@@ -1,28 +1,31 @@
-import { emotional_decoder, tone_generator, math_validate_answer, math_generate_question, formatting_polisher, emoji_policy_check, arabic_mode_formatter, memory_manager, } from "./handlers";
-export async function toolRouter(toolName, args) {
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.toolRouter = toolRouter;
+const handlers_1 = require("./handlers");
+async function toolRouter(toolName, args, context) {
     switch (toolName) {
-        case "emotional_decoder":
-            return emotional_decoder(args);
-        case "tone_generator":
-            return tone_generator(args);
-        // case "teaching_micro_step":
-        //   return teaching_micro_step(args);
-        case "math_validate_answer":
-            return math_validate_answer(args);
-        case "math_generate_question":
-            return math_generate_question(args);
-        case "formatting_polisher":
-            return formatting_polisher(args);
-        case "emoji_policy_check":
-            return emoji_policy_check(args);
-        case "arabic_mode_formatter":
-            return arabic_mode_formatter(args);
-        // case "quran_pedagogy":
-        //   return quran_pedagogy(args);
-        case "memory_manager":
-            return memory_manager(args);
+        case 'emotional_decoder':
+            return (0, handlers_1.emotional_decoder)(args);
+        case 'tone_generator':
+            return (0, handlers_1.tone_generator)(args);
+        case 'teaching_micro_step':
+            return (0, handlers_1.teaching_micro_step)(args);
+        case 'math_validate_answer':
+            return (0, handlers_1.math_validate_answer)(args);
+        case 'math_generate_question':
+            return (0, handlers_1.math_generate_question)(args);
+        case 'formatting_polisher':
+            return (0, handlers_1.formatting_polisher)(args);
+        case 'emoji_policy_check':
+            return (0, handlers_1.emoji_policy_check)(args);
+        case 'arabic_mode_formatter':
+            return (0, handlers_1.arabic_mode_formatter)(args);
+        case 'quran_pedagogy':
+            return (0, handlers_1.quran_pedagogy)(args);
+        case 'memory_manager':
+            return (0, handlers_1.memory_manager)(args, context);
         default:
-            return { error: "Unknown tool: " + toolName };
+            return { error: 'Unknown tool: ' + toolName };
     }
 }
 //# sourceMappingURL=router.js.map

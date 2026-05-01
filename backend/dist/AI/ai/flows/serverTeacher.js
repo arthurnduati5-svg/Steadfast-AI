@@ -1,4 +1,8 @@
+"use strict";
 'use server';
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.TeacherOutputSchema = exports.TeacherInputSchema = void 0;
+exports.default = serverTeacher;
 /**
  * serverTeacher.ts
  *
@@ -10,36 +14,37 @@
  * - Uses your existing toolRouter + polisher chain
  */
 // export const runtime = 'edge';
-import { z } from 'genkit';
-import { toolRouter } from '../tools/handlers';
+const genkit_1 = require("genkit");
+const handlers_1 = require("../tools/handlers");
+const tutor_style_1 = require("./tutor-style");
 // -------------------------------
 // Input & Output Schemas
 // -------------------------------
-export const TeacherInputSchema = z.object({
-    text: z.string(),
-    state: z
+exports.TeacherInputSchema = genkit_1.z.object({
+    text: genkit_1.z.string(),
+    state: genkit_1.z
         .object({
-        awaitingPracticeQuestionAnswer: z.boolean().default(false),
-        validationAttemptCount: z.number().default(0),
-        correctAnswers: z.array(z.string()).default([]),
-        lastQuestionAsked: z.string().optional(),
-        lastTopic: z.string().optional(),
-        studentLevel: z.string().optional(),
-        adaptMode: z.string().default('normal'),
+        awaitingPracticeQuestionAnswer: genkit_1.z.boolean().default(false),
+        validationAttemptCount: genkit_1.z.number().default(0),
+        correctAnswers: genkit_1.z.array(genkit_1.z.string()).default([]),
+        lastQuestionAsked: genkit_1.z.string().optional(),
+        lastTopic: genkit_1.z.string().optional(),
+        studentLevel: genkit_1.z.string().optional(),
+        adaptMode: genkit_1.z.string().default('normal'),
     })
         .optional(),
     // preferences is REQUIRED in your actual pipeline
-    preferences: z
+    preferences: genkit_1.z
         .object({
-        userId: z.string(),
-        preferredLanguage: z.string(),
-        interests: z.array(z.string()),
+        userId: genkit_1.z.string(),
+        preferredLanguage: genkit_1.z.string(),
+        interests: genkit_1.z.array(genkit_1.z.string()),
     })
         .optional(),
 });
-export const TeacherOutputSchema = z.object({
-    text: z.string(),
-    state: TeacherInputSchema.shape.state,
+exports.TeacherOutputSchema = genkit_1.z.object({
+    text: genkit_1.z.string(),
+    state: exports.TeacherInputSchema.shape.state,
 });
 // --------------------------------------
 // LAST RESORT SERVER SANITIZER
@@ -69,7 +74,7 @@ function sanitizeHard(s) {
 // ----------------------------------------
 // The FINAL teacher engine
 // ----------------------------------------
-export default async function serverTeacher(input) {
+async function serverTeacher(input) {
     let state = input.state ??
         {
             awaitingPracticeQuestionAnswer: false,
@@ -79,12 +84,17 @@ export default async function serverTeacher(input) {
         };
     const studentLang = input.preferences?.preferredLanguage || 'english';
     const userMsg = input.text.trim();
+    const tutorStylePrompt = (0, tutor_style_1.buildUnifiedTutorPrompt)({
+        mode: 'teaching',
+        language: studentLang,
+        gradeBand: input.state?.studentLevel || 'General',
+    });
     // -----------------------
     // 1. EMOTIONAL & TONE ANALYSIS (Persona Layer)
     // -----------------------
     // First, we check how the student is feeling
-    const decoderResult = await toolRouter('emotional_decoder', { text: userMsg });
-    const toneResult = await toolRouter('tone_generator', { emotion: decoderResult.emotion });
+    const decoderResult = await (0, handlers_1.toolRouter)('emotional_decoder', { text: userMsg });
+    const toneResult = await (0, handlers_1.toolRouter)('tone_generator', { emotion: decoderResult.emotion });
     // If it's a safety violation or an insult, we use the specific persona response immediately
     if (decoderResult.emotion === 'safety_violation' || decoderResult.emotion === 'angry_insult') {
         let response = toneResult.raw;
@@ -94,7 +104,7 @@ export default async function serverTeacher(input) {
     // -----------------------
     // 2. TEACHING CONTENT (Logic Layer)
     // -----------------------
-    const structured = await toolRouter('teaching_micro_step', {
+    const structured = await (0, handlers_1.toolRouter)('teaching_micro_step', {
         topic: userMsg,
         studentLevel: state.studentLevel || 'beginner',
         context: userMsg,
@@ -115,13 +125,13 @@ export default async function serverTeacher(input) {
     // -----------------------
     let polished = draft;
     // Formatting (removes robotic AI phrases and fixes fraction visuals)
-    const p1 = await toolRouter('formatting_polisher', {
+    const p1 = await (0, handlers_1.toolRouter)('formatting_polisher', {
         rawText: polished,
         languageMode: studentLang,
     });
     polished = p1.cleanedText ?? polished;
     // Emoji Policy (limits to 1 in English, 0 in Arabic)
-    const p2 = await toolRouter('emoji_policy_check', {
+    const p2 = await (0, handlers_1.toolRouter)('emoji_policy_check', {
         text: polished,
         languageMode: studentLang,
     });
@@ -130,11 +140,17 @@ export default async function serverTeacher(input) {
     const wantsArabic = studentLang.toLowerCase().startsWith('arabic') ||
         /[\u0600-\u06FF]/.test(polished);
     if (wantsArabic) {
-        const p3 = await toolRouter('arabic_mode_formatter', { text: polished });
+        const p3 = await (0, handlers_1.toolRouter)('arabic_mode_formatter', { text: polished });
         polished = p3.cleanedText ?? polished;
     }
     // Final hard sanitation to ensure 100% plain text
     polished = sanitizeHard(polished);
+    polished = (0, tutor_style_1.normalizeTutorText)(polished);
+    polished = (0, tutor_style_1.ensureSingleQuestionAtEnd)(polished);
+    // Small anchor to keep this flow aligned with shared tutor governance.
+    if (tutorStylePrompt.includes('Teach one small step at a time') && !/step|next|try/i.test(polished)) {
+        polished = (0, tutor_style_1.ensureSingleQuestionAtEnd)(`${polished} Let us try one small step now.`);
+    }
     return {
         text: polished,
         state,

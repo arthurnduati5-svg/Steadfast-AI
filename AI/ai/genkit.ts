@@ -1,15 +1,26 @@
 import { genkit, z } from 'genkit';
 import { openAI } from 'genkitx-openai';
 
-export const ai = genkit({
-  plugins: [
-    openAI({
-      apiKey: process.env.OPENAI_API_KEY,
-    }),
-  ],
-});
+type GenkitGlobals = {
+  __steadfastGenkitAi?: ReturnType<typeof genkit>;
+  __steadfastSerperSearchTool?: unknown;
+};
 
-export const serperSearchTool = ai.defineTool(
+const globalGenkit = globalThis as typeof globalThis & GenkitGlobals;
+
+export const ai =
+  globalGenkit.__steadfastGenkitAi ||
+  (globalGenkit.__steadfastGenkitAi = genkit({
+    plugins: [
+      openAI({
+        apiKey: process.env.OPENAI_API_KEY,
+      }),
+    ],
+  }));
+
+export const serperSearchTool =
+  (globalGenkit.__steadfastSerperSearchTool as ReturnType<typeof ai.defineTool> | undefined) ||
+  (globalGenkit.__steadfastSerperSearchTool = ai.defineTool(
   {
     name: 'serperSearch',
     description: 'Performs a google search using Serper.dev.',
@@ -75,4 +86,4 @@ export const serperSearchTool = ai.defineTool(
       return { results: [] };
     }
   }
-);
+));

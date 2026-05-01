@@ -1,17 +1,21 @@
-import { defineFlow } from '@genkit-ai/flow';
-import { YoutubeTranscript } from 'youtube-transcript';
-import { z } from 'zod';
-const youtubeTranscriptInputSchema = z.object({ videoId: z.string() });
-export const getYoutubeTranscriptFlow = defineFlow({
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.getYoutubeTranscriptFlow = void 0;
+const flow_1 = require("@genkit-ai/flow");
+const youtube_transcript_1 = require("youtube-transcript");
+const zod_1 = require("zod");
+const flow_singleton_1 = require("./flow-singleton");
+const youtubeTranscriptInputSchema = zod_1.z.object({ videoId: zod_1.z.string() });
+exports.getYoutubeTranscriptFlow = (0, flow_singleton_1.getOrCreateFlow)('getYoutubeTranscriptFlow', () => (0, flow_1.defineFlow)({
     name: 'getYoutubeTranscriptFlow',
     inputSchema: youtubeTranscriptInputSchema,
-    outputSchema: z.string(),
+    outputSchema: zod_1.z.string(),
 }, async (input) => {
     try {
         if (!input.videoId) {
             throw new Error("Video ID is missing");
         }
-        const transcriptItems = await YoutubeTranscript.fetchTranscript(input.videoId);
+        const transcriptItems = await youtube_transcript_1.YoutubeTranscript.fetchTranscript(input.videoId);
         if (!transcriptItems || transcriptItems.length === 0) {
             return 'Could not fetch the transcript for this video (it might not have captions).';
         }
@@ -26,5 +30,5 @@ export const getYoutubeTranscriptFlow = defineFlow({
         console.error('Error fetching YouTube transcript:', error);
         return 'Could not fetch the transcript for this video.';
     }
-});
+}));
 //# sourceMappingURL=get-youtube-transcript.js.map

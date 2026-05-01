@@ -12,17 +12,24 @@
 
 # testing
 /coverage
+coverage/
+vitest-report/
 
 # next.js
 /.next/
+/frontend/.next/
+/frontend/.next-dev/
 /out/
 
 # production
 /build
+/backend/dist/
+/backend/uploads/
 
 # misc
 .DS_Store
 *.pem
+*.log
 
 # debug
 npm-debug.log*
@@ -43,3 +50,6 @@ next-env.d.ts
 # firebase
 firebase-debug.log
 firestore-debug.log
+# Playwright outputs
+playwright-report/
+test-results/

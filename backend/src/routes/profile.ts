@@ -68,7 +68,7 @@ router.post('/profile', schoolAuthMiddleware, async (req: Request, res) => {
 
     res.status(200).send(profile);
   } catch (error: any) {
-    console.error('Error creating/updating profile:', error);
+    logger.error({ error: String(error), userId: req.user?.id }, 'Error creating/updating profile');
     res.status(500).send({ message: 'Internal server error.' });
   }
 });
@@ -120,7 +120,7 @@ router.get('/copilot/preferences', schoolAuthMiddleware, async (req: Request, re
       });
     }
   } catch (error: any) {
-    console.error('Error fetching preferences:', error);
+    logger.error({ error: String(error), userId }, 'Error fetching preferences');
     res.status(500).json({ message: 'Internal server error.' });
   }
 });
@@ -134,13 +134,12 @@ router.post('/copilot/preferences', schoolAuthMiddleware, async (req: Request, r
   // Use topInterests if interests is not provided or is empty
   const interestsToSave = (interests && interests.length > 0) ? interests : topInterests || [];
 
-  console.log(`[Backend] Attempting to save preferences for userId: ${userId}`);
-  console.log(`[Backend] Received preferredLanguage: ${preferredLanguage}, interests:`, interestsToSave);
+  logger.debug({ userId, preferredLanguage, interestsCount: Array.isArray(interestsToSave) ? interestsToSave.length : 0 }, '[Backend] Saving preferences');
 
   // Validation
-  const allowedLanguages = ['english', 'swahili', 'english_sw', 'arabic']; // Added 'arabic'
+  const allowedLanguages = ['english', 'swahili', 'english_sw', 'arabic', 'arabic_english'];
   if (!preferredLanguage || !allowedLanguages.includes(preferredLanguage)) {
-    console.error(`[Backend] Invalid or missing preferredLanguage: ${preferredLanguage}`);
+    logger.warn({ userId, preferredLanguage }, '[Backend] Invalid or missing preferredLanguage');
     return res.status(400).json({ message: 'Invalid or missing preferredLanguage.' });
   }
 
@@ -151,7 +150,7 @@ router.post('/copilot/preferences', schoolAuthMiddleware, async (req: Request, r
   ];
 
   if (!Array.isArray(interestsToSave) || interestsToSave.length > 5 || interestsToSave.some((interest: string) => !allowedInterests.includes(interest))) {
-    console.error(`[Backend] Invalid interests received:`, interestsToSave);
+    logger.warn({ userId, interests: interestsToSave }, '[Backend] Invalid interests received');
     return res.status(400).json({ message: 'Interests must be an array with up to 5 allowed items.' });
   }
 
@@ -169,7 +168,7 @@ router.post('/copilot/preferences', schoolAuthMiddleware, async (req: Request, r
       create: { userId, preferredLanguage, interests: interestsToSave as Prisma.JsonArray },
     });
 
-    console.log(`[Backend] Preferences successfully saved for userId: ${userId}`, updatedPreferences);
+    logger.info({ userId }, '[Backend] Preferences saved successfully');
 
     // Update cache
     let redis;
@@ -178,10 +177,10 @@ router.post('/copilot/preferences', schoolAuthMiddleware, async (req: Request, r
       if (redis) {
         await redis.set(cacheKey, JSON.stringify(updatedPreferences));
         await redis.expire(cacheKey, 1800); // Set expiration separately
-        console.log(`[Backend] Preferences cached for userId: ${userId}`);
+        logger.debug({ userId }, '[Backend] Preferences cached');
       }
     } catch (error) {
-      console.warn('Redis client not available for preferences update.', error);
+      logger.warn({ error: String(error), userId }, 'Redis client not available for preferences update');
     }
 
     res.status(200).json({
@@ -189,7 +188,7 @@ router.post('/copilot/preferences', schoolAuthMiddleware, async (req: Request, r
       ...updatedPreferences,
     });
   } catch (error: any) {
-    console.error('Error saving preferences:', error);
+    logger.error({ error: String(error), userId }, 'Error saving preferences');
     res.status(500).json({ message: 'Internal server error.' });
   }
 });
@@ -212,7 +211,7 @@ router.delete('/copilot/preferences', schoolAuthMiddleware, async (req: Request,
         await redis.del(cacheKey);
       }
     } catch (error) {
-      console.warn('Redis client not available for cache deletion.', error);
+      logger.warn({ error: String(error), userId }, 'Redis client not available for cache deletion');
     }
 
     res.status(200).json({ message: 'Preferences cleared successfully' });
@@ -221,7 +220,7 @@ router.delete('/copilot/preferences', schoolAuthMiddleware, async (req: Request,
     if (error.code === 'P2025') {
       return res.status(200).json({ message: 'Preferences cleared successfully' });
     }
-    console.error('Error deleting preferences:', error);
+    logger.error({ error: String(error), userId }, 'Error deleting preferences');
     res.status(500).json({ message: 'Internal server error.' });
   }
 });

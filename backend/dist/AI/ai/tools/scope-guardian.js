@@ -1,9 +1,14 @@
+"use strict";
 /**
  * scope-guardian.ts
  *
  * DYNAMIC SCOPE ENFORCEMENT
  * Blocks non-educational content with context-aware, natural redirection.
  */
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.detectScopeViolation = detectScopeViolation;
+exports.isOutOfScope = isOutOfScope;
+exports.getDynamicScopeResponse = getDynamicScopeResponse;
 const CATEGORY_MAP = {
     sexual: [
         "sex", "sexual", "sodomy", "gay", "lesbian", "homosexual", "bisexual", "transgender",
@@ -27,14 +32,33 @@ const CATEGORY_MAP = {
     ],
     unknown: []
 };
+const SAFEGUARDING_DISCLOSURE_PATTERNS = [
+    /\b(i want to die|i feel like dying|i am suicidal|i will kill myself|self harm|self-harm|cut myself)\b/i,
+    /\b(i was raped|raped me|sexual assault|molested me|forced me sexually|someone touched me sexually)\b/i,
+    /\b(i am not safe|someone is hurting me|i am being abused)\b/i,
+];
+const HARMFUL_INSTRUCTION_PATTERNS = [
+    /\b(how to kill myself|ways to commit suicide|how do i commit suicide)\b/i,
+    /\b(how to kill someone|how to make a bomb|how to rape)\b/i,
+];
+function isSafeguardingDisclosure(input) {
+    return SAFEGUARDING_DISCLOSURE_PATTERNS.some((pattern) => pattern.test(input));
+}
+function isHarmfulInstruction(input) {
+    return HARMFUL_INSTRUCTION_PATTERNS.some((pattern) => pattern.test(input));
+}
 /**
  * Detects if input is out of scope and returns the category.
  * Returns NULL if safe.
  */
-export function detectScopeViolation(input) {
+function detectScopeViolation(input) {
     if (!input)
         return null;
     const normalized = input.toLowerCase();
+    // Allow wellbeing disclosures so the assistant can respond supportively.
+    if (isSafeguardingDisclosure(normalized) && !isHarmfulInstruction(normalized)) {
+        return null;
+    }
     for (const [category, keywords] of Object.entries(CATEGORY_MAP)) {
         for (const keyword of keywords) {
             // Precise matching for short words
@@ -53,14 +77,14 @@ export function detectScopeViolation(input) {
 /**
  * Checks if out of scope (Boolean wrapper for simple checks)
  */
-export function isOutOfScope(input) {
+function isOutOfScope(input) {
     return detectScopeViolation(input) !== null;
 }
 /**
  * Generates a Context-Aware, Natural Redirection.
  * No apologies. No lectures. Just a firm, gentle pivot.
  */
-export function getDynamicScopeResponse(input) {
+function getDynamicScopeResponse(input) {
     const category = detectScopeViolation(input);
     const pivots = [
         "Let us focus on your studies instead.",

@@ -31,6 +31,25 @@ const CATEGORY_MAP: Record<ViolationCategory, string[]> = {
   unknown: []
 };
 
+const SAFEGUARDING_DISCLOSURE_PATTERNS: RegExp[] = [
+  /\b(i want to die|i feel like dying|i am suicidal|i will kill myself|self harm|self-harm|cut myself)\b/i,
+  /\b(i was raped|raped me|sexual assault|molested me|forced me sexually|someone touched me sexually)\b/i,
+  /\b(i am not safe|someone is hurting me|i am being abused)\b/i,
+];
+
+const HARMFUL_INSTRUCTION_PATTERNS: RegExp[] = [
+  /\b(how to kill myself|ways to commit suicide|how do i commit suicide)\b/i,
+  /\b(how to kill someone|how to make a bomb|how to rape)\b/i,
+];
+
+function isSafeguardingDisclosure(input: string): boolean {
+  return SAFEGUARDING_DISCLOSURE_PATTERNS.some((pattern) => pattern.test(input));
+}
+
+function isHarmfulInstruction(input: string): boolean {
+  return HARMFUL_INSTRUCTION_PATTERNS.some((pattern) => pattern.test(input));
+}
+
 /**
  * Detects if input is out of scope and returns the category.
  * Returns NULL if safe.
@@ -38,6 +57,11 @@ const CATEGORY_MAP: Record<ViolationCategory, string[]> = {
 export function detectScopeViolation(input: string): ViolationCategory | null {
   if (!input) return null;
   const normalized = input.toLowerCase();
+
+  // Allow wellbeing disclosures so the assistant can respond supportively.
+  if (isSafeguardingDisclosure(normalized) && !isHarmfulInstruction(normalized)) {
+    return null;
+  }
 
   for (const [category, keywords] of Object.entries(CATEGORY_MAP)) {
     for (const keyword of keywords) {

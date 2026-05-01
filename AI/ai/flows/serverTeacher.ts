@@ -14,6 +14,7 @@
 
 import { z } from 'genkit';
 import { toolRouter } from '../tools/handlers';
+import { buildUnifiedTutorPrompt, ensureSingleQuestionAtEnd, normalizeTutorText } from './tutor-style';
 
 // -------------------------------
 // Input & Output Schemas
@@ -100,6 +101,11 @@ export default async function serverTeacher(
 
   const studentLang = input.preferences?.preferredLanguage || 'english';
   const userMsg = input.text.trim();
+  const tutorStylePrompt = buildUnifiedTutorPrompt({
+    mode: 'teaching',
+    language: studentLang,
+    gradeBand: input.state?.studentLevel || 'General',
+  });
 
   // -----------------------
   // 1. EMOTIONAL & TONE ANALYSIS (Persona Layer)
@@ -170,6 +176,13 @@ export default async function serverTeacher(
 
   // Final hard sanitation to ensure 100% plain text
   polished = sanitizeHard(polished);
+  polished = normalizeTutorText(polished);
+  polished = ensureSingleQuestionAtEnd(polished);
+
+  // Small anchor to keep this flow aligned with shared tutor governance.
+  if (tutorStylePrompt.includes('Teach one small step at a time') && !/step|next|try/i.test(polished)) {
+    polished = ensureSingleQuestionAtEnd(`${polished} Let us try one small step now.`);
+  }
 
   return {
     text: polished,

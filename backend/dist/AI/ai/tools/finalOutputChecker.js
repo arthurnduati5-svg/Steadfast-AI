@@ -1,22 +1,37 @@
-export async function finalOutputCheckerTool(input) {
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.finalOutputCheckerTool = finalOutputCheckerTool;
+function sentenceCount(text) {
+    return text.split(/[.?!]+/).map((s) => s.trim()).filter(Boolean).length;
+}
+async function finalOutputCheckerTool(input) {
     const failures = [];
-    const msg = input.candidateMessage || '';
-    // Check basic forbidden tokens (adjust to your exact policy)
-    const forbidden = ['\\', '*', '`', '{', '}', '[', ']'];
-    for (const ch of forbidden) {
-        if (msg.includes(ch))
-            failures.push(`Contains forbidden character: ${ch}`);
+    const msg = (input.candidateMessage || '').trim();
+    if (!msg) {
+        failures.push('Candidate message is empty.');
+        return { passed: false, failures };
     }
-    // Single question mark at end
-    const qmCount = (msg.match(/\?/g) || []).length;
-    if (qmCount !== 1 || !msg.trim().endsWith('?')) {
-        failures.push('Must have exactly one question mark at the very end.');
+    const forbiddenTokens = ['```', '\\frac', '\\sqrt', '{', '}', '[', ']'];
+    for (const token of forbiddenTokens) {
+        if (msg.includes(token)) {
+            failures.push(`Contains forbidden token: ${token}`);
+        }
     }
-    // Shortness check: max 3 sentences
-    const sentences = msg.split(/[.?!]+/).filter(s => s.trim().length > 0);
-    if (sentences.length > 3)
-        failures.push('Too many sentences for copilot window.');
-    // Language mode checks could be added here
+    if ((msg.match(/\?/g) || []).length > 1) {
+        failures.push('Use at most one question mark.');
+    }
+    if (sentenceCount(msg) > 6) {
+        failures.push('Response is too long for step-by-step tutoring.');
+    }
+    if (/as an ai|i cannot browse|i am unable to|language model/i.test(msg)) {
+        failures.push('Contains meta-assistant phrasing.');
+    }
+    if (/not fully specified here|based on (the )?(information|details|context) provided|we are discussing/i.test(msg)) {
+        failures.push('Contains internal or weak meta phrasing.');
+    }
+    if (!/[A-Za-z\u0600-\u06FF]/.test(msg)) {
+        failures.push('Message lacks readable language content.');
+    }
     return { passed: failures.length === 0, failures };
 }
 //# sourceMappingURL=finalOutputChecker.js.map

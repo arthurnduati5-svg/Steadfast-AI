@@ -1,16 +1,23 @@
-import prisma from '../utils/prismaClient';
-import { getRedisClient } from '../lib/redis';
-const DEFAULT_LANGUAGE = 'English';
+"use strict";
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.getOrCreateCopilotPreferences = getOrCreateCopilotPreferences;
+exports.formatPreferencesForAI = formatPreferencesForAI;
+const prismaClient_1 = __importDefault(require("../utils/prismaClient"));
+const redis_1 = require("../lib/redis");
+const DEFAULT_LANGUAGE = 'english';
 const DEFAULT_INTERESTS = [];
 /**
  * Fetches Copilot Preferences with intelligent caching.
  * FIX: Ignores "empty" cache hits to force a DB refresh if interests are missing.
  */
-export async function getOrCreateCopilotPreferences(userId) {
+async function getOrCreateCopilotPreferences(userId) {
     const cacheKey = `copilot:preferences:${userId}`;
     let redis;
     try {
-        redis = await getRedisClient();
+        redis = await (0, redis_1.getRedisClient)();
     }
     catch (error) {
         console.warn('Redis client not available for aiPreferenceService.', error);
@@ -29,12 +36,12 @@ export async function getOrCreateCopilotPreferences(userId) {
             }
         }
         // 2. Fetch from Database
-        let preferences = await prisma.copilotPreferences.findUnique({
+        let preferences = await prismaClient_1.default.copilotPreferences.findUnique({
             where: { userId },
         });
         // 3. Create Default if missing
         if (!preferences) {
-            preferences = await prisma.copilotPreferences.create({
+            preferences = await prismaClient_1.default.copilotPreferences.create({
                 data: {
                     userId,
                     preferredLanguage: DEFAULT_LANGUAGE,
@@ -66,7 +73,7 @@ export async function getOrCreateCopilotPreferences(userId) {
 /**
  * Formats preferences into a string instruction for the AI System Prompt.
  */
-export function formatPreferencesForAI(preferences) {
+function formatPreferencesForAI(preferences) {
     let promptString = `The student's preferred language is ${preferences.preferredLanguage}.`;
     if (preferences.interests && preferences.interests.length > 0) {
         const interestsList = preferences.interests.join(', ');

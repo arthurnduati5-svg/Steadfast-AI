@@ -1,0 +1,900 @@
+{
+  "config": {
+    "name": "copilot_research_routing_generated_suite",
+    "newSessionPerCase": true,
+    "applyCasePreferences": true,
+    "failOnRepeatedSegments": true,
+    "defaultMaxLatencyMs": 45000
+  },
+  "cases": [
+    {
+      "id": "research_auto_001",
+      "category": "research_auto",
+      "gradeLevel": "Secondary",
+      "preferredLanguage": "english",
+      "forceWebSearch": false,
+      "prompt": "What is the latest inflation rate in Kenya today? Include sources.",
+      "requireSources": true,
+      "minWords": 12
+    },
+    {
+      "id": "research_auto_003",
+      "category": "research_auto",
+      "gradeLevel": "Secondary",
+      "preferredLanguage": "english",
+      "forceWebSearch": false,
+      "prompt": "Who is the current president of France right now? Cite sources.",
+      "requireSources": true,
+      "minWords": 12
+    },
+    {
+      "id": "research_auto_005",
+      "category": "research_auto",
+      "gradeLevel": "Secondary",
+      "preferredLanguage": "english",
+      "forceWebSearch": false,
+      "prompt": "What is the latest USD to KES exchange rate?",
+      "requireSources": true,
+      "minWords": 12
+    },
+    {
+      "id": "research_auto_007",
+      "category": "research_auto",
+      "gradeLevel": "Secondary",
+      "preferredLanguage": "english",
+      "forceWebSearch": false,
+      "prompt": "Give recent WHO malaria updates with source links.",
+      "requireSources": true,
+      "minWords": 12
+    },
+    {
+      "id": "research_auto_009",
+      "category": "research_auto",
+      "gradeLevel": "Secondary",
+      "preferredLanguage": "english",
+      "forceWebSearch": false,
+      "prompt": "What is the current CEO of OpenAI?",
+      "requireSources": true,
+      "minWords": 12
+    },
+    {
+      "id": "research_auto_011",
+      "category": "research_auto",
+      "gradeLevel": "Secondary",
+      "preferredLanguage": "english",
+      "forceWebSearch": false,
+      "prompt": "What is the latest Python release version?",
+      "requireSources": true,
+      "minWords": 12
+    },
+    {
+      "id": "research_auto_013",
+      "category": "research_auto",
+      "gradeLevel": "Secondary",
+      "preferredLanguage": "english",
+      "forceWebSearch": false,
+      "prompt": "Summarize recent NASA Artemis news with sources.",
+      "requireSources": true,
+      "minWords": 12
+    },
+    {
+      "id": "research_auto_015",
+      "category": "research_auto",
+      "gradeLevel": "Secondary",
+      "preferredLanguage": "english",
+      "forceWebSearch": false,
+      "prompt": "What is today's Bitcoin price in USD with sources?",
+      "requireSources": true,
+      "minWords": 12
+    },
+    {
+      "id": "research_auto_017",
+      "category": "research_auto",
+      "gradeLevel": "Secondary",
+      "preferredLanguage": "english",
+      "forceWebSearch": false,
+      "prompt": "What are current EPL standings this week with sources?",
+      "requireSources": true,
+      "minWords": 12
+    },
+    {
+      "id": "research_auto_019",
+      "category": "research_auto",
+      "gradeLevel": "Secondary",
+      "preferredLanguage": "english",
+      "forceWebSearch": false,
+      "prompt": "What is the latest IMF growth forecast for Kenya?",
+      "requireSources": true,
+      "minWords": 12
+    },
+    {
+      "id": "research_auto_021",
+      "category": "research_auto",
+      "gradeLevel": "Secondary",
+      "preferredLanguage": "english",
+      "forceWebSearch": false,
+      "prompt": "Any recent changes in Kenya education curriculum this year?",
+      "requireSources": true,
+      "minWords": 12
+    },
+    {
+      "id": "research_auto_023",
+      "category": "research_auto",
+      "gradeLevel": "Secondary",
+      "preferredLanguage": "english",
+      "forceWebSearch": false,
+      "prompt": "What is the current Bank of England base rate?",
+      "requireSources": true,
+      "minWords": 12
+    },
+    {
+      "id": "research_auto_025",
+      "category": "research_auto",
+      "gradeLevel": "Secondary",
+      "preferredLanguage": "english",
+      "forceWebSearch": false,
+      "prompt": "Latest update on El Nino impact in East Africa with sources.",
+      "requireSources": true,
+      "minWords": 12
+    },
+    {
+      "id": "research_auto_027",
+      "category": "research_auto",
+      "gradeLevel": "Secondary",
+      "preferredLanguage": "english",
+      "forceWebSearch": false,
+      "prompt": "What is the current population estimate of Nairobi?",
+      "requireSources": true,
+      "minWords": 12
+    },
+    {
+      "id": "research_auto_029",
+      "category": "research_auto",
+      "gradeLevel": "Secondary",
+      "preferredLanguage": "english",
+      "forceWebSearch": false,
+      "prompt": "Give updated global oil price range today with sources.",
+      "requireSources": true,
+      "minWords": 12
+    },
+    {
+      "id": "research_auto_031",
+      "category": "research_auto",
+      "gradeLevel": "Secondary",
+      "preferredLanguage": "english",
+      "forceWebSearch": false,
+      "prompt": "Who is the current UN Secretary-General?",
+      "requireSources": true,
+      "minWords": 12
+    },
+    {
+      "id": "research_auto_033",
+      "category": "research_auto",
+      "gradeLevel": "Secondary",
+      "preferredLanguage": "english",
+      "forceWebSearch": false,
+      "prompt": "Latest iPhone iOS version released this month?",
+      "requireSources": true,
+      "minWords": 12
+    },
+    {
+      "id": "research_auto_035",
+      "category": "research_auto",
+      "gradeLevel": "Secondary",
+      "preferredLanguage": "english",
+      "forceWebSearch": false,
+      "prompt": "Current weather alerts in Mombasa today with sources.",
+      "requireSources": true,
+      "minWords": 12
+    },
+    {
+      "id": "research_auto_037",
+      "category": "research_auto",
+      "gradeLevel": "Secondary",
+      "preferredLanguage": "english",
+      "forceWebSearch": false,
+      "prompt": "What are current gold prices per ounce today?",
+      "requireSources": true,
+      "minWords": 12
+    },
+    {
+      "id": "research_auto_039",
+      "category": "research_auto",
+      "gradeLevel": "Secondary",
+      "preferredLanguage": "english",
+      "forceWebSearch": false,
+      "prompt": "Recent global AI policy news with links.",
+      "requireSources": true,
+      "minWords": 12
+    },
+    {
+      "id": "research_forced_041",
+      "category": "research_forced",
+      "gradeLevel": "Secondary",
+      "preferredLanguage": "english",
+      "forceWebSearch": true,
+      "prompt": "Search online: latest climate summit updates with sources.",
+      "requireSources": true,
+      "minWords": 12
+    },
+    {
+      "id": "research_forced_043",
+      "category": "research_forced",
+      "gradeLevel": "Secondary",
+      "preferredLanguage": "english",
+      "forceWebSearch": true,
+      "prompt": "Look up current gold price and cite sources.",
+      "requireSources": true,
+      "minWords": 12
+    },
+    {
+      "id": "research_forced_045",
+      "category": "research_forced",
+      "gradeLevel": "Secondary",
+      "preferredLanguage": "english",
+      "forceWebSearch": true,
+      "prompt": "Find latest WHO guidance on cholera and cite source.",
+      "requireSources": true,
+      "minWords": 12
+    },
+    {
+      "id": "research_forced_047",
+      "category": "research_forced",
+      "gradeLevel": "Secondary",
+      "preferredLanguage": "english",
+      "forceWebSearch": true,
+      "prompt": "Search the web for today's exchange rate KES to USD.",
+      "requireSources": true,
+      "minWords": 12
+    },
+    {
+      "id": "research_forced_049",
+      "category": "research_forced",
+      "gradeLevel": "Secondary",
+      "preferredLanguage": "english",
+      "forceWebSearch": true,
+      "prompt": "Look up current Kenya treasury bill rate with source.",
+      "requireSources": true,
+      "minWords": 12
+    },
+    {
+      "id": "research_forced_051",
+      "category": "research_forced",
+      "gradeLevel": "Secondary",
+      "preferredLanguage": "english",
+      "forceWebSearch": true,
+      "prompt": "Find recent UN climate statement and link source.",
+      "requireSources": true,
+      "minWords": 12
+    },
+    {
+      "id": "research_forced_053",
+      "category": "research_forced",
+      "gradeLevel": "Secondary",
+      "preferredLanguage": "english",
+      "forceWebSearch": true,
+      "prompt": "Search online for latest WHO vaccine advisory.",
+      "requireSources": true,
+      "minWords": 12
+    },
+    {
+      "id": "research_forced_055",
+      "category": "research_forced",
+      "gradeLevel": "Secondary",
+      "preferredLanguage": "english",
+      "forceWebSearch": true,
+      "prompt": "Find current inflation report for Tanzania with sources.",
+      "requireSources": true,
+      "minWords": 12
+    },
+    {
+      "id": "research_forced_057",
+      "category": "research_forced",
+      "gradeLevel": "Secondary",
+      "preferredLanguage": "english",
+      "forceWebSearch": true,
+      "prompt": "Look up recent COP climate agreement summary with links.",
+      "requireSources": true,
+      "minWords": 12
+    },
+    {
+      "id": "research_forced_059",
+      "category": "research_forced",
+      "gradeLevel": "Secondary",
+      "preferredLanguage": "english",
+      "forceWebSearch": true,
+      "prompt": "Search web for latest NASA launch update with citation.",
+      "requireSources": true,
+      "minWords": 12
+    },
+    {
+      "id": "research_forced_061",
+      "category": "research_forced",
+      "gradeLevel": "Secondary",
+      "preferredLanguage": "english",
+      "forceWebSearch": true,
+      "prompt": "Find current FAO food price index value.",
+      "requireSources": true,
+      "minWords": 12
+    },
+    {
+      "id": "research_forced_063",
+      "category": "research_forced",
+      "gradeLevel": "Secondary",
+      "preferredLanguage": "english",
+      "forceWebSearch": true,
+      "prompt": "Look up latest OECD education report with source.",
+      "requireSources": true,
+      "minWords": 12
+    },
+    {
+      "id": "research_forced_065",
+      "category": "research_forced",
+      "gradeLevel": "Secondary",
+      "preferredLanguage": "english",
+      "forceWebSearch": true,
+      "prompt": "Search online for current silver price.",
+      "requireSources": true,
+      "minWords": 12
+    },
+    {
+      "id": "research_forced_067",
+      "category": "research_forced",
+      "gradeLevel": "Secondary",
+      "preferredLanguage": "english",
+      "forceWebSearch": true,
+      "prompt": "Find latest ECB policy decision with source.",
+      "requireSources": true,
+      "minWords": 12
+    },
+    {
+      "id": "research_forced_069",
+      "category": "research_forced",
+      "gradeLevel": "Secondary",
+      "preferredLanguage": "english",
+      "forceWebSearch": true,
+      "prompt": "Search web for recent IMF debt outlook.",
+      "requireSources": true,
+      "minWords": 12
+    },
+    {
+      "id": "research_no_web_071",
+      "category": "research_no_web_override",
+      "gradeLevel": "Secondary",
+      "preferredLanguage": "english",
+      "forceWebSearch": true,
+      "prompt": "Do not search the web. Explain osmosis from context only.",
+      "forbidSources": true
+    },
+    {
+      "id": "research_no_web_073",
+      "category": "research_no_web_override",
+      "gradeLevel": "Secondary",
+      "preferredLanguage": "english",
+      "forceWebSearch": true,
+      "prompt": "No web lookup please, just teach me photosynthesis simply.",
+      "forbidSources": true
+    },
+    {
+      "id": "research_no_web_075",
+      "category": "research_no_web_override",
+      "gradeLevel": "Secondary",
+      "preferredLanguage": "english",
+      "forceWebSearch": true,
+      "prompt": "Without internet, explain demand and supply basics.",
+      "forbidSources": true
+    },
+    {
+      "id": "research_no_web_077",
+      "category": "research_no_web_override",
+      "gradeLevel": "Secondary",
+      "preferredLanguage": "english",
+      "forceWebSearch": true,
+      "prompt": "Don't search online. Teach Pythagoras theorem.",
+      "forbidSources": true
+    },
+    {
+      "id": "research_no_web_079",
+      "category": "research_no_web_override",
+      "gradeLevel": "Secondary",
+      "preferredLanguage": "english",
+      "forceWebSearch": true,
+      "prompt": "No research mode. Continue from context and explain fractions.",
+      "forbidSources": true
+    },
+    {
+      "id": "research_no_web_081",
+      "category": "research_no_web_override",
+      "gradeLevel": "Secondary",
+      "preferredLanguage": "english",
+      "forceWebSearch": true,
+      "prompt": "Use only our conversation context to explain inflation conceptually.",
+      "forbidSources": true
+    },
+    {
+      "id": "research_no_web_083",
+      "category": "research_no_web_override",
+      "gradeLevel": "Secondary",
+      "preferredLanguage": "english",
+      "forceWebSearch": true,
+      "prompt": "Without external sources, teach me what GDP means.",
+      "forbidSources": true
+    },
+    {
+      "id": "research_no_web_085",
+      "category": "research_no_web_override",
+      "gradeLevel": "Secondary",
+      "preferredLanguage": "english",
+      "forceWebSearch": true,
+      "prompt": "Please do not browse the web; explain Newton's first law.",
+      "forbidSources": true
+    },
+    {
+      "id": "research_no_web_087",
+      "category": "research_no_web_override",
+      "gradeLevel": "Secondary",
+      "preferredLanguage": "english",
+      "forceWebSearch": true,
+      "prompt": "No internet mode, just teach me active recall.",
+      "forbidSources": true
+    },
+    {
+      "id": "research_no_web_089",
+      "category": "research_no_web_override",
+      "gradeLevel": "Secondary",
+      "preferredLanguage": "english",
+      "forceWebSearch": true,
+      "prompt": "Do not look up anything online, explain osmosis again.",
+      "forbidSources": true
+    },
+    {
+      "id": "research_meta_091",
+      "category": "research_meta",
+      "gradeLevel": "Secondary",
+      "preferredLanguage": "english",
+      "forceWebSearch": true,
+      "prompt": "Are you searching online right now or using our context?",
+      "forbidSources": true
+    },
+    {
+      "id": "research_meta_093",
+      "category": "research_meta",
+      "gradeLevel": "Secondary",
+      "preferredLanguage": "english",
+      "forceWebSearch": true,
+      "prompt": "Why are you searching online for this?",
+      "forbidSources": true
+    },
+    {
+      "id": "research_meta_095",
+      "category": "research_meta",
+      "gradeLevel": "Secondary",
+      "preferredLanguage": "english",
+      "forceWebSearch": true,
+      "prompt": "Did you just look this up on the web?",
+      "forbidSources": true
+    },
+    {
+      "id": "research_meta_097",
+      "category": "research_meta",
+      "gradeLevel": "Secondary",
+      "preferredLanguage": "english",
+      "forceWebSearch": true,
+      "prompt": "Are those sources from web research mode?",
+      "forbidSources": true
+    },
+    {
+      "id": "research_meta_099",
+      "category": "research_meta",
+      "gradeLevel": "Secondary",
+      "preferredLanguage": "english",
+      "forceWebSearch": true,
+      "prompt": "Can you explain from context instead of searching?",
+      "forbidSources": true
+    },
+    {
+      "id": "research_context_101",
+      "category": "research_context",
+      "gradeLevel": "Secondary",
+      "preferredLanguage": "english",
+      "forceWebSearch": false,
+      "prompt": "What is photosynthesis?",
+      "forbidSources": true
+    },
+    {
+      "id": "research_context_103",
+      "category": "research_context",
+      "gradeLevel": "Secondary",
+      "preferredLanguage": "english",
+      "forceWebSearch": false,
+      "prompt": "Explain 3/4 + 1/8 step by step.",
+      "forbidSources": true
+    },
+    {
+      "id": "research_context_105",
+      "category": "research_context",
+      "gradeLevel": "Secondary",
+      "preferredLanguage": "english",
+      "forceWebSearch": false,
+      "prompt": "Teach me one idea about sabr for students.",
+      "forbidSources": true
+    },
+    {
+      "id": "research_context_107",
+      "category": "research_context",
+      "gradeLevel": "Secondary",
+      "preferredLanguage": "english",
+      "forceWebSearch": false,
+      "prompt": "How do I revise for exams in one evening?",
+      "forbidSources": true
+    },
+    {
+      "id": "research_context_109",
+      "category": "research_context",
+      "gradeLevel": "Secondary",
+      "preferredLanguage": "english",
+      "forceWebSearch": false,
+      "prompt": "Explain what a noun is for class 5.",
+      "forbidSources": true
+    },
+    {
+      "id": "research_context_111",
+      "category": "research_context",
+      "gradeLevel": "Secondary",
+      "preferredLanguage": "english",
+      "forceWebSearch": false,
+      "prompt": "What is an algorithm in simple terms?",
+      "forbidSources": true
+    },
+    {
+      "id": "research_context_113",
+      "category": "research_context",
+      "gradeLevel": "Secondary",
+      "preferredLanguage": "english",
+      "forceWebSearch": false,
+      "prompt": "Explain supply and demand with one example.",
+      "forbidSources": true
+    },
+    {
+      "id": "research_context_115",
+      "category": "research_context",
+      "gradeLevel": "Secondary",
+      "preferredLanguage": "english",
+      "forceWebSearch": false,
+      "prompt": "Teach me osmosis in simple words.",
+      "forbidSources": true
+    },
+    {
+      "id": "research_context_117",
+      "category": "research_context",
+      "gradeLevel": "Secondary",
+      "preferredLanguage": "english",
+      "forceWebSearch": false,
+      "prompt": "How do I stay consistent in study?",
+      "forbidSources": true
+    },
+    {
+      "id": "research_context_119",
+      "category": "research_context",
+      "gradeLevel": "Secondary",
+      "preferredLanguage": "english",
+      "forceWebSearch": false,
+      "prompt": "What is kinetic energy?",
+      "forbidSources": true
+    },
+    {
+      "id": "research_multi_121",
+      "category": "research_multilingual",
+      "gradeLevel": "Secondary",
+      "preferredLanguage": "swahili",
+      "forceWebSearch": false,
+      "prompt": "Tafadhali nipe taarifa za hivi punde kuhusu mfumuko wa bei Kenya na vyanzo.",
+      "requireSources": true,
+      "requireArabicScript": false
+    },
+    {
+      "id": "research_multi_123",
+      "category": "research_multilingual",
+      "gradeLevel": "Secondary",
+      "preferredLanguage": "arabic",
+      "forceWebSearch": false,
+      "prompt": "ما آخر أخبار الاقتصاد اليوم في كينيا؟ مع المصادر.",
+      "requireSources": true,
+      "requireArabicScript": true
+    },
+    {
+      "id": "research_multi_125",
+      "category": "research_multilingual",
+      "gradeLevel": "Secondary",
+      "preferredLanguage": "english_sw",
+      "forceWebSearch": false,
+      "prompt": "Nipe latest updates za NASA Artemis na sources.",
+      "requireSources": true,
+      "requireArabicScript": false
+    },
+    {
+      "id": "research_multi_127",
+      "category": "research_multilingual",
+      "gradeLevel": "Secondary",
+      "preferredLanguage": "arabic",
+      "forceWebSearch": false,
+      "prompt": "أعطني آخر سعر الذهب اليوم مع المصادر.",
+      "requireSources": true,
+      "requireArabicScript": true
+    },
+    {
+      "id": "research_multi_129",
+      "category": "research_multilingual",
+      "gradeLevel": "Secondary",
+      "preferredLanguage": "swahili",
+      "forceWebSearch": false,
+      "prompt": "Habari za hivi karibuni kuhusu WHO malaria guidance na links.",
+      "requireSources": true,
+      "requireArabicScript": false
+    },
+    {
+      "id": "research_multi_131",
+      "category": "research_multilingual",
+      "gradeLevel": "Secondary",
+      "preferredLanguage": "english",
+      "forceWebSearch": false,
+      "prompt": "Latest global AI policy news today with sources.",
+      "requireSources": true,
+      "requireArabicScript": false
+    },
+    {
+      "id": "research_multi_133",
+      "category": "research_multilingual",
+      "gradeLevel": "Secondary",
+      "preferredLanguage": "arabic",
+      "forceWebSearch": false,
+      "prompt": "ما آخر إصدار من بايثون الآن؟ مع المصدر.",
+      "requireSources": true,
+      "requireArabicScript": true
+    },
+    {
+      "id": "research_multi_135",
+      "category": "research_multilingual",
+      "gradeLevel": "Secondary",
+      "preferredLanguage": "swahili",
+      "forceWebSearch": false,
+      "prompt": "Bei ya dola kwa shilingi leo ni ngapi? Taja chanzo.",
+      "requireSources": true,
+      "requireArabicScript": false
+    },
+    {
+      "id": "research_video_137",
+      "category": "research_video",
+      "gradeLevel": "Secondary",
+      "preferredLanguage": "english",
+      "forceWebSearch": false,
+      "prompt": "Find a YouTube video explaining photosynthesis for students.",
+      "requireVideo": true
+    },
+    {
+      "id": "research_video_139",
+      "category": "research_video",
+      "gradeLevel": "Secondary",
+      "preferredLanguage": "english",
+      "forceWebSearch": false,
+      "prompt": "Find a YouTube lesson on Newton laws.",
+      "requireVideo": true
+    },
+    {
+      "id": "research_video_141",
+      "category": "research_video",
+      "gradeLevel": "Secondary",
+      "preferredLanguage": "english",
+      "forceWebSearch": false,
+      "prompt": "Get an educational video for algebra basics.",
+      "requireVideo": true
+    },
+    {
+      "id": "research_video_143",
+      "category": "research_video",
+      "gradeLevel": "Secondary",
+      "preferredLanguage": "english",
+      "forceWebSearch": false,
+      "prompt": "Find a video about climate change for class 8.",
+      "requireVideo": true
+    },
+    {
+      "id": "research_video_145",
+      "category": "research_video",
+      "gradeLevel": "Secondary",
+      "preferredLanguage": "english",
+      "forceWebSearch": false,
+      "prompt": "Find a tutorial video about fractions.",
+      "requireVideo": true
+    },
+    {
+      "id": "research_video_147",
+      "category": "research_video",
+      "gradeLevel": "Secondary",
+      "preferredLanguage": "english",
+      "forceWebSearch": false,
+      "prompt": "Find a video explaining osmosis in simple terms.",
+      "requireVideo": true
+    },
+    {
+      "id": "research_followup_seed_149",
+      "category": "research_context_followup",
+      "gradeLevel": "Secondary",
+      "preferredLanguage": "english",
+      "forceWebSearch": true,
+      "sessionGroup": "ctx_followup_1",
+      "prompt": "Search latest inflation updates in East Africa with sources. (group 1)",
+      "requireSources": true
+    },
+    {
+      "id": "research_followup_turn_151",
+      "category": "research_context_followup",
+      "gradeLevel": "Secondary",
+      "preferredLanguage": "english",
+      "forceWebSearch": true,
+      "sessionGroup": "ctx_followup_1",
+      "prompt": "Can you explain that part again in simple words?",
+      "forbidSources": true
+    },
+    {
+      "id": "research_followup_turn_153",
+      "category": "research_context_followup",
+      "gradeLevel": "Secondary",
+      "preferredLanguage": "english",
+      "forceWebSearch": true,
+      "sessionGroup": "ctx_followup_1",
+      "prompt": "What does that mean for students practically?",
+      "forbidSources": true
+    },
+    {
+      "id": "research_followup_seed_155",
+      "category": "research_context_followup",
+      "gradeLevel": "Secondary",
+      "preferredLanguage": "english",
+      "forceWebSearch": true,
+      "sessionGroup": "ctx_followup_2",
+      "prompt": "Search latest inflation updates in East Africa with sources. (group 2)",
+      "requireSources": true
+    },
+    {
+      "id": "research_followup_turn_157",
+      "category": "research_context_followup",
+      "gradeLevel": "Secondary",
+      "preferredLanguage": "english",
+      "forceWebSearch": true,
+      "sessionGroup": "ctx_followup_2",
+      "prompt": "Can you explain that part again in simple words?",
+      "forbidSources": true
+    },
+    {
+      "id": "research_followup_turn_159",
+      "category": "research_context_followup",
+      "gradeLevel": "Secondary",
+      "preferredLanguage": "english",
+      "forceWebSearch": true,
+      "sessionGroup": "ctx_followup_2",
+      "prompt": "What does that mean for students practically?",
+      "forbidSources": true
+    },
+    {
+      "id": "research_followup_seed_161",
+      "category": "research_context_followup",
+      "gradeLevel": "Secondary",
+      "preferredLanguage": "english",
+      "forceWebSearch": true,
+      "sessionGroup": "ctx_followup_3",
+      "prompt": "Search latest inflation updates in East Africa with sources. (group 3)",
+      "requireSources": true
+    },
+    {
+      "id": "research_followup_turn_163",
+      "category": "research_context_followup",
+      "gradeLevel": "Secondary",
+      "preferredLanguage": "english",
+      "forceWebSearch": true,
+      "sessionGroup": "ctx_followup_3",
+      "prompt": "Can you explain that part again in simple words?",
+      "forbidSources": true
+    },
+    {
+      "id": "research_followup_turn_165",
+      "category": "research_context_followup",
+      "gradeLevel": "Secondary",
+      "preferredLanguage": "english",
+      "forceWebSearch": true,
+      "sessionGroup": "ctx_followup_3",
+      "prompt": "What does that mean for students practically?",
+      "forbidSources": true
+    },
+    {
+      "id": "research_followup_seed_167",
+      "category": "research_context_followup",
+      "gradeLevel": "Secondary",
+      "preferredLanguage": "english",
+      "forceWebSearch": true,
+      "sessionGroup": "ctx_followup_4",
+      "prompt": "Search latest inflation updates in East Africa with sources. (group 4)",
+      "requireSources": true
+    },
+    {
+      "id": "research_followup_turn_169",
+      "category": "research_context_followup",
+      "gradeLevel": "Secondary",
+      "preferredLanguage": "english",
+      "forceWebSearch": true,
+      "sessionGroup": "ctx_followup_4",
+      "prompt": "Can you explain that part again in simple words?",
+      "forbidSources": true
+    },
+    {
+      "id": "research_followup_turn_171",
+      "category": "research_context_followup",
+      "gradeLevel": "Secondary",
+      "preferredLanguage": "english",
+      "forceWebSearch": true,
+      "sessionGroup": "ctx_followup_4",
+      "prompt": "What does that mean for students practically?",
+      "forbidSources": true
+    },
+    {
+      "id": "research_followup_seed_173",
+      "category": "research_context_followup",
+      "gradeLevel": "Secondary",
+      "preferredLanguage": "english",
+      "forceWebSearch": true,
+      "sessionGroup": "ctx_followup_5",
+      "prompt": "Search latest inflation updates in East Africa with sources. (group 5)",
+      "requireSources": true
+    },
+    {
+      "id": "research_followup_turn_175",
+      "category": "research_context_followup",
+      "gradeLevel": "Secondary",
+      "preferredLanguage": "english",
+      "forceWebSearch": true,
+      "sessionGroup": "ctx_followup_5",
+      "prompt": "Can you explain that part again in simple words?",
+      "forbidSources": true
+    },
+    {
+      "id": "research_followup_turn_177",
+      "category": "research_context_followup",
+      "gradeLevel": "Secondary",
+      "preferredLanguage": "english",
+      "forceWebSearch": true,
+      "sessionGroup": "ctx_followup_5",
+      "prompt": "What does that mean for students practically?",
+      "forbidSources": true
+    },
+    {
+      "id": "research_followup_seed_179",
+      "category": "research_context_followup",
+      "gradeLevel": "Secondary",
+      "preferredLanguage": "english",
+      "forceWebSearch": true,
+      "sessionGroup": "ctx_followup_6",
+      "prompt": "Search latest inflation updates in East Africa with sources. (group 6)",
+      "requireSources": true
+    },
+    {
+      "id": "research_followup_turn_181",
+      "category": "research_context_followup",
+      "gradeLevel": "Secondary",
+      "preferredLanguage": "english",
+      "forceWebSearch": true,
+      "sessionGroup": "ctx_followup_6",
+      "prompt": "Can you explain that part again in simple words?",
+      "forbidSources": true
+    },
+    {
+      "id": "research_followup_turn_183",
+      "category": "research_context_followup",
+      "gradeLevel": "Secondary",
+      "preferredLanguage": "english",
+      "forceWebSearch": true,
+      "sessionGroup": "ctx_followup_6",
+      "prompt": "What does that mean for students practically?",
+      "forbidSources": true
+    }
+  ]
+}

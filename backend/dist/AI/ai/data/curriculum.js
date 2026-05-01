@@ -1,8 +1,11 @@
+"use strict";
 // src/ai/data/curriculum.ts
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.CURRICULUM_MAP = void 0;
 // ⚡ O(1) Lookup Map for Curriculum Content
 // Edit this file to add new topics (Biology, Physics, Islamic Studies)
 // without touching the main code.
-export const CURRICULUM_MAP = new Map([
+exports.CURRICULUM_MAP = new Map([
     ["simultaneous", {
             microIdea: "A simultaneous equation is just a puzzle where we use two clues to find two prices.",
             example: "Imagine you go to the kiosk. One friend buys 2 Mandazis and 1 Chai for 40 shillings. That is your first clue.",

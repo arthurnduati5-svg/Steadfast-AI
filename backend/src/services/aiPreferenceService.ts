@@ -7,7 +7,7 @@ export interface CopilotPreferences {
   interests: string[];
 }
 
-const DEFAULT_LANGUAGE = 'English';
+const DEFAULT_LANGUAGE = 'english';
 const DEFAULT_INTERESTS: string[] = [];
 
 /**

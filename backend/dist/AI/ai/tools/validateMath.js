@@ -1,24 +1,34 @@
-// Very strict parser for plain parentheses arithmetic only, safe and deterministic
-export async function validateMathTool(input) {
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.validateMathTool = validateMathTool;
+const mathjs_1 = require("mathjs");
+const math = (0, mathjs_1.create)(mathjs_1.all, {});
+async function validateMathTool(input) {
     if (!input || typeof input.expression !== 'string') {
         return { valid: false, error: 'Missing expression' };
     }
-    // Basic safety: allow only digits, spaces, parentheses and operators + - * /
-    const safePattern = /^[0-9\s\(\)\+\-\*\/\.]+$/;
     const expr = input.expression.trim();
+    if (!expr) {
+        return { valid: false, error: 'Expression is empty' };
+    }
+    const safePattern = /^[0-9\s()+\-*/.^%]+$/;
     if (!safePattern.test(expr)) {
         return { valid: false, error: 'Expression contains forbidden characters' };
     }
     try {
-        // Evaluate using a tiny safe evaluator: remove surrounding parentheses then compute with Function
-        // NOTE: run this server-side with caution; prefer a math parser lib in production
-        // For stub we use eval-like safe path:
-        const sanitized = expr.replace(/[^\d\+\-\*\/\.\(\)\s]/g, '');
-        // eslint-disable-next-line no-new-func
-        const computed = Function(`"use strict"; return (${sanitized});`)();
-        return { valid: true, computed: String(computed) };
+        const result = math.evaluate(expr);
+        if (typeof result === 'number' && Number.isFinite(result)) {
+            return { valid: true, computed: String(result) };
+        }
+        if (typeof result === 'string') {
+            return { valid: true, computed: result };
+        }
+        if (Array.isArray(result)) {
+            return { valid: false, error: 'Expression must evaluate to a single value' };
+        }
+        return { valid: true, computed: String(result) };
     }
-    catch (err) {
+    catch {
         return { valid: false, error: 'Could not compute expression' };
     }
 }

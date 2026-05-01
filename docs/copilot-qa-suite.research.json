@@ -1,0 +1,262 @@
+{
+  "config": {
+    "name": "copilot_research_routing_suite",
+    "newSessionPerCase": true,
+    "applyCasePreferences": true,
+    "failOnRepeatedSegments": true,
+    "defaultMaxLatencyMs": 45000
+  },
+  "cases": [
+    {
+      "id": "auto_web_latest_inflation",
+      "category": "research_auto",
+      "prompt": "What is the latest inflation rate in Kenya today? Give sources.",
+      "gradeLevel": "Secondary",
+      "preferredLanguage": "english",
+      "forceWebSearch": false,
+      "requireSources": true,
+      "mustContainAny": ["kenya", "inflation", "source"]
+    },
+    {
+      "id": "auto_web_current_ceo",
+      "category": "research_auto",
+      "prompt": "Who is the current CEO of Microsoft? Include source links.",
+      "gradeLevel": "Secondary",
+      "preferredLanguage": "english",
+      "forceWebSearch": false,
+      "requireSources": true,
+      "mustContainAny": ["current", "microsoft", "source"]
+    },
+    {
+      "id": "auto_web_recent_news",
+      "category": "research_auto",
+      "prompt": "Summarize recent news about NASA Artemis with sources.",
+      "gradeLevel": "Secondary",
+      "preferredLanguage": "english",
+      "forceWebSearch": false,
+      "requireSources": true,
+      "mustContainAny": ["nasa", "artemis", "source"]
+    },
+    {
+      "id": "auto_web_exchange_rate",
+      "category": "research_auto",
+      "prompt": "What is the current USD to KES exchange rate?",
+      "gradeLevel": "Secondary",
+      "preferredLanguage": "english",
+      "forceWebSearch": false,
+      "requireSources": true,
+      "mustContainAny": ["usd", "kes", "rate"]
+    },
+    {
+      "id": "auto_web_version_release",
+      "category": "research_auto",
+      "prompt": "What is the latest Python release version now?",
+      "gradeLevel": "Secondary",
+      "preferredLanguage": "english",
+      "forceWebSearch": false,
+      "requireSources": true,
+      "mustContainAny": ["python", "latest", "version"]
+    },
+    {
+      "id": "force_web_explicit_lookup",
+      "category": "research_forced",
+      "prompt": "Search online: latest climate summit updates with sources.",
+      "gradeLevel": "Secondary",
+      "preferredLanguage": "english",
+      "forceWebSearch": true,
+      "requireSources": true
+    },
+    {
+      "id": "force_web_explicit_lookup_2",
+      "category": "research_forced",
+      "prompt": "Look up current gold price and cite sources.",
+      "gradeLevel": "Secondary",
+      "preferredLanguage": "english",
+      "forceWebSearch": true,
+      "requireSources": true
+    },
+    {
+      "id": "force_web_explicit_lookup_3",
+      "category": "research_forced",
+      "prompt": "Find latest WHO guidance on malaria and cite source.",
+      "gradeLevel": "Secondary",
+      "preferredLanguage": "english",
+      "forceWebSearch": true,
+      "requireSources": true
+    },
+    {
+      "id": "context_only_definition_no_force",
+      "category": "research_context",
+      "prompt": "What is photosynthesis?",
+      "gradeLevel": "Primary",
+      "preferredLanguage": "english",
+      "forceWebSearch": false,
+      "forbidSources": true,
+      "mustContainAny": ["photosynthesis", "plant"]
+    },
+    {
+      "id": "context_only_math_no_force",
+      "category": "research_context",
+      "prompt": "Explain 3/4 + 1/8 step by step.",
+      "gradeLevel": "Primary",
+      "preferredLanguage": "english",
+      "forceWebSearch": false,
+      "forbidSources": true,
+      "expectedState": { "mathModeActive": true }
+    },
+    {
+      "id": "context_only_quran_no_force",
+      "category": "research_context",
+      "prompt": "Explain the meaning of sabr for students in simple terms.",
+      "gradeLevel": "Secondary",
+      "preferredLanguage": "english",
+      "forceWebSearch": false,
+      "forbidSources": true,
+      "mustContainAny": ["sabr", "student"]
+    },
+    {
+      "id": "context_followup_under_web_mode",
+      "category": "research_context",
+      "sessionGroup": "ctx_followup_1",
+      "prompt": "Search latest inflation rate in Kenya with sources.",
+      "gradeLevel": "Secondary",
+      "preferredLanguage": "english",
+      "forceWebSearch": true,
+      "requireSources": true
+    },
+    {
+      "id": "context_followup_under_web_mode_2",
+      "category": "research_context",
+      "sessionGroup": "ctx_followup_1",
+      "prompt": "Can you explain that part again in simple terms?",
+      "gradeLevel": "Secondary",
+      "preferredLanguage": "english",
+      "forceWebSearch": true,
+      "forbidSources": true
+    },
+    {
+      "id": "context_followup_under_web_mode_3",
+      "category": "research_context",
+      "sessionGroup": "ctx_followup_1",
+      "prompt": "What does that mean for students?",
+      "gradeLevel": "Secondary",
+      "preferredLanguage": "english",
+      "forceWebSearch": true,
+      "forbidSources": true
+    },
+    {
+      "id": "no_web_override_force_1",
+      "category": "research_no_web_override",
+      "prompt": "Do not search the web. Explain osmosis from context only.",
+      "gradeLevel": "Secondary",
+      "preferredLanguage": "english",
+      "forceWebSearch": true,
+      "forbidSources": true
+    },
+    {
+      "id": "no_web_override_force_2",
+      "category": "research_no_web_override",
+      "prompt": "Without internet lookup, explain what supply and demand means.",
+      "gradeLevel": "Secondary",
+      "preferredLanguage": "english",
+      "forceWebSearch": true,
+      "forbidSources": true
+    },
+    {
+      "id": "no_web_override_force_3",
+      "category": "research_no_web_override",
+      "prompt": "No web search please, teach me Pythagoras theorem basics.",
+      "gradeLevel": "Secondary",
+      "preferredLanguage": "english",
+      "forceWebSearch": true,
+      "forbidSources": true
+    },
+    {
+      "id": "meta_question_web_mode",
+      "category": "research_meta",
+      "prompt": "Are you searching online right now or using our context?",
+      "gradeLevel": "Secondary",
+      "preferredLanguage": "english",
+      "forceWebSearch": true,
+      "forbidSources": true
+    },
+    {
+      "id": "meta_question_web_mode_2",
+      "category": "research_meta",
+      "prompt": "Why are you searching online for this?",
+      "gradeLevel": "Secondary",
+      "preferredLanguage": "english",
+      "forceWebSearch": true,
+      "forbidSources": true
+    },
+    {
+      "id": "video_lookup",
+      "category": "research_video",
+      "prompt": "Find a YouTube video explaining photosynthesis for students.",
+      "gradeLevel": "Secondary",
+      "preferredLanguage": "english",
+      "forceWebSearch": false,
+      "requireVideo": true
+    },
+    {
+      "id": "video_followup_no_new_search",
+      "category": "research_video",
+      "sessionGroup": "video_followup",
+      "prompt": "Find a YouTube video explaining Newton's laws.",
+      "gradeLevel": "Secondary",
+      "preferredLanguage": "english",
+      "forceWebSearch": false,
+      "requireVideo": true
+    },
+    {
+      "id": "video_followup_no_new_search_2",
+      "category": "research_video",
+      "sessionGroup": "video_followup",
+      "prompt": "Explain what that video is mainly teaching.",
+      "gradeLevel": "Secondary",
+      "preferredLanguage": "english",
+      "forceWebSearch": false,
+      "forbidSources": true
+    },
+    {
+      "id": "swahili_auto_web",
+      "category": "research_multilingual",
+      "prompt": "Tafadhali nipe taarifa za hivi punde kuhusu mfumuko wa bei Kenya na vyanzo.",
+      "gradeLevel": "Secondary",
+      "preferredLanguage": "swahili",
+      "forceWebSearch": false,
+      "requireSources": true
+    },
+    {
+      "id": "arabic_auto_web",
+      "category": "research_multilingual",
+      "prompt": "ما آخر أخبار مهمة عن المناخ اليوم؟ مع المصادر.",
+      "gradeLevel": "Secondary",
+      "preferredLanguage": "arabic",
+      "forceWebSearch": false,
+      "requireSources": true,
+      "requireArabicScript": true
+    },
+    {
+      "id": "context_lock_memory_seed",
+      "category": "research_context",
+      "sessionGroup": "ctx_lock",
+      "prompt": "Remember this: my weak topic is fractions and exam is in 2 days.",
+      "gradeLevel": "Secondary",
+      "preferredLanguage": "english",
+      "forceWebSearch": false,
+      "forbidSources": true
+    },
+    {
+      "id": "context_lock_memory_use",
+      "category": "research_context",
+      "sessionGroup": "ctx_lock",
+      "prompt": "Based on that, give me tonight study steps.",
+      "gradeLevel": "Secondary",
+      "preferredLanguage": "english",
+      "forceWebSearch": false,
+      "forbidSources": true,
+      "mustContainAny": ["fraction", "2 days", "exam"]
+    }
+  ]
+}

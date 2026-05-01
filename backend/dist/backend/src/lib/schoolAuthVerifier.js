@@ -1,5 +1,11 @@
+"use strict";
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.verifySchoolAuthToken = verifySchoolAuthToken;
 // backend/src/lib/schoolAuthVerifier.ts
-import jwt from 'jsonwebtoken';
+const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
 /**
  * Verifies a token from the school's primary authentication system.
  *
@@ -17,7 +23,7 @@ import jwt from 'jsonwebtoken';
  * @param {string} token - The JWT authentication token.
  * @returns {Promise<string | null>} The unique user ID if the token is valid, otherwise null.
  */
-export async function verifySchoolAuthToken(token) {
+async function verifySchoolAuthToken(token) {
     const secret = process.env.JWT_SECRET;
     if (!secret) {
         console.error('[SECURITY ERROR] JWT_SECRET is not defined in the environment variables. Cannot verify tokens.');
@@ -25,7 +31,7 @@ export async function verifySchoolAuthToken(token) {
     }
     try {
         // Verify the token using the secret key
-        const decoded = jwt.verify(token, secret);
+        const decoded = jsonwebtoken_1.default.verify(token, secret);
         // Check if the payload has the required userId
         if (decoded && decoded.userId) {
             console.log(`Successfully verified token for userId: ${decoded.userId}`);

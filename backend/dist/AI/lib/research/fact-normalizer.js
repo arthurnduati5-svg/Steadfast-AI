@@ -1,7 +1,10 @@
-import { ai } from '../../ai/genkit';
-import { enforceNoPersona } from './persona-lock';
-export async function normalizeFacts(rawText, source, url) {
-    const prompt = enforceNoPersona(`
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.normalizeFacts = normalizeFacts;
+const genkit_1 = require("../../ai/genkit");
+const persona_lock_1 = require("./persona-lock");
+async function normalizeFacts(rawText, source, url) {
+    const prompt = (0, persona_lock_1.enforceNoPersona)(`
 Extract up to 2 clear factual statements.
 Rules:
 - Short sentences
@@ -11,7 +14,7 @@ Rules:
 TEXT:
 ${rawText}
 `);
-    const res = await ai.generate({
+    const res = await genkit_1.ai.generate({
         model: 'openai/gpt-4o-mini',
         prompt,
     });

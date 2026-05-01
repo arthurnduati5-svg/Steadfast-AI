@@ -1,19 +1,26 @@
-import prisma from '../lib/prisma';
-import { getRedisClient } from '../lib/redis'; // Corrected import
-import pinecone from '../lib/pinecone';
-import { buildProfileSummary } from '../utils/buildProfileSummary';
-import OpenAI from 'openai';
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-export const getEmbedding = async (text) => {
+"use strict";
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.aiService = exports.getEmbedding = void 0;
+const prisma_1 = __importDefault(require("../lib/prisma"));
+const redis_1 = require("../lib/redis"); // Corrected import
+const pinecone_1 = __importDefault(require("../lib/pinecone"));
+const buildProfileSummary_1 = require("../utils/buildProfileSummary");
+const openai_1 = __importDefault(require("openai"));
+const openai = new openai_1.default({ apiKey: process.env.OPENAI_API_KEY });
+const getEmbedding = async (text) => {
     const response = await openai.embeddings.create({
         model: "text-embedding-ada-002",
         input: text,
     });
     return response.data[0].embedding;
 };
-export const aiService = {
+exports.getEmbedding = getEmbedding;
+exports.aiService = {
     chat: async ({ studentId, message, topic }) => {
-        const studentProfile = await prisma.studentProfile.findUnique({
+        const studentProfile = await prisma_1.default.studentProfile.findUnique({
             where: { userId: studentId },
             include: { progress: true, mistakes: true, chatSessions: { take: 1, orderBy: { createdAt: 'desc' } } },
         });
@@ -23,7 +30,7 @@ export const aiService = {
         const redisKey = `session:${studentId}`;
         // 1. Retrieve cached context from Redis (last 5 turns)
         let recentChatHistory = [];
-        const redis = await getRedisClient();
+        const redis = await (0, redis_1.getRedisClient)();
         if (redis) {
             try {
                 const cachedContext = await redis.lRange(redisKey, 0, 4);
@@ -39,9 +46,9 @@ export const aiService = {
         // 2. Retrieve long-term context from Pinecone (semantic similarity search)
         let pineconeContext = []; // Use inferred ChatMessage type
         if (topic) {
-            const messageEmbedding = await getEmbedding(message);
-            if (pinecone) {
-                const index = pinecone.index(`student-${studentId}`);
+            const messageEmbedding = await (0, exports.getEmbedding)(message);
+            if (pinecone_1.default) {
+                const index = pinecone_1.default.index(`student-${studentId}`);
                 const queryResponse = await index.query({
                     vector: messageEmbedding,
                     topK: 5,
@@ -49,7 +56,7 @@ export const aiService = {
                 });
                 const chatMessageIds = queryResponse.matches.map((match) => match.id);
                 if (chatMessageIds.length > 0) {
-                    pineconeContext = await prisma.chatMessage.findMany({
+                    pineconeContext = await prisma_1.default.chatMessage.findMany({
                         where: { id: { in: chatMessageIds } },
                         orderBy: { timestamp: 'asc' },
                     });
@@ -60,18 +67,18 @@ export const aiService = {
             }
         }
         // 3. Fetch recent mistakes and progress from PostgreSQL.
-        const recentMistakes = await prisma.mistake.findMany({
+        const recentMistakes = await prisma_1.default.mistake.findMany({
             where: { studentId },
             orderBy: { lastSeen: 'desc' },
             take: 5,
         });
-        const studentProgress = await prisma.progress.findMany({
+        const studentProgress = await prisma_1.default.progress.findMany({
             where: { studentId },
             orderBy: { updatedAt: 'desc' },
             take: 5,
         });
         // 4. Build AI system instructions and context
-        const profileSummary = buildProfileSummary(studentProfile);
+        const profileSummary = (0, buildProfileSummary_1.buildProfileSummary)(studentProfile);
         let systemPrompt = `You are Steadfast Copilot, an AI tutor for student ${studentProfile.name || ''}. `;
         systemPrompt += `You adapt to their behavior, learning pace, and interests. `;
         systemPrompt += `Here\'s what I know about the student: ${profileSummary}. `;
@@ -99,7 +106,7 @@ export const aiService = {
         // 6. Save response + student message to PostgreSQL.
         let chatSession = studentProfile.chatSessions[0];
         if (!chatSession || !chatSession.isActive || (topic && chatSession.topic !== topic)) {
-            chatSession = await prisma.chatSession.create({
+            chatSession = await prisma_1.default.chatSession.create({
                 data: {
                     studentId: studentId,
                     topic: topic,
@@ -107,7 +114,7 @@ export const aiService = {
                 },
             });
         }
-        const newMessage = await prisma.chatMessage.create({
+        const newMessage = await prisma_1.default.chatMessage.create({
             data: {
                 sessionId: chatSession.id,
                 role: 'user',
@@ -115,7 +122,7 @@ export const aiService = {
                 messageNumber: recentChatHistory.length + 1,
             },
         });
-        const newAIResponse = await prisma.chatMessage.create({
+        const newAIResponse = await prisma_1.default.chatMessage.create({
             data: {
                 sessionId: chatSession.id,
                 role: 'assistant',
@@ -124,18 +131,18 @@ export const aiService = {
             },
         });
         // 7. Store embeddings of the new conversation in Pinecone.
-        const conversationEmbedding = await getEmbedding(`${message} ${aiResponse}`);
-        if (pinecone) {
-            const index = pinecone.index(`student-${studentId}`);
+        const conversationEmbedding = await (0, exports.getEmbedding)(`${message} ${aiResponse}`);
+        if (pinecone_1.default) {
+            const index = pinecone_1.default.index(`student-${studentId}`);
             await index.upsert([
                 {
                     id: newMessage.id,
-                    values: await getEmbedding(newMessage.content),
+                    values: await (0, exports.getEmbedding)(newMessage.content),
                     metadata: { studentId: studentId, topic: chatSession.topic || '', role: 'user' },
                 },
                 {
                     id: newAIResponse.id,
-                    values: await getEmbedding(newAIResponse.content),
+                    values: await (0, exports.getEmbedding)(newAIResponse.content),
                     metadata: { studentId: studentId, topic: chatSession.topic || '', role: 'assistant' },
                 },
             ]);

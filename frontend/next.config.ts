@@ -1,12 +1,21 @@
 import type {NextConfig} from 'next';
 
+const shouldIgnoreBuildErrors =
+  process.env.SKIP_STRICT_BUILD === 'true' && process.env.NODE_ENV !== 'production';
+const backendTarget =
+  process.env.BACKEND_INTERNAL_URL ||
+  process.env.NEXT_PUBLIC_BACKEND_URL ||
+  'http://127.0.0.1:8080';
+const distDir = process.env.NODE_ENV === 'development' ? '.next-dev' : '.next';
+
 const nextConfig: NextConfig = {
   /* config options here */
+  distDir,
   typescript: {
-    ignoreBuildErrors: true,
+    ignoreBuildErrors: shouldIgnoreBuildErrors,
   },
   eslint: {
-    ignoreDuringBuilds: true,
+    ignoreDuringBuilds: shouldIgnoreBuildErrors,
   },
   images: {
     remotePatterns: [
@@ -25,14 +34,13 @@ const nextConfig: NextConfig = {
     ],
   },
   env: {
-    NEXT_PUBLIC_BACKEND_URL: '',
+    NEXT_PUBLIC_BACKEND_URL: process.env.NEXT_PUBLIC_BACKEND_URL || '',
   },
   async rewrites() {
     return [
       {
-        source: '/api/:path*',
-        // Change destination to localhost, as it was proven resolvable by curl from within the environment
-        destination: 'http://localhost:8080/api/:path*',
+        source: '/api/voice/:path*',
+        destination: `${backendTarget.replace(/\/$/, '')}/api/voice/:path*`,
       },
     ];
   },

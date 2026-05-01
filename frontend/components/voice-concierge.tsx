@@ -1,423 +1,828 @@
-'use client';
-
-import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { Mic, Square, X, Settings, Volume2, VolumeX } from 'lucide-react';
-import { PulseOrb } from './pulse-orb';
-import { getMockAuthToken } from '@/lib/mock-auth';
-import { getAssistantResponse } from '@/app/actions';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
+import {
+    BookAudio,
+    Languages,
+    MessageSquareReply,
+    Mic,
+    Pause,
+    Play,
+    Save,
+    Square,
+    Volume2,
+    VolumeX,
+    X,
+} from 'lucide-react';
+import { HeroOrb } from './hero-orb';
 import { Button } from './ui/button';
-import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
-import type { Message } from '@/lib/types';
-
-type VoiceState = 'idle' | 'listening' | 'processing' | 'speaking' | 'error';
+import api from '@/lib/api';
+import {
+    reconcileInterruptedAssistantText,
+    resolveAssistantTurnLanguage,
+    resolveStudentTurnLanguage,
+} from '@/lib/voice-turn-reconciliation';
+import type {
+    DetectedInputLanguage,
+    VoiceBehaviorProfile,
+    VoiceModeRuntimeState,
+    VoiceModeVisualState,
+    VoiceRecapGenerationState,
+    VoiceTranscriptTurn,
+} from '@/lib/types';
+import type { VoiceController } from '../../AI/useVoiceController';
 
 interface VoiceConciergeProps {
-    onClose: () => void;
-    // Callback to sync messages back to main chat
-    onMessageCompleted?: (userMsg: Message, aiMsg: Message) => void;
-    sessionId?: string; // Add sessionId prop
+    voiceController: VoiceController;
+    sessionId?: string;
+    className?: string;
+    isOpen?: boolean;
+    onClose?: () => void;
 }
 
+const PROFILE_LABEL: Record<VoiceBehaviorProfile, string> = {
+    tutor_voice: 'Tutor Voice',
+    revision_voice: 'Revision Voice',
+    reading_voice: 'Reading Voice',
+    focus_voice: 'Focus Voice',
+    exam_voice: 'Exam Voice',
+};
+
+const STATE_LABEL: Record<VoiceModeVisualState, string> = {
+    idle: 'Idle',
+    ready: 'Ready',
+    listening: 'Listening',
+    active_capture: 'Capturing',
+    processing: 'Thinking',
+    speaking: 'Speaking',
+    waiting_response: 'Waiting for your answer',
+    interrupted: 'Interrupted',
+    paused: 'Paused',
+    reconnecting: 'Reconnecting',
+    error: 'Voice issue',
+    recap_playback: 'Recap playback',
+};
+
+const STATE_GUIDANCE: Record<VoiceModeVisualState, string> = {
+    idle: 'Voice mode is resting.',
+    ready: 'Speak naturally. I will guide one step at a time.',
+    listening: 'I am listening. Keep explaining your thinking.',
+    active_capture: 'Good flow. Continue your explanation.',
+    processing: 'Let me think for a moment.',
+    speaking: 'I will keep this short and clear.',
+    waiting_response: 'Your turn. Try answering out loud.',
+    interrupted: 'Interruption handled. Continue when ready.',
+    paused: 'Paused. Tap resume when you want to continue.',
+    reconnecting: 'Connection is recovering. Your context is preserved.',
+    error: 'Voice hit a problem. You can retry or switch to text.',
+    recap_playback: 'Replaying the saved explanation.',
+};
+
+const clamp = (value: number, min = 0, max = 1) => Math.min(max, Math.max(min, value));
+
+const getLastTurnByRole = (turns: VoiceTranscriptTurn[], role: VoiceTranscriptTurn['role']): VoiceTranscriptTurn | null => {
+    for (let index = turns.length - 1; index >= 0; index -= 1) {
+        if (turns[index]?.role === role) return turns[index];
+    }
+    return null;
+};
+
+const toTitleFromText = (value: string) => {
+    const text = String(value || '').replace(/\s+/g, ' ').trim();
+    if (!text) return 'Current voice lesson';
+    if (text.length <= 62) return text;
+    return `${text.slice(0, 59).trimEnd()}...`;
+};
+
+const deriveVisualState = (args: {
+    state: VoiceController['state'];
+    speechIsPlaying: boolean;
+    error: string | null;
+    isPaused: boolean;
+    reconnectState: VoiceController['reconnectState'];
+    interruptionState: VoiceController['interruptionState'];
+    awaitingStudentResponse: boolean;
+    isRecapPlayback: boolean;
+    volume: number;
+}): VoiceModeVisualState => {
+    if (args.error) return 'error';
+    if (args.reconnectState === 'offline' || args.reconnectState === 'degraded' || args.reconnectState === 'reconnecting') {
+        return 'reconnecting';
+    }
+    if (args.isPaused) return 'paused';
+    if (args.isRecapPlayback) return 'recap_playback';
+    if (args.interruptionState !== 'none') return 'interrupted';
+    if (args.state === 'listening') {
+        return args.volume >= 0.22 ? 'active_capture' : 'listening';
+    }
+    if (args.state === 'speaking') {
+        return args.speechIsPlaying ? 'speaking' : 'processing';
+    }
+    if (args.awaitingStudentResponse) return 'waiting_response';
+    if (args.state === 'initializing') return 'ready';
+    return 'ready';
+};
+
 export const VoiceConcierge: React.FC<VoiceConciergeProps> = ({
+    voiceController,
+    sessionId,
+    className,
+    isOpen = false,
     onClose,
-    onMessageCompleted,
-    sessionId
 }) => {
-    const [state, setState] = useState<VoiceState>('idle');
-    const [transcript, setTranscript] = useState('');
-    const [aiResponseText, setAiResponseText] = useState('');
-    const [displayText, setDisplayText] = useState(''); // For typewriter effect
-    const [timer, setTimer] = useState(0);
-    const [isMuted, setIsMuted] = useState(false);
+    const {
+        state,
+        transcript,
+        partialTranscript,
+        draftTranscript,
+        stop,
+        start,
+        discard,
+        error,
+        volume,
+        speechIsPlaying,
+        speechSpokenChars,
+        isSupported,
+        voiceBehaviorProfile,
+        detectedLanguage,
+        selectedLanguage,
+        micPermissionState,
+        currentAudioPlaybackState,
+        interruptionState,
+        reconnectState,
+        activeSessionUsageId,
+        isMuted,
+        toggleMute,
+        replayLast,
+        silence,
+    } = voiceController;
 
-    const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-    const audioChunksRef = useRef<Blob[]>([]);
-    const timerRef = useRef<NodeJS.Timeout | null>(null);
-    const messagesRef = useRef<Message[]>([]); // Keep local history for context via Ref
-    const typeIntervalRef = useRef<NodeJS.Timeout | null>(null);
-    const scrollRef = useRef<HTMLDivElement>(null); // Ref for auto-scrolling response box
-    const audioRef = useRef<HTMLAudioElement | null>(null); // Ref for playing audio
-    const abortControllerRef = useRef<AbortController | null>(null); // Ref for cancelling requests
-    const audioQueueRef = useRef<string[]>([]); // Queue for base64 audio chunks
-    const isPlayingQueueRef = useRef(false); // Flag to track queue playback
+    const [isMounted, setIsMounted] = useState(false);
+    const [isPaused, setIsPaused] = useState(false);
+    const [awaitingStudentResponse, setAwaitingStudentResponse] = useState(false);
+    const [isRecapPlayback, setIsRecapPlayback] = useState(false);
+    const [typedAssistantTranscript, setTypedAssistantTranscript] = useState('');
+    const [turns, setTurns] = useState<VoiceTranscriptTurn[]>([]);
+    const [savedRecapIds, setSavedRecapIds] = useState<string[]>([]);
+    const [recapGenerationState, setRecapGenerationState] = useState<VoiceRecapGenerationState>('idle');
+    const [statusNotice, setStatusNotice] = useState('');
+    const dialogRef = useRef<HTMLDivElement | null>(null);
+    const transcriptRef = useRef<HTMLDivElement | null>(null);
+    const previousStateRef = useRef<VoiceController['state']>('idle');
+    const lastStudentFinalRef = useRef('');
+    const lastAssistantFinalRef = useRef('');
+    const permissionEventEmittedRef = useRef(false);
+    const audioErrorEventEmittedRef = useRef(false);
+    const hesitationTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const lastGrowthSignalKeyRef = useRef('');
+    const lastStableStudentLanguageRef = useRef<DetectedInputLanguage | null>(detectedLanguage || null);
 
-    const { toast } = useToast();
+    const currentTopic = useMemo(() => {
+        const studentTurn = getLastTurnByRole(turns, 'student');
+        if (!studentTurn) return 'Voice study session';
+        return toTitleFromText(studentTurn.text);
+    }, [turns]);
 
-    // Helper to stop everything and prevent collisions
-    const cleanupRequests = useCallback(() => {
-        // 1. Abort pending fetch requests (STT/TTS)
-        if (abortControllerRef.current) {
-            abortControllerRef.current.abort();
-            abortControllerRef.current = null;
-        }
+    const visualState = useMemo(
+        () =>
+            deriveVisualState({
+                state,
+                speechIsPlaying,
+                error,
+                isPaused,
+                reconnectState,
+                interruptionState,
+                awaitingStudentResponse,
+                isRecapPlayback,
+                volume,
+            }),
+        [state, speechIsPlaying, error, isPaused, reconnectState, interruptionState, awaitingStudentResponse, isRecapPlayback, volume]
+    );
 
-        // 2. Stop current audio playback
-        if (audioRef.current) {
-            audioRef.current.pause();
-            audioRef.current.currentTime = 0;
-            audioRef.current = null;
-        }
+    const runtimeState = useMemo<VoiceModeRuntimeState>(
+        () => ({
+            isVoiceModeActive: isOpen,
+            voiceSessionId: activeSessionUsageId || null,
+            voiceProfile: voiceBehaviorProfile,
+            currentVoiceState: visualState,
+            micPermissionState,
+            detectedLanguage: detectedLanguage || null,
+            selectedLanguage: selectedLanguage || null,
+            partialTranscript: partialTranscript || '',
+            finalTranscript: draftTranscript || '',
+            aiSpokenText: transcript || '',
+            currentAudioPlaybackState,
+            interruptionState,
+            reconnectState,
+            recapGenerationState,
+            savedRecapIds,
+            entryPoint: 'voice_overlay',
+            returnContext: sessionId || null,
+        }),
+        [
+            activeSessionUsageId,
+            currentAudioPlaybackState,
+            detectedLanguage,
+            draftTranscript,
+            interruptionState,
+            isOpen,
+            micPermissionState,
+            partialTranscript,
+            recapGenerationState,
+            reconnectState,
+            savedRecapIds,
+            selectedLanguage,
+            sessionId,
+            transcript,
+            visualState,
+            voiceBehaviorProfile,
+        ]
+    );
 
-        // 3. Clear typewriter intervals
-        if (typeIntervalRef.current) {
-            clearInterval(typeIntervalRef.current);
-            typeIntervalRef.current = null;
-        }
+    const intensity = useMemo(() => {
+        const floor =
+            visualState === 'speaking'
+                ? 0.22
+                : visualState === 'processing'
+                    ? 0.14
+                    : visualState === 'active_capture'
+                        ? 0.2
+                        : visualState === 'listening'
+                            ? 0.16
+                            : visualState === 'waiting_response'
+                                ? 0.11
+                                : visualState === 'reconnecting'
+                                    ? 0.07
+                                    : visualState === 'error'
+                                        ? 0.06
+                                        : 0.08;
+        return clamp(floor + (visualState === 'active_capture' || visualState === 'listening' || visualState === 'speaking' ? volume * 0.78 : 0));
+    }, [visualState, volume]);
 
-        // 4. Clear visual state
-        setDisplayText('');
-        setAiResponseText('');
-        setTranscript('');
-
-        // 5. Clear audio queue
-        audioQueueRef.current = [];
-        isPlayingQueueRef.current = false;
+    useEffect(() => {
+        setIsMounted(true);
     }, []);
 
-    // Typewriter effect logic
     useEffect(() => {
-        if (state === 'speaking' && aiResponseText) {
-            setDisplayText('');
-            let i = 0;
-            if (typeIntervalRef.current) clearInterval(typeIntervalRef.current);
-
-            typeIntervalRef.current = setInterval(() => {
-                setDisplayText((prev) => aiResponseText.slice(0, i + 1));
-                i++;
-                if (i >= aiResponseText.length) {
-                    if (typeIntervalRef.current) clearInterval(typeIntervalRef.current);
-                }
-            }, 20); // 20ms per character for a snappier feel
-        } else if (state !== 'speaking') {
-            setDisplayText('');
-            if (typeIntervalRef.current) clearInterval(typeIntervalRef.current);
+        if (!isOpen) {
+            setIsPaused(false);
+            setAwaitingStudentResponse(false);
+            setIsRecapPlayback(false);
+            setTypedAssistantTranscript('');
+            setTurns([]);
+            setSavedRecapIds([]);
+            setRecapGenerationState('idle');
+            setStatusNotice('');
+            previousStateRef.current = 'idle';
+            lastStudentFinalRef.current = '';
+            lastAssistantFinalRef.current = '';
+            permissionEventEmittedRef.current = false;
+            audioErrorEventEmittedRef.current = false;
+            lastStableStudentLanguageRef.current = detectedLanguage || null;
         }
-    }, [state, aiResponseText]);
+    }, [detectedLanguage, isOpen]);
 
-    // Sync mute state with current audio
     useEffect(() => {
-        if (audioRef.current) {
-            audioRef.current.muted = isMuted;
+        const previous = previousStateRef.current;
+        if (state === 'speaking' || state === 'listening') {
+            setAwaitingStudentResponse(false);
         }
-    }, [isMuted]);
+        if (previous === 'speaking' && state === 'idle') {
+            setAwaitingStudentResponse(true);
+        }
+        previousStateRef.current = state;
+    }, [state]);
 
-    // Cleanup on unmount
     useEffect(() => {
+        if (!isOpen) return;
+        if (state !== 'speaking') return;
+        const full = transcript || '';
+        if (!full) return;
+        const spokenChars = clamp(Math.floor(speechSpokenChars), 0, full.length);
+        const typed = full.slice(0, spokenChars || full.length);
+        if (typed !== typedAssistantTranscript) {
+            setTypedAssistantTranscript(typed);
+        }
+    }, [isOpen, state, transcript, speechSpokenChars, typedAssistantTranscript]);
+
+    useEffect(() => {
+        if (!isOpen) return;
+        if (state !== 'listening') return;
+        const liveText = (partialTranscript || draftTranscript || '').trim();
+        if (!liveText) return;
+        const languageResolution = resolveStudentTurnLanguage({
+            detectedLanguage: detectedLanguage || null,
+            previousStableLanguage: lastStableStudentLanguageRef.current,
+        });
+        lastStableStudentLanguageRef.current = languageResolution.nextStableLanguage;
+        setTurns((prev) => {
+            const next = prev.filter((turn) => turn.id !== 'student-live');
+            next.push({
+                id: 'student-live',
+                role: 'student',
+                text: liveText,
+                partial: true,
+                final: false,
+                language: languageResolution.displayLanguage,
+                createdAt: new Date().toISOString(),
+            });
+            return next.slice(-10);
+        });
+    }, [isOpen, state, partialTranscript, draftTranscript, detectedLanguage]);
+
+    useEffect(() => {
+        if (!isOpen) return;
+        if (state === 'listening') return;
+        const finalStudent = (draftTranscript || '').trim();
+        setTurns((prev) => prev.filter((turn) => turn.id !== 'student-live'));
+        if (!finalStudent || finalStudent === lastStudentFinalRef.current) return;
+        const languageResolution = resolveStudentTurnLanguage({
+            detectedLanguage: detectedLanguage || null,
+            previousStableLanguage: lastStableStudentLanguageRef.current,
+        });
+        lastStableStudentLanguageRef.current = languageResolution.nextStableLanguage;
+        lastStudentFinalRef.current = finalStudent;
+        setTurns((prev) => {
+            const next = prev.concat({
+                id: `student-${Date.now()}`,
+                role: 'student',
+                text: finalStudent,
+                partial: false,
+                final: true,
+                language: languageResolution.displayLanguage,
+                createdAt: new Date().toISOString(),
+            });
+            return next.slice(-10);
+        });
+    }, [isOpen, state, draftTranscript, detectedLanguage]);
+
+    useEffect(() => {
+        if (!isOpen) return;
+        if (state !== 'speaking') {
+            setTurns((prev) => prev.filter((turn) => turn.id !== 'assistant-live'));
+            return;
+        }
+        const assistantLive = (typedAssistantTranscript || transcript || '').trim();
+        if (!assistantLive) return;
+        const assistantLanguage = resolveAssistantTurnLanguage({
+            selectedLanguage: selectedLanguage || null,
+            fallbackStudentLanguage: lastStableStudentLanguageRef.current,
+        });
+        setTurns((prev) => {
+            const next = prev.filter((turn) => turn.id !== 'assistant-live');
+            next.push({
+                id: 'assistant-live',
+                role: 'assistant',
+                text: assistantLive,
+                partial: true,
+                final: false,
+                language: assistantLanguage,
+                createdAt: new Date().toISOString(),
+            });
+            return next.slice(-10);
+        });
+    }, [isOpen, state, typedAssistantTranscript, transcript, selectedLanguage]);
+
+    useEffect(() => {
+        if (!isOpen) return;
+        if (state === 'speaking') return;
+        const assistantFinal = (transcript || '').trim();
+        if (!assistantFinal || assistantFinal === lastAssistantFinalRef.current) return;
+        const assistantLanguage = resolveAssistantTurnLanguage({
+            selectedLanguage: selectedLanguage || null,
+            fallbackStudentLanguage: lastStableStudentLanguageRef.current,
+        });
+        lastAssistantFinalRef.current = assistantFinal;
+        setTurns((prev) => {
+            const withoutLive = prev.filter((turn) => turn.id !== 'assistant-live');
+            withoutLive.push({
+                id: `assistant-${Date.now()}`,
+                role: 'assistant',
+                text: assistantFinal,
+                partial: false,
+                final: true,
+                language: assistantLanguage,
+                createdAt: new Date().toISOString(),
+            });
+            return withoutLive.slice(-10);
+        });
+    }, [isOpen, state, transcript, selectedLanguage]);
+
+    useEffect(() => {
+        if (!isOpen) return;
+        if (interruptionState === 'none') return;
+        const interruptedText = reconcileInterruptedAssistantText({
+            fullTranscript: transcript,
+            spokenChars: speechSpokenChars,
+            typedAssistantTranscript,
+        });
+        if (!interruptedText) return;
+        const assistantLanguage = resolveAssistantTurnLanguage({
+            selectedLanguage: selectedLanguage || null,
+            fallbackStudentLanguage: lastStableStudentLanguageRef.current,
+        });
+        setTurns((prev) => {
+            const next = prev.filter((turn) => turn.id !== 'assistant-live');
+            next.push({
+                id: `assistant-interrupted-${Date.now()}`,
+                role: 'assistant',
+                text: interruptedText,
+                partial: true,
+                final: false,
+                language: assistantLanguage,
+                createdAt: new Date().toISOString(),
+            });
+            return next.slice(-10);
+        });
+    }, [interruptionState, isOpen, selectedLanguage, speechSpokenChars, transcript, typedAssistantTranscript]);
+
+    useEffect(() => {
+        const panel = transcriptRef.current;
+        if (!panel) return;
+        panel.scrollTop = panel.scrollHeight;
+    }, [turns]);
+
+    useEffect(() => {
+        if (!isOpen) return;
+        if (visualState === 'reconnecting') {
+            setStatusNotice('Connection recovering...');
+            return;
+        }
+        if (visualState === 'interrupted') {
+            setStatusNotice('Interruption handled.');
+            return;
+        }
+        if (visualState === 'error' && error) {
+            setStatusNotice(error);
+            return;
+        }
+        setStatusNotice('');
+    }, [isOpen, visualState, error]);
+
+    useEffect(() => {
+        if (!isOpen) return;
+        if (micPermissionState !== 'denied' || permissionEventEmittedRef.current) return;
+        permissionEventEmittedRef.current = true;
+        void api.quality.recordLearningEffectEvent({
+            eventType: 'permission_denied',
+            sessionId: sessionId || null,
+            metadata: { module: 'voice_mode', source: 'voice_overlay' },
+        }).catch(() => undefined);
+    }, [isOpen, micPermissionState, sessionId]);
+
+    useEffect(() => {
+        if (!isOpen) return;
+        if (!error || audioErrorEventEmittedRef.current) return;
+        audioErrorEventEmittedRef.current = true;
+        void api.quality.recordLearningEffectEvent({
+            eventType: 'audio_failure',
+            sessionId: sessionId || null,
+            metadata: {
+                module: 'voice_mode',
+                message: error,
+                state: runtimeState.currentVoiceState,
+            },
+        }).catch(() => undefined);
+    }, [error, isOpen, runtimeState.currentVoiceState, sessionId]);
+
+    useEffect(() => {
+        if (!isOpen) return;
+        if (interruptionState === 'none') return;
+        void api.quality.recordLearningEffectEvent({
+            eventType: 'interruptions',
+            sessionId: sessionId || null,
+            metadata: {
+                module: 'voice_mode',
+                interruptionState,
+                voiceState: runtimeState.currentVoiceState,
+            },
+        }).catch(() => undefined);
+    }, [interruptionState, isOpen, runtimeState.currentVoiceState, sessionId]);
+
+    useEffect(() => {
+        if (hesitationTimerRef.current) {
+            clearTimeout(hesitationTimerRef.current);
+            hesitationTimerRef.current = null;
+        }
+        if (!isOpen) return;
+        if (runtimeState.currentVoiceState !== 'waiting_response') return;
+        hesitationTimerRef.current = setTimeout(() => {
+            const signalKey = `hesitation:${currentTopic}`;
+            if (lastGrowthSignalKeyRef.current === signalKey) return;
+            lastGrowthSignalKeyRef.current = signalKey;
+            void api.quality.recordLearningEffectEvent({
+                eventType: 'growth_signal_update',
+                sessionId: sessionId || null,
+                topic: currentTopic,
+                metadata: {
+                    source: 'voice_mode',
+                    signal: 'topic_hesitation',
+                },
+            }).catch(() => undefined);
+        }, 5200);
         return () => {
-            if (timerRef.current) clearInterval(timerRef.current);
-            if (mediaRecorderRef.current) mediaRecorderRef.current.stop();
-            if (typeIntervalRef.current) clearInterval(typeIntervalRef.current);
-            if (audioRef.current) {
-                audioRef.current.pause();
-                audioRef.current = null;
+            if (hesitationTimerRef.current) {
+                clearTimeout(hesitationTimerRef.current);
+                hesitationTimerRef.current = null;
             }
         };
-    }, []);
-
-    const startTimer = () => {
-        setTimer(0);
-        if (timerRef.current) clearInterval(timerRef.current);
-        timerRef.current = setInterval(() => {
-            setTimer(prev => prev + 1);
-        }, 1000);
-    };
-
-    const stopTimer = () => {
-        if (timerRef.current) {
-            clearInterval(timerRef.current);
-            timerRef.current = null;
-        }
-    };
-
-    // Auto-scroll to bottom as text types
-    const scrollToBottom = () => {
-        if (scrollRef.current) {
-            scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-        }
-    };
+    }, [currentTopic, isOpen, runtimeState.currentVoiceState, sessionId]);
 
     useEffect(() => {
-        if (state === 'speaking') {
-            scrollToBottom();
-        }
-    }, [displayText, state]);
+        if (!isOpen) return;
+        const finalStudent = (draftTranscript || '').trim();
+        if (finalStudent.length < 90) return;
+        const signalKey = `oral_explain:${finalStudent.slice(0, 90)}`;
+        if (lastGrowthSignalKeyRef.current === signalKey) return;
+        lastGrowthSignalKeyRef.current = signalKey;
+        void api.quality.recordLearningEffectEvent({
+            eventType: 'growth_signal_update',
+            sessionId: sessionId || null,
+            topic: currentTopic,
+            metadata: {
+                source: 'voice_mode',
+                signal: 'strong_oral_explanation',
+                chars: finalStudent.length,
+            },
+        }).catch(() => undefined);
+    }, [currentTopic, draftTranscript, isOpen, sessionId]);
 
-    const formatTime = (seconds: number) => {
-        const mins = Math.floor(seconds / 60);
-        const secs = seconds % 60;
-        return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
-    };
-
-    const handleStartListening = async () => {
-        try {
-            cleanupRequests(); // stop any current playback/processing
-
-            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-            const mediaRecorder = new MediaRecorder(stream);
-            mediaRecorderRef.current = mediaRecorder;
-            const audioChunks: BlobPart[] = [];
-
-            mediaRecorder.ondataavailable = (event) => {
-                if (event.data.size > 0) audioChunks.push(event.data);
-            };
-
-            mediaRecorder.onstop = async () => {
-                const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
-                processAudio(audioBlob);
-                stream.getTracks().forEach(track => track.stop());
-            };
-
-            mediaRecorder.start();
-            setState('listening');
-            startTimer();
-        } catch (error) {
-            console.error('Mic access denied:', error);
-            setState('error');
-            setAiResponseText("Please enable microphone access in your browser.");
-        }
-    };
-
-    const handleStopListening = () => {
-        if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
-            mediaRecorderRef.current.stop();
-            stopTimer();
-            setState('processing');
-        }
-    };
-
-    const handleCancelRecording = () => {
-        if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
-            mediaRecorderRef.current.onstop = null; // Prevent processing
-            mediaRecorderRef.current.stop();
-            const tracks = mediaRecorderRef.current.stream.getTracks();
-            tracks.forEach(track => track.stop());
-        }
-        stopTimer();
-        setTimer(0);
-        audioChunksRef.current = [];
-        mediaRecorderRef.current = null;
-        setState('idle');
-    };
-
-    const processAudio = async (audioBlob: Blob) => {
-        try {
-            // New interaction cycle starts
-            abortControllerRef.current = new AbortController();
-            const signal = abortControllerRef.current.signal;
-
-            // 1. Get Token (Mock Auth Fallback)
-            let token = localStorage.getItem('token');
-            if (!token) {
-                try {
-                    token = await getMockAuthToken();
-                } catch (e) {
-                    console.error('Failed to get mock token', e);
-                }
+    useEffect(() => {
+        if (!isOpen) return;
+        const handleKeydown = (event: KeyboardEvent) => {
+            if (event.key === 'Escape') {
+                event.preventDefault();
+                discard();
+                onClose?.();
+                return;
             }
+            if (event.key === ' ' && state === 'listening') {
+                event.preventDefault();
+                stop();
+            }
+        };
+        document.addEventListener('keydown', handleKeydown);
+        return () => document.removeEventListener('keydown', handleKeydown);
+    }, [discard, isOpen, onClose, state, stop]);
 
-            if (!token) throw new Error("Authentication failed");
+    const handleClose = useCallback(
+        (options?: { preserveSession?: boolean }) => {
+            if (!options?.preserveSession) {
+                discard();
+            }
+            onClose?.();
+        },
+        [discard, onClose]
+    );
 
-            const formData = new FormData();
-            formData.append('audio', audioBlob, 'recording.webm');
-            formData.append('sessionId', sessionId || 'student_session');
-            formData.append('conversationState', JSON.stringify({})); // Fallback
+    const handlePrimaryAction = useCallback(() => {
+        setIsPaused(false);
+        if (state === 'listening') {
+            stop();
+            return;
+        }
+        if (state === 'speaking' && speechIsPlaying) {
+            silence();
+            return;
+        }
+        start();
+    }, [silence, speechIsPlaying, start, state, stop]);
 
-            const response = await fetch('/api/copilot/voice-chat', {
-                method: 'POST',
-                headers: { 'Authorization': `Bearer ${token}` },
-                body: formData,
-                signal
+    const handlePause = useCallback(() => {
+        if (!isPaused) {
+            if (state === 'listening') {
+                stop();
+            } else if (state === 'speaking') {
+                silence();
+            }
+            setIsPaused(true);
+            return;
+        }
+        setIsPaused(false);
+        if (state === 'idle') start();
+    }, [isPaused, silence, start, state, stop]);
+
+    const handleReplay = useCallback(() => {
+        replayLast();
+        setIsRecapPlayback(true);
+        window.setTimeout(() => setIsRecapPlayback(false), 1800);
+    }, [replayLast]);
+
+    const handleSwitchToText = useCallback(() => {
+        void api.quality.recordLearningEffectEvent({
+            eventType: 'revision_handoff',
+            sessionId: sessionId || null,
+            metadata: {
+                from: 'voice_mode',
+                to: 'text_chat',
+                voiceProfile: voiceBehaviorProfile,
+            },
+        }).catch(() => undefined);
+        handleClose();
+    }, [handleClose, sessionId, voiceBehaviorProfile]);
+
+    const handleSaveRecap = useCallback(async () => {
+        const source = (lastAssistantFinalRef.current || transcript || '').trim();
+        if (!source) return;
+        setRecapGenerationState('generating');
+        setStatusNotice('Generating recap audio...');
+        try {
+            const result = await api.media.generateAudioRecap({
+                recapText: source,
+                title: `Voice recap: ${currentTopic}`,
+                topic: currentTopic,
+                sessionId: sessionId || undefined,
+                language: selectedLanguage || undefined,
             });
-
-            if (!response.body) throw new Error("No response body");
-            const reader = response.body.getReader();
-            const decoder = new TextDecoder();
-            let accumulatedAiText = "";
-
-            while (true) {
-                const { value, done } = await reader.read();
-                if (done) break;
-
-                const chunk = decoder.decode(value);
-                const lines = chunk.split('\n');
-
-                for (const line of lines) {
-                    if (line.startsWith('data: ')) {
-                        try {
-                            const data = JSON.parse(line.slice(6));
-
-                            if (data.type === 'transcription') {
-                                setTranscript(data.content);
-                            } else if (data.type === 'token') {
-                                accumulatedAiText += data.content;
-                                setAiResponseText(accumulatedAiText); // Update typewriter source
-                                if (state !== 'speaking' && state !== 'processing') setState('speaking');
-                            } else if (data.type === 'audio') {
-                                audioQueueRef.current.push(data.content);
-                                if (!isPlayingQueueRef.current) {
-                                    playNextInQueue();
-                                }
-                            } else if (data.type === 'done') {
-                                // Final state sync if needed
-                                console.log('[Voice] Stream Complete');
-                            }
-                        } catch (e) {
-                            console.warn("Error parsing stream line", e);
-                        }
-                    }
-                }
-            }
-            return;
-
-        } catch (error: any) {
-            console.error("Processing error:", error);
-            setState('error');
-            setAiResponseText("I encountered an issue. Let's try again in a moment.");
+            setRecapGenerationState('saved');
+            setSavedRecapIds((prev) => {
+                const next = result.asset?.id ? [result.asset.id, ...prev.filter((id) => id !== result.asset.id)] : prev;
+                return next.slice(0, 8);
+            });
+            setStatusNotice(result.fallbackToText ? 'Recap saved as text recap.' : 'Recap audio saved to Media.');
+            void api.quality.recordLearningEffectEvent({
+                eventType: 'recap_generated',
+                sessionId: sessionId || null,
+                metadata: {
+                    source: 'voice_mode',
+                    fallbackToText: result.fallbackToText,
+                    assetId: result.asset?.id || null,
+                },
+            }).catch(() => undefined);
+            void api.quality.recordLearningEffectEvent({
+                eventType: 'recap_saved',
+                sessionId: sessionId || null,
+                metadata: {
+                    source: 'voice_mode',
+                    assetId: result.asset?.id || null,
+                },
+            }).catch(() => undefined);
+        } catch {
+            setRecapGenerationState('error');
+            setStatusNotice('Could not save recap right now.');
         }
-    };
+    }, [currentTopic, selectedLanguage, sessionId, transcript]);
 
-    const playNextInQueue = async () => {
-        if (audioQueueRef.current.length === 0) {
-            isPlayingQueueRef.current = false;
-            // Only go back to idle if we're not waiting for more chunks
-            // But usually 'done' event will handle the final transition
-            return;
-        }
+    const profileLabel = PROFILE_LABEL[runtimeState.voiceProfile] || 'Tutor Voice';
+    const guidanceText = statusNotice || STATE_GUIDANCE[runtimeState.currentVoiceState];
+    const stateLabel = STATE_LABEL[runtimeState.currentVoiceState];
+    const languageLabel = runtimeState.selectedLanguage || runtimeState.detectedLanguage || 'auto';
+    const canReplay = Boolean((lastAssistantFinalRef.current || transcript || '').trim());
+    const canSaveRecap = canReplay && recapGenerationState !== 'generating';
+    const isProcessing = state === 'initializing' || runtimeState.currentVoiceState === 'processing';
 
-        isPlayingQueueRef.current = true;
-        const base64 = audioQueueRef.current.shift();
-        if (!base64) return;
+    if (!isOpen || !isMounted) return null;
 
-        try {
-            const blob = await (await fetch(`data:audio/mp3;base64,${base64}`)).blob();
-            const url = URL.createObjectURL(blob);
-            const audio = new Audio(url);
-            audioRef.current = audio;
-            audio.muted = isMuted;
-
-            audio.onended = () => {
-                URL.revokeObjectURL(url);
-                playNextInQueue();
-            };
-
-            setState('speaking');
-            await audio.play();
-        } catch (e) {
-            console.error("Queue Playback Error", e);
-            playNextInQueue();
-        }
-    };
-
-    return (
-        <div className="flex flex-col items-center justify-between w-full h-full p-6 text-center bg-[#0B1A2A] text-white overflow-hidden">
-            {/* Header/Close */}
-            <div className="w-full flex justify-end">
-                <Button
-                    variant="ghost"
-                    size="icon"
-                    className="rounded-full w-10 h-10 text-white/50 hover:text-red-400 hover:bg-white/10"
-                    onClick={() => {
-                        handleCancelRecording();
-                        onClose();
-                    }}
-                >
-                    <X size={20} />
-                </Button>
-            </div>
-
-            {/* Top Status Area - Student Focused Persona */}
-            <div className="flex flex-col items-center min-h-[50px] mt-2">
-                <h2 className={cn("text-2xl font-playfair transition-all duration-500",
-                    state === 'processing' ? 'animate-pulse text-primary' : 'text-white'
-                )}>
-                    {state === 'idle' && "How can I help you study today?"}
-                    {state === 'listening' && "Listening to you..."}
-                    {state === 'processing' && "Thinking about your question..."}
-                    {state === 'speaking' && "Here's what I found..."}
-                    {state === 'error' && "Oops! Something went wrong."}
-                </h2>
-
-                <p className="mt-2 text-sm text-gray-400 font-ptsans max-w-sm line-clamp-2 min-h-[1.5em]">
-                    {state === 'idle' && "Tap the mic when you're ready to talk."}
-                    {state === 'listening' && formatTime(timer)}
-                    {(state === 'processing' || state === 'speaking') && transcript ? `"${transcript}"` : ""}
-                    {state === 'error' && aiResponseText}
-                </p>
-            </div>
-
-            {/* Hero Area: Orb (Compact for Chat Overlay) */}
-            <div className="flex-1 flex items-center justify-center w-full min-h-[220px]">
-                <div className="scale-75 origin-center">
-                    <PulseOrb state={state} />
+    return createPortal(
+        <div className={cn('voice-overlay-layer', className)}>
+            <div className="voice-overlay-backdrop" onClick={() => handleClose({ preserveSession: state === 'speaking' })} />
+            <div
+                className={cn('voice-card', `voice-card-state-${runtimeState.currentVoiceState}`)}
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="voice-dialog-title"
+                ref={dialogRef}
+                tabIndex={-1}
+            >
+                <div className="voice-card-bg">
+                    <div className="voice-nebula" />
+                    <div className="voice-orbit-rings" />
+                    <div className="voice-stars" />
+                    <div className="voice-light-sweep" />
                 </div>
-            </div>
 
-            {/* Response Preview with Typewriter Effect */}
-            <div className="flex-1 flex items-center justify-center w-full max-h-[120px] px-4">
-                <AnimatePresence>
-                    {state === 'speaking' && (
-                        <motion.div
-                            initial={{ opacity: 0, y: 20 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            exit={{ opacity: 0, y: 10 }}
-                            className="bg-white/5 rounded-xl border border-primary/20 backdrop-blur-md max-w-lg w-full shadow-lg h-full flex flex-col overflow-hidden"
-                        >
-                            <div
-                                ref={scrollRef}
-                                className="flex-1 overflow-y-auto p-4 scrollbar-thin scrollbar-thumb-primary/20 scrollbar-track-transparent text-left"
-                            >
-                                <p className="text-primary text-base font-playfair leading-relaxed">
-                                    {displayText}
-                                    <motion.span
-                                        animate={{ opacity: [0, 1, 0] }}
-                                        transition={{ duration: 0.8, repeat: Infinity }}
-                                        className="inline-block w-1 h-4 bg-primary ml-1 align-middle"
-                                    />
-                                </p>
+                <div className="voice-card-content">
+                    <header className="voice-context-bar">
+                        <div className="voice-context-stack">
+                            <p className="voice-mode-label">{profileLabel}</p>
+                            <h2 id="voice-dialog-title" className="voice-work-title">
+                                {currentTopic}
+                            </h2>
+                            <div className="voice-context-meta">
+                                <span className="voice-state-pill">{stateLabel}</span>
+                                <span className="voice-lang-pill">
+                                    <Languages size={13} />
+                                    {languageLabel}
+                                </span>
                             </div>
-                        </motion.div>
-                    )}
-                </AnimatePresence>
-            </div>
-
-            {/* Controls */}
-            <div className="flex flex-col items-center gap-4 mb-6 mt-4 w-full px-8">
-                <div className="flex items-center justify-center gap-6 w-full">
-                    {state === 'listening' ? (
+                        </div>
                         <Button
-                            size="lg"
-                            onClick={handleStopListening}
-                            className="rounded-full px-8 bg-blue-500 hover:bg-blue-600 shadow-lg shadow-blue-500/20"
+                            variant="ghost"
+                            size="icon"
+                            className="voice-close-btn"
+                            onClick={() => handleClose({ preserveSession: state === 'speaking' })}
+                            aria-label="Exit voice mode"
                         >
-                            <Square className="h-5 w-5 mr-2 fill-current" /> Stop
+                            <X size={18} />
                         </Button>
-                    ) : (
-                        <Button
-                            size="lg"
-                            disabled={state === 'processing' || state === 'speaking'}
-                            onClick={handleStartListening}
-                            className={cn(
-                                "h-16 w-16 rounded-full shadow-2xl transition-all duration-300 bg-primary hover:bg-primary/90 hover:scale-105"
+                    </header>
+
+                    <section className={cn('voice-orb-field', `voice-orb-field-${runtimeState.currentVoiceState}`)}>
+                        <div className="voice-orb-shell">
+                            <HeroOrb
+                                active={runtimeState.currentVoiceState !== 'idle' && runtimeState.currentVoiceState !== 'ready'}
+                                intensity={intensity}
+                                state={runtimeState.currentVoiceState}
+                            />
+                        </div>
+                        <p className="voice-orb-caption">{guidanceText}</p>
+                    </section>
+
+                    <section className="voice-transcript-zone">
+                        <div ref={transcriptRef} className="voice-transcript-scroll" aria-live="polite" aria-atomic="false">
+                            {turns.length === 0 ? (
+                                <p className="voice-transcript-empty">Speak naturally. I will ask one question at a time.</p>
+                            ) : (
+                                turns.map((turn, index) => (
+                                    <article
+                                        key={turn.id}
+                                        className={cn(
+                                            'voice-turn',
+                                            `voice-turn-${turn.role}`,
+                                            turn.partial && 'voice-turn-partial',
+                                            index < turns.length - 4 && 'voice-turn-faded'
+                                        )}
+                                    >
+                                        <p className="voice-turn-label">{turn.role === 'student' ? 'You' : turn.role === 'assistant' ? 'Steadfast' : 'System'}</p>
+                                        <p className="voice-turn-text">{turn.text}</p>
+                                    </article>
+                                ))
                             )}
-                        >
-                            <Mic className="h-8 w-8" />
-                        </Button>
-                    )}
-                </div>
+                        </div>
+                    </section>
 
-                <div className="flex items-center gap-4">
-                    <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => setIsMuted(!isMuted)}
-                        className="text-gray-400 hover:text-primary transition-colors h-10 w-10"
-                    >
-                        {isMuted ? <VolumeX className="h-5 w-5" /> : <Volume2 className="h-5 w-5" />}
-                    </Button>
+                    <section className="voice-guidance-strip">
+                        <p>{guidanceText}</p>
+                    </section>
+
+                    <footer className="voice-control-bar">
+                        <div className="voice-control-row voice-control-row-primary">
+                            <Button
+                                type="button"
+                                size="icon"
+                                className={cn('voice-control-btn', 'voice-control-btn-primary', state === 'listening' && 'voice-control-btn-stop')}
+                                onClick={handlePrimaryAction}
+                                disabled={!isSupported || isProcessing}
+                                aria-label={state === 'listening' ? 'Stop listening' : 'Start voice capture'}
+                            >
+                                {state === 'listening' ? <Square size={20} className="fill-current" /> : <Mic size={20} />}
+                            </Button>
+
+                            <Button
+                                type="button"
+                                size="icon"
+                                className="voice-control-btn"
+                                onClick={toggleMute}
+                                aria-label={isMuted ? 'Unmute voice output' : 'Mute voice output'}
+                            >
+                                {isMuted ? <VolumeX size={18} /> : <Volume2 size={18} />}
+                            </Button>
+
+                            <Button
+                                type="button"
+                                size="icon"
+                                className="voice-control-btn"
+                                onClick={handlePause}
+                                aria-label={isPaused ? 'Resume voice mode' : 'Pause voice mode'}
+                            >
+                                {isPaused ? <Play size={18} /> : <Pause size={18} />}
+                            </Button>
+
+                            <Button
+                                type="button"
+                                size="icon"
+                                className="voice-control-btn"
+                                onClick={handleReplay}
+                                disabled={!canReplay}
+                                aria-label="Replay assistant response"
+                            >
+                                <MessageSquareReply size={18} />
+                            </Button>
+
+                            <Button
+                                type="button"
+                                size="icon"
+                                className="voice-control-btn"
+                                onClick={handleSaveRecap}
+                                disabled={!canSaveRecap}
+                                aria-label="Save recap"
+                            >
+                                {recapGenerationState === 'generating' ? <BookAudio size={18} className="voice-spin" /> : <Save size={18} />}
+                            </Button>
+                        </div>
+
+                        <div className="voice-control-row voice-control-row-secondary">
+                            <Button type="button" variant="ghost" size="sm" className="voice-text-switch-btn" onClick={handleSwitchToText}>
+                                Switch to text
+                            </Button>
+                            <Button type="button" variant="ghost" size="sm" className="voice-end-btn" onClick={() => handleClose()}>
+                                End session
+                            </Button>
+                        </div>
+                    </footer>
                 </div>
             </div>
-        </div>
+        </div>,
+        document.body
     );
 };

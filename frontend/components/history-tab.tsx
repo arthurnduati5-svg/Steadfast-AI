@@ -2,29 +2,46 @@
 
 import React, { useMemo } from 'react';
 import { Input } from '@/components/ui/input';
-import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { Button } from '@/components/ui/button';
-import { Search, Trash2 } from 'lucide-react';
-import type { ChatSession, Message } from '@/lib/types';
+import { Search, Trash2, ArrowRight, Clock3 } from 'lucide-react';
+import type { ChatSession } from '@/lib/types';
+import { formatChatListTitle } from '@/lib/title-format';
+import { getSteadfastUiCopy } from '@/lib/steadfast-product';
 
 interface HistoryTabProps {
-  history: any[]; // Loosen type to handle backend-originated sessions
+  history: ChatSession[];
   searchQuery: string;
   setSearchQuery: (query: string) => void;
-  handleContinueChat: (session: any) => void;
+  handleContinueChat: (session: ChatSession) => void;
   handleDeleteChat: (sessionId: string) => void;
+  currentPage: number;
+  totalPages: number;
+  totalItems: number;
+  isLoading: boolean;
+  errorMessage: string;
+  onPreviousPage: () => void;
+  onNextPage: () => void;
 }
 
-// ✅ HELPER: Strip Markdown images/links for clean text preview
 function cleanMessagePreview(content: string): string {
-    if (!content) return '';
-    // Replace Markdown images [![alt](img)](url) with [Video]
-    let cleaned = content.replace(/\[!\[.*?\]\(.*?\)\]\(.*?\)/g, '[Video]');
-    // Replace standard links [text](url) with text
-    cleaned = cleaned.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '$1');
-    // Remove bold/italic markers
-    cleaned = cleaned.replace(/[*_]{1,3}([^*_]+)[*_]{1,3}/g, '$1');
-    return cleaned;
+  if (!content) return '';
+  return content
+    .replace(/\[!\[.*?\]\(.*?\)\]\(.*?\)/g, '[Video]')
+    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '$1')
+    .replace(/[*_]{1,3}([^*_]+)[*_]{1,3}/g, '$1');
+}
+
+function getDisplayTitle(session: ChatSession): string {
+  const rawTitle = String(session.title || session.topic || '').trim();
+  if (!rawTitle) return '';
+  if (rawTitle === 'New Chat' || rawTitle === 'New Study Session' || rawTitle === 'Study Session') return '';
+  if (/^study session\b/i.test(rawTitle)) return '';
+  return formatChatListTitle(rawTitle);
+}
+
+function formatUpdatedAt(session: ChatSession) {
+  const date = new Date(session.updatedAt || session.createdAt);
+  return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
 export const HistoryTab: React.FC<HistoryTabProps> = ({
@@ -33,93 +50,145 @@ export const HistoryTab: React.FC<HistoryTabProps> = ({
   setSearchQuery,
   handleContinueChat,
   handleDeleteChat,
+  currentPage,
+  totalPages,
+  totalItems,
+  isLoading,
+  errorMessage,
+  onPreviousPage,
+  onNextPage,
 }) => {
-  const filteredHistory = useMemo(() => {
-    if (!searchQuery) {
-      return history;
-    }
-    const lowerCaseQuery = searchQuery.toLowerCase();
-    // Handle both frontend-created (title) and backend-created (topic) sessions
-    return history.filter(session =>
-      (session.title || session.topic || '').toLowerCase().includes(lowerCaseQuery) ||
-      (session.messages && session.messages.some((msg: Message) => msg.content.toLowerCase().includes(lowerCaseQuery)))
-    );
-  }, [history, searchQuery]);
+  const sessions = useMemo(() => history.filter((session) => getDisplayTitle(session)), [history]);
+  const title = getSteadfastUiCopy('history.title');
+  const intro = getSteadfastUiCopy('history.intro');
+  const searchPlaceholder = getSteadfastUiCopy('history.searchPlaceholder');
+  const emptyTitle = getSteadfastUiCopy('history.emptyTitle');
+  const emptyBody = getSteadfastUiCopy('history.emptyBody');
+  const searchEmptyTitle = getSteadfastUiCopy('history.searchEmptyTitle');
+  const searchEmptyBody = getSteadfastUiCopy('history.searchEmptyBody');
 
   return (
-    <div className="flex flex-col h-full min-h-0">
-      <div className="sticky top-0 z-20 border-b bg-background px-4 py-2">
-        <div className="relative w-full">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input
-            type="text"
-            placeholder="Search chat history..."
-            className="w-full pl-9 pr-3 py-2 rounded-lg border focus:outline-none focus:ring-2 focus:ring-primary"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-          />
+    <div className="copilot-main-stage flex h-full min-h-0 flex-col">
+      <div className="copilot-backdrop-surface sticky top-0 z-20 border-b px-4 py-4 backdrop-blur">
+        <div className="space-y-3">
+          <div>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--copilot-text-tertiary)]">
+              {title}
+            </p>
+            <p className="mt-1 text-sm text-[var(--copilot-text-secondary)]">
+              {intro}
+            </p>
+          </div>
+          <div className="relative w-full">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--copilot-text-tertiary)]" />
+            <Input
+              type="text"
+              placeholder={searchPlaceholder}
+              className="copilot-sidebar-search h-11 rounded-2xl pl-9 pr-3"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+            />
+          </div>
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto min-h-0 px-4 pb-4">
-        <Accordion type="single" collapsible className="space-y-2 pt-4">
-          {filteredHistory.length > 0 ? (
-            filteredHistory.map(session => (
-              <AccordionItem value={session.id} key={session.id}>
-                <AccordionTrigger>
-                  <div>
-                    {/* ✅ CRITICAL FIX: Prioritize 'title' (live update) over 'topic' (database default) */}
-                    <p className="font-semibold text-left">{session.title || session.topic || 'New Chat'}</p>
-                    <p className="text-xs text-muted-foreground text-left">
-                      {new Date(session.updatedAt || session.createdAt).toLocaleDateString()}
-                    </p>
-                  </div>
-                </AccordionTrigger>
-                <AccordionContent>
-                  <div className="space-y-2 text-sm text-muted-foreground">
-                    {/* Use optional chaining and provide a default empty array */}
-                    {(session.messages || []).slice(0, 2).map((msg: Message, index: number) => (
-                      <p key={msg.id || index} className="truncate">
-                        {/* ✅ CLEAN PREVIEW: Removes raw Markdown code from the sidebar preview */}
-                        <strong>{msg.role}:</strong> {cleanMessagePreview(msg.content)}
-                      </p>
-                    ))}
-                    {(session.messages || []).length > 2 && <p>...</p>}
-                  </div>
-                  
-                  {/* Action Buttons */}
-                  <div className="flex items-center justify-between mt-3">
+      <div className="flex-1 overflow-y-auto px-4 py-4">
+        {errorMessage ? (
+          <div className="mb-4 rounded-2xl border border-destructive/25 bg-destructive/5 px-4 py-3 text-sm text-destructive">
+            {errorMessage}
+          </div>
+        ) : null}
+
+        {sessions.length === 0 ? (
+          <div className="flex min-h-[48vh] flex-col items-center justify-center px-4 text-center">
+            <div className="copilot-sidebar-card max-w-md px-6 py-8">
+              <p className="text-base font-semibold text-[var(--copilot-text-primary)]">
+                {isLoading ? 'Loading your recent study...' : searchQuery ? searchEmptyTitle : emptyTitle}
+              </p>
+              <p className="mt-2 text-sm leading-6 text-[var(--copilot-text-secondary)]">
+                {searchQuery
+                  ? searchEmptyBody
+                  : emptyBody}
+              </p>
+            </div>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {sessions.map((session) => {
+              const preview = cleanMessagePreview(String(session.firstMessage || session.messages?.[0]?.content || ''));
+
+              return (
+                <div key={session.id} className="copilot-sidebar-card transition-colors">
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="min-w-0 flex-1">
+                      <h3 className="history-title text-sm font-semibold text-[var(--copilot-text-primary)]">
+                        {getDisplayTitle(session)}
+                      </h3>
+                      <div className="mt-2 flex items-center gap-2 text-[11px] text-[var(--copilot-text-tertiary)]">
+                        <Clock3 className="h-3.5 w-3.5" />
+                        <span>{formatUpdatedAt(session)}</span>
+                      </div>
+                      {preview ? (
+                        <p className="mt-3 line-clamp-2 text-sm leading-6 text-[var(--copilot-text-secondary)]">{preview}</p>
+                      ) : null}
+                    </div>
+
                     <Button
-                      variant="link"
-                      className="p-0 h-auto text-primary"
+                      variant="ghost"
+                      size="icon"
+                      className="h-9 w-9 rounded-full text-[var(--copilot-text-tertiary)] hover:bg-red-500/10 hover:text-red-500"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (confirm('Delete this study session? This cannot be undone.')) {
+                          handleDeleteChat(session.id);
+                        }
+                      }}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+
+                  <div className="mt-4 flex items-center justify-between gap-3">
+                    <div className="text-xs text-[var(--copilot-text-tertiary)]">
+                      Continue this study session when you are ready.
+                    </div>
+                    <Button
+                      variant="ghost"
+                      className="h-9 rounded-full px-3 text-sm font-medium text-[var(--copilot-text-secondary)] hover:bg-[var(--copilot-hover-surface)] hover:text-[var(--copilot-text-primary)]"
                       onClick={() => handleContinueChat(session)}
                     >
-                      Continue this chat
-                    </Button>
-                    <Button
-                        variant="ghost"
-                        size="sm"
-                        className="text-destructive hover:text-destructive hover:bg-destructive/10 h-8 px-2"
-                        onClick={(e) => {
-                            e.stopPropagation(); // Prevent accordion from toggling
-                            if(confirm("Are you sure you want to delete this chat? This cannot be undone.")) {
-                                handleDeleteChat(session.id);
-                            }
-                        }}
-                    >
-                        <Trash2 className="w-4 h-4 mr-1" />
-                        Delete
+                      Continue
+                      <ArrowRight className="ml-1.5 h-4 w-4" />
                     </Button>
                   </div>
-                </AccordionContent>
-              </AccordionItem>
-            ))
-          ) : (
-            <p className="text-center text-muted-foreground">
-              {searchQuery ? 'No sessions found matching your search.' : 'You have no chat history yet.'}
-            </p>
-          )}
-        </Accordion>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      <div className="copilot-backdrop-surface border-t px-4 py-3 backdrop-blur">
+        <div className="flex items-center justify-between gap-3">
+          <p className="text-xs text-[var(--copilot-text-tertiary)]">
+            {totalPages > 0 ? `Page ${currentPage} of ${totalPages}` : 'Page 1 of 1'}
+            {totalItems > 0 ? ` • ${totalItems} sessions` : ''}
+          </p>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" size="sm" onClick={onPreviousPage} disabled={isLoading || currentPage <= 1} className="rounded-full">
+              Back
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={onNextPage}
+              disabled={isLoading || totalPages <= 0 || currentPage >= totalPages}
+              className="rounded-full"
+            >
+              Next
+            </Button>
+          </div>
+        </div>
       </div>
     </div>
   );

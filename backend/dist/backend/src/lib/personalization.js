@@ -1,16 +1,23 @@
-import { OpenAI } from 'openai';
-import prisma from '../utils/prismaClient';
-import { getRedisClient } from './redis';
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-export async function analyzeAndTrackProgress(studentId, userMessage, aiResponse) {
+"use strict";
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.analyzeAndTrackProgress = analyzeAndTrackProgress;
+const openai_1 = require("openai");
+const prismaClient_1 = __importDefault(require("../utils/prismaClient"));
+const redis_1 = require("./redis");
+const logger_1 = require("../utils/logger");
+const openai = new openai_1.OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+async function analyzeAndTrackProgress(studentId, userMessage, aiResponse) {
     try {
         const analysis = await analyzeInteraction(userMessage, aiResponse);
         if (analysis.type === 'neutral' || analysis.confidenceScore < 70)
             return;
-        console.log(`[Personalization] Tracking ${analysis.type} for ${studentId}: ${analysis.topic}`);
+        logger_1.logger.info({ type: analysis.type, studentId, topic: analysis.topic }, '[Personalization] Tracking interaction');
         // --- PROGRESS LOGIC ---
         if (analysis.type === 'progress') {
-            const existingProgress = await prisma.progress.findFirst({
+            const existingProgress = await prismaClient_1.default.progress.findFirst({
                 where: { studentId, topic: analysis.topic }
             });
             let currentMastery = existingProgress ? existingProgress.mastery : 0;
@@ -27,7 +34,7 @@ export async function analyzeAndTrackProgress(studentId, userMessage, aiResponse
                 masteryIncrement = Math.min(masteryIncrement, 10); // Cap jump if previously weak
             }
             let newMastery = Math.min(currentMastery + masteryIncrement, 100);
-            await prisma.progress.upsert({
+            await prismaClient_1.default.progress.upsert({
                 where: { id: existingProgress?.id || `new-${Date.now()}` },
                 update: { mastery: newMastery }, // REMOVED lastReviewed
                 create: {
@@ -40,7 +47,7 @@ export async function analyzeAndTrackProgress(studentId, userMessage, aiResponse
             });
             // If they mastered a topic that was a mistake record, we can optionally resolve/delete the mistake
             if (newMastery > 80) {
-                await prisma.mistake.deleteMany({
+                await prismaClient_1.default.mistake.deleteMany({
                     where: { studentId, topic: analysis.topic }
                 });
             }
@@ -48,12 +55,12 @@ export async function analyzeAndTrackProgress(studentId, userMessage, aiResponse
         }
         else if (analysis.type === 'mistake') {
             // Check if this is a recurring struggle
-            const existingMistake = await prisma.mistake.findFirst({
+            const existingMistake = await prismaClient_1.default.mistake.findFirst({
                 where: { studentId, topic: analysis.topic }
             });
             if (existingMistake) {
                 // RECURRING WEAKNESS: Increment attempts to signal persistence
-                await prisma.mistake.update({
+                await prismaClient_1.default.mistake.update({
                     where: { id: existingMistake.id },
                     data: {
                         attempts: { increment: 1 },
@@ -61,9 +68,9 @@ export async function analyzeAndTrackProgress(studentId, userMessage, aiResponse
                     }
                 });
                 // SIGNIFICANT REGRESSION: If they keep failing, lower their mastery score
-                const existingProgress = await prisma.progress.findFirst({ where: { studentId, topic: analysis.topic } });
+                const existingProgress = await prismaClient_1.default.progress.findFirst({ where: { studentId, topic: analysis.topic } });
                 if (existingProgress) {
-                    await prisma.progress.update({
+                    await prismaClient_1.default.progress.update({
                         where: { id: existingProgress.id },
                         data: { mastery: Math.max(existingProgress.mastery - 10, 0) } // Penalty for recurring error
                     });
@@ -71,7 +78,7 @@ export async function analyzeAndTrackProgress(studentId, userMessage, aiResponse
             }
             else {
                 // NEW WEAKNESS
-                await prisma.mistake.create({
+                await prismaClient_1.default.mistake.create({
                     data: {
                         studentId,
                         topic: analysis.topic,
@@ -82,13 +89,13 @@ export async function analyzeAndTrackProgress(studentId, userMessage, aiResponse
             }
         }
         // 3. Invalidate Redis Cache
-        const redis = await getRedisClient();
+        const redis = await (0, redis_1.getRedisClient)();
         if (redis) {
             await redis.del(`memory:${studentId}`);
         }
     }
     catch (error) {
-        console.error('[Personalization] Engine Error:', error);
+        logger_1.logger.error({ studentId, error: String(error) }, '[Personalization] Engine Error');
     }
 }
 async function analyzeInteraction(userMsg, aiMsg) {
@@ -132,7 +139,7 @@ async function analyzeInteraction(userMsg, aiMsg) {
         return JSON.parse(content);
     }
     catch (e) {
-        console.error('LLM Analysis Failed', e);
+        logger_1.logger.error({ error: String(e) }, 'LLM Analysis Failed');
         return { type: 'neutral', topic: '', details: '', confidenceScore: 0 };
     }
 }

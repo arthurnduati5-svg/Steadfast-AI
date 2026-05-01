@@ -13,16 +13,21 @@ export const rateLimiter = async (req: Request, res: Response, next: NextFunctio
   }
 
   try {
-    const studentId = req.user?.id;
+    const studentId = (req as Request & { user?: { id?: string } }).user?.id;
 
     if (!studentId) {
       return res.status(401).send({ error: "Unauthorized" });
     }
 
     const key = `rate:${studentId}`;
+    const ttl = await redis.ttl(key);
     const current = await redis.get(key);
 
-    if (current && parseInt(current) >= RATE_LIMIT) {
+    if (current && parseInt(current, 10) >= RATE_LIMIT) {
+      if (ttl > 0) {
+        res.setHeader('Retry-After', String(ttl));
+        res.setHeader('X-RateLimit-Reset', String(Math.floor(Date.now() / 1000) + ttl));
+      }
       return res.status(429).send({ error: 'Too many requests' });
     }
 
@@ -34,8 +39,8 @@ export const rateLimiter = async (req: Request, res: Response, next: NextFunctio
 
     next();
   } catch (error) {
-    // Log the error but still call next() to avoid blocking the request
+    // Fail open on limiter issues to avoid cascading outages.
     console.error('Error in rate limiter:', error);
-    next(error);
+    next();
   }
 };

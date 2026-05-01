@@ -1,13 +1,39 @@
+import { runFlow } from '@genkit-ai/flow';
+import { youtubeSearchFlow } from '../flows/youtube-search-flow';
 import { YoutubeSearchInput, YoutubeSearchOutput } from './toolSchemas';
 
-// This stub should call your webSearchFlow or a server-side scraper restricted to whitelisted domains.
+type YoutubeSearchResult = {
+  id: string;
+  title?: string;
+  channel?: string;
+  channelTitle?: string;
+};
+
+function hasRunnableFlow(flow: unknown): flow is { inputSchema: unknown } {
+  return Boolean(flow) && typeof flow === 'object' && 'inputSchema' in (flow as Record<string, unknown>);
+}
+
 export async function youtubeSearchTool(input: YoutubeSearchInput): Promise<YoutubeSearchOutput> {
-  if (!input || typeof input.query !== 'string' || input.query.trim().length === 0) {
+  const query = String(input?.query || '').trim();
+  if (!query) {
     return { results: [] };
   }
-  // Placeholder deterministic stub
-  const results = [
-    { id: 'vid123', title: `Intro to ${input.query}`, channel: 'Trusted EDU Channel', url: `https://youtube.example/watch?v=vid123` },
-  ].slice(0, input.maxResults || 1);
-  return { results };
+
+  try {
+    if (!hasRunnableFlow(youtubeSearchFlow)) {
+      return { results: [] };
+    }
+    const max = Math.max(1, Math.min(5, input.maxResults || 3));
+    const results = await runFlow(youtubeSearchFlow as any, { query }) as YoutubeSearchResult[];
+    return {
+      results: results.slice(0, max).map((video: YoutubeSearchResult) => ({
+        id: video.id,
+        title: video.title || 'Educational Video',
+        channel: video.channel || video.channelTitle,
+        url: `https://www.youtube.com/watch?v=${video.id}`,
+      })),
+    };
+  } catch {
+    return { results: [] };
+  }
 }

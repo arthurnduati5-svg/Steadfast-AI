@@ -1,4 +1,7 @@
-export const promptBuilder = {
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.promptBuilder = void 0;
+exports.promptBuilder = {
     buildSystemContext: (profile, session, conversationState) => {
         const interests = profile.preferences?.interests || [];
         const gradeLevel = profile.gradeLevel || 'a student';

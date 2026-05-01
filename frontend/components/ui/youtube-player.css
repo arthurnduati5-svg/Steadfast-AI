@@ -1,13 +1,27 @@
 .youtube-player {
     position: relative;
     width: 100%;
-    /* Aspect ratio hack for inline mode */
-    padding-top: 56.25%; 
-    border-radius: 1rem; 
+    padding-top: 56.25%;
+    border-radius: 1rem;
     overflow: hidden;
     background-color: #000;
     transition: width 0.1s, height 0.1s;
-    resize: none; 
+    resize: none;
+}
+
+.youtube-player.embedded-player {
+    width: 100%;
+    padding-top: 56.25%;
+    border-radius: 1rem;
+}
+
+.youtube-player.widget-overlay-player {
+    padding-top: 0 !important;
+    aspect-ratio: auto;
+    border-radius: 1.35rem;
+    box-shadow: 0 28px 80px rgba(15, 23, 42, 0.34);
+    border: 1px solid rgba(255, 255, 255, 0.28);
+    backdrop-filter: blur(10px);
 }
 
 .youtube-iframe {
@@ -16,8 +30,17 @@
     left: 0;
     width: 100%;
     height: 100%;
-    /* Ensure iframe is interactive normally */
-    pointer-events: auto; 
+    display: block;
+    pointer-events: auto;
+}
+
+.youtube-iframe iframe {
+    position: absolute;
+    inset: 0;
+    width: 100% !important;
+    height: 100% !important;
+    display: block;
+    border: 0;
 }
 
 /* CRITICAL FIX: Disable iframe interaction while dragging 
@@ -26,26 +49,16 @@
     pointer-events: none !important;
 }
 
-/* Mini-player mode styles */
-.youtube-player.mini-player {
-    /* Padding reset */
-    padding-top: 0 !important; 
-    
-    /* Default Initial Size */
-    width: 450px;
-    height: 254px;
-    
-    border-radius: 0.5rem !important; 
+.youtube-player.floating-player {
+    padding-top: 0 !important;
+    width: min(360px, calc(100vw - 48px));
+    height: 214px;
+    border-radius: 0.85rem !important;
     box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
     border: 1px solid rgba(255, 255, 255, 0.1);
-    
-    /* Enable Resizing */
-    resize: both;
-    overflow: hidden; 
-    min-width: 280px;
-    min-height: 160px;
-    max-width: 95vw;
-    max-height: 95vh;
+    overflow: hidden;
+    max-width: calc(100vw - 48px);
+    max-height: calc(100vh - 112px);
 }
 
 /* The header bar used for dragging */
@@ -54,38 +67,37 @@
     top: 0;
     left: 0;
     width: 100%;
-    height: 36px; 
-    z-index: 20; /* Must be above iframe */
+    height: 40px;
+    z-index: 20;
     display: flex;
     justify-content: flex-end; 
     align-items: center;
-    padding: 0 8px;
-    
-    /* Gradient background for visibility */
-    background: linear-gradient(to bottom, rgba(0,0,0,0.85) 0%, rgba(0,0,0,0) 100%);
-    
+    padding: 0 10px;
+    background: linear-gradient(to bottom, rgba(2, 6, 23, 0.86) 0%, rgba(2, 6, 23, 0.18) 62%, rgba(2, 6, 23, 0) 100%);
     opacity: 0;
     transition: opacity 0.2s ease-in-out;
 }
 
-/* Always show controls when dragging or in mini mode */
 .youtube-player:hover .video-controls,
-.youtube-player.mini-player .video-controls,
+.youtube-player.widget-overlay-player .video-controls,
+.youtube-player.floating-player .video-controls,
 .youtube-player.dragging .video-controls {
-    opacity: 1; 
+    opacity: 1;
 }
 
 .video-controls Button {
-    background-color: rgba(0, 0, 0, 0.5) !important; 
+    background-color: rgba(15, 23, 42, 0.58) !important;
     color: white !important;
-    border-radius: 4px;
-    width: 28px;
-    height: 28px;
+    border-radius: 999px;
+    width: 30px;
+    height: 30px;
     display: flex;
     align-items: center;
     justify-content: center;
+    border: 1px solid rgba(255, 255, 255, 0.16);
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.18);
 }
 
 .video-controls Button:hover {
-    background-color: rgba(0, 0, 0, 0.9) !important; 
+    background-color: rgba(15, 23, 42, 0.82) !important;
 }

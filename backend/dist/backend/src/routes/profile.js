@@ -1,29 +1,35 @@
-import { Router } from 'express';
-import { schoolAuthMiddleware } from '../middleware/schoolAuthMiddleware';
-import prisma from '../utils/prismaClient';
-import { getRedisClient } from '../lib/redis'; // Corrected import
-const router = Router();
+"use strict";
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+const express_1 = require("express");
+const schoolAuthMiddleware_1 = require("../middleware/schoolAuthMiddleware");
+const prismaClient_1 = __importDefault(require("../utils/prismaClient"));
+const redis_1 = require("../lib/redis"); // Corrected import
+const logger_1 = require("../utils/logger");
+const router = (0, express_1.Router)();
 // Get student profile
-router.get('/profile', schoolAuthMiddleware, async (req, res) => {
+router.get('/profile', schoolAuthMiddleware_1.schoolAuthMiddleware, async (req, res) => {
     try {
         const studentId = req.user.id;
-        const profile = await prisma.studentProfile.findUnique({ where: { userId: studentId } });
+        const profile = await prismaClient_1.default.studentProfile.findUnique({ where: { userId: studentId } });
         if (!profile) {
             return res.status(404).send({ message: 'Profile not found. It will be created on first interaction.' });
         }
         res.status(200).send(profile);
     }
     catch (error) {
-        console.error('Error fetching profile:', error);
+        logger_1.logger.error({ error: error.message, userId: req.user?.id }, 'Error fetching profile');
         res.status(500).send({ message: 'Internal server error.' });
     }
 });
 // Create or Update student profile with safe merging
-router.post('/profile', schoolAuthMiddleware, async (req, res) => {
+router.post('/profile', schoolAuthMiddleware_1.schoolAuthMiddleware, async (req, res) => {
     try {
         const studentId = req.user.id;
         const { preferredLanguage, topInterests, favoriteShows, ...otherData } = req.body;
-        const existingProfile = await prisma.studentProfile.findUnique({
+        const existingProfile = await prismaClient_1.default.studentProfile.findUnique({
             where: { userId: studentId },
         });
         // Prepare preferences JSON
@@ -49,7 +55,7 @@ router.post('/profile', schoolAuthMiddleware, async (req, res) => {
             preferences: newPreferences,
             profileCompleted: true,
         };
-        const profile = await prisma.studentProfile.upsert({
+        const profile = await prismaClient_1.default.studentProfile.upsert({
             where: { userId: studentId },
             update: updatePayload,
             create: createPayload,
@@ -62,32 +68,32 @@ router.post('/profile', schoolAuthMiddleware, async (req, res) => {
     }
 });
 // GET /api/copilot/preferences
-router.get('/copilot/preferences', schoolAuthMiddleware, async (req, res) => {
+router.get('/copilot/preferences', schoolAuthMiddleware_1.schoolAuthMiddleware, async (req, res) => {
     const userId = req.user.id;
     const cacheKey = `copilot:preferences:${userId}`;
-    console.log(`[Backend] Attempting to fetch preferences for userId: ${userId}`);
+    logger_1.logger.debug({ userId }, '[Backend] Fetching preferences');
     let redis;
     try {
-        redis = await getRedisClient();
+        redis = await (0, redis_1.getRedisClient)();
     }
     catch (error) {
-        console.warn('Redis client not available for preferences retrieval.', error);
+        logger_1.logger.warn({ error: String(error) }, 'Redis client not available for preferences retrieval');
     }
     try {
         // Check cache first
         if (redis) {
             const cachedPreferences = await redis.get(cacheKey);
             if (cachedPreferences) {
-                console.log(`[Backend] Preferences found in cache for userId: ${userId}`);
+                logger_1.logger.debug({ userId }, '[Backend] Preferences found in cache');
                 return res.status(200).json(JSON.parse(cachedPreferences));
             }
         }
         // If not in cache, fetch from DB
-        const preferences = await prisma.copilotPreferences.findUnique({
+        const preferences = await prismaClient_1.default.copilotPreferences.findUnique({
             where: { userId },
         });
         if (preferences) {
-            console.log(`[Backend] Preferences found in DB for userId: ${userId}`, preferences);
+            logger_1.logger.debug({ userId }, '[Backend] Preferences found in DB');
             // Store in cache for 30 minutes
             if (redis) {
                 await redis.set(cacheKey, JSON.stringify(preferences));
@@ -96,7 +102,7 @@ router.get('/copilot/preferences', schoolAuthMiddleware, async (req, res) => {
             return res.status(200).json(preferences);
         }
         else {
-            console.log(`[Backend] No preferences found for userId: ${userId}, returning defaults.`);
+            logger_1.logger.info({ userId }, '[Backend] No preferences found, returning defaults');
             // Return default empty preferences
             return res.status(200).json({
                 preferredLanguage: 'english',
@@ -111,7 +117,7 @@ router.get('/copilot/preferences', schoolAuthMiddleware, async (req, res) => {
     }
 });
 // POST /api/copilot/preferences
-router.post('/copilot/preferences', schoolAuthMiddleware, async (req, res) => {
+router.post('/copilot/preferences', schoolAuthMiddleware_1.schoolAuthMiddleware, async (req, res) => {
     const userId = req.user.id;
     const { preferredLanguage, interests, topInterests } = req.body; // Destructure both interests and topInterests
     const cacheKey = `copilot:preferences:${userId}`;
@@ -120,7 +126,7 @@ router.post('/copilot/preferences', schoolAuthMiddleware, async (req, res) => {
     console.log(`[Backend] Attempting to save preferences for userId: ${userId}`);
     console.log(`[Backend] Received preferredLanguage: ${preferredLanguage}, interests:`, interestsToSave);
     // Validation
-    const allowedLanguages = ['english', 'swahili', 'english_sw', 'arabic']; // Added 'arabic'
+    const allowedLanguages = ['english', 'swahili', 'english_sw', 'arabic', 'arabic_english'];
     if (!preferredLanguage || !allowedLanguages.includes(preferredLanguage)) {
         console.error(`[Backend] Invalid or missing preferredLanguage: ${preferredLanguage}`);
         return res.status(400).json({ message: 'Invalid or missing preferredLanguage.' });
@@ -136,12 +142,12 @@ router.post('/copilot/preferences', schoolAuthMiddleware, async (req, res) => {
     }
     try {
         // Ensure a StudentProfile exists before upserting CopilotPreferences
-        await prisma.studentProfile.upsert({
+        await prismaClient_1.default.studentProfile.upsert({
             where: { userId },
             update: {},
             create: { userId, preferredLanguage: 'english', topInterests: [] }, // Create with defaults if not exists
         });
-        const updatedPreferences = await prisma.copilotPreferences.upsert({
+        const updatedPreferences = await prismaClient_1.default.copilotPreferences.upsert({
             where: { userId },
             update: { preferredLanguage, interests: interestsToSave },
             create: { userId, preferredLanguage, interests: interestsToSave },
@@ -150,7 +156,7 @@ router.post('/copilot/preferences', schoolAuthMiddleware, async (req, res) => {
         // Update cache
         let redis;
         try {
-            redis = await getRedisClient();
+            redis = await (0, redis_1.getRedisClient)();
             if (redis) {
                 await redis.set(cacheKey, JSON.stringify(updatedPreferences));
                 await redis.expire(cacheKey, 1800); // Set expiration separately
@@ -171,17 +177,17 @@ router.post('/copilot/preferences', schoolAuthMiddleware, async (req, res) => {
     }
 });
 // DELETE /api/copilot/preferences
-router.delete('/copilot/preferences', schoolAuthMiddleware, async (req, res) => {
+router.delete('/copilot/preferences', schoolAuthMiddleware_1.schoolAuthMiddleware, async (req, res) => {
     const userId = req.user.id;
     const cacheKey = `copilot:preferences:${userId}`;
     try {
-        await prisma.copilotPreferences.delete({
+        await prismaClient_1.default.copilotPreferences.delete({
             where: { userId },
         });
         // Remove from cache
         let redis;
         try {
-            redis = await getRedisClient();
+            redis = await (0, redis_1.getRedisClient)();
             if (redis) {
                 await redis.del(cacheKey);
             }
@@ -200,5 +206,5 @@ router.delete('/copilot/preferences', schoolAuthMiddleware, async (req, res) => 
         res.status(500).json({ message: 'Internal server error.' });
     }
 });
-export default router;
+exports.default = router;
 //# sourceMappingURL=profile.js.map

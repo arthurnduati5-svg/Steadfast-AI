@@ -1,0 +1,157 @@
+{
+  "config": {
+    "name": "copilot_research_deep_conversations_suite",
+    "newSessionPerCase": false,
+    "applyCasePreferences": true,
+    "failOnRepeatedSegments": true,
+    "defaultMaxLatencyMs": 50000
+  },
+  "cases": [
+    {
+      "id": "econ_turn1_web_fresh",
+      "category": "research_context",
+      "sessionGroup": "econ_thread",
+      "prompt": "What is the latest inflation rate in Kenya today with sources?",
+      "gradeLevel": "Secondary",
+      "preferredLanguage": "english",
+      "forceWebSearch": false,
+      "requireSources": true,
+      "mustContainAny": ["inflation", "kenya", "source"],
+      "mustNotContain": ["as an ai language model"]
+    },
+    {
+      "id": "econ_turn2_context_followup",
+      "category": "research_context",
+      "sessionGroup": "econ_thread",
+      "prompt": "Can you explain that in simple words for a class 7 student?",
+      "gradeLevel": "Primary",
+      "preferredLanguage": "english",
+      "forceWebSearch": false,
+      "forbidSources": true,
+      "mustContainAny": ["simple", "student", "inflation"],
+      "mustNotContain": ["as an ai language model"]
+    },
+    {
+      "id": "econ_turn3_explicit_no_web",
+      "category": "research_context",
+      "sessionGroup": "econ_thread",
+      "prompt": "Do not search online now. Explain only from context and our previous discussion.",
+      "gradeLevel": "Secondary",
+      "preferredLanguage": "english",
+      "forceWebSearch": true,
+      "forbidSources": true,
+      "mustContainAny": ["context", "previous", "explain"],
+      "mustNotContain": ["as an ai language model"]
+    },
+    {
+      "id": "econ_turn4_explicit_web",
+      "category": "research_context",
+      "sessionGroup": "econ_thread",
+      "prompt": "Now search online for the latest CBK inflation citation and update the number.",
+      "gradeLevel": "Secondary",
+      "preferredLanguage": "english",
+      "forceWebSearch": true,
+      "requireSources": true,
+      "mustContainAny": ["latest", "inflation", "citation"],
+      "mustNotContain": ["as an ai language model"]
+    },
+    {
+      "id": "bio_turn1_context_intro",
+      "category": "research_context",
+      "sessionGroup": "bio_thread",
+      "prompt": "Teach me photosynthesis in a clear short way.",
+      "gradeLevel": "Secondary",
+      "preferredLanguage": "english",
+      "forceWebSearch": false,
+      "forbidSources": true,
+      "mustContainAny": ["photosynthesis", "plants"],
+      "mustNotContain": ["as an ai language model"]
+    },
+    {
+      "id": "bio_turn2_meta_question",
+      "category": "research_context",
+      "sessionGroup": "bio_thread",
+      "prompt": "Are you searching online right now or using context?",
+      "gradeLevel": "Secondary",
+      "preferredLanguage": "english",
+      "forceWebSearch": true,
+      "forbidSources": true,
+      "mustContainAny": ["context", "searching", "online"],
+      "mustNotContain": ["as an ai language model"]
+    },
+    {
+      "id": "bio_turn3_web_fresh_topic",
+      "category": "research_context",
+      "sessionGroup": "bio_thread",
+      "prompt": "Search latest 2026 findings on photosynthesis efficiency with sources.",
+      "gradeLevel": "Secondary",
+      "preferredLanguage": "english",
+      "forceWebSearch": false,
+      "requireSources": true,
+      "mustContainAny": ["photosynthesis", "efficiency", "source"],
+      "mustNotContain": ["as an ai language model"]
+    },
+    {
+      "id": "bio_turn4_context_simplify",
+      "category": "research_context",
+      "sessionGroup": "bio_thread",
+      "prompt": "Continue with that and simplify for primary school.",
+      "gradeLevel": "Primary",
+      "preferredLanguage": "english",
+      "forceWebSearch": false,
+      "forbidSources": true,
+      "mustContainAny": ["simple", "primary", "photosynthesis"],
+      "mustNotContain": ["as an ai language model"]
+    },
+    {
+      "id": "mixed_turn1_context_osmosis",
+      "category": "research_context",
+      "sessionGroup": "mixed_shift_thread",
+      "prompt": "Teach me osmosis using one short example.",
+      "gradeLevel": "Secondary",
+      "preferredLanguage": "english",
+      "forceWebSearch": false,
+      "forbidSources": true,
+      "mustContainAny": ["osmosis", "example"],
+      "mustNotContain": ["as an ai language model"]
+    },
+    {
+      "id": "mixed_turn2_shift_to_fresh_web",
+      "category": "research_context",
+      "sessionGroup": "mixed_shift_thread",
+      "prompt": "New topic: what is the current USD to KES exchange rate today with source?",
+      "gradeLevel": "Secondary",
+      "preferredLanguage": "english",
+      "forceWebSearch": false,
+      "requireSources": true,
+      "mustContainAny": ["usd", "kes", "exchange", "rate"],
+      "mustNotContain": ["as an ai language model"]
+    },
+    {
+      "id": "mixed_turn3_no_web_after_shift",
+      "category": "research_context",
+      "sessionGroup": "mixed_shift_thread",
+      "prompt": "Without internet now, compare that rate conceptually with why rates move.",
+      "gradeLevel": "Secondary",
+      "preferredLanguage": "english",
+      "forceWebSearch": true,
+      "forbidSources": true,
+      "mustContainAny": ["rates", "move", "concept"],
+      "mustNotContain": ["as an ai language model"]
+    },
+    {
+      "id": "mixed_turn4_reenable_web",
+      "category": "research_context",
+      "sessionGroup": "mixed_shift_thread",
+      "prompt": "Search online latest update again and cite source links.",
+      "gradeLevel": "Secondary",
+      "preferredLanguage": "english",
+      "forceWebSearch": true,
+      "requireSources": true,
+      "mustContainAny": ["latest", "source", "link"],
+      "mustNotContain": ["as an ai language model"]
+    }
+  ]
+}
+
+

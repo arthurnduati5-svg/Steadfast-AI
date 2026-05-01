@@ -1,4 +1,25 @@
+"use strict";
 'use server';
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.isArabicText = isArabicText;
+exports.emotional_decoder = emotional_decoder;
+exports.tone_generator = tone_generator;
+exports.teaching_micro_step = teaching_micro_step;
+exports.math_validate_answer = math_validate_answer;
+exports.formatting_polisher = formatting_polisher;
+exports.memory_manager = memory_manager;
+exports.GUARDIAN_SANITIZE = GUARDIAN_SANITIZE;
+exports.youtube_search_tool = youtube_search_tool;
+exports.get_youtube_transcript_tool = get_youtube_transcript_tool;
+exports.math_generate_question = math_generate_question;
+exports.arabic_mode_formatter = arabic_mode_formatter;
+exports.emoji_policy_check = emoji_policy_check;
+exports.ask_practice_question = ask_practice_question;
+exports.quran_pedagogy = quran_pedagogy;
+exports.toolRouter = toolRouter;
 /**
  * handlers.ts
  *
@@ -11,16 +32,17 @@
  * 4. REDIS ACTIVE: Fault-tolerant connection using getRedisClient.
  * 5. SANITIZER V2: Fixes phantom '?', double (( )), robotic phrasing, and regex bugs.
  */
-import { create, all } from 'mathjs';
-import { runFlow } from '@genkit-ai/flow';
-import { webSearchFlow } from '../flows/web_search_flow';
-import { getYoutubeTranscriptFlow } from '../flows/get-youtube-transcript';
+const mathjs_1 = require("mathjs");
+const flow_1 = require("@genkit-ai/flow");
+const youtube_search_flow_1 = require("../flows/youtube-search-flow");
+const get_youtube_transcript_1 = require("../flows/get-youtube-transcript");
+const prisma_1 = __importDefault(require("../../lib/prisma"));
 // ✅ REDIS: Import the singleton getter
-import { getRedisClient } from '../../lib/redis';
+const redis_1 = require("../../lib/redis");
 // ✅ DATA: Import scalable content map
-import { CURRICULUM_MAP } from '../data/curriculum';
+const curriculum_1 = require("../data/curriculum");
 // Initialize mathjs once
-const math = create(all, {});
+const math = (0, mathjs_1.create)(mathjs_1.all, {});
 /* ============================================================================
    SECTION 1: HIGH-PERFORMANCE CONSTANTS & REGEX (PRE-COMPILED)
    ============================================================================ */
@@ -32,22 +54,48 @@ const REGEX_ROBOTIC = /\b(I am sorry|as an ai|I apologize|Sorry, I am an AI|I am
 // 2. Optimized Grammar Regex
 const REGEX_GRAMMAR_SOFT = /, and (the|it|he|she|we|they|this|that|I|you)/gi;
 const REGEX_FILLERS = /\b(in order to|it is important to note that|as you can see|basically|essentially)\b/gi;
+const REGEX_META_LIMITATIONS = /\b(not fully specified here|not specified here|based on (?:the )?(?:information|details|context) provided(?: here)?|details? (?:are )?not (?:fully )?specified)\b/gi;
+const REGEX_RESEARCH_HEDGE = /\b(i could not verify enough reliable information for that yet|insufficient (?:reliable )?information(?: available)?(?: here)?|there is not enough information(?: here)?|this is not fully covered here)\b/gi;
 // 3. Step & Metaphor Triggers
-const REGEX_STEPS = /solve|calculate|work out|find the value|steps|procedure|process|how do we|how to|simplify|divide|multiply|add|subtract/i;
+const REGEX_STEPS = /\b(solve|calculate|work out|find the value|step by step|show steps|procedure|algorithm|debug|troubleshoot|fix|implement|build|simplify|derive|compute|divide|multiply|add|subtract)\b/i;
 const REGEX_METAPHOR_BLOCK = /^(what is|define|meaning of|explain|clarify)/i;
 const REGEX_STRUCTURE_LEAK = /(Micro-Idea|Relatable Example|Check|Concept|Real Life|Question):\s*/gi;
+const REGEX_MATH_TOPIC = /\b(math|mathematics|algebra|arithmetic|fraction|fractions|equation|equations|solve|simplify|calculate|ratio|percent|percentage|denominator|numerator|integer|decimal)\b|[0-9]\s*[\+\-\*\/=]\s*[0-9]|\(\s*\d+\s*\/\s*\d+\s*\)\s*\/\s*\(\s*\d+\s*\/\s*\d+\s*\)/i;
+const REGEX_FINAL_ANSWER_LEAK = /\b(this means|therefore|hence|so,?\s*the\s*(?:final\s*)?answer\s*(?:is|=)|simplifies to)\b[^.?!]*[.?!]?/gi;
+const REGEX_UNREALISTIC_SPLIT_OBJECT = /\b(cut|split|divide|share)\b[^.!?\n]{0,50}\b(football|soccer ball|basketball|tennis ball)\b/i;
+const REGEX_FENCED_CODE_BLOCK = /```[\w+-]*\n[\s\S]*?```/g;
+const SAFE_CODE_FENCE_LANGS = new Set([
+    'javascript', 'typescript', 'python', 'powershell', 'bash', 'json', 'html', 'css', 'sql', 'text', ''
+]);
 /* ============================================================================
    SECTION 2: STATELESS HELPERS (PURE FUNCTIONS)
    ============================================================================ */
 function shouldUseSteps(input) {
     return !!input && REGEX_STEPS.test(input);
 }
+function shouldAllowProceduralStepLabels(args) {
+    if (Boolean(args.strictMathMode))
+        return true;
+    const userInput = String(args.userInput || '');
+    const topic = String(args.contextTopic || '');
+    const explicitStepwiseIntentRegex = /\b(step by step|show steps|walk me through (?:the )?steps|troubleshoot|debug|fix|implement|build|write code|algorithm|derive|calculate|solve|compute|simplify)\b/i;
+    const nonProceduralPointFormRegex = /\b(point form|bullet(?:ed)?|list(?:ing)?|overview|concept(?:ual)?|theory|causes|reasons|factors|what are)\b/i;
+    const explicitStepwise = explicitStepwiseIntentRegex.test(userInput) || explicitStepwiseIntentRegex.test(topic);
+    const explicitPointForm = nonProceduralPointFormRegex.test(userInput) && !/\bstep by step\b/i.test(userInput);
+    if (explicitPointForm)
+        return false;
+    if (explicitStepwise)
+        return true;
+    if (shouldUseSteps(userInput))
+        return true;
+    return false;
+}
 function shouldUseExample(topic) {
     if (!topic)
         return false;
     const t = topic.toLowerCase();
     // Fast check against our loaded map
-    for (const key of CURRICULUM_MAP.keys()) {
+    for (const key of curriculum_1.CURRICULUM_MAP.keys()) {
         if (t.includes(key))
             return true;
     }
@@ -57,7 +105,196 @@ function shouldUseExample(topic) {
 function shouldUseMetaphor(input) {
     return !!input && !REGEX_METAPHOR_BLOCK.test(input);
 }
-export async function isArabicText(text) {
+function isMathContext(text, currentTopic, userInput) {
+    return REGEX_MATH_TOPIC.test(text || '') || REGEX_MATH_TOPIC.test(currentTopic || '') || REGEX_MATH_TOPIC.test(userInput || '');
+}
+function normalizeFenceLanguage(langRaw, code) {
+    const raw = String(langRaw || '').trim().toLowerCase();
+    const alias = raw === 'js' ? 'javascript' :
+        raw === 'ts' ? 'typescript' :
+            raw === 'shell' ? 'bash' : raw;
+    if (SAFE_CODE_FENCE_LANGS.has(alias)) {
+        return alias;
+    }
+    const guessed = guessCodeLanguage(code);
+    return guessed === 'text' ? '' : guessed;
+}
+function isLikelyFencedCodeBody(code) {
+    const source = String(code || '').trim();
+    if (!source)
+        return false;
+    if (isLikelyCodeParagraph(source))
+        return true;
+    if (guessCodeLanguage(source) !== 'text')
+        return true;
+    const lines = source
+        .split('\n')
+        .map((line) => line.trim())
+        .filter(Boolean);
+    if (lines.length === 0)
+        return false;
+    const symbolHeavyLines = lines.filter((line) => /[{}()[\];=<>]/.test(line)).length;
+    const keywordLines = lines.filter((line) => /\b(def|return|import|from|class|const|let|var|function|print|console\.log)\b/i.test(line)).length;
+    return symbolHeavyLines >= 2 || (symbolHeavyLines >= 1 && keywordLines >= 1);
+}
+function preserveFencedCodeBlocks(text) {
+    const blocks = [];
+    let index = 0;
+    const withoutBlocks = String(text || '').replace(REGEX_FENCED_CODE_BLOCK, (match) => {
+        const fence = String(match || '');
+        const parsed = fence.match(/^```([^\n`]*)\n([\s\S]*?)```$/);
+        if (!parsed)
+            return fence;
+        const rawLanguage = String(parsed[1] || '');
+        const body = String(parsed[2] || '').replace(/\s+$/g, '');
+        if (!isLikelyFencedCodeBody(body)) {
+            // Fence contains prose, not code. Unwrap so UI renders regular text.
+            return `\n${body.trim()}\n`;
+        }
+        const normalizedLanguage = normalizeFenceLanguage(rawLanguage, body);
+        const normalizedFence = normalizedLanguage
+            ? `\`\`\`${normalizedLanguage}\n${body}\n\`\`\``
+            : `\`\`\`\n${body}\n\`\`\``;
+        const token = `CODE_BLOCK_TOKEN_${index}_X`;
+        blocks.push({ token, block: normalizedFence });
+        index += 1;
+        return token;
+    });
+    return { text: withoutBlocks, blocks };
+}
+function restoreFencedCodeBlocks(text, blocks) {
+    let output = String(text || '');
+    for (const block of blocks) {
+        output = output.replace(block.token, block.block);
+    }
+    return output;
+}
+function guessCodeLanguage(code) {
+    const source = String(code || '');
+    if (/(^|\n)\s*(?:get|set|new|remove|write|start|stop|test|invoke|select|where|foreach|convertto|convertfrom|import|export)-[a-z]+/mi.test(source) ||
+        /(^|\n)\s*\$[a-z_]\w*\s*=/mi.test(source) ||
+        /(^|\n)\s*\$env:[a-z_]\w*/mi.test(source)) {
+        return 'powershell';
+    }
+    if (/(^|\n)\s*(?:function\s+\w+\s*\(|const\s+\w+\s*=|let\s+\w+\s*=|var\s+\w+\s*=|class\s+\w+|if\s*\(|for\s*\(|while\s*\(|return\b|console\.log\(|import\s+.+from\s+['"]|export\s+)/mi.test(source) ||
+        /=>/.test(source)) {
+        return 'javascript';
+    }
+    if (/(^|\n)\s*(?:def\s+\w+\(|import\s+\w+|from\s+\w+\s+import|print\()/mi.test(source)) {
+        return 'python';
+    }
+    if (/(^|\n)\s*(?:npm|npx|pnpm|yarn|git|node|python|pip)\b/mi.test(source)) {
+        return 'bash';
+    }
+    return 'text';
+}
+function isLikelyCodeParagraph(paragraph) {
+    const lines = String(paragraph || '')
+        .split('\n')
+        .map((line) => line.trim())
+        .filter(Boolean);
+    if (lines.length === 0)
+        return false;
+    const codeLineRegex = /^(?:function\s+\w+\s*\(|const\s+\w+\s*=|let\s+\w+\s*=|var\s+\w+\s*=|class\s+\w+|if\s*\(|for\s*\(|while\s*\(|return\b|console\.log\(|try\s*\{|catch\s*\(|switch\s*\(|\$\w+\s*=|(?:get|set|new|remove|write|start|stop|test|invoke|select|where|foreach|convertto|convertfrom|import|export)-[a-z]+|(?:npm|npx|pnpm|yarn|git|node|python|pip)\b)/i;
+    const codeLikeLines = lines.filter((line) => codeLineRegex.test(line) ||
+        (/[{}();=]/.test(line) && /\b(?:return|function|const|let|var|if|for|while)\b/i.test(line))).length;
+    if (codeLikeLines >= 2)
+        return true;
+    if (lines.length === 1) {
+        const single = lines[0];
+        return codeLineRegex.test(single) && /[{}();=]|-[a-z]+/i.test(single);
+    }
+    return false;
+}
+function convertInlineLanguagePrefixedCode(text) {
+    const source = String(text || '');
+    const match = source.match(/\b(javascript|js|typescript|ts|python|powershell|bash|shell)\s+((?:function|const|let|var|class|\$|get-|set-|new-|remove-|write-|start-|stop-|test-|invoke-|select-|where-|foreach-|convertto-|convertfrom-|import-|export-|if\s*\(|for\s*\(|while\s*\().*)/i);
+    if (!match || typeof match.index !== 'number')
+        return source;
+    const langRaw = match[1].toLowerCase();
+    const lang = langRaw === 'js' ? 'javascript' :
+        langRaw === 'ts' ? 'typescript' :
+            langRaw === 'shell' ? 'bash' : langRaw;
+    const before = source.slice(0, match.index).trimEnd();
+    const code = String(match[2] || '').trim();
+    if (!code)
+        return source;
+    if (!isLikelyCodeParagraph(code))
+        return source;
+    return `${before ? `${before}\n\n` : ''}\`\`\`${lang}\n${code}\n\`\`\``;
+}
+function wrapLikelyCodeParagraphs(text) {
+    const paragraphs = String(text || '')
+        .split(/\n{2,}/)
+        .map((paragraph) => paragraph.trim())
+        .filter(Boolean);
+    const transformed = paragraphs.map((paragraph) => {
+        if (paragraph.includes('```'))
+            return paragraph;
+        if (!isLikelyCodeParagraph(paragraph))
+            return paragraph;
+        const lang = guessCodeLanguage(paragraph);
+        return `\`\`\`${lang}\n${paragraph}\n\`\`\``;
+    });
+    return transformed.join('\n\n').trim();
+}
+function normalizeStepLines(text) {
+    const lines = String(text || '').split('\n');
+    const words = ['one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten'];
+    let stepIndex = 0;
+    const out = [];
+    for (const rawLine of lines) {
+        const line = rawLine.trim();
+        if (!line)
+            continue;
+        const stepMatch = line.match(/^step\s+(one|two|three|four|five|six|seven|eight|nine|ten|\d+)\s*:\s*(.*)$/i);
+        if (stepMatch) {
+            const body = (stepMatch[2] || '').trim();
+            if (!body)
+                continue;
+            const label = words[Math.min(stepIndex, words.length - 1)] || String(stepIndex + 1);
+            out.push(`Step ${label}: ${body}`);
+            stepIndex += 1;
+            continue;
+        }
+        out.push(line);
+    }
+    return out.join('\n').trim();
+}
+function enforceStrictMathCoachFormatting(text, userInput, currentTopic) {
+    let output = String(text || '');
+    if (!isMathContext(output, currentTopic, userInput))
+        return output.trim();
+    output = output
+        .replace(REGEX_FINAL_ANSWER_LEAK, '')
+        .replace(/\bthe complex fraction\b/gi, 'the fraction')
+        .replace(/\s{2,}/g, ' ')
+        .trim();
+    output = normalizeStepLines(output);
+    return output.trim();
+}
+function enforceRealisticMathExamples(text, userInput, currentTopic) {
+    let output = String(text || '');
+    if (!output.trim())
+        return output;
+    const mathContext = isMathContext(output, currentTopic, userInput);
+    if (!mathContext)
+        return output;
+    output = output
+        .replace(/\bone whole football\b/gi, 'one whole pizza')
+        .replace(/\ba whole football\b/gi, 'a whole pizza')
+        .replace(/\bwhole football\b/gi, 'whole pizza')
+        .replace(/\bthe football\b/gi, 'the pizza')
+        .replace(/\bfootball\b/gi, 'pizza')
+        .replace(/\bsoccer ball\b/gi, 'pizza')
+        .replace(/\bbasketball\b/gi, 'pizza')
+        .replace(/\btennis ball\b/gi, 'pizza');
+    if (REGEX_UNREALISTIC_SPLIT_OBJECT.test(String(text || ''))) {
+        output = output.replace(/\bIf you cut the pizza in half\b/gi, 'If you cut a pizza in half');
+    }
+    return output;
+}
+async function isArabicText(text) {
     if (!text)
         return false;
     return REGEX_ARABIC.test(text);
@@ -94,17 +331,16 @@ function generateTeachingResponse(rawResponse, context) {
             response = `Let us take it slowly. ${response}`;
         }
     }
-    // 6. Context Anchor
-    if (context.topic && !response.toLowerCase().includes(context.topic.toLowerCase())) {
-        response = `We are talking about ${context.topic}. ${response}`;
-    }
+    // 6. Keep topic anchoring internal-only. Do not inject context labels into visible output.
     return response;
 }
 /* ============================================================================
    SECTION 4: HARD LOCK SANITIZER (FIXED & UPGRADED)
    ============================================================================ */
-function sanitizeOutputHard(text, currentTopic) {
+function sanitizeOutputHard(text, currentTopic, options) {
     let output = text;
+    // Never expose internal context annotations in user-visible responses.
+    output = output.replace(/\(Context:\s*We are discussing[^)]*\)\.?/gi, '');
     // 1. Remove Internal Labels
     output = output.replace(REGEX_STRUCTURE_LEAK, '');
     // 2. Fast cleanup
@@ -125,12 +361,19 @@ function sanitizeOutputHard(text, currentTopic) {
     // Allowed: numbers, operators, %, degrees, variables x,y,z
     // If it matches text words (not math), it strips the parens.
     output = output.replace(/\(([^0-9/+\-*=xXyYza-z%°\., ]+)\)/g, '$1');
-    // 4. STEP FORMATTER (RELAXED)
-    // Only convert explicit numbering "1.", "2." to "Step one"
-    // Do NOT convert "First," or "Next," unless it's a list.
-    output = output.replace(/(^|\s)1\.\s/g, '$1Step one: ');
-    output = output.replace(/(^|\s)2\.\s/g, '$1Step two: ');
-    output = output.replace(/(^|\s)3\.\s/g, '$1Step three: ');
+    // 4. STEP LABEL GOVERNANCE
+    // Only allow procedural step labels for explicit solving/debugging contexts.
+    if (options?.allowProceduralStepLabels) {
+        // Convert only line-start numbering, never sentence numbers like "= 2."
+        output = output.replace(/^\s*1\.\s+/gm, 'Step one: ');
+        output = output.replace(/^\s*2\.\s+/gm, 'Step two: ');
+        output = output.replace(/^\s*3\.\s+/gm, 'Step three: ');
+    }
+    else {
+        output = output
+            .replace(/\bstep\s+(one|two|three|four|five|six|seven|eight|nine|ten|\d+)\s*[:\-]\s*/gi, '')
+            .replace(/^\s*\d+\.\s+/gm, '');
+    }
     // 5. GLOBAL LATEX CLEANUP (PART 4 - "No LaTeX")
     output = output.replace(/\\frac/g, '');
     output = output.replace(/\\sqrt/g, '');
@@ -151,6 +394,10 @@ function sanitizeOutputHard(text, currentTopic) {
     Object.keys(replacements).forEach(key => {
         output = output.replace(new RegExp(key, 'gi'), replacements[key]);
     });
+    // 6b. Rewrite weak meta-language into direct teacher voice.
+    output = output
+        .replace(REGEX_META_LIMITATIONS, 'let us focus on what we can confirm clearly')
+        .replace(REGEX_RESEARCH_HEDGE, 'let us continue with what we can confirm clearly');
     // 7. Phantom Question Mark Killer
     if (output.endsWith('?')) {
         const segments = output.split(/[.!?]/);
@@ -161,20 +408,14 @@ function sanitizeOutputHard(text, currentTopic) {
             output = output.slice(0, -1) + ".";
         }
     }
-    // 8. Final Anchor
-    if (currentTopic && !output.toLowerCase().includes(currentTopic.toLowerCase())) {
-        // Only add context if the message is substantial enough to need anchoring
-        if (output.length > 100) {
-            output = `${output}\n\n(Context: We are discussing ${currentTopic}.)`;
-        }
-    }
+    // 8. Keep context anchoring in memory/state only, not in visible response text.
     return output.trim();
 }
 /* ============================================================================
    SECTION 5: TOOLS IMPLEMENTATION
    ============================================================================ */
 /* --- 1. Emotional Decoder (SAFETY FIREWALL) --- */
-export async function emotional_decoder(args) {
+async function emotional_decoder(args) {
     const raw = norm(args.text);
     // ⛔ STRICT MUSLIM SCHOOL FIREWALL
     const forbidden = [
@@ -192,13 +433,13 @@ export async function emotional_decoder(args) {
     const religious = ["allah", "god", "prophet", "quran", "prayer", "halal", "haram", "fatwa"];
     if (religious.some(w => raw.includes(w)))
         return { emotion: "religious_inquiry", triggers: [], suggestedLanguageMode: "english" };
-    const confusion = ["don't get", "confus", "lost", "don't know", "not sure", "help me"];
+    const confusion = ["don't get", "confuse", "lost", "don't know", "not sure", "help me"];
     if (confusion.some(w => raw.includes(w)))
         return { emotion: "confused", triggers: [], suggestedLanguageMode: "english" };
     return { emotion: "neutral", triggers: [], suggestedLanguageMode: "english" };
 }
 /* --- 2. Tone Generator --- */
-export async function tone_generator(args) {
+async function tone_generator(args) {
     const e = norm(args.emotion);
     if (e === "safety_violation") {
         return {
@@ -209,7 +450,7 @@ export async function tone_generator(args) {
     return { mode: 'neutral', hintPrefix: "Let us look at this clearly.", style: "calm, kenyan teacher warmth" };
 }
 /* --- 3. Teaching Micro Step (STRICT PERSONALIZATION) --- */
-export async function teaching_micro_step(args) {
+async function teaching_micro_step(args) {
     const topic = (args.topic || 'general').toLowerCase();
     // 1. Content Strategy - Default
     let content = {
@@ -221,7 +462,7 @@ export async function teaching_micro_step(args) {
     const hasInterests = args.studentInterests && args.studentInterests.length > 0;
     // If no specific interests, try to use the static Kenyan map
     if (!hasInterests) {
-        for (const [key, val] of CURRICULUM_MAP) {
+        for (const [key, val] of curriculum_1.CURRICULUM_MAP) {
             if (topic.includes(key)) {
                 content = val;
                 break;
@@ -249,7 +490,7 @@ export async function teaching_micro_step(args) {
     };
 }
 /* --- 4. Math Validate --- */
-export async function math_validate_answer(args) {
+async function math_validate_answer(args) {
     const qClean = args.question.replace(REGEX_MATH_CLEAN, '');
     const sClean = args.studentAnswer.replace(REGEX_MATH_CLEAN, '');
     if (!qClean)
@@ -272,7 +513,11 @@ export async function math_validate_answer(args) {
             return { isCorrect: true, feedbackType: "celebrate", explanation: "Mashallah! Exactly right." };
         }
         if ((args.attemptCount || 1) >= 5) {
-            return { isCorrect: false, feedbackType: "reveal", explanation: `The answer is ${correctVal}. Let's see why.` };
+            return {
+                isCorrect: false,
+                feedbackType: "hint",
+                explanation: "Good persistence. I will not give the final answer directly. Let us do one small step together."
+            };
         }
         return { isCorrect: false, feedbackType: "hint", explanation: "Not quite. Check your numbers." };
     }
@@ -281,40 +526,94 @@ export async function math_validate_answer(args) {
     }
 }
 /* --- 5. Formatting Polisher (Stateless) --- */
-export async function formatting_polisher(args) {
-    let text = args.rawText || '';
+async function formatting_polisher(args) {
+    const preserved = preserveFencedCodeBlocks(args.rawText || '');
+    let text = preserved.text;
     // 1. Remove Robotic Phrases
     text = text.replace(REGEX_ROBOTIC, '');
     // 2. Markdown Cleanup
-    text = text.replace(/(\*\*|__|\*|_|`)/g, '');
-    // 3. Apply Hard Sanitizer (Includes Grammar & Context Anchor if topic provided)
-    const cleaned = sanitizeOutputHard(text, args.contextTopic);
+    text = text.replace(/(\*\*|__)/g, '');
+    text = text.replace(/^\s*[-*]\s+/gm, '');
+    // 3. Apply Hard Sanitizer (Includes grammar, context hygiene, and step-label governance)
+    const allowProceduralStepLabels = shouldAllowProceduralStepLabels(args);
+    let cleaned = sanitizeOutputHard(text, args.contextTopic, { allowProceduralStepLabels });
+    const strictMath = Boolean(args.strictMathMode) || isMathContext(cleaned, args.contextTopic, args.userInput);
+    if (strictMath) {
+        cleaned = enforceStrictMathCoachFormatting(cleaned, args.userInput, args.contextTopic);
+    }
+    cleaned = enforceRealisticMathExamples(cleaned, args.userInput, args.contextTopic);
+    cleaned = convertInlineLanguagePrefixedCode(cleaned);
+    cleaned = wrapLikelyCodeParagraphs(cleaned);
+    cleaned = restoreFencedCodeBlocks(cleaned, preserved.blocks);
     return { cleanedText: cleaned };
 }
 /* --- 6. Memory Manager (Redis Activated & Fault Tolerant) --- */
-export async function memory_manager(args, context) {
+async function memory_manager(args, context) {
     if (!context?.studentId)
         return { ok: false, error: 'Student ID required' };
-    // ACTIVATE REDIS: Use the robust singleton
-    const redis = await getRedisClient();
-    // FAULT TOLERANCE
-    if (!redis) {
-        console.warn('[MemoryManager] Redis unavailable, skipping memory operation.');
-        return { ok: false, error: 'DB Unavailable' };
-    }
-    const redisKey = `student:${context.studentId}:memory:${args.key}`;
+    const mode = String(args.mode || '').toLowerCase();
+    const key = String(args.key || '').trim();
+    if (!key)
+        return { ok: false, error: 'Memory key required' };
+    const redis = await (0, redis_1.getRedisClient)();
+    const redisKey = `student:${context.studentId}:memory:${key}`;
+    const topicKey = `student:${context.studentId}`;
     try {
-        if (args.mode === "save") {
-            await redis.set(redisKey, args.value ?? '', { EX: 604800 }); // 7 days
-            return { ok: true };
+        if (mode === 'save') {
+            const value = String(args.value ?? '').trim();
+            if (!value)
+                return { ok: false, error: 'Memory value required' };
+            const existing = await prisma_1.default.globalMemory.findFirst({
+                where: { topic: topicKey, question: key },
+                orderBy: { updatedAt: 'desc' },
+            });
+            if (existing) {
+                await prisma_1.default.globalMemory.update({
+                    where: { id: existing.id },
+                    data: {
+                        correction: value,
+                        frequency: { increment: 1 },
+                    },
+                });
+            }
+            else {
+                await prisma_1.default.globalMemory.create({
+                    data: {
+                        topic: topicKey,
+                        question: key,
+                        correction: value,
+                    },
+                });
+            }
+            if (redis) {
+                await redis.set(redisKey, value, { EX: 60 * 60 * 24 * 30 });
+            }
+            return { ok: true, durable: true };
         }
-        if (args.mode === "get") {
-            const v = await redis.get(redisKey);
-            return { ok: true, value: v };
+        if (mode === 'get') {
+            if (redis) {
+                const cached = await redis.get(redisKey);
+                if (cached)
+                    return { ok: true, value: cached, durable: true, cached: true };
+            }
+            const existing = await prisma_1.default.globalMemory.findFirst({
+                where: { topic: topicKey, question: key },
+                orderBy: { updatedAt: 'desc' },
+            });
+            const value = String(existing?.correction || '').trim();
+            if (value && redis) {
+                await redis.set(redisKey, value, { EX: 60 * 60 * 24 * 30 });
+            }
+            return { ok: true, value: value || null, durable: true };
         }
-        if (args.mode === "delete") {
-            await redis.del(redisKey);
-            return { ok: true };
+        if (mode === 'delete') {
+            await prisma_1.default.globalMemory.deleteMany({
+                where: { topic: topicKey, question: key },
+            });
+            if (redis) {
+                await redis.del(redisKey);
+            }
+            return { ok: true, durable: true };
         }
         return { ok: true };
     }
@@ -324,9 +623,14 @@ export async function memory_manager(args, context) {
     }
 }
 /* --- 7. Guardian Sanitize (Entry Point) --- */
-export async function GUARDIAN_SANITIZE(text, contextTopic) {
+async function GUARDIAN_SANITIZE(text, contextTopic, options) {
     // This is the main exit gate. It is stateless.
-    let output = await formatting_polisher({ rawText: text, contextTopic });
+    let output = await formatting_polisher({
+        rawText: text,
+        contextTopic,
+        userInput: options?.userInput,
+        strictMathMode: options?.strictMathMode
+    });
     // Check Emojis
     const isArabic = await isArabicText(output.cleanedText);
     if (isArabic) {
@@ -342,46 +646,133 @@ export async function GUARDIAN_SANITIZE(text, contextTopic) {
     return output.cleanedText;
 }
 /* --- 8. Wrappers --- */
-export async function youtube_search_tool(args) {
-    if (typeof webSearchFlow === 'undefined')
+async function youtube_search_tool(args) {
+    if (typeof youtube_search_flow_1.youtubeSearchFlow === 'undefined')
         return { results: [] };
     try {
-        // @ts-ignore
-        const { results } = await runFlow(webSearchFlow, { query: args.query, isAnswerMode: false });
-        return { results };
+        const results = await (0, flow_1.runFlow)(youtube_search_flow_1.youtubeSearchFlow, { query: args.query });
+        return { results: Array.isArray(results) ? results : [] };
     }
     catch {
         return { results: [] };
     }
 }
-export async function get_youtube_transcript_tool(args) {
-    if (typeof getYoutubeTranscriptFlow === 'undefined')
+async function get_youtube_transcript_tool(args) {
+    if (typeof get_youtube_transcript_1.getYoutubeTranscriptFlow === 'undefined')
         return "No transcript";
-    return await runFlow(getYoutubeTranscriptFlow, { videoId: args.videoId });
+    return await (0, flow_1.runFlow)(get_youtube_transcript_1.getYoutubeTranscriptFlow, { videoId: args.videoId });
 }
-export async function math_generate_question(args) {
+async function math_generate_question(args) {
     return { question: "What is 2 + 2?", answerKeywords: "4,four" };
 }
-export async function arabic_mode_formatter(args) {
+async function arabic_mode_formatter(args) {
     let t = args.text.replace(REGEX_EMOJI, '');
     t = t.replace(/\?/g, '؟').replace(/,/g, '،');
     return { cleanedText: t };
 }
-export async function emoji_policy_check(args) {
-    return { ok: true, cleanedText: args.text };
+async function emoji_policy_check(args) {
+    const text = String(args?.text || '');
+    const languageMode = norm(args?.languageMode);
+    if (!text)
+        return { ok: true, cleanedText: '' };
+    if (languageMode.startsWith('arabic')) {
+        return { ok: true, cleanedText: text.replace(REGEX_EMOJI, '').trim() };
+    }
+    const emojis = text.match(REGEX_EMOJI) || [];
+    if (emojis.length <= 1) {
+        return { ok: true, cleanedText: text };
+    }
+    const withoutEmoji = text.replace(REGEX_EMOJI, '').trim();
+    return { ok: true, cleanedText: `${withoutEmoji} ${emojis[0]}`.trim() };
 }
-export async function ask_practice_question(args) {
+async function ask_practice_question(args) {
     return args;
 }
-export async function quran_pedagogy(args) {
-    if ((args.requestType || "").includes("fatwa"))
-        return { safe: false, message: "Focus on character." };
-    return { type: 'general', message: "This teaches us discipline." };
+async function quran_pedagogy(args) {
+    const query = String(args?.query || args?.text || args?.topic || '').toLowerCase();
+    const requestType = String(args?.requestType || '').toLowerCase();
+    const gradeLevel = String(args?.gradeLevel || '').toLowerCase();
+    const isFatwaLike = /\b(fatwa|halal|haram|permissible|allowed|forbidden|sinful|is it okay|is it allowed)\b/.test(query) ||
+        requestType.includes('fatwa');
+    const isQuran = /\b(quran|surah|ayah|tafsir|tajweed|makhraj)\b/.test(query);
+    const isHadith = /\b(hadith|sunnah|narration)\b/.test(query);
+    const isFiqh = /\b(fiqh|wudu|wudhu|ghusl|salah|zakat|sawm|fasting|hajj)\b/.test(query);
+    const isSeerah = /\b(seerah|sirah|prophet|sahaba|companions|madinah|makkah)\b/.test(query);
+    const isAkhlaq = /\b(akhlaq|character|manners|adab|honesty|patience|kindness)\b/.test(query);
+    const domain = isQuran ? 'quran' :
+        isHadith ? 'hadith' :
+            isFiqh ? 'fiqh' :
+                isSeerah ? 'seerah' :
+                    isAkhlaq ? 'akhlaq' :
+                        'general_islamic';
+    const ageSafeTone = /primary|grade 1|grade 2|grade 3|grade 4|grade 5|grade 6|children|kid/.test(gradeLevel)
+        ? 'Use very simple words, short sentences, and one moral takeaway.'
+        : 'Use respectful, clear educational wording and mention valid scholarly differences briefly when needed.';
+    const evidenceReferences = domain === 'quran'
+        ? ['Qur\'an text', 'reliable tafsir summary', 'clear distinction between verse wording and explanation']
+        : domain === 'hadith'
+            ? ['Hadith wording if known', 'authenticity level if known', 'Sahih collections first when applicable']
+            : domain === 'fiqh'
+                ? ['Qur\'an and Sunnah principle', 'brief note on valid scholarly difference', 'refer personal rulings to a trusted local scholar']
+                : domain === 'seerah'
+                    ? ['well-established seerah reports', 'distinguish confirmed reports from popular retellings']
+                    : ['Qur\'an or Sunnah principle when relevant', 'state clearly when a point is a general lesson rather than a direct quotation'];
+    const scholarlyMethod = domain === 'fiqh'
+        ? 'State the core ruling principle, then note briefly if scholars or madhhabs differ. Do not present a disputed issue as unanimous.'
+        : domain === 'hadith'
+            ? 'State authenticity carefully. If a hadith grade is uncertain, say so plainly and focus on the educational benefit.'
+            : 'Ground the explanation in recognised Islamic sources and distinguish evidence from teacher explanation.';
+    if (isFatwaLike) {
+        return {
+            safe: true,
+            domain,
+            teachingMode: 'principles_with_scholar_caution',
+            message: 'Teach the core principle respectfully, avoid acting as a final mufti, and advise checking a trusted local scholar or teacher for personal rulings.',
+            scholarCaution: 'Do not issue absolute personal fatwas. Give the educational principle, note if scholars may differ, and recommend a trusted local scholar for personal cases.',
+            ageSafeTone,
+            evidenceReferences,
+            scholarlyMethod,
+        };
+    }
+    if (domain === 'quran') {
+        return {
+            safe: true,
+            domain,
+            teachingMode: 'quran_reflection',
+            message: 'Explain the ayah or surah in simple educational language, keep wording respectful, and focus on meaning, lesson, and memorisation-friendly understanding.',
+            scholarCaution: 'If you are unsure of an exact quotation or reference, paraphrase clearly instead of inventing wording.',
+            ageSafeTone,
+            evidenceReferences,
+            scholarlyMethod,
+        };
+    }
+    if (domain === 'hadith') {
+        return {
+            safe: true,
+            domain,
+            teachingMode: 'hadith_context',
+            message: 'Teach the hadith with context, the practical lesson, and careful wording. Avoid overstating authenticity if not certain.',
+            scholarCaution: 'If authenticity level is uncertain, say so briefly and focus on the educational lesson.',
+            ageSafeTone,
+            evidenceReferences,
+            scholarlyMethod,
+        };
+    }
+    return {
+        safe: true,
+        domain,
+        teachingMode: 'islamic_studies',
+        message: 'Teach respectfully, connect the concept to worship, character, or daily Muslim life when helpful, and keep the explanation educational rather than preachy.',
+        scholarCaution: 'Where valid scholarly differences exist, mention that briefly and avoid claiming a disputed point is unanimous.',
+        ageSafeTone,
+        evidenceReferences,
+        scholarlyMethod,
+    };
 }
 /* ============================================================================
    MAIN ROUTER
    ============================================================================ */
-export async function toolRouter(functionName, args, context) {
+async function toolRouter(functionName, args, context) {
     switch (functionName) {
         case 'emotional_decoder': return emotional_decoder(args);
         case 'tone_generator': return tone_generator(args);
@@ -391,10 +782,11 @@ export async function toolRouter(functionName, args, context) {
         case 'math_generate_question': return math_generate_question(args);
         case 'formatting_polisher': return formatting_polisher(args);
         case 'memory_manager': return memory_manager(args, context);
-        case 'GUARDIAN_SANITIZE': return GUARDIAN_SANITIZE(args.text, args.topic);
+        case 'GUARDIAN_SANITIZE': return GUARDIAN_SANITIZE(args.text, args.topic, args.options);
         case 'youtube_search': return youtube_search_tool(args);
         case 'get_youtube_transcript': return get_youtube_transcript_tool(args);
         case 'arabic_mode_formatter': return arabic_mode_formatter(args);
+        case 'emoji_policy_check': return emoji_policy_check(args);
         case 'quran_pedagogy': return quran_pedagogy(args);
         default: return { error: `Unknown tool: ${functionName}` };
     }

@@ -1,6 +1,7 @@
 'use client';
 
 import React, { createContext, useContext, useState, ReactNode, useEffect } from 'react';
+import type { MediaPreferenceProfile } from '@/lib/types';
 
 // Define the shape of the user profile
 interface UserProfile {
@@ -10,6 +11,9 @@ interface UserProfile {
   // FIX: Renamed 'topInterests' to 'interests' to match the backend API and create a single source of truth.
   interests: string[]; 
   favoriteShows: string[];
+  lastUpdatedAt?: string | null;
+  mediaPreferences?: MediaPreferenceProfile | null;
+  learningStyleSignals?: string[];
 }
 
 // Define the context shape

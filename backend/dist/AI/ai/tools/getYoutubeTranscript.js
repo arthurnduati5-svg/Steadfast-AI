@@ -1,12 +1,22 @@
-// Real implementation should fetch transcripts server-side and sanitize them.
-export async function getYoutubeTranscriptTool(input) {
-    if (!input || typeof input.videoId !== 'string' || input.videoId.length < 4) {
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.getYoutubeTranscriptTool = getYoutubeTranscriptTool;
+const flow_1 = require("@genkit-ai/flow");
+const get_youtube_transcript_1 = require("../flows/get-youtube-transcript");
+async function getYoutubeTranscriptTool(input) {
+    const videoId = String(input?.videoId || '').trim();
+    if (!videoId || videoId.length < 4) {
         return { error: 'Invalid videoId' };
     }
-    // Stub behavior: return a short sample transcript or an error if id unknown
-    if (input.videoId === 'vid123') {
-        return { transcript: 'This is a short sample transcript for the educational video.' };
+    try {
+        const transcript = await (0, flow_1.runFlow)(get_youtube_transcript_1.getYoutubeTranscriptFlow, { videoId });
+        if (!transcript || transcript.startsWith('Could not')) {
+            return { error: 'Transcript not available' };
+        }
+        return { transcript };
     }
-    return { error: 'Transcript not available' };
+    catch {
+        return { error: 'Transcript not available' };
+    }
 }
 //# sourceMappingURL=getYoutubeTranscript.js.map

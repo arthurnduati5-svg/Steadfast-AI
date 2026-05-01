@@ -1,4 +1,7 @@
-export async function askPracticeQuestionTool(input) {
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.askPracticeQuestionTool = askPracticeQuestionTool;
+async function askPracticeQuestionTool(input) {
     if (!input || typeof input.question !== 'string' || !Array.isArray(input.correctAnswers) || input.correctAnswers.length === 0) {
         throw new Error('Invalid askPracticeQuestion input: question and correctAnswers required.');
     }

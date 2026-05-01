@@ -1,121 +1,450 @@
-import { runFlow } from '@genkit-ai/flow';
-import { ai } from '../genkit';
-import { setMode } from '../../lib/research/research-state';
-import { detectResearchIntent } from './intent-detector';
-import { generalWebResearchFlow } from './general_web_search_flow';
-import { webSearchFlow } from './web_search_flow';
-import { youtubeSearchFlow } from './youtube-search-flow';
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.runResearchOrchestrator = runResearchOrchestrator;
+const flow_1 = require("@genkit-ai/flow");
+const genkit_1 = require("../genkit");
+const intent_detector_1 = require("./intent-detector");
+const general_web_search_flow_1 = require("./general_web_search_flow");
+const web_search_flow_1 = require("./web_search_flow");
+const youtube_search_flow_1 = require("./youtube-search-flow");
 const FORBIDDEN_TOPICS = [
-    "sex", "dating", "romance", "violence", "kill", "suicide", "harm",
-    "drug", "alcohol", "politics", "vote", "gambling", "betting",
-    "hack", "cybercrime", "cheat", "porn", "nude", "terror", "boyfriend", "girlfriend",
-    "bhang", "weed", "smoke", "doggy", "yacht", "yatch",
-    "music video", "lyrics", "official video", "song", "mp3", "playlist"
+    'sex',
+    'dating',
+    'romance',
+    'violence',
+    'kill',
+    'suicide',
+    'harm',
+    'drug',
+    'alcohol',
+    'politics',
+    'vote',
+    'gambling',
+    'betting',
+    'hack',
+    'cybercrime',
+    'cheat',
+    'porn',
+    'nude',
+    'terror',
+    'boyfriend',
+    'girlfriend',
+    'bhang',
+    'weed',
+    'smoke',
+    'music video',
+    'lyrics',
+    'official video',
+    'song',
+    'mp3',
+    'playlist',
 ];
+const VIDEO_NOISE_WORDS = new Set([
+    'better',
+    'another',
+    'more',
+    'different',
+    'best',
+    'good',
+    'suggest',
+    'show',
+    'video',
+    'youtube',
+    'this',
+    'that',
+    'it',
+    'same',
+    'topic',
+]);
 function isSafeQuery(query) {
     const lower = query.toLowerCase();
-    return !FORBIDDEN_TOPICS.some(topic => lower.includes(topic));
+    return !FORBIDDEN_TOPICS.some((topic) => lower.includes(topic));
 }
-// ✅ UPGRADED: STRICT CONTEXT REWRITER
-async function generateVideoQuery(userQuery, topic) {
-    // If no topic exists, we must use the user's query, but strip noise
+function cleanQueryForSearch(value) {
+    return value.replace(/["'`]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 120);
+}
+function isWebModeMetaQuery(query) {
+    const lower = query.trim().toLowerCase();
+    if (!lower)
+        return false;
+    if (/\b(web research mode|research mode)\b/.test(lower))
+        return true;
+    return (/\b(are you|did you|why are you|how are you|can you|will you)\b[^?.!]{0,120}\b(search|searching|look up|web|online|source|sources|citation|verify)\b/.test(lower) ||
+        /\b(are you searching|did you search|why are you searching|did you look up)\b/.test(lower));
+}
+function isLikelyFollowUpQuery(query) {
+    const lower = query.trim().toLowerCase();
+    if (!lower)
+        return false;
+    const words = lower.split(/\s+/).filter(Boolean);
+    if (words.length > 24)
+        return false;
+    return (/\b(this|that|it|those|these|above|earlier|previous|same|part|point)\b/.test(lower) ||
+        /\b(you said|your answer|that answer|this answer|explain that|explain this)\b/.test(lower) ||
+        /^(and|so|then|but)\b/.test(lower));
+}
+function hasExplicitNoWebSignal(query) {
+    const lower = String(query || '').trim().toLowerCase();
+    if (!lower)
+        return false;
+    return (/\b(no web|don't search|do not search|without searching|no internet|without internet|from your knowledge|from context only)\b/.test(lower) ||
+        /\bjust explain|no lookup|no research\b/.test(lower));
+}
+function hasFreshnessOrVolatilitySignal(query) {
+    const lower = String(query || '').trim().toLowerCase();
+    if (!lower)
+        return false;
+    return (/\b(latest|current|today|this week|this month|this year|updated|recent|news|breaking|price|stock|rate|exchange rate|inflation|election|president|prime minister|ceo|version|release)\b/.test(lower) ||
+        /\b(202[4-9]|203[0-9])\b/.test(lower));
+}
+function isVideoContextFollowUp(query) {
+    const lower = query.trim().toLowerCase();
+    if (!lower)
+        return false;
+    if (!/\b(video|youtube|watch|transcript)\b/.test(lower))
+        return false;
+    return /\b(content|contents|about|about it|in it|inside it|aware|know|summary|summarize|summarise|explain|cover|covers|teach|talking about|what is in|what's in|what is the video about|what does the video say)\b/.test(lower);
+}
+const GENERIC_VIDEO_REQUEST_NOISE_WORDS = new Set([
+    'a',
+    'an',
+    'about',
+    'another',
+    'can',
+    'cvan',
+    'could',
+    'educational',
+    'find',
+    'for',
+    'get',
+    'give',
+    'i',
+    'it',
+    'lecture',
+    'lesson',
+    'me',
+    'on',
+    'please',
+    'recommend',
+    'same',
+    'show',
+    'suggest',
+    'suggested',
+    'that',
+    'the',
+    'this',
+    'topic',
+    'transcript',
+    'video',
+    'watch',
+    'would',
+    'youtube',
+    'you',
+]);
+function looksLikeGenericVideoRequest(query) {
+    const lower = query.trim().toLowerCase();
+    if (!lower)
+        return false;
+    if (!/\b(video|youtube|watch|transcript)\b/.test(lower))
+        return false;
+    if (/\b(this|that|it|same topic|same thing|same concept|same lesson)\b/.test(lower))
+        return true;
+    const words = lower.split(/\s+/).filter(Boolean);
+    if (words.length === 0)
+        return false;
+    const meaningfulWords = words.filter((word) => !GENERIC_VIDEO_REQUEST_NOISE_WORDS.has(word));
+    return meaningfulWords.length <= 2;
+}
+function extractTopicCandidate(query) {
+    return cleanQueryForSearch(String(query || '')
+        .replace(/^(show me|give me|find me|suggest|recommend)\s+(an?\s+)?(video|youtube video|youtube|transcript)\s*/i, '')
+        .replace(/^(what about|how about|let'?s talk about|talk about|new topic|another topic|different topic|change topic to|switch topic to|instead)\s+/i, ''));
+}
+function shouldPrefixActiveTopicForWebQuery(query) {
+    const lower = cleanQueryForSearch(query).toLowerCase();
+    if (!lower)
+        return false;
+    if (/\b(new topic|another topic|different topic|change topic|switch topic|unrelated)\b/.test(lower)) {
+        return false;
+    }
+    if (/\b(this|that|it|again|same|as above|previous)\b/.test(lower))
+        return true;
+    if (/^(search|look up|find|check)\b/.test(lower) && /\b(latest|current|today|update|source|sources|citation|cite)\b/.test(lower)) {
+        return true;
+    }
+    if (/\b(update again|latest update again|cite source links?)\b/.test(lower))
+        return true;
+    return false;
+}
+function buildContextualWebQuery(query, activeTopic) {
+    const cleanedQuery = cleanQueryForSearch(query);
+    const topic = cleanQueryForSearch(activeTopic || '');
     if (!topic)
-        return userQuery;
-    // HEURISTIC: If query contains vague reference words, FORCE topic use.
-    const lower = userQuery.toLowerCase();
-    const vagueWords = ["better", "another", "more", "different", "best", "good", "suggest", "show", "video", "youtube", "this", "that", "it", "same topic"];
-    // If the query is dominated by vague words, REVERT TO TOPIC
-    const isVague = vagueWords.some(w => lower.includes(w));
-    if (isVague) {
-        // AI Rewriter for nuance (e.g. "focus on heart")
-        const prompt = `
-        Active Topic: "${topic}"
-        User Request: "${userQuery}"
-        
-        TASK: Create a clean YouTube search query.
-        
-        RULES:
-        1. IGNORE adjectives like "better", "best", "good", "another".
-        2. REPLACE "this", "that", "it" with "${topic}".
-        3. IF user adds a specific detail (e.g. "focus on lungs"), append it.
-        4. IF user just wants "another video", output ONLY "${topic} educational".
-        5. OUTPUT ONLY THE STRING.
-        `;
-        const res = await ai.generate({ model: 'openai/gpt-4o-mini', prompt });
-        return res.text.trim().replace(/"/g, '');
-    }
-    return userQuery;
+        return cleanedQuery;
+    if (!shouldPrefixActiveTopicForWebQuery(cleanedQuery))
+        return cleanedQuery;
+    const lowerQuery = cleanedQuery.toLowerCase();
+    const lowerTopic = topic.toLowerCase();
+    if (lowerQuery.includes(lowerTopic))
+        return cleanedQuery;
+    return `${topic} ${cleanedQuery}`.trim();
 }
-export async function runResearchOrchestrator(input) {
-    setMode('research');
-    console.log(`[🔍 DEEP TRACE] Orchestrator Input: "${input.query}" | Context: "${input.lastSearchTopic}"`);
-    const history = input.chatHistory || [];
-    // 🛡️ STEP 1: SAFETY CHECK
-    if (!isSafeQuery(input.query)) {
-        console.log(`[🔍 DEEP TRACE] 🛑 BLOCKED Forbidden Topic.`);
-        return await runFlow(webSearchFlow, {
-            query: input.query,
-            chatHistory: history,
-            lastSearchTopic: input.lastSearchTopic,
-            awaitingPracticeQuestion: false,
-            awaitingPracticeAnswer: false,
-            attempts: 0,
-        });
+function shouldRewriteVideoQuery(userQuery) {
+    const words = userQuery.toLowerCase().split(/\s+/).filter(Boolean);
+    if (words.length === 0)
+        return true;
+    const noiseCount = words.filter((word) => VIDEO_NOISE_WORDS.has(word)).length;
+    return noiseCount >= Math.ceil(words.length / 2);
+}
+async function generateVideoQuery(userQuery, topic) {
+    const cleanUserQuery = cleanQueryForSearch(userQuery);
+    const candidateTopic = extractTopicCandidate(cleanUserQuery);
+    if (topic && (looksLikeGenericVideoRequest(cleanUserQuery) || looksLikeGenericVideoRequest(candidateTopic))) {
+        return `${cleanQueryForSearch(topic)} educational`;
     }
-    // 🧠 STEP 2: DETECT INTENT
-    const intent = await detectResearchIntent(input.query, input.lastSearchTopic);
-    console.log(`[🔍 DEEP TRACE] Intent: ${intent}`);
-    // 🎬 STEP 3: VIDEO LOOKUP (WITH INTELLIGENT REWRITING)
-    if (intent === 'video_lookup') {
-        // ✅ FORCE REWRITING. Never pass raw query directly if context exists.
-        const effectiveQuery = await generateVideoQuery(input.query, input.lastSearchTopic);
-        console.log(`[🔍 DEEP TRACE] 🔄 Video Query Rewritten: "${input.query}" -> "${effectiveQuery}"`);
-        const videos = await runFlow(youtubeSearchFlow, { query: effectiveQuery });
-        // Filter bad results (Music, Lyrics, etc)
-        const filteredVideos = videos.filter(v => {
-            const t = v.title.toLowerCase();
-            return !t.includes("official video") &&
-                !t.includes("lyrics") &&
-                !t.includes("music") &&
-                !t.includes("reaction") &&
-                !t.includes("song");
+    if (candidateTopic && candidateTopic !== cleanUserQuery && !isLikelyFollowUpQuery(cleanUserQuery)) {
+        return candidateTopic;
+    }
+    if (!topic)
+        return cleanUserQuery;
+    if (!shouldRewriteVideoQuery(cleanUserQuery))
+        return cleanUserQuery;
+    const prompt = `
+Active topic: "${topic}"
+User request: "${cleanUserQuery}"
+
+Rewrite into one clean YouTube educational query.
+
+Return strict JSON only:
+{"query":"..."}
+
+Rules:
+- Replace vague pronouns with the active topic.
+- Keep useful qualifiers from the user request.
+- If request is generic ("another video"), return "<topic> educational".
+`;
+    try {
+        const res = await genkit_1.ai.generate({
+            model: 'openai/gpt-4o-mini',
+            prompt,
+            output: { format: 'json' },
         });
-        const video = filteredVideos.length > 0 ? filteredVideos[0] : null;
-        const safeChannel = (video?.channel || video?.channelTitle || '').replace('Unknown Channel', '');
+        const candidate = res.output?.query;
+        if (typeof candidate === 'string' && candidate.trim()) {
+            return cleanQueryForSearch(candidate);
+        }
+    }
+    catch {
+        // Fall through to deterministic fallback.
+    }
+    return `${cleanQueryForSearch(topic)} educational`;
+}
+function isEducationalVideoTitle(title) {
+    const lower = title.toLowerCase();
+    return !['official video', 'lyrics', 'music', 'reaction', 'song'].some((bad) => lower.includes(bad));
+}
+function tokenizeTopicTerms(text) {
+    return cleanQueryForSearch(text)
+        .toLowerCase()
+        .split(/\s+/)
+        .filter((token) => token.length >= 4)
+        .slice(0, 10);
+}
+function scoreEducationalVideoCandidate(video, topic, userQuery) {
+    const title = String(video.title || '').toLowerCase();
+    const channel = String(video.channel || video.channelTitle || '').toLowerCase();
+    const topicTerms = new Set([...tokenizeTopicTerms(topic), ...tokenizeTopicTerms(userQuery)]);
+    const metaYouTubeTerms = [
+        'suggested videos',
+        'youtube suggested',
+        'watch later',
+        'partner program',
+        'youtube creator',
+        'algorithm',
+        'monetization',
+        'adsense',
+    ];
+    const educationalTerms = [
+        'lesson',
+        'tutorial',
+        'explained',
+        'introduction',
+        'practice',
+        'revision',
+        'worked example',
+        'solve',
+        'equations',
+        'math',
+        'science',
+    ];
+    const trustedChannelHints = [
+        'khan academy',
+        'freesciencelessons',
+        'organic chemistry tutor',
+        'crash course',
+        'math antics',
+        'ted-ed',
+    ];
+    if (!isEducationalVideoTitle(title))
+        return -100;
+    if (metaYouTubeTerms.some((term) => title.includes(term) || channel.includes(term)))
+        return -50;
+    let score = 0;
+    for (const term of topicTerms) {
+        if (title.includes(term))
+            score += 6;
+        if (channel.includes(term))
+            score += 2;
+    }
+    if (educationalTerms.some((term) => title.includes(term)))
+        score += 5;
+    if (trustedChannelHints.some((term) => channel.includes(term)))
+        score += 8;
+    if (/\b(kcse|igcse|gcse|grade|form)\b/.test(title))
+        score += 3;
+    return score;
+}
+function pickBestEducationalVideo(videos, topic, userQuery) {
+    const ranked = videos
+        .map((video) => ({
+        video,
+        score: scoreEducationalVideoCandidate(video, topic, userQuery),
+    }))
+        .filter((entry) => entry.score > 0)
+        .sort((a, b) => b.score - a.score);
+    return ranked[0]?.video || null;
+}
+function inferVideoDifficulty(title) {
+    const lower = String(title || '').toLowerCase();
+    if (/\b(introduction|intro|basics|beginner|easy|foundation|for beginners)\b/.test(lower))
+        return 'beginner';
+    if (/\b(advanced|hard|exam challenge|olympiad|proof)\b/.test(lower))
+        return 'advanced';
+    return 'intermediate';
+}
+function buildVideoRecommendationDetails(video, topic, userQuery) {
+    const normalizedTopic = cleanQueryForSearch(topic || userQuery || 'this topic');
+    const title = String(video.title || '').trim();
+    const channel = String(video.channel || video.channelTitle || '').trim();
+    const difficulty = inferVideoDifficulty(title);
+    const topicTerms = Array.from(new Set([...tokenizeTopicTerms(normalizedTopic), ...tokenizeTopicTerms(userQuery)])).slice(0, 4);
+    const coverageTerms = topicTerms.filter((term) => title.toLowerCase().includes(term));
+    const concepts = coverageTerms.length > 0 ? coverageTerms : topicTerms;
+    const difficultyText = difficulty === 'beginner'
+        ? 'It looks beginner-friendly and suitable for first understanding.'
+        : difficulty === 'advanced'
+            ? 'It looks better for deeper or higher-challenge study.'
+            : 'It looks suitable for guided practice after the basics.';
+    const explanation = [
+        `I found a strong video for ${normalizedTopic}: "${title}".`,
+        concepts.length > 0 ? `Why this fits: it appears to cover ${concepts.join(', ')} directly.` : 'Why this fits: the title lines up well with the lesson topic.',
+        difficultyText,
+        channel ? `Channel signal: ${channel}.` : '',
+    ]
+        .filter(Boolean)
+        .join(' ');
+    return { explanation, concepts, difficulty };
+}
+function hasRunnableFlow(flow) {
+    return Boolean(flow) && typeof flow === 'object' && Boolean(flow.inputSchema);
+}
+async function runYoutubeSearchSafely(query) {
+    if (!query)
+        return [];
+    if (!hasRunnableFlow(youtube_search_flow_1.youtubeSearchFlow)) {
+        console.warn('[ResearchOrchestrator] youtubeSearchFlow is unavailable. Skipping video lookup.');
+        return [];
+    }
+    try {
+        const results = await (0, flow_1.runFlow)(youtube_search_flow_1.youtubeSearchFlow, { query });
+        return Array.isArray(results) ? results : [];
+    }
+    catch (error) {
+        console.error('[ResearchOrchestrator] YouTube lookup failed:', error);
+        return [];
+    }
+}
+async function runWebSearchFlowSafely(input) {
+    if (!hasRunnableFlow(web_search_flow_1.webSearchFlow)) {
         return {
             mode: 'teaching',
-            response: video
-                ? `I found a relevant video on **${effectiveQuery}**. Watch below!`
-                : `I searched for videos on "${effectiveQuery}" but couldn't find a perfect educational match right now.`,
-            videoData: video ? { id: video.id, title: video.title, channel: safeChannel, thumbnail: video.thumbnailUrl } : undefined
+            response: 'Let us continue directly from what we have already discussed.',
         };
     }
-    // 🟢 STEP 4: CHAT / TEACHING
-    if (intent === 'dialogue_continuation' || intent === 'greeting' || intent === 'clarification' || intent === 'definition' || intent === 'concept_explanation') {
-        return await runFlow(webSearchFlow, {
-            query: input.query,
-            chatHistory: history,
-            lastSearchTopic: input.lastSearchTopic,
-            awaitingPracticeQuestion: false,
-            awaitingPracticeAnswer: false,
-            attempts: 0,
-        });
-    }
-    // 🔵 STEP 5: DEEP RESEARCH
-    if (intent === 'fact_lookup' || intent === 'deep_research' || input.forceWebSearch) {
-        return await runFlow(generalWebResearchFlow, {
-            query: input.query,
-            forceWebSearch: true,
-        });
-    }
-    // 🔴 STEP 6: FALLBACK
-    return await runFlow(webSearchFlow, {
+    return (0, flow_1.runFlow)(web_search_flow_1.webSearchFlow, {
         query: input.query,
-        chatHistory: history,
+        chatHistory: input.chatHistory,
         lastSearchTopic: input.lastSearchTopic,
         awaitingPracticeQuestion: false,
         awaitingPracticeAnswer: false,
         attempts: 0,
+    });
+}
+async function runGeneralResearchFlowSafely(input) {
+    if (!hasRunnableFlow(general_web_search_flow_1.generalWebResearchFlow)) {
+        return {
+            mode: 'teaching',
+            response: 'I can continue teaching this directly without web lookup.',
+        };
+    }
+    return (0, flow_1.runFlow)(general_web_search_flow_1.generalWebResearchFlow, input);
+}
+async function runResearchOrchestrator(input) {
+    const history = input.chatHistory || [];
+    const activeTopic = cleanQueryForSearch(input.lastSearchTopic || '');
+    const contextualWebQuery = buildContextualWebQuery(input.query, activeTopic);
+    const hasActiveTopic = activeTopic.length > 0;
+    if (!isSafeQuery(input.query)) {
+        return runWebSearchFlowSafely({
+            query: input.query,
+            chatHistory: history,
+            lastSearchTopic: input.lastSearchTopic,
+        });
+    }
+    const turnPlan = await (0, intent_detector_1.detectLearningTurnPlan)(input.query, input.lastSearchTopic, {
+        hasVideoContext: Boolean(hasActiveTopic && isVideoContextFollowUp(input.query)),
+        forceWebSearch: input.forceWebSearch,
+        recentTurns: history,
+    });
+    const intent = turnPlan.intent;
+    const shouldUseWebResearch = turnPlan.researchRequired && turnPlan.primaryAction === 'research';
+    if (intent === 'video_lookup' || turnPlan.primaryAction === 'video_lookup') {
+        if (turnPlan.currentContextTarget === 'video' ||
+            (isVideoContextFollowUp(input.query) && (hasActiveTopic || turnPlan.likelyFollowUp || history.length > 0))) {
+            return {
+                mode: 'teaching',
+                response: 'We are still talking about the current video already in this conversation. Ask me to summarize it or explain a specific part instead of searching for a new one.',
+            };
+        }
+        const effectiveQuery = await generateVideoQuery(input.query, input.lastSearchTopic);
+        const videos = await runYoutubeSearchSafely(effectiveQuery);
+        const video = pickBestEducationalVideo(videos, input.lastSearchTopic || effectiveQuery, input.query);
+        const safeChannel = (video?.channel || video?.channelTitle || '').replace('Unknown Channel', '');
+        const recommendation = video
+            ? buildVideoRecommendationDetails(video, input.lastSearchTopic || effectiveQuery, input.query)
+            : null;
+        return {
+            mode: 'teaching',
+            response: video
+                ? recommendation?.explanation || `I found a relevant video on ${effectiveQuery}.`
+                : `I searched for videos on "${effectiveQuery}" but could not find a strong educational match right now.`,
+            videoData: video
+                ? { id: video.id, title: video.title, channel: safeChannel, thumbnail: video.thumbnailUrl }
+                : undefined,
+            videoWhyRecommended: recommendation?.explanation,
+            videoConcepts: recommendation?.concepts,
+        };
+    }
+    if (shouldUseWebResearch) {
+        return runGeneralResearchFlowSafely({
+            query: contextualWebQuery,
+            forceWebSearch: true,
+        });
+    }
+    return runWebSearchFlowSafely({
+        query: input.query,
+        chatHistory: history,
+        lastSearchTopic: input.lastSearchTopic,
     });
 }
 //# sourceMappingURL=research-orchestrator.js.map

@@ -1,146 +1,131 @@
-import { Queue, Worker } from 'bullmq';
-import { OpenAI } from 'openai';
-import prisma from '../utils/prismaClient';
-import pinecone from '../lib/vectorClient';
-import { getRedisClient } from '../lib/redis';
-import { analyzeAndTrackProgress } from '../lib/personalization'; // Import personalization logic
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-const pineconeIndex = pinecone ? pinecone.Index(process.env.PINECONE_INDEX || '') : null;
-// --- No-op Queue Implementation for when Redis is unavailable ---
-class NoopQueue {
-    constructor(name, _opts) {
-        this.name = name;
-        console.warn(`NoopQueue: Redis is not available. Queue '${this.name}' will not process jobs.`);
-    }
-    async add(name, data, _opts) {
-        console.warn(`NoopQueue: Redis not connected. Job '${name}' for queue '${this.name}' skipped.`);
-        return {
-            id: 'noop-job-' + Math.random().toString(36).substring(7),
-            name,
-            data,
-        };
-    }
-    close() { return Promise.resolve(); }
-    pause() { return Promise.resolve(); }
-    resume() { return Promise.resolve(); }
-}
-class NoopWorker {
-    constructor(name, _processor, _opts) {
-        this.name = name;
-        console.warn(`NoopWorker: Redis is not available. Worker '${this.name}' will not run.`);
-    }
-    close() { return Promise.resolve(); }
-    on() { return this; } // Mock event listener
-}
-let redisConnection = null;
-// Initialize Redis connection for workers
-// Note: In production, we might want to wait or retry, but for now we follow the existing pattern
-getRedisClient().then((client) => {
-    redisConnection = client;
-}).catch((error) => {
-    console.error("Failed to initialize Redis client for workers:", error);
-});
-const redisConfig = redisConnection ? { connection: redisConnection } : undefined;
-// --- Summarization Worker ---
-export const summarizationQueue = redisConnection ?
-    new Queue('summarization-jobs', redisConfig) :
-    new NoopQueue('summarization-jobs');
-export const summarizationWorker = redisConnection ?
-    new Worker('summarization-jobs', async (job) => {
-        const { sessionId, studentId } = job.data;
-        try {
-            const messages = await prisma.chatMessage.findMany({ where: { sessionId }, orderBy: { timestamp: 'asc' } });
-            const sessionContent = messages.map((m) => m.content).join(' ');
-            const topicResponse = await openai.chat.completions.create({
-                model: 'gpt-3.5-turbo',
-                messages: [{ role: 'user', content: `Generate a concise, engaging topic (under 5 words) for this chat session:\n\n${sessionContent}` }],
-                max_tokens: 20,
+"use strict";
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.runSummarizationTask = runSummarizationTask;
+exports.runEmbeddingTask = runEmbeddingTask;
+exports.runRefreshCacheTask = runRefreshCacheTask;
+exports.runPersonalizationTask = runPersonalizationTask;
+const openai_1 = require("openai");
+const prismaClient_1 = __importDefault(require("../utils/prismaClient"));
+const vectorClient_1 = __importDefault(require("../lib/vectorClient"));
+const redis_1 = require("../lib/redis");
+const personalization_1 = require("../lib/personalization");
+require("dotenv/config");
+const logger_1 = require("../utils/logger");
+const openai = new openai_1.OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+const pineconeIndex = vectorClient_1.default ? vectorClient_1.default.Index(process.env.PINECONE_INDEX || '') : null;
+// --- Background Task Logic ---
+/**
+ * Summarizes the chat session and updates the topic.
+ */
+async function runSummarizationTask(sessionId, studentId) {
+    try {
+        const messages = await prismaClient_1.default.chatMessage.findMany({
+            where: { sessionId },
+            orderBy: { timestamp: 'asc' }
+        });
+        if (messages.length === 0)
+            return;
+        const sessionContent = messages.map((m) => m.content).join('\n');
+        const resp = await openai.chat.completions.create({
+            model: 'gpt-3.5-turbo',
+            messages: [{
+                    role: 'user',
+                    content: `Generate a concise, engaging topic (under 5 words) for this chat session history:\n\n${sessionContent}`
+                }],
+            max_tokens: 20,
+        });
+        const topic = resp.choices[0]?.message?.content?.trim() || 'Untitled Session';
+        await prismaClient_1.default.chatSession.update({ where: { id: sessionId }, data: { topic } });
+        if (pineconeIndex) {
+            const embeddingResponse = await openai.embeddings.create({
+                model: 'text-embedding-ada-002',
+                input: topic
             });
-            const topic = topicResponse.choices[0]?.message?.content?.trim() || 'Untitled Session';
-            await prisma.chatSession.update({ where: { id: sessionId }, data: { topic } });
-            if (pineconeIndex) {
-                const embeddingResponse = await openai.embeddings.create({ model: 'text-embedding-ada-002', input: topic });
-                const embedding = embeddingResponse.data[0]?.embedding;
-                if (embedding) {
-                    await pineconeIndex.upsert([{ id: sessionId, values: embedding, metadata: { studentId, topic, type: 'session_summary' } }]);
-                    console.log(`Session ${sessionId} summarized and embedded.`);
-                }
+            const embedding = embeddingResponse.data[0]?.embedding;
+            if (embedding) {
+                await pineconeIndex.upsert([{
+                        id: sessionId,
+                        values: embedding,
+                        metadata: { studentId, topic, type: 'session_summary' }
+                    }]);
             }
         }
-        catch (error) {
-            console.error(`Error in summarization worker for session ${sessionId}:`, error);
-        }
-    }, redisConfig) :
-    new NoopWorker('summarization-jobs', async () => { });
-// --- Embedding Worker ---
-export const embeddingQueue = redisConnection ?
-    new Queue('embedding-jobs', redisConfig) :
-    new NoopQueue('embedding-jobs');
-export const embeddingWorker = redisConnection ?
-    new Worker('embedding-jobs', async (job) => {
-        const { sessionId, studentId, message, aiResponse } = job.data;
-        if (!pineconeIndex)
-            return; // Skip if vector DB is not configured
-        try {
-            const [messageEmbedding, aiResponseEmbedding] = await Promise.all([
-                openai.embeddings.create({ model: 'text-embedding-ada-002', input: message }),
-                openai.embeddings.create({ model: 'text-embedding-ada-002', input: aiResponse }),
-            ]);
-            const messageVector = { id: `${sessionId}-student-${Date.now()}`, values: messageEmbedding.data[0].embedding, metadata: { studentId, sessionId, role: 'student' } };
-            const aiResponseVector = { id: `${sessionId}-ai-${Date.now()}`, values: aiResponseEmbedding.data[0].embedding, metadata: { studentId, sessionId, role: 'ai' } };
-            await pineconeIndex.upsert([messageVector, aiResponseVector]);
-            const session = await prisma.chatSession.findUnique({ where: { id: sessionId } });
-            if (session?.topic === 'New Chat') { // Changed 'Untitled' to 'New Chat' to match default
-                summarizationQueue.add('summarization-jobs', { sessionId, studentId });
+        logger_1.logger.info({ sessionId }, '[Task] Summarization complete');
+    }
+    catch (error) {
+        logger_1.logger.error({ sessionId, error: String(error) }, '[Task] Summarization failed');
+    }
+}
+/**
+ * Generates and stores embeddings for a chat message and AI response.
+ */
+async function runEmbeddingTask(sessionId, studentId, message, aiResponse) {
+    if (!pineconeIndex)
+        return;
+    try {
+        const [messageEmbedding, aiResponseEmbedding] = await Promise.all([
+            openai.embeddings.create({ model: 'text-embedding-ada-002', input: message }),
+            openai.embeddings.create({ model: 'text-embedding-ada-002', input: aiResponse }),
+        ]);
+        await pineconeIndex.upsert([
+            {
+                id: `${sessionId}-student-${Date.now()}`,
+                values: messageEmbedding.data[0].embedding,
+                metadata: { studentId, sessionId, role: 'student' }
+            },
+            {
+                id: `${sessionId}-ai-${Date.now()}`,
+                values: aiResponseEmbedding.data[0].embedding,
+                metadata: { studentId, sessionId, role: 'ai' }
             }
-            console.log(`Embeddings for session ${sessionId} processed and stored.`);
+        ]);
+        // Auto-update topic if it's still 'New Chat'
+        const session = await prismaClient_1.default.chatSession.findUnique({ where: { id: sessionId } });
+        if (session?.topic === 'New Chat') {
+            await runSummarizationTask(sessionId, studentId);
         }
-        catch (error) {
-            console.error(`Error in embedding worker for session ${sessionId}:`, error);
+        logger_1.logger.info({ sessionId }, '[Task] Embeddings stored');
+    }
+    catch (error) {
+        logger_1.logger.error({ sessionId, error: String(error) }, '[Task] Embedding task failed');
+    }
+}
+/**
+ * Refreshes the student's profile and history cache in Redis.
+ */
+async function runRefreshCacheTask(studentId) {
+    try {
+        const [profile, history] = await Promise.all([
+            prismaClient_1.default.studentProfile.findUnique({ where: { userId: studentId } }),
+            prismaClient_1.default.chatSession.findMany({ where: { studentId }, take: 5, orderBy: { updatedAt: 'desc' } }),
+        ]);
+        const redis = await (0, redis_1.getRedisClient)();
+        if (redis) {
+            await redis.set(`profile:${studentId}`, JSON.stringify(profile));
+            await redis.expire(`profile:${studentId}`, 43200); // 12 hours
+            await redis.set(`session:history:${studentId}`, JSON.stringify(history));
+            await redis.expire(`session:history:${studentId}`, 43200);
+            logger_1.logger.info({ studentId }, '[Task] Cache refreshed');
         }
-    }, redisConfig) :
-    new NoopWorker('embedding-jobs', async () => { });
-// --- Refresh Cache Worker ---
-export const refreshCacheQueue = redisConnection ?
-    new Queue('refresh-cache-jobs', redisConfig) :
-    new NoopQueue('refresh-cache-jobs');
-export const refreshCacheWorker = redisConnection ?
-    new Worker('refresh-cache-jobs', async (job) => {
-        const { studentId } = job.data;
-        try {
-            const [profile, history] = await Promise.all([
-                prisma.studentProfile.findUnique({ where: { userId: studentId }, select: { userId: true, gradeLevel: true, preferredLanguage: true, preferences: true } }),
-                prisma.chatSession.findMany({ where: { studentId }, take: 5, orderBy: { updatedAt: 'desc' }, select: { id: true, topic: true, updatedAt: true } }),
-            ]);
-            const redis = await getRedisClient();
-            if (redis) {
-                await redis.set(`profile:${studentId}`, JSON.stringify(profile));
-                await redis.expire(`profile:${studentId}`, 43200);
-                await redis.set(`session:history:${studentId}`, JSON.stringify(history));
-                await redis.expire(`session:history:${studentId}`, 43200);
-                console.log(`Cache refreshed for student ${studentId}.`);
-            }
-        }
-        catch (error) {
-            console.error(`Error in refresh cache worker for student ${studentId}:`, error);
-        }
-    }, redisConfig) :
-    new NoopWorker('refresh-cache-jobs', async () => { });
-// --- Personalization Engine Worker (NEW) ---
-export const personalizationQueue = redisConnection ?
-    new Queue('personalization-jobs', redisConfig) :
-    new NoopQueue('personalization-jobs');
-export const personalizationWorker = redisConnection ?
-    new Worker('personalization-jobs', async (job) => {
-        const { studentId, userMessage, aiResponse } = job.data;
-        try {
-            // Analyze and track progress/mistakes
-            await analyzeAndTrackProgress(studentId, userMessage, aiResponse);
-            console.log(`Personalization processed for student ${studentId}.`);
-        }
-        catch (error) {
-            console.error(`Error in personalization worker for student ${studentId}:`, error);
-        }
-    }, redisConfig) :
-    new NoopWorker('personalization-jobs', async () => { });
+    }
+    catch (error) {
+        logger_1.logger.error({ studentId, error: String(error) }, '[Task] Cache refresh failed');
+    }
+}
+/**
+ * Runs personalization analysis in the background.
+ */
+async function runPersonalizationTask(studentId, userMessage, aiResponse) {
+    try {
+        await (0, personalization_1.analyzeAndTrackProgress)(studentId, userMessage, aiResponse);
+        logger_1.logger.info({ studentId }, '[Task] Personalization processed');
+    }
+    catch (error) {
+        logger_1.logger.error({ studentId, error: String(error) }, '[Task] Personalization task failed');
+    }
+}
+logger_1.logger.info('[Workers] Background tasks initialized.');
 //# sourceMappingURL=index.js.map

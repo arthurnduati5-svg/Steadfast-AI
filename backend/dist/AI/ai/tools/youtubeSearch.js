@@ -1,12 +1,33 @@
-// This stub should call your webSearchFlow or a server-side scraper restricted to whitelisted domains.
-export async function youtubeSearchTool(input) {
-    if (!input || typeof input.query !== 'string' || input.query.trim().length === 0) {
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.youtubeSearchTool = youtubeSearchTool;
+const flow_1 = require("@genkit-ai/flow");
+const youtube_search_flow_1 = require("../flows/youtube-search-flow");
+function hasRunnableFlow(flow) {
+    return Boolean(flow) && typeof flow === 'object' && 'inputSchema' in flow;
+}
+async function youtubeSearchTool(input) {
+    const query = String(input?.query || '').trim();
+    if (!query) {
         return { results: [] };
     }
-    // Placeholder deterministic stub
-    const results = [
-        { id: 'vid123', title: `Intro to ${input.query}`, channel: 'Trusted EDU Channel', url: `https://youtube.example/watch?v=vid123` },
-    ].slice(0, input.maxResults || 1);
-    return { results };
+    try {
+        if (!hasRunnableFlow(youtube_search_flow_1.youtubeSearchFlow)) {
+            return { results: [] };
+        }
+        const max = Math.max(1, Math.min(5, input.maxResults || 3));
+        const results = await (0, flow_1.runFlow)(youtube_search_flow_1.youtubeSearchFlow, { query });
+        return {
+            results: results.slice(0, max).map((video) => ({
+                id: video.id,
+                title: video.title || 'Educational Video',
+                channel: video.channel || video.channelTitle,
+                url: `https://www.youtube.com/watch?v=${video.id}`,
+            })),
+        };
+    }
+    catch {
+        return { results: [] };
+    }
 }
 //# sourceMappingURL=youtubeSearch.js.map

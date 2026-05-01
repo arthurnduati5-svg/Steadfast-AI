@@ -63,7 +63,7 @@ export const FavoriteShowsInput: React.FC<FavoriteShowsInputProps> = ({
   return (
     <div className="relative p-4 rounded-lg bg-black/20 border border-white/10">
       <div className="flex items-center gap-2 mb-3">
-        <PlusCircle className="text-blue-400" size={20} />
+        <PlusCircle className="text-[var(--copilot-accent-muted-icon)]" size={20} />
         <Input
           type="text"
           value={inputValue}

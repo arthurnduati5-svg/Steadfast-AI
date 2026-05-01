@@ -1,9 +1,13 @@
-import { getMode } from './research-state';
-export function personaAllowed() {
-    const mode = getMode();
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.personaAllowed = personaAllowed;
+exports.enforceNoPersona = enforceNoPersona;
+const research_state_1 = require("./research-state");
+function personaAllowed() {
+    const mode = (0, research_state_1.getMode)();
     return mode === 'teaching' || mode === 'chat';
 }
-export function enforceNoPersona(prompt) {
+function enforceNoPersona(prompt) {
     if (!personaAllowed()) {
         return `
 SYSTEM RULE:

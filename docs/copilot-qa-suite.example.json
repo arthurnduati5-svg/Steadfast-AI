@@ -1,0 +1,93 @@
+{
+  "config": {
+    "name": "copilot_frontend_bulk_suite",
+    "newSessionPerCase": true,
+    "applyCasePreferences": true,
+    "failOnRepeatedSegments": true,
+    "defaultMaxLatencyMs": 35000
+  },
+  "cases": [
+    {
+      "id": "math_primary_stepwise",
+      "prompt": "I am in primary school. Explain 3/4 + 1/8 step by step simply, then ask me one short check question.",
+      "gradeLevel": "Primary",
+      "preferredLanguage": "english",
+      "mustContainAny": ["step", "before solving", "first"],
+      "mustMatchRegex": ["question|\\?"],
+      "mustNotContain": ["as an ai language model"]
+    },
+    {
+      "id": "science_form2_clarification",
+      "prompt": "I am Form 2. What is photosynthesis? Keep it concise, then give one real life example from farming.",
+      "gradeLevel": "Secondary",
+      "preferredLanguage": "english",
+      "mustContain": ["photosynthesis", "example"],
+      "mustNotContain": ["cannot help"]
+    },
+    {
+      "id": "history_short_answer",
+      "prompt": "Give me a short summary of why industrialization changed cities in the 19th century.",
+      "gradeLevel": "Secondary",
+      "preferredLanguage": "english",
+      "mustContainAny": ["city", "cities", "urban"],
+      "mustNotContain": ["as an ai language model"]
+    },
+    {
+      "id": "islam_quran_basic",
+      "prompt": "What are two key themes from Surah Al-Fatiha for a student? Keep the tone respectful and easy.",
+      "gradeLevel": "Secondary",
+      "preferredLanguage": "english",
+      "mustContain": ["surah"],
+      "mustNotContain": ["as an ai language model"]
+    },
+    {
+      "id": "islam_sensitive_difference",
+      "prompt": "Explain the difference between Quran and Hadith in simple terms without attacking any group.",
+      "gradeLevel": "Secondary",
+      "preferredLanguage": "english",
+      "mustContain": ["quran", "hadith"],
+      "mustNotContain": ["hate", "violence"]
+    },
+    {
+      "id": "swahili_mix",
+      "prompt": "Nisaidie kuelewa equation ya x + 7 = 15, hatua kwa hatua, kisha niulize swali moja la majaribio.",
+      "gradeLevel": "Primary",
+      "preferredLanguage": "swahili",
+      "mustContain": ["x", "swali"],
+      "mustNotContain": ["as an ai language model"]
+    },
+    {
+      "id": "arabic_simple",
+      "prompt": "Explain gravity in simple Arabic suitable for a school student, then ask one short question.",
+      "gradeLevel": "Primary",
+      "preferredLanguage": "arabic",
+      "mustContainAny": ["question", "السؤال", "؟"],
+      "mustNotContain": ["as an ai language model"]
+    },
+    {
+      "id": "followup_memory_seed",
+      "prompt": "Remember this: my weak topic is fractions and I prefer short examples.",
+      "gradeLevel": "Primary",
+      "preferredLanguage": "english",
+      "mustContain": ["fraction"],
+      "mustNotContain": ["as an ai language model"]
+    },
+    {
+      "id": "followup_memory_check",
+      "prompt": "Based on what I told you earlier, teach me one fraction concept in short steps.",
+      "gradeLevel": "Primary",
+      "preferredLanguage": "english",
+      "mustContain": ["fraction"],
+      "mustNotContain": ["i do not know your preference"]
+    },
+    {
+      "id": "format_non_robotic",
+      "prompt": "Answer this in a warm human tutoring tone: how do I prepare for exams in 7 days?",
+      "gradeLevel": "Secondary",
+      "preferredLanguage": "english",
+      "mustContainAny": ["7", "seven"],
+      "mustContain": ["day"],
+      "mustNotContain": ["as an ai language model", "i am just a bot"]
+    }
+  ]
+}

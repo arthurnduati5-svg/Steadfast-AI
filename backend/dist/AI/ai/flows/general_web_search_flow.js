@@ -1,225 +1,594 @@
-import { defineFlow } from '@genkit-ai/flow';
-import { z } from 'zod';
-import * as cheerio from 'cheerio';
-import { ai, serperSearchTool } from '../genkit';
-import { GUARDIAN_SANITIZE } from '../tools/handlers';
-/* ======================================================
-   1. STRICT CONFIGURATION (UPDATED)
-====================================================== */
-const SPECIFIC_TRUSTED_DOMAINS = [
-    'khanacademy.org', 'britannica.com', 'nationalgeographic.com',
-    'openstax.org', 'nasa.gov', 'who.int', 'cdc.gov', 'unesco.org',
-    'oecd.org', 'bbc.co.uk', 'mit.edu', 'harvard.edu', 'stanford.edu',
-    'nature.com', 'scientificamerican.com', 'smithsonianmag.com',
-    'ncbi.nlm.nih.gov', 'biologymad.com'
-];
-const TRUSTED_TLDS = ['.edu', '.gov', '.ac.uk', '.org'];
+"use strict";
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.generalWebResearchFlow = void 0;
+const flow_1 = require("@genkit-ai/flow");
+const zod_1 = require("zod");
+const cheerio = __importStar(require("cheerio"));
+const genkit_1 = require("../genkit");
+const handlers_1 = require("../tools/handlers");
+const source_trust_1 = require("../../lib/research/source-trust");
+const redis_1 = require("../../lib/redis");
+const flow_singleton_1 = require("./flow-singleton");
 const MAX_SOURCES = 4;
-const MAX_FACTS = 5; // Reduced to focus on core concepts
-const FETCH_TIMEOUT_MS = 8000;
-/* ======================================================
-   2. SCHEMAS
-====================================================== */
-const InputSchema = z.object({
-    query: z.string(),
-    forceWebSearch: z.boolean().default(false),
-    gradeHint: z.enum(['Primary', 'LowerSecondary', 'UpperSecondary']).optional(),
+const MAX_FACTS = 6;
+const MAX_RESULTS_PER_QUERY = 2;
+const MAX_TOTAL_RESULTS = 4;
+const FETCH_TIMEOUT_MS = 2200;
+const SEARCH_TIMEOUT_MS = 1600;
+const SYNTHESIS_TIMEOUT_MS = 1800;
+const TOTAL_RESEARCH_BUDGET_MS = 3600;
+const RESULT_PROCESS_CONCURRENCY = 3;
+const CACHE_TTL_SEARCH_SEC = 120;
+const CACHE_TTL_PAGE_SEC = 180;
+const CACHE_TTL_FINAL_SEC = 180;
+const FINAL_REPLY_CACHE_VERSION = 'v2';
+const MIN_FACT_LENGTH = 25;
+const MAX_FACT_LENGTH = 260;
+const memorySearchCache = new Map();
+const memoryPageCache = new Map();
+const memoryFinalCache = new Map();
+const InputSchema = zod_1.z.object({
+    query: zod_1.z.string(),
+    forceWebSearch: zod_1.z.boolean().default(false),
+    gradeHint: zod_1.z.enum(['Primary', 'LowerSecondary', 'UpperSecondary']).optional(),
 });
-const OutputSchema = z.object({
-    reply: z.string(),
-    sources: z.array(z.object({
-        sourceName: z.string(),
-        url: z.string(),
-    })).optional(),
-    mode: z.literal('web_research'),
+const OutputSchema = zod_1.z.object({
+    reply: zod_1.z.string(),
+    sources: zod_1.z
+        .array(zod_1.z.object({
+        sourceName: zod_1.z.string(),
+        url: zod_1.z.string(),
+    }))
+        .optional(),
+    mode: zod_1.z.literal('web_research'),
 });
-/* ======================================================
-   3. UTILS
-====================================================== */
 function cleanText(text) {
-    return text.replace(/(\r\n|\n|\r)/gm, ' ').replace(/\s+/g, ' ').trim();
+    return text.replace(/(\r\n|\n|\r)/g, ' ').replace(/\s+/g, ' ').trim();
 }
-/* ======================================================
-   4. STEP FUNCTIONS
-====================================================== */
+function normalizeTeacherResearchTone(text) {
+    return cleanText(text)
+        .replace(/\b(the detailed mechanisms? and full extent of [^.?!]* not fully specified here)\b/gi, 'Here is what we can confirm clearly so far')
+        .replace(/\b(not fully specified here|not specified here|based on (?:the )?(?:information|details|context) provided(?: here)?)\b/gi, 'based on verified facts');
+}
+function finalizeResearchReply(text) {
+    let output = cleanText(text)
+        .replace(/^\s*here are the verified facts[.:!\-]?\s*/i, '')
+        .replace(/\s*\*\*(.*?)\*\*\s*/g, '$1 ')
+        .replace(/\*/g, '')
+        .replace(/\(\s+/g, '(')
+        .replace(/\s+\)/g, ')')
+        .replace(/\s+([,.;!?])/g, '$1')
+        .trim();
+    // If an unmatched opening parenthesis remains, drop the dangling tail.
+    const openCount = (output.match(/\(/g) || []).length;
+    const closeCount = (output.match(/\)/g) || []).length;
+    if (openCount > closeCount) {
+        const lastOpen = output.lastIndexOf('(');
+        if (lastOpen >= 0) {
+            output = output.slice(0, lastOpen).trim();
+        }
+    }
+    if (/[A-Z][A-Za-z]+(?:\s+[A-Z][A-Za-z]+){0,4}\)\s*$/.test(output) && !/[.!?]\s*[A-Z][A-Za-z]+(?:\s+[A-Z][A-Za-z]+){0,4}\)\s*$/.test(output)) {
+        output = output.replace(/[A-Z][A-Za-z]+(?:\s+[A-Z][A-Za-z]+){0,4}\)\s*$/, '').trim();
+    }
+    const tailWord = output
+        .split(/\s+/)
+        .pop()
+        ?.toLowerCase()
+        .replace(/[^a-z]/g, '') || '';
+    const danglingTailWords = new Set([
+        'and', 'or', 'to', 'with', 'for', 'from', 'that', 'which', 'because',
+        'when', 'while', 'if', 'then', 'this', 'these', 'those', 'lead', 'leads',
+        'can', 'could', 'would', 'should', 'is', 'are', 'was', 'were', 'be', 'being'
+    ]);
+    if (danglingTailWords.has(tailWord)) {
+        const lastPunctuation = Math.max(output.lastIndexOf('.'), output.lastIndexOf('!'), output.lastIndexOf('?'));
+        if (lastPunctuation > 0) {
+            output = output.slice(0, lastPunctuation + 1).trim();
+        }
+    }
+    if (output && !/[.!?]$/.test(output)) {
+        output = `${output}.`;
+    }
+    return output;
+}
+function nowMs() {
+    return Date.now();
+}
+function makeCacheKey(prefix, value) {
+    const normalized = cleanText(value).toLowerCase();
+    return `${prefix}:${Buffer.from(normalized).toString('base64url')}`;
+}
+function getMemoryCached(cache, key) {
+    const hit = cache.get(key);
+    if (!hit)
+        return null;
+    if (hit.expiresAt <= nowMs()) {
+        cache.delete(key);
+        return null;
+    }
+    return hit.value;
+}
+function setMemoryCached(cache, key, value, ttlSeconds) {
+    cache.set(key, { value, expiresAt: nowMs() + ttlSeconds * 1000 });
+    if (cache.size > 800) {
+        const firstKey = cache.keys().next().value;
+        if (firstKey)
+            cache.delete(firstKey);
+    }
+}
+async function getRedisCached(key) {
+    if (process.env.NODE_ENV === 'test')
+        return null;
+    try {
+        const redis = await (0, redis_1.getRedisClient)();
+        if (!redis)
+            return null;
+        const raw = await redis.get(key);
+        if (!raw)
+            return null;
+        return JSON.parse(raw);
+    }
+    catch {
+        return null;
+    }
+}
+async function setRedisCached(key, value, ttlSeconds) {
+    if (process.env.NODE_ENV === 'test')
+        return;
+    try {
+        const redis = await (0, redis_1.getRedisClient)();
+        if (!redis)
+            return;
+        await redis.set(key, JSON.stringify(value), { EX: ttlSeconds });
+    }
+    catch {
+        // Cache failure should not break responses.
+    }
+}
+function withTimeout(promise, timeoutMs, fallbackValue) {
+    if (timeoutMs <= 0)
+        return Promise.resolve(fallbackValue);
+    let timeoutId = null;
+    const timeoutPromise = new Promise((resolve) => {
+        timeoutId = setTimeout(() => resolve(fallbackValue), timeoutMs);
+    });
+    return Promise.race([promise, timeoutPromise]).finally(() => {
+        if (timeoutId)
+            clearTimeout(timeoutId);
+    });
+}
+async function mapWithConcurrency(items, concurrency, worker) {
+    if (items.length === 0)
+        return [];
+    const results = new Array(items.length);
+    let cursor = 0;
+    const workers = Array.from({ length: Math.min(concurrency, items.length) }, async () => {
+        while (true) {
+            const index = cursor++;
+            if (index >= items.length)
+                return;
+            results[index] = await worker(items[index], index);
+        }
+    });
+    await Promise.all(workers);
+    return results;
+}
+function parseJsonObject(raw) {
+    const text = raw.trim();
+    if (!text)
+        return null;
+    try {
+        return JSON.parse(text);
+    }
+    catch {
+        const first = text.indexOf('{');
+        const last = text.lastIndexOf('}');
+        if (first === -1 || last === -1 || first >= last)
+            return null;
+        try {
+            return JSON.parse(text.slice(first, last + 1));
+        }
+        catch {
+            return null;
+        }
+    }
+}
+function normalizePlanQuery(query) {
+    return cleanText(query
+        .replace(/^[-*\u2022\d\.\)\s]+/, '')
+        .replace(/^["']+|["']+$/g, ''));
+}
+function parsePlanLines(rawText) {
+    return rawText
+        .split('\n')
+        .map((line) => normalizePlanQuery(line))
+        .filter(Boolean);
+}
+function normalizeClaim(claim) {
+    return claim.toLowerCase().replace(/[^\w\s]/g, '').replace(/\s+/g, ' ').trim();
+}
+function isLikelyFact(claim) {
+    const trimmed = cleanText(claim);
+    if (trimmed.length < MIN_FACT_LENGTH || trimmed.length > MAX_FACT_LENGTH) {
+        return false;
+    }
+    const lower = trimmed.toLowerCase();
+    const bannedFragments = [
+        'cookie',
+        'javascript',
+        'subscribe',
+        'sign in',
+        'access denied',
+        'captcha',
+        'click here',
+        'terms of use',
+        'privacy policy',
+    ];
+    if (bannedFragments.some((fragment) => lower.includes(fragment))) {
+        return false;
+    }
+    return /[a-z]/i.test(trimmed);
+}
 async function shouldUseWeb(query, force) {
-    console.log(`[🔍 DEEP TRACE] Checking Web Intent. Force=${force}, Query="${query}"`);
     if (force)
         return true;
-    const prompt = `
-Question: "${query}"
-Decide if answering this requires REAL-TIME or CURRENT web information.
-Respond ONLY with JSON: { "needsWeb": true | false }
-`;
-    const res = await ai.generate({ model: 'openai/gpt-4o-mini', prompt, output: { format: 'json' } });
-    const decision = Boolean(res.output?.needsWeb);
-    console.log(`[🔍 DEEP TRACE] Web Intent Decision: ${decision}`);
-    return decision;
+    const realtimeSignal = /\b(today|latest|current|recent|news|price|stock|weather|forecast|score|election|president|ceo|update)\b/i;
+    const explicitWebSignal = /\b(search|look up|web|online|browse|source|citation|verify)\b/i;
+    const factualLookupSignal = /\b(who is|when did|where is|population|gdp|exchange rate|market cap|price of)\b/i;
+    if (realtimeSignal.test(query) || explicitWebSignal.test(query)) {
+        return true;
+    }
+    return factualLookupSignal.test(query);
 }
 async function generateResearchPlan(query) {
-    console.log(`[🔍 DEEP TRACE] Generating Research Plan...`);
-    const prompt = `
-Create a neutral research plan for: "${query}"
-Rules: No teaching language. Max 4 search queries. Output plain lines.
-`;
-    const res = await ai.generate({ model: 'openai/gpt-4o-mini', prompt });
-    const plan = cleanText(res.text).split('. ').map(q => q.trim()).filter(Boolean).slice(0, 4);
-    console.log(`[🔍 DEEP TRACE] Plan Created: ${JSON.stringify(plan)}`);
-    return plan;
+    const normalizedQuery = normalizePlanQuery(query);
+    const candidates = [];
+    const lower = normalizedQuery.toLowerCase();
+    const asksLatest = /\b(latest|current|today|recent|update|news)\b/.test(lower);
+    const asksBiography = /\b(who is|who was)\b/.test(lower);
+    if (asksLatest) {
+        candidates.push(`${normalizedQuery} official update`);
+        candidates.push(`${normalizedQuery} trusted source`);
+    }
+    else if (asksBiography) {
+        candidates.push(`${normalizedQuery} biography official`);
+        candidates.push(`${normalizedQuery} verified profile`);
+    }
+    else {
+        candidates.push(`${normalizedQuery} overview`);
+        candidates.push(`${normalizedQuery} trusted source`);
+    }
+    const output = [];
+    const seen = new Set();
+    const pushUnique = (value) => {
+        const q = normalizePlanQuery(value);
+        const key = q.toLowerCase();
+        if (!q || seen.has(key))
+            return;
+        seen.add(key);
+        output.push(q);
+    };
+    pushUnique(normalizedQuery);
+    for (const c of candidates) {
+        pushUnique(c);
+        if (output.length >= 4)
+            break;
+    }
+    return output.slice(0, 3);
 }
-async function scrape(url) {
+async function scrape(url, timeoutMs = FETCH_TIMEOUT_MS) {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), Math.max(800, timeoutMs));
     try {
-        const controller = new AbortController();
-        setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
-        const res = await fetch(url, {
-            headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36' },
+        const response = await fetch(url, {
+            headers: {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            },
             signal: controller.signal,
         });
-        if (!res.ok)
+        if (!response.ok) {
             return '';
-        const html = await res.text();
-        const $ = cheerio.load(html);
-        // Remove junk & ads
-        $('script, style, nav, footer, header, aside, iframe, img, video, noscript, .ad, .advertisement').remove();
-        const text = cleanText($('body').text());
-        // 🛑 ANTI-GARBAGE FILTER: Detect Security Block Pages
-        const lower = text.toLowerCase();
-        if (lower.includes("access denied") ||
-            lower.includes("security check") ||
-            lower.includes("cloudflare") ||
-            lower.includes("captcha") ||
-            lower.includes("verify you are human")) {
-            console.log(`[🔍 DEEP TRACE] 🗑️ Rejected Garbage Page: ${url}`);
-            return ""; // Reject this source immediately
         }
-        return text.slice(0, 6000);
+        const contentType = (response.headers.get('content-type') || '').toLowerCase();
+        if (!contentType.includes('text/html') && !contentType.includes('application/xhtml+xml') && !contentType.includes('text/plain')) {
+            return '';
+        }
+        const raw = await response.text();
+        const text = contentType.includes('text/plain')
+            ? cleanText(raw)
+            : (() => {
+                const $ = cheerio.load(raw);
+                $('script, style, nav, footer, header, aside, iframe, img, video, noscript').remove();
+                return cleanText($('body').text());
+            })();
+        if (text.length < 120) {
+            return '';
+        }
+        const lower = text.toLowerCase();
+        if (lower.includes('access denied') ||
+            lower.includes('security check') ||
+            lower.includes('cloudflare') ||
+            lower.includes('verify you are human') ||
+            lower.includes('enable javascript')) {
+            return '';
+        }
+        return text.slice(0, 8000);
     }
     catch {
         return '';
     }
+    finally {
+        clearTimeout(timeoutId);
+    }
 }
-function isTrusted(url) {
+async function extractFacts(rawText, source, url, queryTerms) {
+    if (!rawText)
+        return [];
+    const candidates = rawText
+        .split(/(?<=[.!?])\s+|\n+/)
+        .map((line) => cleanText(line))
+        .filter((line) => isLikelyFact(line))
+        .map((line) => {
+        const lower = line.toLowerCase();
+        let score = 0;
+        if (/\b\d{2,4}\b|%|\$\d+|ksh|usd|km|kg|cm\b/i.test(line))
+            score += 2;
+        if (/\b(is|are|was|were|has|have|includes|reported|states|according|founded|launched)\b/i.test(line))
+            score += 2;
+        if (queryTerms.some((term) => term.length > 2 && lower.includes(term)))
+            score += 3;
+        if (line.length >= 50 && line.length <= 180)
+            score += 1;
+        return { line, score };
+    })
+        .sort((a, b) => b.score - a.score)
+        .slice(0, 6);
+    const deduped = [];
+    const seen = new Set();
+    for (const item of candidates) {
+        const key = normalizeClaim(item.line);
+        if (!key || seen.has(key))
+            continue;
+        seen.add(key);
+        deduped.push(item.line);
+        if (deduped.length >= 3)
+            break;
+    }
+    return deduped.map((claim) => ({ claim, source, url }));
+}
+function fallbackSynthesis(query, facts) {
+    if (facts.length === 0) {
+        return 'Let us narrow this to one specific part so I can explain it clearly with trusted sources. Which part should we start with?';
+    }
+    const top = facts.slice(0, 3).map((fact) => fact.claim);
+    return `${top.join(' ')} Which part would you like me to explain next?`;
+}
+async function synthesizeAnswer(query, facts) {
+    if (facts.length === 0) {
+        return (0, handlers_1.GUARDIAN_SANITIZE)('Let us narrow this to one specific part so I can explain it clearly with trusted sources. Which part should we start with?');
+    }
+    const prompt = `
+You are STEADFAST, an elite teacher who explains verified facts clearly.
+
+Question:
+"${query}"
+
+Verified facts:
+${facts.map((fact, index) => `${index + 1}. ${fact.claim}`).join('\n')}
+
+Write a concise answer.
+Rules:
+- Use the verified facts for specific claims.
+- Do not invent dates, numbers, names, or studies.
+- If facts are incomplete, say only what is verified and continue teaching from confirmed facts.
+- Never use phrases like "not fully specified here", "based on information provided", or "details are not specified".
+- 4 to 6 sentences.
+- End with one short follow-up question.
+- Do not mention sources, searching, or tools.
+- Do not start with phrases like "Here are the verified facts."
+- Do not use markdown, bullets, section headers, or incomplete bracketed fragments.
+- Sound like a confident, supportive teacher.
+`;
     try {
-        const parsed = new URL(url);
-        const hostname = parsed.hostname.toLowerCase();
-        if (SPECIFIC_TRUSTED_DOMAINS.some(d => hostname.endsWith(d)))
-            return true;
-        if (TRUSTED_TLDS.some(tld => hostname.endsWith(tld)))
-            return true;
-        return false;
+        const response = await withTimeout(genkit_1.ai.generate({ model: 'openai/gpt-4o-mini', prompt }), SYNTHESIS_TIMEOUT_MS, { text: fallbackSynthesis(query, facts) });
+        return (0, handlers_1.GUARDIAN_SANITIZE)(finalizeResearchReply(normalizeTeacherResearchTone(response.text || fallbackSynthesis(query, facts))));
     }
     catch {
-        return false;
+        return (0, handlers_1.GUARDIAN_SANITIZE)(finalizeResearchReply(normalizeTeacherResearchTone(fallbackSynthesis(query, facts))));
     }
 }
-async function extractFacts(rawText, source, url) {
-    const prompt = `
-Extract clear educational facts.
-Rules: No opinions, No technical warnings, Max 3 facts.
-TEXT: ${rawText.slice(0, 2000)}
-`;
-    const res = await ai.generate({ model: 'openai/gpt-4o-mini', prompt });
-    const lines = cleanText(res.text).split('. ').slice(0, 3);
-    return lines.map(line => ({ claim: line.trim(), source, url }));
+function getQueryTerms(query) {
+    return cleanText(query)
+        .toLowerCase()
+        .split(/\s+/)
+        .filter((token) => token.length > 2)
+        .slice(0, 12);
 }
-// ✅ UPDATED: STRICT MICRO-TEACHING SYNTHESIS
-async function synthesizeAnswer(query, facts) {
-    const hasFacts = facts.length > 0;
-    console.log(`[🔍 DEEP TRACE] Synthesizing Answer. Facts available: ${hasFacts ? facts.length : 'NONE'}`);
-    const prompt = hasFacts
-        ? `
-    SYSTEM ROLE: WORLD-CLASS PRIVATE TUTOR
-    You are introducing a new topic to a student.
-
-    Student Question: "${query}"
-    Research Data:
-    ${facts.map(f => `- ${f.claim}`).join('\n')}
-
-    **STRICT TEACHING RULES:**
-    1. **THE 10% RULE:** Teach ONLY the basic definition/concept first. Do NOT explain stages (like Krebs/Glycolysis), types, or complex chemistry yet. Save that for the next turn.
-    2. **LENGTH:** Write exactly 3 to 5 clear sentences.
-    3. **NO VOMIT:** Do not list facts. Weave them into a simple explanation.
-    4. **NO SOURCES:** Never mention "I searched", "NCBI", "JavaScript", or "Browsers".
-    5. **CHECKING QUESTION:** End with a simple question to verify they understood the definition (e.g., "Does that general idea make sense?").
-    `
-        : `
-    SYSTEM ROLE: WORLD-CLASS PRIVATE TUTOR
-    Student Question: "${query}"
-    
-    TASK:
-    1. Introduce the concept simply using your internal knowledge.
-    2. **THE 10% RULE:** Definition ONLY. No complex sub-steps yet.
-    3. **LENGTH:** 3-5 sentences.
-    4. End with a simple question to check understanding.
-    `;
-    const res = await ai.generate({ model: 'openai/gpt-4o', prompt });
-    return GUARDIAN_SANITIZE(cleanText(res.text));
+async function searchWithCache(query, deadlineAt) {
+    const key = makeCacheKey('research:search', query);
+    const mem = getMemoryCached(memorySearchCache, key);
+    if (mem)
+        return mem;
+    const redisHit = await getRedisCached(key);
+    if (redisHit) {
+        setMemoryCached(memorySearchCache, key, redisHit, CACHE_TTL_SEARCH_SEC);
+        return redisHit;
+    }
+    const timeLeft = Math.max(0, deadlineAt - nowMs() - 250);
+    if (timeLeft < 500)
+        return [];
+    const response = await withTimeout((0, genkit_1.serperSearchTool)({ query }), Math.min(SEARCH_TIMEOUT_MS, timeLeft), { results: [] });
+    const results = (response?.results || [])
+        .filter((item) => item?.link && (0, source_trust_1.isTrustedSource)(item.link))
+        .slice(0, MAX_RESULTS_PER_QUERY);
+    setMemoryCached(memorySearchCache, key, results, CACHE_TTL_SEARCH_SEC);
+    void setRedisCached(key, results, CACHE_TTL_SEARCH_SEC);
+    return results;
 }
-/* ======================================================
-   10. FLOW IMPLEMENTATION
-====================================================== */
-export const generalWebResearchFlow = defineFlow({
+async function getPageTextWithCache(url, snippet, deadlineAt) {
+    const key = makeCacheKey('research:page', url);
+    const mem = getMemoryCached(memoryPageCache, key);
+    if (mem)
+        return mem;
+    const redisHit = await getRedisCached(key);
+    if (redisHit) {
+        setMemoryCached(memoryPageCache, key, redisHit, CACHE_TTL_PAGE_SEC);
+        return redisHit;
+    }
+    const timeLeft = Math.max(0, deadlineAt - nowMs() - 200);
+    let text = '';
+    if (timeLeft >= 700) {
+        text = await scrape(url, Math.min(FETCH_TIMEOUT_MS, timeLeft));
+    }
+    if (!text || text.length < 120) {
+        text = cleanText(snippet || '');
+    }
+    if (text) {
+        setMemoryCached(memoryPageCache, key, text, CACHE_TTL_PAGE_SEC);
+        void setRedisCached(key, text, CACHE_TTL_PAGE_SEC);
+    }
+    return text;
+}
+exports.generalWebResearchFlow = (0, flow_singleton_1.getOrCreateFlow)('generalWebResearchFlow', () => (0, flow_1.defineFlow)({
     name: 'generalWebResearchFlow',
     inputSchema: InputSchema,
     outputSchema: OutputSchema,
 }, async (input) => {
-    console.log(`[🔍 DEEP TRACE] Starting General Web Research Flow...`);
     const useWeb = await shouldUseWeb(input.query, input.forceWebSearch);
     if (!useWeb) {
         return {
-            reply: await GUARDIAN_SANITIZE('This topic does not need web research. I can explain it directly.'),
+            reply: await (0, handlers_1.GUARDIAN_SANITIZE)('This topic does not need web research. I can explain it directly.'),
             mode: 'web_research',
         };
     }
-    const plan = await generateResearchPlan(input.query);
-    const collectedFacts = [];
-    const sources = [];
-    const seen = new Set();
-    for (const q of plan) {
-        console.log(`[🔍 DEEP TRACE] 🔎 Executing Query: "${q}"`);
-        try {
-            const res = await serperSearchTool({ query: q });
-            const results = res.results?.slice(0, 3) || [];
-            console.log(`[🔍 DEEP TRACE] found ${results.length} raw links.`);
-            for (const r of results) {
-                if (seen.has(r.link))
-                    continue;
-                if (!isTrusted(r.link)) {
-                    console.log(`[🔍 DEEP TRACE] ⚠️ Untrusted Domain skipped: ${r.link}`);
-                    continue;
-                }
-                console.log(`[🔍 DEEP TRACE] 🕷️ Attempting to scrape: ${r.link}`);
-                let text = await scrape(r.link);
-                // Fallback to snippet if scrape is blocked or empty
-                if (!text || text.length < 50) {
-                    console.log(`[🔍 DEEP TRACE] ⚠️ Scrape blocked/empty. Falling back to Search Snippet.`);
-                    text = r.snippet || "";
-                }
-                if (!text) {
-                    console.log(`[🔍 DEEP TRACE] ❌ No data available.`);
-                    continue;
-                }
-                const facts = await extractFacts(text, r.title, r.link);
-                console.log(`[🔍 DEEP TRACE] 🧪 Extracted ${facts.length} facts.`);
-                collectedFacts.push(...facts);
-                sources.push({ sourceName: r.title, url: r.link });
-                seen.add(r.link);
-                if (collectedFacts.length >= MAX_FACTS)
-                    break;
+    const normalizedQuery = normalizePlanQuery(input.query);
+    const finalCacheKey = makeCacheKey('research:final', `${normalizedQuery}|${input.gradeHint || 'none'}|${FINAL_REPLY_CACHE_VERSION}`);
+    const finalMemHit = getMemoryCached(memoryFinalCache, finalCacheKey);
+    if (finalMemHit) {
+        return { reply: finalMemHit.reply, sources: finalMemHit.sources, mode: 'web_research' };
+    }
+    const finalRedisHit = await getRedisCached(finalCacheKey);
+    if (finalRedisHit) {
+        setMemoryCached(memoryFinalCache, finalCacheKey, finalRedisHit, CACHE_TTL_FINAL_SEC);
+        return { reply: finalRedisHit.reply, sources: finalRedisHit.sources, mode: 'web_research' };
+    }
+    const deadlineAt = nowMs() + TOTAL_RESEARCH_BUDGET_MS;
+    const plan = await generateResearchPlan(normalizedQuery);
+    const queryTerms = getQueryTerms(normalizedQuery);
+    const searchBatches = await Promise.all(plan.map((plannedQuery) => searchWithCache(plannedQuery, deadlineAt)));
+    const rankedCandidates = new Map();
+    for (const batch of searchBatches) {
+        for (const result of batch) {
+            const link = String(result.link || '').trim();
+            if (!link || !(0, source_trust_1.isTrustedSource)(link))
+                continue;
+            const title = cleanText(result.title || 'Trusted source');
+            const snippet = cleanText(result.snippet || '');
+            const lower = `${title} ${snippet}`.toLowerCase();
+            let rank = 0;
+            if (/\.gov|\.edu|\.org/.test(link))
+                rank += 2;
+            if (snippet.length > 40)
+                rank += 1;
+            for (const term of queryTerms) {
+                if (lower.includes(term))
+                    rank += 2;
+            }
+            const existing = rankedCandidates.get(link);
+            if (!existing || rank > existing.rank) {
+                rankedCandidates.set(link, { title, link, snippet, rank });
             }
         }
-        catch (e) {
-            console.error("[🔍 DEEP TRACE] 💥 Search Step Exception:", e);
-        }
-        if (sources.length >= MAX_SOURCES)
-            break;
     }
-    console.log(`[🔍 DEEP TRACE] 🏁 Research Complete. Total Facts: ${collectedFacts.length}`);
+    const candidates = Array.from(rankedCandidates.values())
+        .sort((a, b) => b.rank - a.rank)
+        .slice(0, MAX_TOTAL_RESULTS);
+    const extracted = await mapWithConcurrency(candidates, RESULT_PROCESS_CONCURRENCY, async (candidate) => {
+        if (nowMs() >= deadlineAt)
+            return null;
+        const text = await getPageTextWithCache(candidate.link, candidate.snippet, deadlineAt);
+        if (!text)
+            return null;
+        const facts = await extractFacts(text, candidate.title, candidate.link, queryTerms);
+        if (facts.length === 0)
+            return null;
+        return {
+            source: { sourceName: candidate.title, url: candidate.link },
+            facts,
+        };
+    });
+    const collectedFacts = [];
+    const sources = [];
+    const seenFacts = new Set();
+    const seenSources = new Set();
+    for (const item of extracted) {
+        if (!item)
+            continue;
+        if (sources.length >= MAX_SOURCES || collectedFacts.length >= MAX_FACTS)
+            break;
+        let sourceHasFact = false;
+        for (const fact of item.facts) {
+            const key = normalizeClaim(fact.claim);
+            if (!key || seenFacts.has(key))
+                continue;
+            seenFacts.add(key);
+            collectedFacts.push(fact);
+            sourceHasFact = true;
+            if (collectedFacts.length >= MAX_FACTS)
+                break;
+        }
+        if (sourceHasFact && !seenSources.has(item.source.url)) {
+            seenSources.add(item.source.url);
+            sources.push(item.source);
+        }
+    }
+    // Fallback when nothing trusted comes back: do not fabricate placeholder citations
+    if (collectedFacts.length === 0 || sources.length === 0) {
+        const reply = `I could not verify enough reliable external sources for ${normalizedQuery} right now.`;
+        return { reply, sources: [], mode: 'web_research' };
+    }
     const answer = await synthesizeAnswer(input.query, collectedFacts);
+    const payload = { reply: answer, sources: sources.slice(0, MAX_SOURCES) };
+    setMemoryCached(memoryFinalCache, finalCacheKey, payload, CACHE_TTL_FINAL_SEC);
+    void setRedisCached(finalCacheKey, payload, CACHE_TTL_FINAL_SEC);
     return {
-        reply: answer,
-        sources,
+        reply: payload.reply,
+        sources: payload.sources,
         mode: 'web_research',
     };
-});
+}));
 //# sourceMappingURL=general_web_search_flow.js.map

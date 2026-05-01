@@ -3,27 +3,70 @@ import 'dotenv/config';
 import { logger } from '../utils/logger';
 
 const REDIS_URL = process.env.REDIS_URL;
+const REDIS_CONNECT_COOLDOWN_MS = 30000;
+const REDIS_MAX_RECONNECT_RETRIES = 5;
+const REDIS_RECONNECT_MAX_DELAY_MS = 2000;
+const REDIS_CONNECT_TIMEOUT_MS = Math.max(
+  250,
+  Number.parseInt(process.env.REDIS_CONNECT_TIMEOUT_MS || '800', 10) || 800
+);
 
 if (!REDIS_URL) {
   logger.warn('REDIS_URL is not defined in environment. Redis features will be disabled.');
 }
 
 let isConnecting = false;
+let connectPromise: Promise<unknown> | null = null;
+let nextConnectAllowedAt = 0;
+let lastCooldownLogAt = 0;
+let loggedReady = false;
+let loggedConnect = false;
 
-// Initialize client if URL is present
+const shouldThrottleCooldownLog = () => Date.now() - lastCooldownLogAt < 5000;
+const enterCooldown = (reason: string) => {
+  nextConnectAllowedAt = Date.now() + REDIS_CONNECT_COOLDOWN_MS;
+  if (!shouldThrottleCooldownLog()) {
+    lastCooldownLogAt = Date.now();
+    logger.warn(
+      `[Redis] ${reason}. Cooling down for ${Math.round(REDIS_CONNECT_COOLDOWN_MS / 1000)}s.`
+    );
+  }
+};
+
+function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => {
+      reject(new Error(`Redis connection timed out after ${timeoutMs}ms`));
+    }, timeoutMs);
+
+    promise.then(
+      (value) => {
+        clearTimeout(timer);
+        resolve(value);
+      },
+      (error) => {
+        clearTimeout(timer);
+        reject(error);
+      }
+    );
+  });
+}
+
+// Initialize client if URL is present.
 const client = REDIS_URL
   ? createClient({
     url: REDIS_URL,
     disableOfflineQueue: true,
     socket: {
-      connectTimeout: 15000,
+      connectTimeout: REDIS_CONNECT_TIMEOUT_MS,
       family: 4,
       reconnectStrategy: (retries) => {
-        if (retries > 10) {
-          logger.warn('[Redis] Too many reconnect attempts. Cooling down.');
-          return 5000;
+        // Stop internal reconnect storm; getRedisClient() will retry after cooldown.
+        if (retries >= REDIS_MAX_RECONNECT_RETRIES) {
+          enterCooldown('Too many reconnect attempts');
+          return false;
         }
-        return Math.min(retries * 100, 3000);
+        return Math.min(150 * (retries + 1), REDIS_RECONNECT_MAX_DELAY_MS);
       }
     }
   })
@@ -31,32 +74,74 @@ const client = REDIS_URL
 
 if (client) {
   client.on('error', (err) => {
-    if (!err.message.includes('ECONNRESET') && !err.message.includes('Socket closed')) {
-      logger.error({ err: err.message }, '[Redis] Client Error');
+    const message = String(err?.message || '');
+    if (
+      message.includes('ECONNRESET') ||
+      message.includes('Socket closed') ||
+      message.includes('Connection timeout') ||
+      message.includes('ETIMEDOUT')
+    ) {
+      enterCooldown('Redis connectivity error');
+      return;
+    }
+    logger.error({ err: message }, '[Redis] Client Error');
+  });
+
+  client.on('connect', () => {
+    if (!loggedConnect) {
+      logger.info('[Redis] Connected.');
+      loggedConnect = true;
     }
   });
 
-  client.on('connect', () => logger.info('[Redis] Connected.'));
-  client.on('ready', () => logger.info('[Redis] Ready.'));
+  client.on('ready', () => {
+    if (!loggedReady) {
+      logger.info('[Redis] Ready.');
+      loggedReady = true;
+    }
+    nextConnectAllowedAt = 0;
+  });
+
+  client.on('end', () => {
+    loggedConnect = false;
+    loggedReady = false;
+  });
 }
 
-export async function getRedisClient(): Promise<any | null> {
+export async function getRedisClient(): Promise<RedisClientType | null> {
   if (!client) return null;
 
   if (client.isOpen && client.isReady) {
-    return client;
+    return client as RedisClientType;
   }
 
-  if (isConnecting) return null;
+  // Circuit breaker window after repeated failures/timeouts.
+  if (Date.now() < nextConnectAllowedAt) {
+    return null;
+  }
+
+  // Single-flight connect guard for concurrent callers.
+  if (isConnecting || connectPromise) {
+    return null;
+  }
+
+  if (client.isOpen && !client.isReady) {
+    return null;
+  }
 
   try {
     isConnecting = true;
-    await client.connect();
-    isConnecting = false;
-    return client;
-  } catch (error) {
-    isConnecting = false;
-    logger.warn('[Redis] Connection failed. Using Database fallback.');
+    connectPromise = withTimeout(client.connect(), REDIS_CONNECT_TIMEOUT_MS + 150);
+    await connectPromise;
+    if (client.isOpen && client.isReady) {
+      return client as RedisClientType;
+    }
     return null;
+  } catch (error) {
+    enterCooldown(error instanceof Error ? error.message : 'Connection failed');
+    return null;
+  } finally {
+    isConnecting = false;
+    connectPromise = null;
   }
 }

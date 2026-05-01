@@ -1,0 +1,233 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Learning Orbit Panel Mockup</title>
+  <style>
+    :root {
+      --bg: #070f27;
+      --panel: #0d1a42;
+      --panel-2: #102456;
+      --line: rgba(170, 200, 255, 0.28);
+      --text: #f3f8ff;
+      --muted: rgba(205, 222, 255, 0.78);
+      --soft: rgba(183, 205, 255, 0.56);
+      --accent: #89b7ff;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      background:
+        radial-gradient(circle at 12% 0%, rgba(146, 176, 255, 0.28), transparent 40%),
+        radial-gradient(circle at 100% 0%, rgba(132, 182, 255, 0.2), transparent 44%),
+        linear-gradient(160deg, #050b1c, #0a1434 56%, #0a183f);
+      font-family: 'Inter', 'Segoe UI', Arial, sans-serif;
+      color: var(--text);
+      padding: 32px;
+    }
+    .panel {
+      width: 360px;
+      border-radius: 24px;
+      border: 1px solid var(--line);
+      background:
+        linear-gradient(165deg, rgba(12, 23, 58, 0.92), rgba(14, 30, 74, 0.84)),
+        radial-gradient(circle at 100% 0%, rgba(158, 198, 255, 0.22), transparent 50%);
+      box-shadow:
+        inset 0 1px 0 rgba(197, 219, 255, 0.24),
+        0 24px 48px rgba(4, 10, 30, 0.45);
+      padding: 16px;
+      display: grid;
+      gap: 10px;
+    }
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 10px;
+    }
+    .eyebrow {
+      margin: 0;
+      font-size: 10px;
+      letter-spacing: .18em;
+      text-transform: uppercase;
+      color: var(--soft);
+      font-weight: 700;
+    }
+    .subtitle {
+      margin: 6px 0 0;
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--text);
+    }
+    .badge {
+      font-size: 10px;
+      padding: 6px 10px;
+      border-radius: 999px;
+      border: 1px solid rgba(136, 193, 255, 0.44);
+      color: #e9f4ff;
+      background: linear-gradient(135deg, rgba(51, 100, 160, 0.64), rgba(72, 130, 192, 0.52));
+      white-space: nowrap;
+    }
+    .surface {
+      border: 1px solid rgba(150, 178, 247, 0.24);
+      border-radius: 16px;
+      background: linear-gradient(160deg, rgba(14, 27, 68, 0.82), rgba(17, 34, 82, 0.62));
+      padding: 12px;
+    }
+    .focus-title {
+      margin: 6px 0 0;
+      font-size: 15px;
+      font-weight: 620;
+    }
+    .focus-support {
+      margin: 6px 0 0;
+      font-size: 12px;
+      color: var(--muted);
+      line-height: 1.45;
+    }
+    .stage-strip {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 6px;
+      margin-top: 8px;
+    }
+    .stage {
+      display: grid;
+      place-items: center;
+      min-height: 28px;
+      border-radius: 999px;
+      border: 1px solid rgba(143, 171, 238, 0.28);
+      color: rgba(193, 213, 255, 0.7);
+      font-size: 10px;
+      font-weight: 650;
+      letter-spacing: .06em;
+    }
+    .stage.active {
+      color: #f5f9ff;
+      border-color: rgba(171, 205, 255, 0.62);
+      background: linear-gradient(135deg, rgba(80, 118, 198, 0.78), rgba(102, 144, 220, 0.64));
+      box-shadow: 0 10px 18px rgba(8, 20, 50, .36);
+    }
+    .helper {
+      margin: 8px 0 0;
+      font-size: 12px;
+      color: var(--muted);
+    }
+    .cue {
+      border-color: rgba(171, 202, 255, 0.38);
+      background: linear-gradient(150deg, rgba(27, 44, 96, .88), rgba(23, 40, 95, .74));
+      box-shadow: inset 0 1px 0 rgba(204, 223, 255, 0.2);
+    }
+    .cue-text {
+      margin: 8px 0 0;
+      font-size: 14px;
+      line-height: 1.55;
+      color: #f4f9ff;
+      font-weight: 560;
+    }
+    .support-row {
+      margin-top: 8px;
+      display: flex;
+      justify-content: space-between;
+      gap: 8px;
+      font-size: 11px;
+      color: var(--muted);
+    }
+    .support-chip {
+      border: 1px solid rgba(148, 177, 245, 0.36);
+      border-radius: 999px;
+      padding: 4px 8px;
+      color: #e4efff;
+      background: rgba(37, 59, 117, .56);
+      white-space: nowrap;
+    }
+    .unlock-text {
+      margin: 8px 0 0;
+      font-size: 13px;
+      line-height: 1.48;
+      color: #f0f7ff;
+    }
+    .unlock-action {
+      margin-top: 10px;
+      display: inline-flex;
+      align-items: center;
+      border: 1px solid rgba(173, 205, 255, .52);
+      border-radius: 999px;
+      padding: 6px 12px;
+      font-size: 11px;
+      color: #f0f7ff;
+      background: rgba(44, 73, 142, .64);
+      font-weight: 600;
+    }
+    .lineup {
+      border-top: 1px solid rgba(145, 172, 237, .24);
+      padding-top: 10px;
+      display: grid;
+      gap: 6px;
+    }
+    .row {
+      border: 1px solid rgba(137, 165, 234, 0.24);
+      border-radius: 12px;
+      padding: 8px 10px;
+      background: linear-gradient(165deg, rgba(14, 28, 70, .76), rgba(12, 23, 55, .62));
+      font-size: 12px;
+      color: rgba(230, 242, 255, .92);
+    }
+  </style>
+</head>
+<body>
+  <aside class="panel" aria-label="Learning Orbit Companion Panel Mockup">
+    <header class="header">
+      <div>
+        <p class="eyebrow">Learning Orbit</p>
+        <h1 class="subtitle">Now playing + next unlocks</h1>
+      </div>
+      <span class="badge">Clarity boost</span>
+    </header>
+
+    <section class="surface">
+      <p class="eyebrow">Now in focus</p>
+      <p class="focus-title">Neutralisation audio drill</p>
+      <p class="focus-support">Pattern first: acid + alkali -&gt; salt + water.</p>
+    </section>
+
+    <section class="surface">
+      <p class="eyebrow">Stage</p>
+      <div class="stage-strip">
+        <span class="stage active">Orient</span>
+        <span class="stage">Try</span>
+        <span class="stage">Explain</span>
+        <span class="stage">Keep</span>
+        <span class="stage">Unlock</span>
+      </div>
+      <p class="helper">You're just getting started with this idea.</p>
+    </section>
+
+    <section class="surface cue">
+      <p class="eyebrow">Notice</p>
+      <p class="cue-text">Acid and alkali do not disappear - they change into salt and water.</p>
+      <div class="support-row">
+        <span class="support-chip">Memory anchor</span>
+        <span>acid + alkali -&gt; salt + water</span>
+      </div>
+    </section>
+
+    <section class="surface">
+      <p class="eyebrow">Unlock next</p>
+      <p class="unlock-text">Answer one quick check to unlock the next layer.</p>
+      <span class="unlock-action">Try quick check</span>
+    </section>
+
+    <section class="lineup">
+      <p class="eyebrow">Orbit lineup</p>
+      <div class="row">Next: test the idea</div>
+      <div class="row">Then: apply it differently</div>
+      <div class="row">Later: lock it in</div>
+    </section>
+  </aside>
+</body>
+</html>

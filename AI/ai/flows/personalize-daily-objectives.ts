@@ -1,66 +1,106 @@
-// src/ai/flows/personalize-daily-objectives.ts
 'use server';
 /**
- * @fileOverview Generates personalized daily objectives for students based on their performance and the curriculum.
- *
- * - personalizedObjectives - A function that generates personalized daily objectives.
- * - PersonalizedObjectivesInput - The input type for the personalizedObjectives function.
- * - PersonalizedObjectivesOutput - The return type for the personalizedObjectives function.
+ * @fileOverview Generates personalized daily objectives for students based on performance signals.
  */
 
 import { z } from 'genkit';
 import OpenAI from 'openai';
+import { buildUnifiedTutorPrompt, normalizeTutorText } from './tutor-style';
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
-  timeout: 30000, // 30 seconds
+  timeout: 30000,
 });
 
 const PersonalizedObjectivesInputSchema = z.object({
-  studentPerformance: z.string().describe('The student\u2019s recent academic performance data.'),
+  studentPerformance: z.string().describe('The student\'s recent academic performance data.'),
   curriculum: z.string().describe('The curriculum for the current lesson or day.'),
   loggedMisconceptions: z.string().describe('Any misconceptions the student has demonstrated.'),
 });
 export type PersonalizedObjectivesInput = z.infer<typeof PersonalizedObjectivesInputSchema>;
 
 const PersonalizedObjectivesOutputSchema = z.object({
-  dailyObjectives: z.array(
-    z.string().describe('A list of 2-5 personalized daily objectives for the student.')
-  ).describe('An array of personalized daily objectives'),
+  dailyObjectives: z
+    .array(z.string().describe('A list of 2-5 personalized daily objectives for the student.'))
+    .describe('An array of personalized daily objectives'),
 });
 export type PersonalizedObjectivesOutput = z.infer<typeof PersonalizedObjectivesOutputSchema>;
+
+const ObjectivesPayloadSchema = z.object({
+  objectives: z.array(z.string().min(4)).min(2).max(5),
+});
+
+function fallbackObjectives(input: PersonalizedObjectivesInput): PersonalizedObjectivesOutput {
+  const curriculumTopic = normalizeTutorText(input.curriculum || 'today\'s topic');
+  return {
+    dailyObjectives: [
+      `Review the key concept from ${curriculumTopic} in your own words.`,
+      `Practice one targeted question and explain each step clearly.`,
+      `Correct one misconception from yesterday and state the right rule.`,
+    ],
+  };
+}
+
+function sanitizeObjectives(values: string[]): string[] {
+  const cleaned = values
+    .map((value) => normalizeTutorText(value))
+    .filter(Boolean)
+    .map((value) => (/[.!?]$/.test(value) ? value : `${value}.`));
+  const deduped = Array.from(new Set(cleaned));
+  return deduped.slice(0, 5);
+}
 
 export async function personalizedObjectives(input: PersonalizedObjectivesInput): Promise<PersonalizedObjectivesOutput> {
   return personalizedObjectivesFlow(input);
 }
 
-const personalizedObjectivesFlow = async (input: PersonalizedObjectivesInput): Promise<PersonalizedObjectivesOutput> => {
-  const systemMessage = `You are **Steadfast Copilot AI**, a supportive and insightful teacher for Kenyan students.
-Your task is to create a short, personalized list of daily objectives to help a student focus their learning for the day.
-The objectives should be clear, encouraging, and directly related to their recent performance, the curriculum, and any misconceptions they have.
+const personalizedObjectivesFlow = async (
+  input: PersonalizedObjectivesInput
+): Promise<PersonalizedObjectivesOutput> => {
+  const basePrompt = buildUnifiedTutorPrompt({ mode: 'objectives', language: 'english' });
 
-Keep the objectives:
-- **Action-oriented:** Start with a verb (e.g., "Review," "Practice," "Explain").
-- **Specific:** Clearly state the topic or skill to work on.
-- **Positive and encouraging:** Frame the objectives in a way that builds confidence.
-- **Concise:** Generate between 2 to 4 objectives.
+  const systemMessage = `
+${basePrompt}
 
-Here is the student's information:
-- **Student Performance:** ${input.studentPerformance}
-- **Today's Curriculum:** ${input.curriculum}
-- **Logged Misconceptions:** ${input.loggedMisconceptions}
+Create personalized daily learning objectives.
+Return strict JSON only:
+{"objectives":["...","..."]}
 
-Based on this, create a list of daily objectives.`;
+Rules:
+- 2 to 4 objectives.
+- Each objective starts with a verb.
+- Be specific to curriculum and misconceptions.
+- Keep each objective short, clear, and encouraging.
 
-  const completion = await openai.chat.completions.create({
-    messages: [
-      { role: 'system', content: systemMessage },
-    ],
-    model: 'gpt-4o-mini',
-  });
+Student signals:
+- Performance: ${input.studentPerformance}
+- Curriculum: ${input.curriculum}
+- Misconceptions: ${input.loggedMisconceptions}
+`;
 
-  const objectivesString = completion.choices[0].message.content || '';
-  const dailyObjectives = objectivesString.split('\n').filter(obj => obj.trim() !== '');
+  try {
+    const completion = await openai.chat.completions.create({
+      messages: [{ role: 'system', content: systemMessage }],
+      model: 'gpt-4o-mini',
+      response_format: { type: 'json_object' },
+    });
 
-  return { dailyObjectives };
+    const raw = completion.choices[0].message.content || '';
+    if (!raw) return fallbackObjectives(input);
+
+    const parsed = ObjectivesPayloadSchema.safeParse(JSON.parse(raw));
+    if (!parsed.success) {
+      return fallbackObjectives(input);
+    }
+
+    const objectives = sanitizeObjectives(parsed.data.objectives);
+    if (objectives.length < 2) {
+      return fallbackObjectives(input);
+    }
+
+    return { dailyObjectives: objectives };
+  } catch {
+    return fallbackObjectives(input);
+  }
 };
+

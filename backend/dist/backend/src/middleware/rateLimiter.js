@@ -1,8 +1,11 @@
-import { getRedisClient } from '../lib/redis';
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.rateLimiter = void 0;
+const redis_1 = require("../lib/redis");
 const RATE_LIMIT = 20; // Max requests per minute
 const RATE_LIMIT_WINDOW = 60; // 60 seconds
-export const rateLimiter = async (req, res, next) => {
-    const redis = await getRedisClient();
+const rateLimiter = async (req, res, next) => {
+    const redis = await (0, redis_1.getRedisClient)();
     if (!redis) {
         console.warn('Redis client not available. Bypassing rate limiter.');
         return next();
@@ -13,8 +16,13 @@ export const rateLimiter = async (req, res, next) => {
             return res.status(401).send({ error: "Unauthorized" });
         }
         const key = `rate:${studentId}`;
+        const ttl = await redis.ttl(key);
         const current = await redis.get(key);
-        if (current && parseInt(current) >= RATE_LIMIT) {
+        if (current && parseInt(current, 10) >= RATE_LIMIT) {
+            if (ttl > 0) {
+                res.setHeader('Retry-After', String(ttl));
+                res.setHeader('X-RateLimit-Reset', String(Math.floor(Date.now() / 1000) + ttl));
+            }
             return res.status(429).send({ error: 'Too many requests' });
         }
         const newCurrent = await redis.incr(key);
@@ -24,9 +32,10 @@ export const rateLimiter = async (req, res, next) => {
         next();
     }
     catch (error) {
-        // Log the error but still call next() to avoid blocking the request
+        // Fail open on limiter issues to avoid cascading outages.
         console.error('Error in rate limiter:', error);
-        next(error);
+        next();
     }
 };
+exports.rateLimiter = rateLimiter;
 //# sourceMappingURL=rateLimiter.js.map

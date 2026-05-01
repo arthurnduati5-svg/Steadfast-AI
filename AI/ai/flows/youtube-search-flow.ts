@@ -1,6 +1,7 @@
 import { defineFlow } from '@genkit-ai/flow';
 import { z } from 'zod';
 import * as youtubeSearch from 'youtube-search-api';
+import { getOrCreateFlow } from './flow-singleton';
 
 interface YouTubeSearchAPIResult {
   id: string;
@@ -32,7 +33,7 @@ function isEducational(video: YouTubeSearchAPIResult): boolean {
   return !BANNED_KEYWORDS.some(keyword => text.includes(keyword));
 }
 
-export const youtubeSearchFlow = defineFlow(
+export const youtubeSearchFlow = getOrCreateFlow('youtubeSearchFlow', () => defineFlow(
   {
     name: 'youtubeSearchFlow',
     inputSchema: z.object({ query: z.string() }),
@@ -75,4 +76,4 @@ export const youtubeSearchFlow = defineFlow(
       return [];
     }
   }
-);
+));
