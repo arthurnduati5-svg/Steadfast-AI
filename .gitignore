@@ -53,3 +53,6 @@ firestore-debug.log
 # Playwright outputs
 playwright-report/
 test-results/
+
+# Local agent verification reports
+reports/
