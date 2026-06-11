@@ -1,0 +1,34 @@
+.copilot-theme-scope[data-copilot-destination='new_session'] {
+  --copilot-workspace-tint: rgba(59, 130, 246, 0.16);
+  --copilot-workspace-line: rgba(59, 130, 246, 0.26);
+  --copilot-workspace-strong: #2563eb;
+  --copilot-workspace-hero-glow: rgba(59, 130, 246, 0.16);
+}
+
+.copilot-theme-scope[data-copilot-destination='search'] {
+  --copilot-workspace-tint: rgba(14, 165, 233, 0.15);
+  --copilot-workspace-line: rgba(14, 165, 233, 0.24);
+  --copilot-workspace-strong: #0284c7;
+  --copilot-workspace-hero-glow: rgba(14, 165, 233, 0.16);
+}
+
+.copilot-theme-scope[data-copilot-destination='revision'] {
+  --copilot-workspace-tint: rgba(217, 119, 6, 0.15);
+  --copilot-workspace-line: rgba(217, 119, 6, 0.24);
+  --copilot-workspace-strong: #b45309;
+  --copilot-workspace-hero-glow: rgba(217, 119, 6, 0.16);
+}
+
+.copilot-theme-scope[data-copilot-destination='media'] {
+  --copilot-workspace-tint: rgba(168, 85, 247, 0.15);
+  --copilot-workspace-line: rgba(168, 85, 247, 0.24);
+  --copilot-workspace-strong: #7c3aed;
+  --copilot-workspace-hero-glow: rgba(168, 85, 247, 0.16);
+}
+
+.copilot-theme-scope[data-copilot-destination='growth'] {
+  --copilot-workspace-tint: rgba(16, 185, 129, 0.15);
+  --copilot-workspace-line: rgba(16, 185, 129, 0.24);
+  --copilot-workspace-strong: #059669;
+  --copilot-workspace-hero-glow: rgba(16, 185, 129, 0.16);
+}

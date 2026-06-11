@@ -1,0 +1,186 @@
+.copilot-theme-scope {
+    color-scheme: light;
+    --background: 0 0% 100%;
+    --foreground: 222 23% 14%;
+    --card: 0 0% 100%;
+    --card-foreground: 222 23% 14%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 222 23% 14%;
+    --primary: 207 88% 68%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 210 17% 96%;
+    --secondary-foreground: 222 23% 14%;
+    --muted: 210 17% 96%;
+    --muted-foreground: 217 10% 42%;
+    --accent: 210 40% 96%;
+    --accent-foreground: 222.2 47.4% 11.2%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 220 13% 90%;
+    --input: 220 13% 90%;
+    --ring: 207 88% 68%;
+
+    --sf-cream-bg: #ffffff;
+    --sf-cream-surface: #f7f7f8;
+    --sf-cream-border: rgba(0, 0, 0, 0.08);
+
+    --copilot-chat-text: #111827;
+    --copilot-chat-text-strong: #0f172a;
+    --copilot-chat-text-soft: #334155;
+    --copilot-link: #2563eb;
+    --copilot-link-hover: #1d4ed8;
+    --copilot-assistant-bubble-bg: #ffffff;
+    --copilot-assistant-bubble-border: rgba(15, 23, 42, 0.08);
+    --copilot-user-bubble-bg: #edf5ff;
+    --copilot-user-bubble-fg: #0b1220;
+    --copilot-user-bubble-border: rgba(59, 130, 246, 0.24);
+    --copilot-input-bg: #ffffff;
+    --copilot-input-text: #0f172a;
+    --copilot-input-placeholder: #6b7280;
+    --copilot-soft-shadow: 0 18px 50px rgba(15, 23, 42, 0.08);
+    --copilot-card-shadow: 0 10px 30px rgba(15, 23, 42, 0.06);
+    --copilot-surface-1: rgba(255, 255, 255, 0.96);
+    --copilot-surface-2: rgba(255, 255, 255, 0.9);
+    --copilot-surface-muted: rgba(248, 250, 252, 0.92);
+    --copilot-hover-surface: rgba(148, 163, 184, 0.08);
+    --copilot-backdrop: rgba(255, 255, 255, 0.88);
+    --copilot-text-primary: #0f172a;
+    --copilot-text-secondary: #475569;
+    --copilot-text-tertiary: #64748b;
+    --copilot-main-stage:
+      radial-gradient(circle at 14% 10%, rgba(56, 189, 248, 0.2), transparent 34%),
+      radial-gradient(circle at 86% 8%, rgba(14, 165, 233, 0.18), transparent 30%),
+      linear-gradient(145deg, #f7fbff 0%, #eef6ff 52%, #f4f8ff 100%);
+    --copilot-elevated-surface: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(248, 250, 252, 0.98));
+    --copilot-elevated-surface-muted: linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(246, 248, 251, 0.98));
+    --copilot-soft-line: rgba(148, 163, 184, 0.18);
+    --copilot-kicker-bg: rgba(59, 130, 246, 0.08);
+    --copilot-kicker-fg: #1d4ed8;
+    --copilot-blockquote-bg: linear-gradient(180deg, rgba(239, 246, 255, 0.72), rgba(248, 250, 252, 0.82));
+    --copilot-blockquote-fg: #334155;
+    --copilot-action-bg: rgba(255, 255, 255, 0.9);
+    --copilot-action-fg: #334155;
+    --copilot-action-border: rgba(148, 163, 184, 0.18);
+    --copilot-action-hover-bg: rgba(239, 246, 255, 0.95);
+    --copilot-action-hover-fg: #0f172a;
+    --copilot-action-hover-border: rgba(59, 130, 246, 0.28);
+    --copilot-source-count: #64748b;
+    --copilot-card-shadow-strong: 0 20px 48px rgba(15, 23, 42, 0.07);
+    --copilot-accent-primary: #3b82f6;
+    --copilot-accent-primary-hover: #60a5fa;
+    --copilot-accent-primary-active: #1d4ed8;
+    --copilot-accent-soft: rgba(59, 130, 246, 0.14);
+    --copilot-accent-soft-hover: rgba(59, 130, 246, 0.22);
+    --copilot-accent-surface: #edf5ff;
+    --copilot-accent-border: rgba(59, 130, 246, 0.38);
+    --copilot-accent-focus-ring: rgba(59, 130, 246, 0.36);
+    --copilot-accent-text: #1d4ed8;
+    --copilot-accent-on-fill: #ffffff;
+    --copilot-accent-subtle-glow: rgba(59, 130, 246, 0.14);
+    --copilot-accent-muted-icon: rgba(59, 130, 246, 0.75);
+    --copilot-shell-surface: rgba(255, 255, 255, 0.86);
+    --copilot-shell-border: rgba(56, 189, 248, 0.22);
+    --copilot-shell-shadow: 0 30px 76px rgba(14, 116, 144, 0.12);
+    --copilot-workspace-tint: rgba(14, 165, 233, 0.16);
+    --copilot-workspace-line: rgba(14, 165, 233, 0.28);
+    --copilot-workspace-strong: #0284c7;
+    --copilot-workspace-hero-glow: rgba(14, 165, 233, 0.18);
+    --copilot-workspace-wash: linear-gradient(180deg, rgba(255, 255, 255, 0.22), transparent 54%);
+    --copilot-mode-tint: rgba(59, 130, 246, 0.12);
+    --copilot-mode-line: rgba(59, 130, 246, 0.2);
+
+    background-color: hsl(var(--background));
+    color: hsl(var(--foreground));
+    transition: background-color 220ms ease, color 220ms ease, border-color 220ms ease;
+  }
+
+  .copilot-theme-scope[data-copilot-theme="dark"],
+  .copilot-theme-scope.copilot-theme-dark {
+    color-scheme: dark;
+    --background: 0 0% 13%;
+    --foreground: 0 0% 93%;
+    --card: 0 0% 16%;
+    --card-foreground: 0 0% 93%;
+    --popover: 0 0% 16%;
+    --popover-foreground: 0 0% 93%;
+    --primary: 207 88% 68%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 0 0% 16%;
+    --secondary-foreground: 0 0% 93%;
+    --muted: 0 0% 16%;
+    --muted-foreground: 0 0% 74%;
+    --accent: 217.2 24% 18%;
+    --accent-foreground: 0 0% 98%;
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 0 0% 24%;
+    --input: 0 0% 24%;
+    --ring: 207 88% 68%;
+
+    --sf-cream-bg: #212121;
+    --sf-cream-surface: #171717;
+    --sf-cream-border: rgba(255, 255, 255, 0.12);
+
+    --copilot-chat-text: #ececec;
+    --copilot-chat-text-strong: #f8fafc;
+    --copilot-chat-text-soft: #cbd5e1;
+    --copilot-link: #8ab4f8;
+    --copilot-link-hover: #a8c7fa;
+    --copilot-assistant-bubble-bg: #1f2937;
+    --copilot-assistant-bubble-border: rgba(255, 255, 255, 0.08);
+    --copilot-user-bubble-bg: #273244;
+    --copilot-user-bubble-fg: #f5f5f5;
+    --copilot-user-bubble-border: rgba(255, 255, 255, 0.1);
+    --copilot-input-bg: #1f2937;
+    --copilot-input-text: #f1f5f9;
+    --copilot-input-placeholder: #a3a3a3;
+    --copilot-surface-1: rgba(17, 24, 39, 0.96);
+    --copilot-surface-2: rgba(15, 23, 42, 0.94);
+    --copilot-surface-muted: rgba(30, 41, 59, 0.96);
+    --copilot-hover-surface: rgba(148, 163, 184, 0.14);
+    --copilot-backdrop: rgba(17, 24, 39, 0.88);
+    --copilot-text-primary: #f8fafc;
+    --copilot-text-secondary: #cbd5e1;
+    --copilot-text-tertiary: #94a3b8;
+    --copilot-main-stage:
+      radial-gradient(circle at 18% 10%, rgba(56, 189, 248, 0.16), transparent 38%),
+      radial-gradient(circle at 84% 10%, rgba(59, 130, 246, 0.14), transparent 34%),
+      linear-gradient(170deg, #050b16 0%, #0a1220 46%, #0f172a 100%);
+    --copilot-elevated-surface: linear-gradient(180deg, rgba(17, 24, 39, 0.98), rgba(15, 23, 42, 0.98));
+    --copilot-elevated-surface-muted: linear-gradient(180deg, rgba(22, 31, 48, 0.96), rgba(15, 23, 42, 0.98));
+    --copilot-soft-line: rgba(148, 163, 184, 0.16);
+    --copilot-kicker-bg: rgba(96, 165, 250, 0.12);
+    --copilot-kicker-fg: #93c5fd;
+    --copilot-blockquote-bg: linear-gradient(180deg, rgba(30, 41, 59, 0.72), rgba(17, 24, 39, 0.82));
+    --copilot-blockquote-fg: #cbd5e1;
+    --copilot-action-bg: rgba(15, 23, 42, 0.85);
+    --copilot-action-fg: #dbe4f0;
+    --copilot-action-border: rgba(148, 163, 184, 0.18);
+    --copilot-action-hover-bg: rgba(30, 41, 59, 0.96);
+    --copilot-action-hover-fg: #f8fafc;
+    --copilot-action-hover-border: rgba(96, 165, 250, 0.32);
+    --copilot-source-count: #94a3b8;
+    --copilot-card-shadow-strong: 0 24px 60px rgba(2, 6, 23, 0.42);
+    --copilot-accent-primary: #7ab6ff;
+    --copilot-accent-primary-hover: #9ec8ff;
+    --copilot-accent-primary-active: #5197ee;
+    --copilot-accent-soft: rgba(122, 182, 255, 0.22);
+    --copilot-accent-soft-hover: rgba(122, 182, 255, 0.32);
+    --copilot-accent-surface: #1b2f47;
+    --copilot-accent-border: rgba(122, 182, 255, 0.52);
+    --copilot-accent-focus-ring: rgba(122, 182, 255, 0.55);
+    --copilot-accent-text: #c7e0ff;
+    --copilot-accent-on-fill: #081226;
+    --copilot-accent-subtle-glow: rgba(122, 182, 255, 0.22);
+    --copilot-accent-muted-icon: rgba(199, 224, 255, 0.82);
+    --copilot-shell-surface: rgba(7, 15, 27, 0.78);
+    --copilot-shell-border: rgba(56, 189, 248, 0.2);
+    --copilot-shell-shadow: 0 32px 84px rgba(2, 6, 23, 0.48);
+    --copilot-workspace-tint: rgba(56, 189, 248, 0.2);
+    --copilot-workspace-line: rgba(56, 189, 248, 0.34);
+    --copilot-workspace-strong: #9ec8ff;
+    --copilot-workspace-hero-glow: rgba(56, 189, 248, 0.2);
+    --copilot-workspace-wash: linear-gradient(180deg, rgba(6, 11, 21, 0.18), transparent 60%);
+    --copilot-mode-tint: rgba(122, 182, 255, 0.16);
+    --copilot-mode-line: rgba(122, 182, 255, 0.24);
+  }

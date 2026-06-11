@@ -1,6 +1,27 @@
 
 import type { Metadata } from 'next';
 import './globals.css';
+
+/* Style system — foundations */
+import '@/styles/foundations/app-tokens.css';
+import '@/styles/foundations/base.css';
+
+/* Theme contract + theme index */
+import '@/styles/themes/theme-contract.css';
+import '@/styles/themes/themes.index.css';
+
+/* Copilot — destination + study mode overrides */
+import '@/styles/copilot/copilot-theme.destinations.css';
+import '@/styles/copilot/copilot-theme.study-modes.css';
+
+/* Copilot — component styles */
+import '@/styles/copilot/copilot-animations.css';
+import '@/styles/copilot/copilot-voice.css';
+import '@/styles/copilot/copilot-markdown.css';
+import '@/styles/copilot/copilot-chat.css';
+import '@/styles/copilot/copilot-sidebar.css';
+import '@/styles/copilot/copilot-revision.css';
+
 import { AppClientShell } from '@/components/AppClientShell';
 
 export const metadata: Metadata = {

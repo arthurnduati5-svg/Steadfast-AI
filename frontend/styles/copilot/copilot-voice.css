@@ -1,0 +1,60 @@
+.voice-card-bg {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+}
+
+.voice-nebula {
+  position: absolute;
+  inset: -30%;
+  background:
+    radial-gradient(circle at 20% 30%, rgba(30, 64, 175, 0.25), transparent 55%),
+    radial-gradient(circle at 70% 20%, rgba(76, 29, 149, 0.18), transparent 60%),
+    radial-gradient(circle at 60% 75%, rgba(14, 116, 144, 0.2), transparent 55%);
+  filter: blur(18px);
+  animation: nebula-drift 70s ease-in-out infinite;
+  opacity: 0.7;
+}
+
+.voice-orbit-rings {
+  position: absolute;
+  inset: -20%;
+  background:
+    radial-gradient(circle at 50% 50%, transparent 42%, rgba(99, 102, 241, 0.16) 44%, transparent 46%),
+    radial-gradient(circle at 50% 50%, transparent 62%, rgba(59, 130, 246, 0.1) 64%, transparent 66%);
+  animation: orbit-spin 110s linear infinite;
+  opacity: 0.35;
+}
+
+.voice-stars {
+  position: absolute;
+  inset: 0;
+  background-image:
+    radial-gradient(2px 2px at 20% 30%, rgba(226, 232, 240, 0.5), transparent 45%),
+    radial-gradient(1.5px 1.5px at 70% 40%, rgba(191, 219, 254, 0.45), transparent 55%),
+    radial-gradient(1px 1px at 45% 70%, rgba(148, 163, 184, 0.35), transparent 60%),
+    radial-gradient(1.5px 1.5px at 80% 75%, rgba(226, 232, 240, 0.4), transparent 60%);
+  animation: stars-drift 50s ease-in-out infinite;
+  opacity: 0.7;
+}
+
+.voice-stars::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image:
+    radial-gradient(1.5px 1.5px at 30% 60%, rgba(191, 219, 254, 0.7), transparent 55%),
+    radial-gradient(1px 1px at 60% 25%, rgba(226, 232, 240, 0.6), transparent 60%),
+    radial-gradient(1px 1px at 85% 45%, rgba(191, 219, 254, 0.5), transparent 60%);
+  animation: stars-twinkle 10s ease-in-out infinite;
+  opacity: 0.5;
+}
+
+.voice-light-sweep {
+  position: absolute;
+  inset: -30%;
+  background: linear-gradient(120deg, transparent 40%, rgba(147, 197, 253, 0.08) 50%, transparent 60%);
+  animation: light-sweep 24s ease-in-out infinite;
+  opacity: 0.5;
+}

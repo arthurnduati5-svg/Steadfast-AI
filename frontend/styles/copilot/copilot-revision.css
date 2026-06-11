@@ -1,0 +1,1754 @@
+.copilot-revision-card {
+  border-radius: 1.1rem;
+  border: 1px solid var(--copilot-soft-line);
+  background: var(--copilot-surface-1);
+  box-shadow: 0 6px 18px rgba(15, 23, 42, 0.05);
+  padding: 0.85rem 0.9rem;
+}
+
+.copilot-revision-workspace-shell {
+  background: var(--copilot-surface-1);
+  border-color: color-mix(in srgb, var(--copilot-soft-line) 88%, rgba(15, 23, 42, 0.08));
+  box-shadow:
+    0 28px 70px rgba(15, 23, 42, 0.2),
+    inset 0 1px 0 rgba(255, 255, 255, 0.26);
+}
+
+.copilot-revision-workspace-header {
+  background: color-mix(in srgb, var(--copilot-backdrop) 94%, rgba(248, 250, 252, 0.8));
+}
+
+.copilot-revision-workspace-stats {
+  align-items: stretch;
+}
+
+.copilot-revision-workspace-stat {
+  background: var(--copilot-surface-1);
+  border-color: color-mix(in srgb, var(--copilot-soft-line) 86%, rgba(15, 23, 42, 0.08));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.42),
+    0 6px 16px rgba(15, 23, 42, 0.05);
+}
+
+.copilot-revision-workspace-sidebar {
+  background: var(--copilot-surface-muted);
+  border-color: color-mix(in srgb, var(--copilot-soft-line) 88%, rgba(15, 23, 42, 0.08));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.4),
+    0 8px 22px rgba(15, 23, 42, 0.06);
+}
+
+.copilot-revision-workspace-detail {
+  background:
+    radial-gradient(circle at top right, color-mix(in srgb, var(--copilot-accent-soft) 34%, transparent), transparent 46%),
+    radial-gradient(circle at top left, color-mix(in srgb, var(--copilot-workspace-tint) 26%, transparent), transparent 42%),
+    var(--copilot-surface-1);
+  border-color: color-mix(in srgb, var(--copilot-soft-line) 88%, rgba(15, 23, 42, 0.08));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.45),
+    0 10px 26px rgba(15, 23, 42, 0.07);
+}
+
+.copilot-revision-workspace-track {
+  position: relative;
+}
+
+.copilot-revision-workspace-track::before {
+  content: '';
+  position: absolute;
+  inset: 0.55rem;
+  z-index: 0;
+  border-radius: 1.35rem;
+  border: 1px dashed color-mix(in srgb, var(--copilot-soft-line) 52%, transparent);
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+.copilot-revision-workspace-track > * {
+  position: relative;
+  z-index: 1;
+}
+
+.copilot-revision-workspace-section {
+  border: 1px solid color-mix(in srgb, var(--copilot-soft-line) 86%, rgba(15, 23, 42, 0.08));
+  border-radius: 1.25rem;
+  background: color-mix(in srgb, var(--copilot-surface-1) 92%, var(--copilot-surface-muted));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.4),
+    0 10px 22px rgba(15, 23, 42, 0.05);
+  padding: 0.9rem;
+}
+
+.copilot-revision-workspace-section-head {
+  border-bottom: 1px solid color-mix(in srgb, var(--copilot-soft-line) 86%, transparent);
+  padding-bottom: 0.65rem;
+}
+
+.copilot-revision-workspace-spotlight {
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.48),
+    0 12px 30px rgba(15, 23, 42, 0.08);
+}
+
+.copilot-revision-library-row {
+  border-radius: 1rem;
+  border: 1px solid var(--copilot-soft-line);
+  background: var(--copilot-surface-1);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.03);
+  padding: 0.85rem;
+}
+
+.copilot-revision-library-row-active {
+  border-color: var(--copilot-accent-border);
+  background: color-mix(in srgb, var(--copilot-accent-soft) 78%, var(--copilot-surface-1));
+  box-shadow: inset 0 0 0 1px var(--copilot-accent-soft-hover);
+}
+
+.copilot-revision-preview-card {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+  --copilot-preview-card-glow: rgba(96, 165, 250, 0.16);
+  --copilot-preview-card-edge: rgba(96, 165, 250, 0.34);
+  --copilot-preview-card-grid: rgba(148, 163, 184, 0.1);
+  --copilot-preview-card-accent-ink: #1d4ed8;
+  border-color: color-mix(in srgb, var(--copilot-preview-card-edge) 56%, var(--copilot-soft-line));
+  background:
+    radial-gradient(circle at 10% -16%, color-mix(in srgb, var(--copilot-preview-card-glow) 92%, transparent), transparent 42%),
+    radial-gradient(circle at 100% 0%, color-mix(in srgb, var(--copilot-preview-card-edge) 20%, transparent), transparent 34%),
+    linear-gradient(165deg, color-mix(in srgb, var(--copilot-surface-1) 96%, white 4%), color-mix(in srgb, var(--copilot-surface-muted) 80%, white 20%));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.58),
+    inset 0 -1px 0 rgba(148, 163, 184, 0.12),
+    0 12px 24px rgba(15, 23, 42, 0.06);
+  transition:
+    transform 240ms cubic-bezier(0.22, 1, 0.36, 1),
+    border-color 220ms ease,
+    box-shadow 240ms ease,
+    background 240ms ease;
+}
+
+.copilot-revision-preview-card::before,
+.copilot-revision-preview-card::after {
+  content: '';
+  position: absolute;
+  pointer-events: none;
+}
+
+.copilot-revision-preview-card::before {
+  inset: 0;
+  background-image:
+    linear-gradient(to right, var(--copilot-preview-card-grid) 1px, transparent 1px),
+    linear-gradient(to bottom, color-mix(in srgb, var(--copilot-preview-card-grid) 84%, transparent) 1px, transparent 1px);
+  background-size:
+    22px 22px,
+    22px 22px;
+  opacity: 0.12;
+  mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0.8), transparent 88%);
+}
+
+.copilot-revision-preview-card::after {
+  inset: -1px;
+  border-radius: inherit;
+  background:
+    linear-gradient(
+      120deg,
+      transparent 12%,
+      color-mix(in srgb, var(--copilot-preview-card-edge) 32%, transparent) 48%,
+      transparent 78%
+    );
+  opacity: 0;
+  transform: translateX(-36%);
+  transition: opacity 240ms ease, transform 280ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.copilot-revision-preview-card > * {
+  position: relative;
+  z-index: 1;
+}
+
+.copilot-revision-preview-card[data-save-type='worked_step'] {
+  --copilot-preview-card-glow: rgba(14, 165, 233, 0.16);
+  --copilot-preview-card-edge: rgba(14, 116, 144, 0.34);
+}
+
+.copilot-revision-preview-card[data-save-type='short_note'] {
+  --copilot-preview-card-glow: rgba(148, 163, 184, 0.16);
+  --copilot-preview-card-edge: rgba(100, 116, 139, 0.28);
+}
+
+.copilot-revision-preview-card[data-save-type='mistake_to_fix'] {
+  --copilot-preview-card-glow: rgba(244, 63, 94, 0.16);
+  --copilot-preview-card-edge: rgba(225, 29, 72, 0.34);
+}
+
+.copilot-revision-preview-card[data-save-type='formula'] {
+  --copilot-preview-card-glow: rgba(99, 102, 241, 0.16);
+  --copilot-preview-card-edge: rgba(79, 70, 229, 0.34);
+}
+
+.copilot-revision-preview-card[data-save-type='definition'] {
+  --copilot-preview-card-glow: rgba(192, 132, 252, 0.16);
+  --copilot-preview-card-edge: rgba(147, 51, 234, 0.34);
+}
+
+.copilot-revision-preview-card[data-save-type='research_note'] {
+  --copilot-preview-card-glow: rgba(34, 211, 238, 0.16);
+  --copilot-preview-card-edge: rgba(8, 145, 178, 0.34);
+}
+
+.copilot-revision-preview-card[data-save-type='practice_item'] {
+  --copilot-preview-card-glow: rgba(16, 185, 129, 0.16);
+  --copilot-preview-card-edge: rgba(5, 150, 105, 0.34);
+}
+
+.copilot-revision-preview-card[data-lens='beginner'] {
+  --copilot-preview-card-glow: rgba(45, 212, 191, 0.16);
+  --copilot-preview-card-edge: rgba(45, 212, 191, 0.34);
+  --copilot-preview-card-accent-ink: #0f766e;
+}
+
+.copilot-revision-preview-card[data-lens='exam'] {
+  --copilot-preview-card-glow: rgba(251, 191, 36, 0.16);
+  --copilot-preview-card-edge: rgba(245, 158, 11, 0.34);
+  --copilot-preview-card-accent-ink: #b45309;
+}
+
+.copilot-revision-preview-card[data-lens='trap'] {
+  --copilot-preview-card-glow: rgba(251, 113, 133, 0.16);
+  --copilot-preview-card-edge: rgba(244, 114, 182, 0.34);
+  --copilot-preview-card-accent-ink: #be123c;
+}
+
+.copilot-revision-preview-card:hover,
+.copilot-revision-preview-card:focus-visible {
+  transform: translateY(-3px);
+  border-color: color-mix(in srgb, var(--copilot-preview-card-edge) 82%, rgba(255, 255, 255, 0.2));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.68),
+    0 22px 44px rgba(15, 23, 42, 0.1),
+    0 0 26px color-mix(in srgb, var(--copilot-preview-card-glow) 68%, transparent);
+}
+
+.copilot-revision-preview-card:hover::after,
+.copilot-revision-preview-card:focus-visible::after {
+  opacity: 0.72;
+  transform: translateX(38%);
+}
+
+.copilot-revision-preview-card[data-active='true'] {
+  border-color: color-mix(in srgb, var(--copilot-preview-card-edge) 96%, rgba(255, 255, 255, 0.18));
+  background:
+    radial-gradient(circle at 10% -16%, color-mix(in srgb, var(--copilot-preview-card-glow) 98%, transparent), transparent 40%),
+    radial-gradient(circle at 100% 0%, color-mix(in srgb, var(--copilot-preview-card-edge) 24%, transparent), transparent 34%),
+    linear-gradient(165deg, color-mix(in srgb, var(--copilot-surface-1) 98%, white 2%), color-mix(in srgb, var(--copilot-preview-card-glow) 28%, var(--copilot-surface-muted)));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.72),
+    0 22px 42px rgba(15, 23, 42, 0.1),
+    0 0 28px color-mix(in srgb, var(--copilot-preview-card-glow) 72%, transparent);
+}
+
+.copilot-revision-preview-card[data-active='true']::after {
+  opacity: 0.86;
+  transform: translateX(34%);
+}
+
+.copilot-revision-preview-card-compact {
+  border-radius: 1rem;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.54),
+    0 8px 16px rgba(15, 23, 42, 0.05);
+}
+
+.copilot-revision-preview-card-compact .copilot-revision-preview-lens-pill {
+  min-height: 1.56rem;
+  padding: 0.16rem 0.52rem;
+  font-size: 0.59rem;
+}
+
+.copilot-revision-preview-card-compact .copilot-revision-preview-system-tag {
+  min-height: 1.5rem;
+  padding: 0.14rem 0.48rem;
+  font-size: 0.53rem;
+}
+
+.copilot-revision-preview-card .copilot-revision-type-pill,
+.copilot-revision-preview-card .copilot-revision-pill {
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.42);
+}
+
+.copilot-revision-preview-card .copilot-revision-pill {
+  border-color: color-mix(in srgb, var(--copilot-preview-card-edge) 40%, var(--copilot-soft-line));
+  background: color-mix(in srgb, var(--copilot-surface-1) 86%, white 14%);
+}
+
+.copilot-revision-preview-card-head {
+  position: relative;
+  z-index: 1;
+}
+
+.copilot-revision-preview-lens-pill,
+.copilot-revision-preview-system-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.36rem;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--copilot-preview-card-edge) 72%, var(--copilot-soft-line));
+  background:
+    linear-gradient(140deg, color-mix(in srgb, var(--copilot-surface-1) 92%, white 8%), color-mix(in srgb, var(--copilot-preview-card-glow) 34%, transparent));
+  color: color-mix(in srgb, var(--copilot-preview-card-accent-ink) 86%, var(--copilot-text-primary));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.46),
+    0 7px 16px color-mix(in srgb, var(--copilot-preview-card-glow) 34%, rgba(15, 23, 42, 0.05));
+}
+
+.copilot-revision-preview-lens-pill {
+  min-height: 1.7rem;
+  padding: 0.2rem 0.62rem;
+  font-size: 0.64rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.copilot-revision-preview-system-tag {
+  min-height: 1.58rem;
+  align-self: flex-start;
+  padding: 0.16rem 0.52rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-size: 0.57rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  line-height: 1;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.copilot-revision-preview-lens-orb,
+.copilot-revision-preview-system-orb {
+  position: relative;
+  width: 0.4rem;
+  height: 0.4rem;
+  flex-shrink: 0;
+  border-radius: 999px;
+  background:
+    radial-gradient(circle at 35% 35%, rgba(255, 255, 255, 0.96), color-mix(in srgb, var(--copilot-preview-card-edge) 86%, white 14%) 58%, transparent 60%);
+  box-shadow: 0 0 9px color-mix(in srgb, var(--copilot-preview-card-glow) 72%, transparent);
+}
+
+.copilot-revision-preview-lens-orb::after,
+.copilot-revision-preview-system-orb::after {
+  content: '';
+  position: absolute;
+  inset: -0.24rem;
+  border-radius: inherit;
+  border: 1px solid color-mix(in srgb, var(--copilot-preview-card-edge) 56%, transparent);
+  opacity: 0.38;
+  animation: copilot-revision-preview-pulse 2.9s ease-out infinite;
+}
+
+.copilot-revision-preview-card-signal {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-size: 0.63rem;
+  font-weight: 700;
+  letter-spacing: 0.15em;
+  line-height: 1;
+  text-transform: uppercase;
+  color: color-mix(in srgb, var(--copilot-preview-card-edge) 82%, var(--copilot-text-tertiary));
+}
+
+.copilot-revision-preview-card-signal::before {
+  content: '';
+  width: 0.46rem;
+  height: 0.46rem;
+  flex-shrink: 0;
+  border-radius: 999px;
+  background:
+    radial-gradient(circle at 35% 35%, rgba(255, 255, 255, 0.98), color-mix(in srgb, var(--copilot-preview-card-edge) 88%, white 12%) 56%, transparent 58%);
+  box-shadow: 0 0 12px color-mix(in srgb, var(--copilot-preview-card-glow) 82%, transparent);
+  animation: copilot-revision-preview-pulse 3.2s ease-out infinite;
+}
+
+.copilot-revision-preview-card-title {
+  text-wrap: balance;
+  letter-spacing: -0.015em;
+}
+
+.copilot-revision-preview-card-summary {
+  max-width: 42ch;
+  line-height: 1.65;
+  color: color-mix(in srgb, var(--copilot-text-secondary) 92%, #0f172a);
+}
+
+.copilot-revision-preview-card-rail {
+  min-width: 7rem;
+}
+
+.copilot-revision-preview-card-shell {
+  position: relative;
+}
+
+.copilot-revision-preview-card-shell::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -0.1rem;
+  height: 1px;
+  pointer-events: none;
+  background:
+    linear-gradient(90deg, transparent, color-mix(in srgb, var(--copilot-preview-card-edge) 86%, transparent) 16%, color-mix(in srgb, var(--copilot-soft-line) 70%, transparent) 84%, transparent);
+  opacity: 0.72;
+}
+
+.copilot-revision-preview-card-date {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  line-height: 1.2;
+  text-transform: uppercase;
+  color: color-mix(in srgb, var(--copilot-preview-card-edge) 78%, var(--copilot-text-tertiary));
+}
+
+@media (min-width: 640px) {
+  .copilot-revision-preview-card-date[data-has-quick-actions='true'] {
+    margin-inline-end: 2.35rem;
+  }
+}
+
+.copilot-revision-preview-card-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  min-height: 1.9rem;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--copilot-preview-card-edge) 62%, var(--copilot-soft-line));
+  background:
+    linear-gradient(140deg, color-mix(in srgb, var(--copilot-surface-1) 92%, white 8%), color-mix(in srgb, var(--copilot-preview-card-glow) 34%, transparent));
+  padding: 0.24rem 0.68rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  line-height: 1;
+  text-transform: uppercase;
+  color: color-mix(in srgb, var(--copilot-text-primary) 84%, var(--copilot-preview-card-edge));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.4),
+    0 8px 18px color-mix(in srgb, var(--copilot-preview-card-glow) 36%, rgba(15, 23, 42, 0.05));
+}
+
+.copilot-revision-preview-card-action[data-mode='drag'] {
+  color: color-mix(in srgb, var(--copilot-text-primary) 78%, var(--copilot-text-secondary));
+}
+
+.copilot-revision-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  min-height: 1.75rem;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--copilot-soft-line) 72%, var(--copilot-workspace-line));
+  background: color-mix(in srgb, var(--copilot-action-bg) 88%, var(--copilot-surface-1));
+  color: var(--copilot-text-secondary);
+  padding: 0.25rem 0.65rem;
+  font-size: 0.7rem;
+  font-weight: 600;
+}
+
+.copilot-revision-type-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  min-height: 1.8rem;
+  border-radius: 999px;
+  background: var(--copilot-kicker-bg);
+  color: var(--copilot-kicker-fg);
+  padding: 0.28rem 0.7rem;
+  font-size: 0.7rem;
+  font-weight: 700;
+}
+
+.copilot-revision-tag-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  min-height: 1.6rem;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--copilot-soft-line) 74%, white 26%);
+  background: color-mix(in srgb, var(--copilot-surface-1) 90%, white 10%);
+  color: var(--copilot-text-secondary);
+  padding: 0.2rem 0.58rem;
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}
+
+.copilot-revision-type-explanation {
+  border-color: color-mix(in srgb, var(--copilot-accent-border) 58%, var(--copilot-soft-line));
+  background: color-mix(in srgb, var(--copilot-accent-soft) 84%, white 16%);
+  color: var(--copilot-accent-text);
+}
+
+.copilot-revision-type-worked {
+  border-color: rgba(14, 116, 144, 0.28);
+  background: rgba(207, 250, 254, 0.88);
+  color: #0f6176;
+}
+
+.copilot-revision-type-short-note {
+  border-color: rgba(100, 116, 139, 0.26);
+  background: rgba(241, 245, 249, 0.92);
+  color: #334155;
+}
+
+.copilot-revision-type-mistake {
+  border-color: rgba(244, 63, 94, 0.28);
+  background: rgba(255, 228, 230, 0.92);
+  color: #be123c;
+}
+
+.copilot-revision-type-formula {
+  border-color: rgba(79, 70, 229, 0.3);
+  background: rgba(224, 231, 255, 0.92);
+  color: #3730a3;
+}
+
+.copilot-revision-type-definition {
+  border-color: rgba(168, 85, 247, 0.3);
+  background: rgba(243, 232, 255, 0.92);
+  color: #7e22ce;
+}
+
+.copilot-revision-type-research {
+  border-color: rgba(8, 145, 178, 0.28);
+  background: rgba(207, 250, 254, 0.88);
+  color: #0e7490;
+}
+
+.copilot-revision-type-practice {
+  border-color: rgba(16, 185, 129, 0.28);
+  background: rgba(209, 250, 229, 0.9);
+  color: #047857;
+}
+
+.copilot-revision-subject-group {
+  border: 1px solid color-mix(in srgb, var(--copilot-soft-line) 84%, white 16%);
+  border-radius: 1rem;
+  background:
+    linear-gradient(
+      135deg,
+      color-mix(in srgb, var(--copilot-workspace-tint) 13%, transparent),
+      transparent 75%
+    ),
+    color-mix(in srgb, var(--copilot-surface-1) 92%, white 8%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.52),
+    0 8px 18px rgba(15, 23, 42, 0.05);
+  padding: 0.5rem;
+}
+
+.copilot-revision-subject-group-open {
+  border-color: color-mix(in srgb, var(--copilot-accent-border) 46%, var(--copilot-soft-line));
+  background:
+    linear-gradient(
+      135deg,
+      color-mix(in srgb, var(--copilot-accent-soft) 26%, transparent),
+      transparent 74%
+    ),
+    color-mix(in srgb, var(--copilot-surface-1) 95%, white 5%);
+}
+
+.copilot-revision-subject-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  border-radius: 0.82rem;
+  padding: 0.5rem;
+  transition: background-color 180ms ease;
+}
+
+.copilot-revision-subject-toggle:hover,
+.copilot-revision-subject-toggle:focus-visible {
+  background: rgba(255, 255, 255, 0.82);
+}
+
+.copilot-revision-note-row {
+  border: 1px solid color-mix(in srgb, var(--copilot-soft-line) 84%, white 16%);
+  border-radius: 0.88rem;
+  background: color-mix(in srgb, white 88%, var(--copilot-surface-1));
+  padding: 0.52rem 0.62rem;
+  transition: border-color 180ms ease, background-color 180ms ease, transform 180ms ease;
+}
+
+.copilot-revision-note-row:hover,
+.copilot-revision-note-row:focus-visible {
+  border-color: color-mix(in srgb, var(--copilot-accent-border) 58%, var(--copilot-soft-line));
+  background: color-mix(in srgb, var(--copilot-accent-soft) 44%, white 56%);
+  transform: translateY(-1px);
+}
+
+.copilot-revision-note-row-active {
+  border-color: var(--copilot-accent-border);
+  background: color-mix(in srgb, var(--copilot-accent-soft) 52%, white 48%);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--copilot-accent-soft-hover) 68%, transparent);
+}
+
+.copilot-revision-smart-filter-grid {
+  display: grid;
+  gap: 0.42rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+@media (min-width: 640px) {
+  .copilot-revision-smart-filter-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+.copilot-revision-smart-filter {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  border: 1px solid color-mix(in srgb, var(--copilot-soft-line) 82%, white 18%);
+  border-radius: 0.9rem;
+  background:
+    linear-gradient(
+      135deg,
+      color-mix(in srgb, var(--copilot-workspace-tint) 16%, transparent),
+      transparent 70%
+    ),
+    color-mix(in srgb, var(--copilot-surface-1) 94%, white 6%);
+  color: var(--copilot-text-primary);
+  min-height: 3rem;
+  padding: 0.42rem 0.5rem;
+  transition: border-color 180ms ease, background-color 180ms ease, transform 180ms ease;
+}
+
+.copilot-revision-smart-filter:hover,
+.copilot-revision-smart-filter:focus-visible {
+  border-color: color-mix(in srgb, var(--copilot-accent-border) 64%, var(--copilot-soft-line));
+  background:
+    linear-gradient(
+      135deg,
+      color-mix(in srgb, var(--copilot-accent-soft) 32%, transparent),
+      transparent 70%
+    ),
+    color-mix(in srgb, var(--copilot-surface-1) 97%, white 3%);
+  transform: translateY(-1px);
+}
+
+.copilot-revision-smart-filter-active {
+  border-color: var(--copilot-accent-border);
+  background:
+    linear-gradient(
+      135deg,
+      color-mix(in srgb, var(--copilot-accent-soft-hover) 34%, transparent),
+      transparent 70%
+    ),
+    color-mix(in srgb, var(--copilot-surface-1) 97%, white 3%);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--copilot-accent-soft-hover) 55%, transparent);
+}
+
+.copilot-revision-smart-filter-tone-due {
+  border-color: color-mix(in srgb, rgba(14, 116, 144, 0.32) 70%, var(--copilot-soft-line));
+  background:
+    linear-gradient(135deg, rgba(207, 250, 254, 0.52), transparent 72%),
+    color-mix(in srgb, var(--copilot-surface-1) 95%, white 5%);
+}
+
+.copilot-revision-smart-filter-tone-due > span:first-child {
+  border-color: rgba(8, 145, 178, 0.3);
+  background: rgba(236, 254, 255, 0.95);
+  color: #0e7490;
+}
+
+.copilot-revision-smart-filter-tone-fix {
+  border-color: color-mix(in srgb, rgba(225, 29, 72, 0.28) 68%, var(--copilot-soft-line));
+  background:
+    linear-gradient(135deg, rgba(255, 228, 230, 0.58), transparent 72%),
+    color-mix(in srgb, var(--copilot-surface-1) 95%, white 5%);
+}
+
+.copilot-revision-smart-filter-tone-fix > span:first-child {
+  border-color: rgba(225, 29, 72, 0.26);
+  background: rgba(255, 241, 242, 0.95);
+  color: #be123c;
+}
+
+.copilot-revision-smart-filter-tone-practice {
+  border-color: color-mix(in srgb, rgba(5, 150, 105, 0.3) 66%, var(--copilot-soft-line));
+  background:
+    linear-gradient(135deg, rgba(209, 250, 229, 0.56), transparent 72%),
+    color-mix(in srgb, var(--copilot-surface-1) 95%, white 5%);
+}
+
+.copilot-revision-smart-filter-tone-practice > span:first-child {
+  border-color: rgba(5, 150, 105, 0.28);
+  background: rgba(236, 253, 245, 0.95);
+  color: #047857;
+}
+
+.copilot-revision-smart-filter-tone-pinned {
+  border-color: color-mix(in srgb, rgba(71, 85, 105, 0.3) 68%, var(--copilot-soft-line));
+  background:
+    linear-gradient(135deg, rgba(241, 245, 249, 0.68), transparent 72%),
+    color-mix(in srgb, var(--copilot-surface-1) 95%, white 5%);
+}
+
+.copilot-revision-smart-filter-tone-pinned > span:first-child {
+  border-color: rgba(100, 116, 139, 0.24);
+  background: rgba(248, 250, 252, 0.95);
+  color: #334155;
+}
+
+.copilot-revision-smart-filter-tone-momentum {
+  border-color: color-mix(in srgb, rgba(37, 99, 235, 0.28) 68%, var(--copilot-soft-line));
+  background:
+    linear-gradient(135deg, rgba(219, 234, 254, 0.62), transparent 72%),
+    color-mix(in srgb, var(--copilot-surface-1) 95%, white 5%);
+}
+
+.copilot-revision-smart-filter-tone-momentum > span:first-child {
+  border-color: rgba(37, 99, 235, 0.26);
+  background: rgba(239, 246, 255, 0.95);
+  color: #1d4ed8;
+}
+
+.copilot-revision-active-filter-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  border: 1px solid color-mix(in srgb, var(--copilot-accent-border) 62%, var(--copilot-soft-line));
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--copilot-accent-soft) 72%, var(--copilot-surface-1));
+  color: var(--copilot-accent-text);
+  font-size: 0.68rem;
+  font-weight: 700;
+  padding: 0.22rem 0.56rem;
+}
+
+.copilot-revision-filter-lane {
+  border: 1px solid color-mix(in srgb, var(--copilot-soft-line) 80%, white 20%);
+  border-radius: 0.95rem;
+  background:
+    linear-gradient(
+      135deg,
+      color-mix(in srgb, var(--copilot-workspace-tint) 12%, transparent),
+      transparent 75%
+    ),
+    color-mix(in srgb, var(--copilot-surface-1) 95%, white 5%);
+  padding: 0.52rem 0.55rem;
+}
+
+.copilot-revision-filter-lane-subject {
+  border-color: color-mix(in srgb, rgba(14, 116, 144, 0.22) 74%, var(--copilot-soft-line));
+  background:
+    linear-gradient(135deg, rgba(236, 254, 255, 0.72), transparent 74%),
+    color-mix(in srgb, var(--copilot-surface-1) 95%, white 5%);
+}
+
+.copilot-revision-filter-lane-type {
+  border-color: color-mix(in srgb, rgba(71, 85, 105, 0.2) 72%, var(--copilot-soft-line));
+  background:
+    linear-gradient(135deg, rgba(248, 250, 252, 0.8), transparent 74%),
+    color-mix(in srgb, var(--copilot-surface-1) 95%, white 5%);
+}
+
+.copilot-revision-filter-lane-smart {
+  border-color: color-mix(in srgb, rgba(59, 130, 246, 0.2) 72%, var(--copilot-soft-line));
+  background:
+    linear-gradient(135deg, rgba(239, 246, 255, 0.78), transparent 74%),
+    color-mix(in srgb, var(--copilot-surface-1) 95%, white 5%);
+}
+
+.copilot-revision-origin-filter-group {
+  border: 1px solid color-mix(in srgb, var(--copilot-soft-line) 80%, white 20%);
+  border-radius: 0.85rem;
+  padding: 0.4rem;
+}
+
+.copilot-revision-origin-filter-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.55rem;
+  border-radius: 0.7rem;
+  padding: 0.34rem 0.4rem;
+  transition: background-color 180ms ease;
+}
+
+.copilot-revision-origin-filter-toggle:hover,
+.copilot-revision-origin-filter-toggle:focus-visible {
+  background: rgba(255, 255, 255, 0.76);
+}
+
+.copilot-revision-origin-filter-stem {
+  border-color: rgba(8, 145, 178, 0.22);
+  background: rgba(236, 254, 255, 0.56);
+}
+
+.copilot-revision-origin-filter-language {
+  border-color: rgba(79, 70, 229, 0.2);
+  background: rgba(238, 242, 255, 0.56);
+}
+
+.copilot-revision-origin-filter-humanities {
+  border-color: rgba(217, 119, 6, 0.2);
+  background: rgba(255, 247, 237, 0.56);
+}
+
+.copilot-revision-origin-filter-applied {
+  border-color: rgba(5, 150, 105, 0.2);
+  background: rgba(236, 253, 245, 0.56);
+}
+
+.copilot-revision-origin-filter-general {
+  border-color: rgba(100, 116, 139, 0.2);
+  background: rgba(248, 250, 252, 0.62);
+}
+
+.copilot-revision-filter-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.34rem;
+  border: 1px solid color-mix(in srgb, var(--copilot-soft-line) 76%, var(--copilot-workspace-line));
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--copilot-surface-1) 92%, white 8%);
+  color: var(--copilot-text-secondary);
+  font-size: 0.68rem;
+  font-weight: 700;
+  line-height: 1;
+  min-height: 1.7rem;
+  padding: 0.24rem 0.56rem;
+  --copilot-filter-pill-active-border: var(--copilot-accent-border);
+  --copilot-filter-pill-active-bg: color-mix(in srgb, var(--copilot-accent-soft) 78%, var(--copilot-surface-1));
+  --copilot-filter-pill-active-color: var(--copilot-accent-text);
+  --copilot-filter-pill-active-ring: color-mix(in srgb, var(--copilot-accent-soft-hover) 56%, transparent);
+  transition: border-color 170ms ease, background-color 170ms ease, color 170ms ease, transform 170ms ease;
+}
+
+.copilot-revision-filter-pill-tone-all {
+  border-color: rgba(59, 130, 246, 0.26);
+  background: rgba(219, 234, 254, 0.6);
+  color: #1e3a8a;
+  --copilot-filter-pill-active-border: rgba(37, 99, 235, 0.5);
+  --copilot-filter-pill-active-bg: rgba(219, 234, 254, 0.9);
+  --copilot-filter-pill-active-color: #1e3a8a;
+  --copilot-filter-pill-active-ring: rgba(147, 197, 253, 0.72);
+}
+
+.copilot-revision-filter-pill-tone-explanation {
+  border-color: rgba(99, 102, 241, 0.24);
+  background: rgba(224, 231, 255, 0.58);
+  color: #3730a3;
+  --copilot-filter-pill-active-border: rgba(79, 70, 229, 0.48);
+  --copilot-filter-pill-active-bg: rgba(224, 231, 255, 0.9);
+  --copilot-filter-pill-active-color: #3730a3;
+  --copilot-filter-pill-active-ring: rgba(165, 180, 252, 0.7);
+}
+
+.copilot-revision-filter-pill-tone-worked {
+  border-color: rgba(14, 116, 144, 0.25);
+  background: rgba(207, 250, 254, 0.58);
+  color: #155e75;
+  --copilot-filter-pill-active-border: rgba(14, 116, 144, 0.46);
+  --copilot-filter-pill-active-bg: rgba(207, 250, 254, 0.88);
+  --copilot-filter-pill-active-color: #155e75;
+  --copilot-filter-pill-active-ring: rgba(103, 232, 249, 0.68);
+}
+
+.copilot-revision-filter-pill-tone-short-note {
+  border-color: rgba(100, 116, 139, 0.24);
+  background: rgba(241, 245, 249, 0.76);
+  color: #334155;
+  --copilot-filter-pill-active-border: rgba(100, 116, 139, 0.44);
+  --copilot-filter-pill-active-bg: rgba(241, 245, 249, 0.94);
+  --copilot-filter-pill-active-color: #334155;
+  --copilot-filter-pill-active-ring: rgba(203, 213, 225, 0.72);
+}
+
+.copilot-revision-filter-pill-tone-mistake {
+  border-color: rgba(244, 63, 94, 0.2);
+  background: rgba(255, 241, 242, 0.78);
+  color: #9f1239;
+  --copilot-filter-pill-active-border: rgba(225, 29, 72, 0.38);
+  --copilot-filter-pill-active-bg: rgba(255, 228, 230, 0.96);
+  --copilot-filter-pill-active-color: #9f1239;
+  --copilot-filter-pill-active-ring: rgba(254, 205, 211, 0.76);
+}
+
+.copilot-revision-filter-pill-tone-formula {
+  border-color: rgba(99, 102, 241, 0.25);
+  background: rgba(238, 242, 255, 0.68);
+  color: #4338ca;
+  --copilot-filter-pill-active-border: rgba(79, 70, 229, 0.46);
+  --copilot-filter-pill-active-bg: rgba(224, 231, 255, 0.9);
+  --copilot-filter-pill-active-color: #4338ca;
+  --copilot-filter-pill-active-ring: rgba(199, 210, 254, 0.72);
+}
+
+.copilot-revision-filter-pill-tone-definition {
+  border-color: rgba(168, 85, 247, 0.24);
+  background: rgba(243, 232, 255, 0.66);
+  color: #7e22ce;
+  --copilot-filter-pill-active-border: rgba(147, 51, 234, 0.42);
+  --copilot-filter-pill-active-bg: rgba(243, 232, 255, 0.9);
+  --copilot-filter-pill-active-color: #7e22ce;
+  --copilot-filter-pill-active-ring: rgba(216, 180, 254, 0.72);
+}
+
+.copilot-revision-filter-pill-tone-research {
+  border-color: rgba(14, 165, 233, 0.24);
+  background: rgba(224, 242, 254, 0.68);
+  color: #0369a1;
+  --copilot-filter-pill-active-border: rgba(2, 132, 199, 0.44);
+  --copilot-filter-pill-active-bg: rgba(224, 242, 254, 0.9);
+  --copilot-filter-pill-active-color: #0369a1;
+  --copilot-filter-pill-active-ring: rgba(125, 211, 252, 0.7);
+}
+
+.copilot-revision-filter-pill-tone-practice {
+  border-color: rgba(16, 185, 129, 0.24);
+  background: rgba(220, 252, 231, 0.68);
+  color: #047857;
+  --copilot-filter-pill-active-border: rgba(5, 150, 105, 0.42);
+  --copilot-filter-pill-active-bg: rgba(220, 252, 231, 0.9);
+  --copilot-filter-pill-active-color: #047857;
+  --copilot-filter-pill-active-ring: rgba(134, 239, 172, 0.72);
+}
+
+.copilot-revision-filter-pill-tone-all .copilot-revision-filter-pill-count {
+  background: rgba(191, 219, 254, 0.84);
+  color: #1e3a8a;
+}
+
+.copilot-revision-filter-pill-tone-explanation .copilot-revision-filter-pill-count {
+  background: rgba(199, 210, 254, 0.82);
+  color: #3730a3;
+}
+
+.copilot-revision-filter-pill-tone-worked .copilot-revision-filter-pill-count {
+  background: rgba(165, 243, 252, 0.82);
+  color: #155e75;
+}
+
+.copilot-revision-filter-pill-tone-short-note .copilot-revision-filter-pill-count {
+  background: rgba(226, 232, 240, 0.84);
+  color: #334155;
+}
+
+.copilot-revision-filter-pill-tone-mistake .copilot-revision-filter-pill-count {
+  background: rgba(255, 228, 230, 0.86);
+  color: #9f1239;
+}
+
+.copilot-revision-filter-pill-tone-formula .copilot-revision-filter-pill-count {
+  background: rgba(224, 231, 255, 0.84);
+  color: #4338ca;
+}
+
+.copilot-revision-filter-pill-tone-definition .copilot-revision-filter-pill-count {
+  background: rgba(233, 213, 255, 0.84);
+  color: #7e22ce;
+}
+
+.copilot-revision-filter-pill-tone-research .copilot-revision-filter-pill-count {
+  background: rgba(186, 230, 253, 0.82);
+  color: #0369a1;
+}
+
+.copilot-revision-filter-pill-tone-practice .copilot-revision-filter-pill-count {
+  background: rgba(187, 247, 208, 0.84);
+  color: #047857;
+}
+
+.copilot-revision-filter-pill:hover,
+.copilot-revision-filter-pill:focus-visible {
+  border-color: color-mix(in srgb, var(--copilot-accent-border) 62%, var(--copilot-soft-line));
+  background: color-mix(in srgb, var(--copilot-accent-soft) 52%, var(--copilot-surface-1));
+  color: var(--copilot-text-primary);
+  transform: translateY(-1px);
+}
+
+.copilot-revision-filter-pill-active {
+  border-color: var(--copilot-filter-pill-active-border);
+  background: var(--copilot-filter-pill-active-bg);
+  color: var(--copilot-filter-pill-active-color);
+  box-shadow: inset 0 0 0 1px var(--copilot-filter-pill-active-ring);
+}
+
+.copilot-revision-filter-pill-count {
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--copilot-action-bg) 88%, var(--copilot-surface-1));
+  color: var(--copilot-text-tertiary);
+  font-size: 0.62rem;
+  font-weight: 700;
+  padding: 0.15rem 0.32rem;
+}
+
+.copilot-revision-filter-pill-active .copilot-revision-filter-pill-count {
+  font-weight: 800;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, currentColor 18%, transparent);
+}
+
+.copilot-revision-focus-bar {
+  border-radius: 1rem;
+  padding: 0.72rem 0.85rem 0.95rem;
+  background:
+    linear-gradient(
+      135deg,
+      color-mix(in srgb, var(--copilot-workspace-tint) 24%, transparent),
+      transparent 76%
+    ),
+    color-mix(in srgb, var(--copilot-surface-1) 95%, white 5%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.46),
+    0 8px 20px rgba(15, 23, 42, 0.04);
+}
+
+.copilot-revision-reader-shell {
+  position: relative;
+  isolation: isolate;
+  padding: 0;
+  background:
+    radial-gradient(circle at top right, color-mix(in srgb, var(--copilot-accent-soft) 20%, transparent), transparent 32%),
+    linear-gradient(180deg, color-mix(in srgb, var(--copilot-surface-1) 96%, white 4%), color-mix(in srgb, var(--copilot-surface-1) 90%, white 10%));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.56),
+    0 18px 38px rgba(15, 23, 42, 0.06);
+}
+
+.copilot-revision-reader-body {
+  position: relative;
+  z-index: 1;
+}
+
+.copilot-revision-collection-card {
+  position: relative;
+  isolation: isolate;
+}
+
+.copilot-revision-collection-card-active {
+  border-color: color-mix(in srgb, var(--copilot-accent-border) 74%, var(--copilot-soft-line)) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.6),
+    0 18px 34px rgba(79, 70, 229, 0.12);
+}
+
+.copilot-revision-collection-card-drop {
+  transform: translateY(-2px);
+  border-color: color-mix(in srgb, var(--copilot-accent-border) 82%, var(--copilot-soft-line)) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.62),
+    0 0 0 1px color-mix(in srgb, var(--copilot-accent-border) 45%, transparent),
+    0 20px 40px rgba(79, 70, 229, 0.14);
+}
+
+.copilot-revision-collection-card::after {
+  content: '';
+  position: absolute;
+  inset: auto 14px 12px;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.72), transparent);
+  pointer-events: none;
+}
+
+.copilot-revision-book-cover {
+  position: relative;
+  isolation: isolate;
+}
+
+.copilot-revision-book-identity {
+  border: 1px solid color-mix(in srgb, var(--copilot-soft-line) 76%, white 24%);
+  background:
+    radial-gradient(circle at top right, color-mix(in srgb, var(--copilot-accent-soft) 24%, transparent), transparent 42%),
+    linear-gradient(180deg, color-mix(in srgb, var(--copilot-surface-1) 95%, white 5%), color-mix(in srgb, var(--copilot-surface-muted) 74%, white 26%));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.56),
+    0 14px 28px rgba(15, 23, 42, 0.06);
+}
+
+.copilot-revision-book-cover::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background:
+    radial-gradient(circle at top left, rgba(255, 255, 255, 0.72), transparent 34%),
+    linear-gradient(135deg, rgba(255, 255, 255, 0.16), transparent 48%);
+  pointer-events: none;
+}
+
+.copilot-revision-book-item {
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.48),
+    0 10px 24px rgba(15, 23, 42, 0.045);
+}
+
+.copilot-revision-cover-mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  border: 1px solid color-mix(in srgb, var(--copilot-soft-line) 68%, white 32%);
+  background:
+    radial-gradient(circle at top left, rgba(255, 255, 255, 0.78), transparent 34%),
+    linear-gradient(180deg, color-mix(in srgb, var(--copilot-surface-1) 92%, white 8%), color-mix(in srgb, var(--copilot-accent-soft) 38%, var(--copilot-surface-1)));
+  color: var(--copilot-text-primary);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.56),
+    0 10px 24px rgba(15, 23, 42, 0.06);
+}
+
+.copilot-revision-cover-mark-emoji {
+  line-height: 1;
+}
+
+.copilot-revision-cover-art {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  border-radius: inherit;
+}
+
+.copilot-revision-cover-motto {
+  color: var(--copilot-text-tertiary);
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  line-height: 1.2;
+  text-transform: uppercase;
+}
+
+.copilot-revision-chapter-toggle {
+  border: 1px solid color-mix(in srgb, var(--copilot-soft-line) 76%, white 24%);
+  border-radius: 1rem;
+  background: color-mix(in srgb, var(--copilot-surface-1) 92%, white 8%);
+  padding: 0.82rem 0.88rem;
+  transition: border-color 180ms ease, background-color 180ms ease, transform 180ms ease;
+}
+
+.copilot-revision-chapter-toggle:hover,
+.copilot-revision-chapter-toggle:focus-visible {
+  border-color: color-mix(in srgb, var(--copilot-accent-border) 60%, var(--copilot-soft-line));
+  background: color-mix(in srgb, var(--copilot-accent-soft) 24%, var(--copilot-surface-1));
+  transform: translateY(-1px);
+}
+
+.copilot-revision-book-cover-editor {
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.58),
+    0 12px 28px rgba(15, 23, 42, 0.05);
+}
+
+.copilot-revision-book-cover-preview {
+  width: 172px;
+  height: 228px;
+  border-radius: 1.25rem;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--copilot-soft-line) 72%, white 28%);
+  background:
+    radial-gradient(circle at top left, rgba(255, 255, 255, 0.72), transparent 35%),
+    linear-gradient(180deg, color-mix(in srgb, var(--copilot-surface-1) 94%, white 6%), color-mix(in srgb, var(--copilot-accent-soft) 38%, var(--copilot-surface-1)));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.5),
+    0 14px 34px rgba(15, 23, 42, 0.08);
+}
+
+.copilot-revision-book-cover-preview-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.copilot-revision-book-cover-placeholder {
+  width: 100%;
+  height: 100%;
+  display: grid;
+  place-items: center;
+  background:
+    linear-gradient(140deg, rgba(255, 255, 255, 0.26), transparent 44%),
+    radial-gradient(circle at top left, color-mix(in srgb, var(--copilot-accent-soft) 38%, transparent), transparent 48%);
+}
+
+.copilot-revision-narrative-card {
+  border: 1px solid color-mix(in srgb, var(--copilot-accent-border) 36%, var(--copilot-soft-line));
+  background:
+    radial-gradient(circle at top right, color-mix(in srgb, var(--copilot-accent-soft) 24%, transparent), transparent 44%),
+    linear-gradient(180deg, color-mix(in srgb, var(--copilot-surface-1) 94%, white 6%), color-mix(in srgb, var(--copilot-surface-muted) 82%, white 18%));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.62),
+    0 14px 30px rgba(15, 23, 42, 0.05);
+}
+
+.copilot-revision-flashcard-shell {
+  border: 1px solid color-mix(in srgb, var(--copilot-accent-border) 34%, var(--copilot-soft-line));
+  background:
+    radial-gradient(circle at top right, color-mix(in srgb, var(--copilot-accent-soft) 20%, transparent), transparent 42%),
+    linear-gradient(180deg, color-mix(in srgb, var(--copilot-surface-1) 94%, white 6%), color-mix(in srgb, var(--copilot-surface-muted) 78%, white 22%));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.58),
+    0 14px 30px rgba(15, 23, 42, 0.055);
+  transition: transform 180ms ease, border-color 180ms ease, box-shadow 180ms ease;
+}
+
+button.copilot-revision-flashcard-shell:hover,
+button.copilot-revision-flashcard-shell:focus-visible {
+  border-color: color-mix(in srgb, var(--copilot-accent-border) 62%, var(--copilot-soft-line));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.64),
+    0 18px 34px rgba(15, 23, 42, 0.07);
+  transform: translateY(-1px);
+}
+
+.copilot-revision-flashcard-face {
+  border: 1px solid color-mix(in srgb, var(--copilot-soft-line) 72%, white 28%);
+  background: color-mix(in srgb, white 82%, var(--copilot-surface-1) 18%);
+  min-height: 170px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.copilot-revision-visual-grid {
+  display: grid;
+  gap: 0.9rem;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
+.copilot-revision-visual-card {
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--copilot-soft-line) 74%, white 26%);
+  background:
+    radial-gradient(circle at top left, rgba(255, 255, 255, 0.7), transparent 34%),
+    linear-gradient(180deg, color-mix(in srgb, var(--copilot-surface-1) 96%, white 4%), color-mix(in srgb, var(--copilot-surface-muted) 84%, white 16%));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.56),
+    0 14px 28px rgba(15, 23, 42, 0.05);
+}
+
+.copilot-revision-visual-thumb {
+  aspect-ratio: 4 / 3;
+  overflow: hidden;
+  border-bottom: 1px solid color-mix(in srgb, var(--copilot-soft-line) 74%, white 26%);
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--copilot-accent-soft) 28%, transparent), transparent 58%),
+    color-mix(in srgb, var(--copilot-surface-1) 92%, white 8%);
+}
+
+@media (max-width: 768px) {
+  .copilot-revision-book-cover-preview {
+    width: 100%;
+    max-width: 240px;
+    height: 280px;
+  }
+
+  .copilot-revision-flashcard-face {
+    min-height: 148px;
+  }
+}
+
+.copilot-revision-reader-header {
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  overflow: hidden;
+  isolation: isolate;
+  padding: 1rem 1rem 0.95rem;
+  border-bottom: 1px solid color-mix(in srgb, var(--copilot-workspace-line) 34%, var(--copilot-soft-line));
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--copilot-surface-1) 99%, rgba(255, 255, 255, 0.96)), color-mix(in srgb, var(--copilot-surface-1) 95%, rgba(255, 255, 255, 0.82)));
+  backdrop-filter: blur(18px) saturate(142%);
+  box-shadow:
+    inset 0 -1px 0 rgba(255, 255, 255, 0.34),
+    0 10px 22px rgba(15, 23, 42, 0.04);
+  transition:
+    padding 380ms cubic-bezier(0.22, 1, 0.36, 1),
+    border-color 320ms ease,
+    background 360ms ease,
+    box-shadow 360ms ease;
+}
+
+.copilot-revision-reader-header[data-scrolled='true'] {
+  box-shadow:
+    inset 0 -1px 0 rgba(255, 255, 255, 0.42),
+    0 16px 32px rgba(15, 23, 42, 0.08);
+}
+
+.copilot-revision-reader-header[data-collapsed='true'] {
+  padding-top: 0.72rem;
+  padding-bottom: 0.68rem;
+  border-bottom-color: color-mix(in srgb, var(--copilot-accent-border) 24%, var(--copilot-soft-line));
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--copilot-surface-1) 98%, rgba(255, 255, 255, 0.94)), color-mix(in srgb, var(--copilot-surface-1) 92%, rgba(255, 255, 255, 0.7)));
+  box-shadow:
+    inset 0 -1px 0 rgba(255, 255, 255, 0.46),
+    0 20px 38px rgba(15, 23, 42, 0.1);
+}
+
+.copilot-revision-reader-header::before,
+.copilot-revision-reader-header::after {
+  content: '';
+  position: absolute;
+  pointer-events: none;
+}
+
+.copilot-revision-reader-header::before {
+  inset: 0 0 auto 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--copilot-workspace-line) 72%, var(--copilot-accent-border)), transparent);
+  opacity: 0.82;
+}
+
+.copilot-revision-reader-header::after {
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: min(20rem, 46%);
+  background: radial-gradient(circle at top right, color-mix(in srgb, var(--copilot-workspace-tint) 32%, transparent), transparent 62%);
+  opacity: 0.9;
+}
+
+.copilot-revision-reader-header > * {
+  position: relative;
+  z-index: 1;
+}
+
+.copilot-revision-reader-header-title-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.9rem 1rem;
+  transition: gap 360ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.copilot-revision-reader-header-copy {
+  min-width: 0;
+  flex: 1 1 26rem;
+}
+
+.copilot-revision-reader-title {
+  transform-origin: left top;
+  transition: transform 380ms cubic-bezier(0.22, 1, 0.36, 1);
+  will-change: transform;
+}
+
+.copilot-revision-reader-header .copilot-revision-type-pill {
+  transition:
+    transform 380ms cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow 360ms ease;
+}
+
+.copilot-revision-reader-header-actions {
+  display: flex;
+  flex: 0 1 auto;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  max-width: 100%;
+  max-height: 7rem;
+  overflow: hidden;
+  transform-origin: top right;
+  transition:
+    opacity 300ms ease,
+    transform 380ms cubic-bezier(0.22, 1, 0.36, 1),
+    max-width 380ms cubic-bezier(0.22, 1, 0.36, 1),
+    max-height 380ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.copilot-revision-reader-header-meta-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.8rem;
+  max-height: 4rem;
+  overflow: hidden;
+  transform-origin: top left;
+  transition:
+    opacity 280ms ease,
+    transform 360ms cubic-bezier(0.22, 1, 0.36, 1),
+    margin-top 360ms cubic-bezier(0.22, 1, 0.36, 1),
+    max-height 360ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.copilot-revision-reader-header[data-collapsed='true'] .copilot-revision-breadcrumb-row {
+  margin-bottom: 0.45rem;
+}
+
+.copilot-revision-reader-header[data-collapsed='true'] .copilot-revision-reader-header-title-row {
+  gap: 0.35rem 0.65rem;
+}
+
+.copilot-revision-reader-header[data-collapsed='true'] .copilot-revision-reader-title {
+  transform: scale(0.9);
+}
+
+.copilot-revision-reader-header[data-collapsed='true'] .copilot-revision-type-pill {
+  transform: translateY(-1px) scale(0.96);
+  box-shadow: 0 10px 22px rgba(15, 23, 42, 0.08);
+}
+
+.copilot-revision-reader-header[data-collapsed='true'] .copilot-revision-reader-header-actions {
+  opacity: 0;
+  transform: translateY(-0.85rem) scale(0.96);
+  max-width: 0;
+  max-height: 0;
+  pointer-events: none;
+}
+
+.copilot-revision-reader-header[data-collapsed='true'] .copilot-revision-reader-header-meta-row {
+  opacity: 0;
+  transform: translateY(-0.6rem) scale(0.98);
+  margin-top: 0;
+  max-height: 0;
+  pointer-events: none;
+}
+
+.copilot-revision-reader-meta,
+.copilot-revision-reader-date {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  min-height: 1.65rem;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--copilot-soft-line) 72%, white 28%);
+  background: color-mix(in srgb, var(--copilot-surface-muted) 66%, white 34%);
+  color: var(--copilot-text-secondary);
+  padding: 0.2rem 0.62rem;
+  font-size: 0.72rem;
+  font-weight: 600;
+}
+
+@media (min-width: 768px) {
+  .copilot-revision-reader-header {
+    padding-left: 1.25rem;
+    padding-right: 1.25rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .copilot-revision-reader-header,
+  .copilot-revision-reader-header-title-row,
+  .copilot-revision-reader-title,
+  .copilot-revision-reader-header .copilot-revision-type-pill,
+  .copilot-revision-reader-header-actions,
+  .copilot-revision-reader-header-meta-row {
+    transition: none !important;
+  }
+}
+
+.copilot-revision-breadcrumb-row {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 0.85rem;
+  min-width: 0;
+}
+
+.copilot-revision-breadcrumb-main {
+  position: relative;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  min-width: 0;
+  flex: 1 1 auto;
+  padding: 0.4rem 0.45rem;
+  border: 1px solid color-mix(in srgb, var(--copilot-workspace-line) 34%, var(--copilot-soft-line));
+  border-radius: 999px;
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--copilot-workspace-tint) 24%, rgba(255, 255, 255, 0.9)), color-mix(in srgb, var(--copilot-surface-1) 94%, rgba(255, 255, 255, 0.86)));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.62),
+    inset 0 -1px 0 rgba(148, 163, 184, 0.12),
+    0 12px 26px rgba(15, 23, 42, 0.06);
+}
+
+.copilot-revision-breadcrumb-main::before,
+.copilot-revision-breadcrumb-main::after {
+  content: '';
+  position: absolute;
+  pointer-events: none;
+}
+
+.copilot-revision-breadcrumb-main::before {
+  inset: 1px;
+  border-radius: inherit;
+  background-image:
+    linear-gradient(to right, color-mix(in srgb, var(--copilot-workspace-line) 18%, transparent) 1px, transparent 1px),
+    linear-gradient(to bottom, color-mix(in srgb, var(--copilot-workspace-line) 14%, transparent) 1px, transparent 1px);
+  background-size:
+    18px 18px,
+    18px 18px;
+  opacity: 0.28;
+  mask-image: linear-gradient(90deg, rgba(0, 0, 0, 0.22), rgba(0, 0, 0, 0.95) 16%, rgba(0, 0, 0, 0.95) 84%, rgba(0, 0, 0, 0.22));
+}
+
+.copilot-revision-breadcrumb-main::after {
+  inset: -1px;
+  border-radius: inherit;
+  background: linear-gradient(120deg, transparent 10%, color-mix(in srgb, var(--copilot-accent-soft) 24%, rgba(255, 255, 255, 0.42)) 44%, transparent 72%);
+  opacity: 0.34;
+}
+
+.copilot-revision-breadcrumb-main > * {
+  position: relative;
+  z-index: 1;
+  min-width: 0;
+}
+
+.copilot-revision-breadcrumb-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  min-height: 1.95rem;
+  padding: 0.34rem 0.88rem;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--copilot-accent-border) 68%, var(--copilot-workspace-line));
+  background:
+    linear-gradient(145deg, color-mix(in srgb, var(--copilot-accent-soft) 88%, rgba(255, 255, 255, 0.92)), color-mix(in srgb, var(--copilot-surface-1) 92%, rgba(255, 255, 255, 0.08)));
+  color: color-mix(in srgb, var(--copilot-accent-text) 82%, var(--copilot-text-primary));
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.56),
+    0 10px 20px color-mix(in srgb, var(--copilot-accent-soft) 34%, rgba(15, 23, 42, 0.06));
+}
+
+.copilot-revision-breadcrumb-subject-tag {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  min-height: 1.95rem;
+  padding: 0.34rem 0.82rem;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--copilot-workspace-line) 54%, var(--copilot-soft-line));
+  background:
+    linear-gradient(145deg, color-mix(in srgb, var(--copilot-workspace-tint) 22%, rgba(255, 255, 255, 0.86)), color-mix(in srgb, var(--copilot-surface-muted) 88%, rgba(255, 255, 255, 0.14)));
+  color: color-mix(in srgb, var(--copilot-text-primary) 92%, var(--copilot-workspace-strong));
+  font-family: "Space Grotesk", "Segoe UI", "Inter", system-ui, sans-serif;
+  font-size: 0.76rem;
+  font-weight: 650;
+  letter-spacing: 0.04em;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.5),
+    0 8px 18px rgba(15, 23, 42, 0.05);
+}
+
+.copilot-revision-breadcrumb-trail {
+  display: flex;
+  align-items: center;
+  flex: 1 1 auto;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  min-width: 0;
+}
+
+.copilot-revision-breadcrumb-separator {
+  flex: 0 0 auto;
+  color: color-mix(in srgb, var(--copilot-text-tertiary) 72%, var(--copilot-workspace-strong));
+  opacity: 0.86;
+}
+
+.copilot-revision-breadcrumb-chip {
+  position: relative;
+  max-width: min(48vw, 26rem);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-height: 1.95rem;
+  padding: 0.34rem 0.86rem;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--copilot-text-secondary);
+  font-family: "Space Grotesk", "Segoe UI", "Inter", system-ui, sans-serif;
+  font-size: 0.8rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  transition:
+    transform 180ms ease,
+    border-color 180ms ease,
+    background-color 180ms ease,
+    color 180ms ease,
+    box-shadow 180ms ease;
+}
+
+.copilot-revision-breadcrumb-chip::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--copilot-workspace-tint) 20%, rgba(255, 255, 255, 0.7)), color-mix(in srgb, var(--copilot-surface-muted) 86%, rgba(255, 255, 255, 0.14)));
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 180ms ease;
+}
+
+.copilot-revision-breadcrumb-chip:disabled {
+  opacity: 1;
+  cursor: default;
+}
+
+.copilot-revision-breadcrumb-chip-clickable:hover,
+.copilot-revision-breadcrumb-chip-clickable:focus-visible {
+  transform: translateY(-1px);
+  border-color: color-mix(in srgb, var(--copilot-workspace-line) 62%, var(--copilot-soft-line));
+  color: var(--copilot-text-primary);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.48),
+    0 8px 18px rgba(15, 23, 42, 0.05);
+}
+
+.copilot-revision-breadcrumb-chip-clickable:hover::before,
+.copilot-revision-breadcrumb-chip-clickable:focus-visible::before {
+  opacity: 1;
+}
+
+.copilot-revision-breadcrumb-chip-active {
+  border-color: color-mix(in srgb, var(--copilot-accent-border) 78%, var(--copilot-workspace-line));
+  background:
+    linear-gradient(140deg, color-mix(in srgb, var(--copilot-accent-soft) 70%, rgba(255, 255, 255, 0.92)), color-mix(in srgb, var(--copilot-workspace-tint) 38%, var(--copilot-surface-1)));
+  color: color-mix(in srgb, var(--copilot-accent-text) 84%, var(--copilot-text-primary));
+  font-weight: 700;
+  text-shadow: 0 0 16px color-mix(in srgb, var(--copilot-accent-soft) 34%, transparent);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.62),
+    0 12px 24px color-mix(in srgb, var(--copilot-accent-soft) 42%, rgba(15, 23, 42, 0.08));
+}
+
+.copilot-revision-breadcrumb-chip-muted {
+  color: var(--copilot-text-tertiary);
+}
+
+.copilot-revision-breadcrumb-nav {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  flex: 0 0 auto;
+}
+
+.copilot-revision-breadcrumb-nav-btn {
+  border-color: color-mix(in srgb, var(--copilot-soft-line) 74%, white 26%);
+  background:
+    linear-gradient(150deg, color-mix(in srgb, var(--copilot-surface-1) 96%, white 4%), color-mix(in srgb, var(--copilot-surface-muted) 84%, white 16%));
+  color: var(--copilot-text-primary);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.56),
+    0 6px 14px rgba(15, 23, 42, 0.04);
+}
+
+.copilot-revision-breadcrumb-nav-btn:hover:not(:disabled),
+.copilot-revision-breadcrumb-nav-btn:focus-visible:not(:disabled) {
+  transform: translateY(-1px);
+  border-color: color-mix(in srgb, var(--copilot-accent-border) 68%, var(--copilot-workspace-line));
+  background:
+    linear-gradient(150deg, color-mix(in srgb, var(--copilot-accent-soft) 34%, var(--copilot-surface-1)), color-mix(in srgb, var(--copilot-surface-1) 92%, white 8%));
+}
+
+.copilot-revision-breadcrumb-nav-btn:disabled {
+  opacity: 0.42;
+  box-shadow: none;
+}
+
+.copilot-revision-header-notebook-nav {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  flex: 0 0 auto;
+  margin-left: auto;
+  padding: 0.2rem 0.24rem 0.2rem 0.56rem;
+  border: 1px solid color-mix(in srgb, var(--copilot-workspace-line) 30%, var(--copilot-soft-line));
+  border-radius: 999px;
+  background:
+    linear-gradient(145deg, color-mix(in srgb, var(--copilot-surface-1) 94%, rgba(255, 255, 255, 0.08)), color-mix(in srgb, var(--copilot-surface-muted) 84%, rgba(255, 255, 255, 0.16)));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.58),
+    0 8px 18px rgba(15, 23, 42, 0.05);
+}
+
+.copilot-revision-header-notebook-nav::before,
+.copilot-revision-header-notebook-nav::after {
+  pointer-events: none;
+}
+
+.copilot-revision-header-notebook-nav::before {
+  content: 'Browse';
+  color: color-mix(in srgb, var(--copilot-text-tertiary) 76%, var(--copilot-workspace-strong));
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-size: 0.64rem;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+.copilot-revision-header-notebook-nav::after {
+  content: '';
+  width: 1px;
+  align-self: stretch;
+  margin: 0 0.16rem 0 0.08rem;
+  background: linear-gradient(180deg, transparent, color-mix(in srgb, var(--copilot-workspace-line) 56%, transparent), transparent);
+}
+
+.copilot-revision-header-notebook-nav-btn {
+  border-color: color-mix(in srgb, var(--copilot-workspace-line) 48%, var(--copilot-soft-line));
+  background:
+    linear-gradient(145deg, color-mix(in srgb, var(--copilot-surface-1) 96%, white 4%), color-mix(in srgb, var(--copilot-workspace-tint) 16%, var(--copilot-surface-muted)));
+  color: color-mix(in srgb, var(--copilot-text-primary) 92%, var(--copilot-workspace-strong));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.62),
+    0 6px 14px rgba(15, 23, 42, 0.05);
+}
+
+.copilot-revision-header-notebook-nav-btn:hover:not(:disabled),
+.copilot-revision-header-notebook-nav-btn:focus-visible:not(:disabled) {
+  transform: translateY(-1px);
+  border-color: color-mix(in srgb, var(--copilot-accent-border) 66%, var(--copilot-workspace-line));
+  background:
+    linear-gradient(145deg, color-mix(in srgb, var(--copilot-accent-soft) 42%, var(--copilot-surface-1)), color-mix(in srgb, var(--copilot-workspace-tint) 24%, var(--copilot-surface-1)));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.66),
+    0 8px 16px color-mix(in srgb, var(--copilot-accent-soft) 30%, rgba(15, 23, 42, 0.08));
+}
+
+.copilot-revision-header-notebook-nav-btn:disabled {
+  opacity: 0.46;
+  box-shadow: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .copilot-revision-preview-card,
+  .copilot-revision-preview-card::after {
+    transition: none !important;
+    transform: none !important;
+  }
+
+  .copilot-revision-preview-card-signal::before,
+  .copilot-revision-preview-lens-orb::after,
+  .copilot-revision-preview-system-orb::after {
+    animation: none !important;
+  }
+
+  .copilot-revision-note-stage {
+    animation: none !important;
+  }
+}

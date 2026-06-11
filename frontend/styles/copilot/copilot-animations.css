@@ -1,0 +1,248 @@
+/* Voice ambient animations */
+@keyframes orbit-spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+@keyframes stars-drift {
+  0%, 100% { transform: translate(0, 0); opacity: 0.7; }
+  33% { transform: translate(6%, -4%); opacity: 0.8; }
+  67% { transform: translate(-4%, 6%); opacity: 0.6; }
+}
+
+@keyframes stars-twinkle {
+  0%, 100% { opacity: 0.5; }
+  50% { opacity: 0.8; }
+}
+
+@keyframes nebula-drift {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  25% { transform: translate(5%, -6%) scale(1.04); }
+  50% { transform: translate(-4%, 4%) scale(0.96); }
+  75% { transform: translate(6%, 2%) scale(1.02); }
+}
+
+@keyframes light-sweep {
+  0%, 100% { transform: translateX(-70%) rotate(-4deg); opacity: 0.4; }
+  50% { transform: translateX(70%) rotate(4deg); opacity: 0.7; }
+}
+
+/* Copilot revision preview animations */
+@keyframes copilot-revision-preview-pulse {
+  0%, 100% { opacity: 0.38; transform: scale(1); }
+  50% { opacity: 0.78; transform: scale(1.12); }
+}
+
+/* Media myth sweep */
+@keyframes copilot-media-myth-sweep {
+  0%, 100% { transform: translateX(-38%); opacity: 0.38; }
+  50% { transform: translateX(38%); opacity: 0.88; }
+}
+
+/* Media myth orbit breathe */
+@keyframes copilot-media-myth-orbit-breathe {
+  0%, 100% {
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.95),
+      0 14px 24px rgba(var(--copilot-media-shadow-rgb), 0.09);
+  }
+  50% {
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.96),
+      0 18px 30px rgba(var(--copilot-media-shadow-rgb), 0.12);
+  }
+}
+
+/* Copilot revision editor */
+@keyframes copilot-revision-editor-aurora {
+  0%, 100% { opacity: 0.06; transform: translateX(-30%) scale(1); }
+  50% { opacity: 0.14; transform: translateX(30%) scale(1.04); }
+}
+
+/* Copilot revision graph */
+@keyframes copilot-revision-graph-sweep {
+  0%, 100% { opacity: 0.16; transform: translateX(-20%); }
+  50% { opacity: 0.3; transform: translateX(20%); }
+}
+
+@keyframes copilot-revision-note-slide-in {
+  0% { opacity: 0; transform: translateY(10px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+
+/* Copilot revision notegraph overview */
+@keyframes copilot-revision-notegraph-overview-push {
+  0%, 100% { opacity: 0.4; transform: scaleY(0.96); }
+  50% { opacity: 0.64; transform: scaleY(1); }
+}
+
+@keyframes copilot-revision-notegraph-overview-sheen {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(200%); }
+}
+
+@keyframes copilot-revision-notegraph-recap-breathe {
+  0%, 100% { opacity: 0.46; }
+  50% { opacity: 0.74; }
+}
+
+@keyframes copilot-revision-notegraph-recap-grid-drift {
+  0%, 100% { transform: translate(0, 0); }
+  33% { transform: translate(-3%, 2%); }
+  67% { transform: translate(2%, -3%); }
+}
+
+@keyframes copilot-revision-notegraph-recap-scan {
+  0% { transform: translateX(-50%) scaleX(0.2); opacity: 0; }
+  30% { opacity: 0.6; }
+  70% { opacity: 0.6; }
+  100% { transform: translateX(50%) scaleX(0.2); opacity: 0; }
+}
+
+@keyframes copilot-revision-notegraph-recap-kicker-glow {
+  0%, 100% { opacity: 0.5; }
+  50% { opacity: 1; }
+}
+
+@keyframes copilot-revision-notegraph-recap-action-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--copilot-accent-soft) 40%, transparent); }
+  50% { box-shadow: 0 0 0 6px color-mix(in srgb, var(--copilot-accent-soft) 10%, transparent); }
+}
+
+@keyframes copilot-revision-node-pulse {
+  0%, 100% { opacity: 0.3; }
+  50% { opacity: 0.7; }
+}
+
+@keyframes copilot-revision-graph-glow {
+  0%, 100% { opacity: 0.2; }
+  50% { opacity: 0.5; }
+}
+
+@keyframes copilot-revision-system-pulse {
+  0%, 100% { opacity: 0.4; transform: scale(1); }
+  50% { opacity: 0.8; transform: scale(1.06); }
+}
+
+@keyframes copilot-revision-lens-charge {
+  0%, 100% { opacity: 0.3; filter: blur(0); }
+  50% { opacity: 0.7; filter: blur(1px); }
+}
+
+/* Copilot shell */
+@keyframes copilot-shell-drift {
+  0%, 100% { transform: translate(0, 0); }
+  25% { transform: translate(3%, -2%); }
+  50% { transform: translate(-2%, 4%); }
+  75% { transform: translate(4%, 1%); }
+}
+
+@keyframes copilot-shell-pulse {
+  0%, 100% { opacity: 0.2; }
+  50% { opacity: 0.5; }
+}
+
+/* Copilot nav */
+@keyframes copilot-nav-sweep {
+  0%, 100% { opacity: 0.2; }
+  50% { opacity: 0.6; }
+}
+
+/* Copilot stream */
+@keyframes copilot-stream-dot-pulse {
+  0%, 100% { opacity: 0.4; transform: scale(1); }
+  50% { opacity: 1; transform: scale(1.3); }
+}
+
+@keyframes copilot-stream-cursor-blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+
+/* Chat empty logo */
+@keyframes chat-empty-logo-float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-6px); }
+}
+
+@keyframes chat-empty-logo-glow {
+  0%, 100% { opacity: 0.5; }
+  50% { opacity: 0.9; }
+}
+
+@keyframes chat-empty-logo-ping {
+  0% { transform: scale(1); opacity: 1; }
+  100% { transform: scale(1.2); opacity: 0; }
+}
+
+/* Voice orb animations */
+@keyframes voiceOrbIdleBreath {
+  0%, 100% { transform: scale(1); opacity: 0.6; }
+  50% { transform: scale(1.03); opacity: 0.8; }
+}
+
+@keyframes voiceOrbAuraBreath {
+  0%, 100% { opacity: 0.3; transform: scale(1); }
+  50% { opacity: 0.6; transform: scale(1.05); }
+}
+
+@keyframes voiceOrbRingPulse {
+  0%, 100% { opacity: 0.2; transform: scale(1); }
+  50% { opacity: 0.6; transform: scale(1.08); }
+}
+
+@keyframes voiceOrbRipple {
+  0% { transform: scale(0.95); opacity: 0.6; }
+  100% { transform: scale(1.1); opacity: 0; }
+}
+
+@keyframes voiceBars {
+  0%, 100% { height: 20%; }
+  50% { height: 80%; }
+}
+
+@keyframes voiceOrbSpeakResonance {
+  0%, 100% { opacity: 0.4; transform: scale(1); }
+  50% { opacity: 0.8; transform: scale(1.06); }
+}
+
+@keyframes voiceOrbCapturePulse {
+  0%, 100% { opacity: 0.5; transform: scale(1); }
+  50% { opacity: 1; transform: scale(1.12); }
+}
+
+@keyframes voiceOrbThinkInhale {
+  0%, 100% { transform: scale(1); opacity: 0.7; }
+  50% { transform: scale(1.08); opacity: 0.9; }
+}
+
+@keyframes voiceSpin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+/* Copilot study workspace */
+@keyframes copilot-study-workspace-enter {
+  0% { opacity: 0; transform: translateY(12px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes copilot-study-workspace-cast {
+  0%, 100% { opacity: 0.08; }
+  50% { opacity: 0.2; }
+}
+
+@keyframes copilot-study-viewport-sweep {
+  0%, 100% { opacity: 0.06; transform: translateX(-20%); }
+  50% { opacity: 0.14; transform: translateX(20%); }
+}
+
+@keyframes copilot-study-live-dot {
+  0%, 100% { opacity: 0.6; }
+  50% { opacity: 1; }
+}
+
+@keyframes copilot-tutor-inline-breathe {
+  0%, 100% { opacity: 0.5; }
+  50% { opacity: 0.9; }
+}

@@ -1,0 +1,72 @@
+/*
+ * Steadfast AI — Theme Token Contract
+ *
+ * Every theme MUST define these variables inside
+ * .copilot-theme-scope (or a scoped variant).
+ *
+ * Components consume semantic tokens, not raw colors.
+ *
+ * Core surface tokens
+ * --copilot-bg
+ * --copilot-bg-soft
+ * --copilot-surface
+ * --copilot-surface-raised
+ * --copilot-surface-muted
+ * --copilot-overlay
+ * --copilot-border
+ * --copilot-border-strong
+ *
+ * Text tokens
+ * --copilot-text
+ * --copilot-text-strong
+ * --copilot-muted
+ * --copilot-muted-strong
+ * --copilot-inverse-text
+ *
+ * Brand/accent tokens
+ * --copilot-primary
+ * --copilot-primary-strong
+ * --copilot-primary-soft
+ * --copilot-accent
+ * --copilot-accent-strong
+ * --copilot-accent-soft
+ *
+ * Learning state tokens
+ * --copilot-success
+ * --copilot-success-soft
+ * --copilot-warning
+ * --copilot-warning-soft
+ * --copilot-danger
+ * --copilot-danger-soft
+ * --copilot-info
+ * --copilot-info-soft
+ *
+ * Interaction tokens
+ * --copilot-ring
+ * --copilot-focus
+ * --copilot-hover
+ * --copilot-active
+ * --copilot-disabled
+ * --copilot-shadow
+ * --copilot-shadow-soft
+ *
+ * Composer/chat tokens
+ * --copilot-user-bubble
+ * --copilot-user-bubble-text
+ * --copilot-assistant-bubble
+ * --copilot-assistant-bubble-text
+ * --copilot-composer-bg
+ * --copilot-composer-border
+ *
+ * Revision/media/growth support tokens
+ * --copilot-revision-accent
+ * --copilot-media-accent
+ * --copilot-growth-accent
+ * --copilot-research-accent
+ * --copilot-focus-accent
+ * --copilot-exam-accent
+ */
+
+.copilot-theme-scope {
+  /* Every theme defines these; fallback to steadfast-default values */
+}

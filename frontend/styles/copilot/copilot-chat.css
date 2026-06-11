@@ -1,0 +1,138 @@
+.copilot-user-bubble {
+  border: 1px solid var(--copilot-user-bubble-border);
+  background: var(--copilot-user-bubble-bg);
+  color: var(--copilot-user-bubble-fg);
+  box-shadow: 0 10px 26px rgba(59, 130, 246, 0.08);
+}
+
+.copilot-assistant-bubble {
+  border: 1px solid var(--copilot-assistant-bubble-border);
+  background: var(--copilot-assistant-bubble-bg);
+  color: var(--copilot-chat-text);
+  box-shadow: var(--copilot-card-shadow);
+}
+
+.copilot-teaching-card {
+  width: min(100%, 46rem);
+  border-radius: 1.7rem 1.7rem 1.7rem 0.75rem;
+  border: 1px solid color-mix(in srgb, var(--copilot-workspace-line) 42%, var(--copilot-assistant-bubble-border));
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--copilot-workspace-tint) 12%, transparent), transparent 24%),
+    var(--copilot-elevated-surface);
+  box-shadow: var(--copilot-card-shadow-strong);
+}
+
+.copilot-teaching-card-muted {
+  background: var(--copilot-elevated-surface-muted);
+}
+
+.copilot-teaching-kicker {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.4rem 0.7rem;
+  border-radius: 999px;
+  background: var(--copilot-kicker-bg);
+  color: var(--copilot-kicker-fg);
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.copilot-next-step {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.7rem;
+  border: 1px solid color-mix(in srgb, var(--copilot-workspace-line) 58%, var(--copilot-soft-line));
+  border-radius: 1.1rem;
+  background: color-mix(in srgb, var(--copilot-workspace-tint) 56%, var(--copilot-surface-1));
+  padding: 0.9rem 1rem;
+  color: var(--copilot-chat-text-soft);
+  font-size: 0.8rem;
+  line-height: 1.6;
+}
+
+.copilot-next-step strong {
+  color: var(--copilot-chat-text-strong);
+  font-weight: 700;
+}
+
+.copilot-message-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.copilot-message-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  color: var(--copilot-text-tertiary);
+  background: transparent;
+  padding: 0.32rem 0.55rem;
+  transition: border-color 0.18s ease, background-color 0.18s ease, color 0.18s ease;
+}
+
+.copilot-message-action:hover,
+.copilot-message-action:focus-visible {
+  border-color: var(--copilot-soft-line);
+  background: var(--copilot-hover-surface);
+  color: var(--copilot-text-primary);
+}
+
+.copilot-message-action-label {
+  display: inline-block;
+  max-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  opacity: 0;
+  transition: max-width 0.18s ease, opacity 0.18s ease;
+}
+
+.copilot-message-actions:hover .copilot-message-action-label,
+.copilot-message-actions:focus-within .copilot-message-action-label,
+.copilot-message-action-label[data-open="true"] {
+  max-width: 3.5rem;
+  opacity: 1;
+}
+
+.copilot-tutor-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.42rem;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--copilot-workspace-line) 44%, var(--copilot-action-border));
+  background: color-mix(in srgb, var(--copilot-action-bg) 82%, var(--copilot-surface-1));
+  color: var(--copilot-action-fg);
+  padding: 0.52rem 0.85rem;
+  font-size: 0.72rem;
+  font-weight: 600;
+  box-shadow: 0 10px 22px rgba(15, 23, 42, 0.08);
+  transition: transform 0.18s ease, border-color 0.18s ease, background-color 0.18s ease, box-shadow 0.18s ease, color 0.18s ease;
+}
+
+.copilot-tutor-action:hover,
+.copilot-tutor-action:focus-visible {
+  transform: translateY(-1px);
+  border-color: var(--copilot-action-hover-border);
+  background: var(--copilot-action-hover-bg);
+  box-shadow: 0 12px 24px var(--copilot-accent-subtle-glow);
+  color: var(--copilot-action-hover-fg);
+}
+
+.copilot-tutor-action-secondary {
+  background: color-mix(in srgb, var(--copilot-action-bg) 65%, white 35%);
+  border-color: color-mix(in srgb, var(--copilot-action-border) 78%, transparent 22%);
+  box-shadow: 0 6px 14px rgba(15, 23, 42, 0.05);
+  color: color-mix(in srgb, var(--copilot-action-fg) 82%, #64748b 18%);
+}
+
+.copilot-material-card {
+  border-radius: 1.3rem;
+  border: 1px solid var(--copilot-soft-line);
+  background: var(--copilot-elevated-surface-muted);
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.05);
+}

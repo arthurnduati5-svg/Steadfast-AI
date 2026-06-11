@@ -1,0 +1,26 @@
+/*
+ * Steadfast AI — Theme Index
+ *
+ * Import order matters. The last loaded theme with matching specificity
+ * wins. Default theme should always be importable.
+ *
+ * Available themes:
+ * 1. steadfast-default  (active, fully implemented)
+ * 2. midnight-scholar    (placeholder)
+ * 3. soft-paper          (placeholder)
+ * 4. rose-studio         (placeholder)
+ * 5. ember-focus         (placeholder)
+ * 6. violet-library      (placeholder)
+ * 7. ocean-glass         (placeholder)
+ * 8. calm-forest         (placeholder)
+ */
+
+@import './steadfast-default.css';
+/* Placeholder tokens for future themes */
+@import './midnight-scholar.css';
+@import './soft-paper.css';
+@import './rose-studio.css';
+@import './ember-focus.css';
+@import './violet-library.css';
+@import './ocean-glass.css';
+@import './calm-forest.css';
