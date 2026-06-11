@@ -68,11 +68,11 @@ describe('Revision note options contract', () => {
 
   it('keeps preview-card dates clear of the floating options trigger', () => {
     const revisionTabTsx = readRepoFile('frontend/components/revision-tab.tsx');
-    const globalsCss = readRepoFile('frontend/app/globals.css');
+    const revisionCss = readRepoFile('frontend/styles/copilot/copilot-revision.css');
 
     expect(revisionTabTsx).toContain("data-has-quick-actions={hasQuickActions ? 'true' : 'false'}");
-    expect(globalsCss).toContain(".copilot-revision-preview-card-date[data-has-quick-actions='true']");
-    expect(globalsCss).toContain('margin-inline-end: 2.35rem;');
+    expect(revisionCss).toContain(".copilot-revision-preview-card-date[data-has-quick-actions='true']");
+    expect(revisionCss).toContain('margin-inline-end: 2.35rem;');
   });
 
   it('keeps focus-note position near the title and uses chevron icon navigation controls', () => {

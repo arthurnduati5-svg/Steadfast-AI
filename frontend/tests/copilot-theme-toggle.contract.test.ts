@@ -28,18 +28,29 @@ describe('Copilot dark-mode toggle contract', () => {
     expect(steadfastCopilot).toContain('copilot-theme-dark');
   });
 
-  it('defines standalone theme scope variables that do not rely on global school theme', () => {
-    const globalsCss = readRepoFile('frontend/app/globals.css');
+  it('defines standalone theme scope variables in steadfast-default.css', () => {
+    const themeCss = readRepoFile('frontend/styles/themes/steadfast-default.css');
 
-    expect(globalsCss).toContain('.copilot-theme-scope');
-    expect(globalsCss).toContain('.copilot-theme-scope.copilot-theme-dark');
-    expect(globalsCss).toContain('--sf-cream-bg');
-    expect(globalsCss).toContain('--background');
-    expect(globalsCss).toContain('--copilot-user-bubble-bg');
-    expect(globalsCss).toContain('--copilot-chat-text');
-    expect(globalsCss).toContain('--copilot-input-text');
-    expect(globalsCss).toContain('.copilot-user-bubble');
-    expect(globalsCss).toContain('.copilot-md-link');
+    expect(themeCss).toContain('.copilot-theme-scope');
+    expect(themeCss).toContain('.copilot-theme-scope.copilot-theme-dark');
+  });
+
+  it('defines app-level tokens in app-tokens.css', () => {
+    const appTokens = readRepoFile('frontend/styles/foundations/app-tokens.css');
+
+    expect(appTokens).toContain('--sf-cream-bg');
+    expect(appTokens).toContain('--background');
+  });
+
+  it('defines copilot component styles in the extracted CSS files', () => {
+    const chatCss = readRepoFile('frontend/styles/copilot/copilot-chat.css');
+    expect(chatCss).toContain('--copilot-user-bubble-bg');
+    expect(chatCss).toContain('.copilot-user-bubble');
+
+    const markdownCss = readRepoFile('frontend/styles/copilot/copilot-markdown.css');
+    expect(markdownCss).toContain('--copilot-chat-text');
+    expect(markdownCss).toContain('--copilot-input-text');
+    expect(markdownCss).toContain('.copilot-md-link');
   });
 
   it('uses copilot-specific bubble and link styles for chat readability', () => {
