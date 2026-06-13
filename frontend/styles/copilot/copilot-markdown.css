@@ -86,3 +86,8 @@
 .copilot-assistant-text :where(h1, h2, h3, h4, p, ul, ol, blockquote, .md-pre, .md-table-wrap):first-child {
   margin-top: 0;
 }
+
+.markdown-bubble :where(p, li, blockquote, a, span, code, td, th) {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}

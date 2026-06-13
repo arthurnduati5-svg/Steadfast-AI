@@ -97,3 +97,16 @@
   width: 17px;
   height: 17px;
 }
+
+.copilot-sidebar-card-active {
+  border-color: var(--copilot-accent-border) !important;
+  background: color-mix(in srgb, var(--copilot-accent-soft) 42%, var(--copilot-elevated-surface-muted)) !important;
+}
+
+.copilot-sidebar-section-label {
+  color: var(--copilot-text-tertiary);
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
