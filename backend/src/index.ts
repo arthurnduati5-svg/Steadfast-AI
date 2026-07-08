@@ -8,7 +8,9 @@ import aiRoutes from './routes/ai';
 import voiceRoutes from './routes/voice';
 import latencyRoutes from './routes/latency';
 import anomalyRoutes from './routes/anomalies';
+import task024OperationsRoutes from './routes/task024OperationsRoutes';
 import { schoolAuthMiddleware } from './middleware/schoolAuthMiddleware';
+import { requireVerifiedSchoolContext } from './middleware/schoolContextGuardMiddleware';
 import { logger, httpLogger } from './utils/logger';
 
 const app = express();
@@ -82,6 +84,18 @@ app.use('/api/copilot/anomalies', schoolAuthMiddleware, anomalyRoutes);
 app.use('/api/copilot', schoolAuthMiddleware, aiRoutes);
 app.use('/api/voice', schoolAuthMiddleware, voiceRoutes);
 app.use('/api', schoolAuthMiddleware, profileRoutes);
+
+// --- Task 024: Production Operations Routes ---
+app.use('/api', task024OperationsRoutes);
+
+// Task 024 operations readiness routes --- requires school auth, verified school context
+import task024OperationsReadinessRoutes from './routes/task024OperationsReadinessRoutes';
+app.use(
+  '/api/task024/operations-readiness',
+  schoolAuthMiddleware,
+  requireVerifiedSchoolContext,
+  task024OperationsReadinessRoutes
+);
 
 // Global Error Handler
 app.use((err: any, req: Request, res: Response, next: NextFunction) => {
