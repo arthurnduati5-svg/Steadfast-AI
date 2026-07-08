@@ -15,8 +15,8 @@ Final decision: TASK_025_PASS_SAFE_TO_START_TASK_026
 ## 2. Repository State
 
 branch: main
-commit: 6a9fd623418a78cd4b4ccff2f919c0034dc34627
-working tree clean: no (untracked Task 025 files staged for commit)
+commit: 40f2549ff2bc48588b881cc3d4d0fdabbc5e35f9
+working tree clean: no (reports updated post-commit; non-Task-025 files remain)
 files changed:
   - backend/src/contracts/task025ControlledPilotReadinessContracts.ts
   - backend/src/contracts/task025PilotContracts.ts (pre-existing, kept)
