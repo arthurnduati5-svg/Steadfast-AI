@@ -1,0 +1,66 @@
+{
+    "OverallResult":  "PASS",
+    "OverallExitCode":  0,
+    "GeneratedAt":  "2026-07-08T09:22:45.4431982+03:00",
+    "LogDirectory":  "C:\\Users\\HP\\Steadfast-AI\\logs\\task-025",
+    "TaskName":  "Controlled School Pilot Readiness, Safe Rollout Gates, Pilot Cohort Control, and End-to-End Pilot Proof",
+    "Steps":  [
+                  {
+                      "Name":  "Prisma Validate",
+                      "ExitCode":  0,
+                      "Command":  "npx prisma validate --schema backend/prisma/schema.prisma 2\u003e\u00261",
+                      "LogPath":  "C:\\Users\\HP\\Steadfast-AI\\logs\\task-025\\prisma-validate.log",
+                      "DurationSeconds":  4.046715,
+                      "Result":  "PASS"
+                  },
+                  {
+                      "Name":  "Prisma Generate",
+                      "ExitCode":  0,
+                      "Command":  "npx prisma generate --schema backend/prisma/schema.prisma 2\u003e\u00261",
+                      "LogPath":  "C:\\Users\\HP\\Steadfast-AI\\logs\\task-025\\prisma-generate.log",
+                      "DurationSeconds":  3.9055155999999998,
+                      "Result":  "PASS"
+                  },
+                  {
+                      "Name":  "Prisma Test Client Generate",
+                      "ExitCode":  0,
+                      "Command":  "npx prisma generate --schema backend/prisma/schema.test.sqlite.prisma 2\u003e\u00261",
+                      "LogPath":  "C:\\Users\\HP\\Steadfast-AI\\logs\\task-025\\prisma-test-client-generate.log",
+                      "DurationSeconds":  3.6690278999999997,
+                      "Result":  "PASS"
+                  },
+                  {
+                      "Name":  "Backend Typecheck",
+                      "ExitCode":  0,
+                      "Command":  "npx tsc --noEmit -p backend/tsconfig.json 2\u003e\u00261",
+                      "LogPath":  "C:\\Users\\HP\\Steadfast-AI\\logs\\task-025\\backend-typecheck.log",
+                      "DurationSeconds":  48.9586731,
+                      "Result":  "PASS"
+                  },
+                  {
+                      "Name":  "Backend Build",
+                      "ExitCode":  0,
+                      "Command":  "npx tsc -p backend/tsconfig.json 2\u003e\u00261",
+                      "LogPath":  "C:\\Users\\HP\\Steadfast-AI\\logs\\task-025\\backend-build.log",
+                      "DurationSeconds":  61.203755199999996,
+                      "Result":  "PASS"
+                  },
+                  {
+                      "Name":  "Task 025 Tests",
+                      "ExitCode":  0,
+                      "Command":  "npx vitest run backend/src/tests/task-025- --reporter=verbose 2\u003e\u00261",
+                      "LogPath":  "C:\\Users\\HP\\Steadfast-AI\\logs\\task-025\\task025-targeted-tests.log",
+                      "DurationSeconds":  3.5496467999999997,
+                      "Result":  "PASS"
+                  },
+                  {
+                      "Name":  "Generate Task 025 Report",
+                      "ExitCode":  0,
+                      "Command":  "node scripts/gen-task025-report.cjs 2\u003e\u00261",
+                      "LogPath":  "C:\\Users\\HP\\Steadfast-AI\\logs\\task-025\\report-generation.log",
+                      "DurationSeconds":  10.2395702,
+                      "Result":  "PASS"
+                  }
+              ],
+    "TaskId":  "025"
+}
