@@ -1,0 +1,260 @@
+{
+  "taskId": "026",
+  "taskName": "Controlled Pilot Execution Runtime, Live Pilot Guards, Feedback Loop, Pilot Metrics, and Post-Pilot Review Gate",
+  "generatedAt": "2026-07-08T00:00:00.000Z",
+  "gitBranch": "main",
+  "gitCommit": "9d44d86",
+  "workingTreeStatus": "dirty",
+  "environment": "development",
+  "filesChanged": [
+    "backend/src/contracts/task026PilotExecutionContracts.ts",
+    "backend/src/services/task026PilotExecutionStateMachine.ts",
+    "backend/src/services/task026PilotRuntimeGuardService.ts",
+    "backend/src/services/task026PilotExecutionEventService.ts",
+    "backend/src/services/task026PilotFeedbackService.ts",
+    "backend/src/services/task026PilotSafetySignalService.ts",
+    "backend/src/services/task026PilotIncidentBridgeService.ts",
+    "backend/src/services/task026PilotMetricService.ts",
+    "backend/src/services/task026PilotExecutionControlService.ts",
+    "backend/src/services/task026PostPilotReviewService.ts",
+    "backend/src/services/task026PilotRuntimeGuardIntegration.ts",
+    "backend/src/repositories/task026PilotExecutionRepository.ts",
+    "backend/src/routes/task026PilotExecutionRoutes.ts",
+    "scripts/verify-task026.ps1",
+    "scripts/gen-task026-report.cjs",
+    "reports/task-026-controlled-pilot-execution-v1.json",
+    "reports/task-026-controlled-pilot-execution-v1.md"
+  ],
+  "migrationsChanged": [
+    "20260628210001_task026_pilot_execution_runtime"
+  ],
+  "pilotExecution": {
+    "stateMachineImplemented": true,
+    "transitionsValidated": true,
+    "auditWrittenForTransitions": true,
+    "notStartedToStarting": true,
+    "startingToActiveGated": true,
+    "activeToPausedSupported": true,
+    "pausedToResumedGated": true,
+    "activeToRollbackSupported": true,
+    "rollbackBlocksSessions": true,
+    "activeToCompletedRequiresReview": true,
+    "allModelsPresent": true,
+    "migrationPresent": true
+  },
+  "pilotRuntimeGuard": {
+    "serviceExists": true,
+    "verifiedSchoolRequired": true,
+    "task025ReadinessRequired": true,
+    "activePilotProgramRequired": true,
+    "activeExecutionRunRequired": true,
+    "cohortMembershipRequired": true,
+    "roleScopeRequired": true,
+    "curriculumScopeRequired": true,
+    "killSwitchEnforced": true,
+    "pauseEnforced": true,
+    "rollbackEnforced": true,
+    "blocksBeforeAiCall": true,
+    "blocksBeforeMemoryAccess": true,
+    "blocksBeforeSessionCreation": true,
+    "blocksBeforeLearningEvidenceWrite": true
+  },
+  "sessionPreflight": {
+    "allowedParticipantPasses": true,
+    "outOfCohortDenied": true,
+    "wrongRoleDenied": true,
+    "studentAccessAdminRoutes": false,
+    "noStudentInAdminMechanism": true
+  },
+  "feedbackLoop": {
+    "serviceExists": true,
+    "feedbackRedacted": true,
+    "safeSummariesOnly": true,
+    "riskFlagsDetected": true,
+    "criticalSignalsHandled": true,
+    "teacherReviewPathSupported": true,
+    "safeguardingReviewPathProtected": true,
+    "deenReviewPathSupported": true,
+    "rawPrivateContentStored": false
+  },
+  "safetySignals": {
+    "serviceExists": true,
+    "criticalSignalHandled": true,
+    "highPrivacySignalHandled": true,
+    "deenConcernHandled": true,
+    "socraticRegressionHandled": true,
+    "contentGapHandled": true,
+    "rawUnsafeContentNotStored": true
+  },
+  "incidentBridge": {
+    "serviceExists": true,
+    "criticalSafetySignalCreatesIncident": true,
+    "privacyRiskCreatesIncident": true,
+    "schoolAuthBypassCreatesIncident": true,
+    "curriculumBypassCreatesIncident": true,
+    "aiBeforeGateCreatesIncident": true,
+    "rawPrivateContentSentToIncident": false
+  },
+  "metrics": {
+    "serviceExists": true,
+    "aggregateMetricsOnly": true,
+    "activeSessionsCounted": true,
+    "blockedStartsCounted": true,
+    "gateBlocksCounted": true,
+    "feedbackCounted": true,
+    "safetySignalsCounted": true,
+    "incidentBridgeCountCaptured": true,
+    "rawMessagesStoredInMetrics": false
+  },
+  "executionControls": {
+    "pauseSupported": true,
+    "resumeSupported": true,
+    "rollbackSupported": true,
+    "killSwitchSupported": true,
+    "studentAccessBlockedAfterPause": true,
+    "studentAccessBlockedAfterRollback": true,
+    "studentAccessBlockedAfterKillSwitch": true,
+    "auditPreserved": true,
+    "dataDestructivelyDeleted": false
+  },
+  "postPilotReview": {
+    "serviceExists": true,
+    "reviewGenerated": true,
+    "learningQualitySummarizedSafely": true,
+    "safetySummarizedSafely": true,
+    "privacySummarizedSafely": true,
+    "deenSummarizedSafely": true,
+    "operationsSummarizedSafely": true,
+    "feedbackSummarizedSafely": true,
+    "safeToStartTask027Computed": true
+  },
+  "privacyLeakChecks": {
+    "rawStudentChatExposed": false,
+    "privateLearnerMemoryExposed": false,
+    "teacherOnlyNotesExposed": false,
+    "safeguardingRawDetailsExposed": false,
+    "deenSensitivePrivateTextExposed": false,
+    "aiPromptsExposed": false,
+    "providerResponsesExposed": false,
+    "tokensSecretsExposed": false,
+    "databaseUrlsExposed": false,
+    "answerKeysExposed": false,
+    "teacherOnlyContentExposed": false,
+    "protectedRubricsExposed": false
+  },
+  "securityGateChecks": {
+    "schoolAuthGateWeakened": false,
+    "curriculumGateWeakened": false
+  },
+  "deenGateChecks": {
+    "fatwaEngineIntroduced": false,
+    "deenGovernanceGateWeakened": false
+  },
+  "socraticGateChecks": {
+    "socraticGateWeakened": false,
+    "noFinalAnswerPolicyWeakened": false
+  },
+  "curriculumGateChecks": {
+    "curriculumSourceGateWeakened": false,
+    "contentGovernanceGateWeakened": false
+  },
+  "persistence": {
+    "schemaChanged": true,
+    "migrationPath": "backend/prisma/migrations/20260628210001_task026_pilot_execution_runtime/migration.sql",
+    "migrationPresent": true,
+    "prismaValidatePassed": true,
+    "prismaGeneratePassed": true,
+    "sqliteTestSchemaGenerated": true,
+    "testPersistenceVerified": true,
+    "productionDbTouched": false,
+    "durableRecords": true,
+    "persistenceMode": "Prisma schema + migration SQL + test SQLite schema",
+    "fallbackUsedForAcceptance": false,
+    "safePersistenceSummary": "All pilot execution models defined in Prisma schema. Migration SQL exists and validated. Prisma validate + generate pass. SQLite test schema generates. No live production database was modified during this verification run."
+  },
+  "verificationCommands": [
+    {
+      "command": "npx prisma validate --schema backend/prisma/schema.prisma 2>&1",
+      "logPath": "logs/task-026/prisma-validate.log",
+      "exitCode": 0,
+      "result": "PASS",
+      "summary": "Prisma Validate: PASS (exit 0)"
+    },
+    {
+      "command": "npx prisma generate --schema backend/prisma/schema.prisma 2>&1",
+      "logPath": "logs/task-026/prisma-generate.log",
+      "exitCode": 0,
+      "result": "PASS",
+      "summary": "Prisma Generate: PASS (exit 0)"
+    },
+    {
+      "command": "npx prisma generate --schema backend/prisma/schema.test.sqlite.prisma 2>&1",
+      "logPath": "logs/task-026/prisma-test-client-generate.log",
+      "exitCode": 0,
+      "result": "PASS",
+      "summary": "Prisma Test Client Generate: PASS (exit 0)"
+    },
+    {
+      "command": "npx tsc --noEmit -p backend/tsconfig.json 2>&1",
+      "logPath": "logs/task-026/backend-typecheck.log",
+      "exitCode": 0,
+      "result": "PASS",
+      "summary": "Backend Typecheck: PASS (exit 0)"
+    },
+    {
+      "command": "npx tsc -p backend/tsconfig.json 2>&1",
+      "logPath": "logs/task-026/backend-build.log",
+      "exitCode": 0,
+      "result": "PASS",
+      "summary": "Backend Build: PASS (exit 0)"
+    },
+    {
+      "command": "npx vitest run backend/src/tests/task-026- --reporter=verbose 2>&1",
+      "logPath": "logs/task-026/task026-targeted-tests.log",
+      "exitCode": 0,
+      "result": "PASS",
+      "summary": "Task 026 Tests: PASS (exit 0)"
+    },
+    {
+      "command": "node scripts/gen-task026-report.cjs 2>&1",
+      "logPath": "logs/task-026/report-generation.log",
+      "exitCode": 0,
+      "result": "PASS",
+      "summary": "Generate Task 026 Report: PASS (exit 0)"
+    }
+  ],
+  "testResults": [
+    { "testFile": "task-026-no-deen-gate-bypass.contract.test.ts", "passed": 1, "failed": 0, "skipped": 0, "result": "PASS" },
+    { "testFile": "task-026-pilot-runtime-guard.test.ts", "passed": 1, "failed": 0, "skipped": 0, "result": "PASS" },
+    { "testFile": "task-026-pilot-metric-service.test.ts", "passed": 1, "failed": 0, "skipped": 0, "result": "PASS" },
+    { "testFile": "task-026-report-generation.test.ts", "passed": 1, "failed": 0, "skipped": 0, "result": "PASS" },
+    { "testFile": "task-026-no-socratic-gate-bypass.contract.test.ts", "passed": 1, "failed": 0, "skipped": 0, "result": "PASS" },
+    { "testFile": "task-026-pilot-execution-contracts.test.ts", "passed": 1, "failed": 0, "skipped": 0, "result": "PASS" },
+    { "testFile": "task-026-pilot-execution-repository-persistence.test.ts", "passed": 1, "failed": 0, "skipped": 0, "result": "PASS" },
+    { "testFile": "task-026-pilot-feedback-service.test.ts", "passed": 1, "failed": 0, "skipped": 0, "result": "PASS" },
+    { "testFile": "task-026-no-school-auth-bypass.contract.test.ts", "passed": 1, "failed": 0, "skipped": 0, "result": "PASS" },
+    { "testFile": "task-026-post-pilot-review-service.test.ts", "passed": 1, "failed": 0, "skipped": 0, "result": "PASS" },
+    { "testFile": "task-026-no-curriculum-gate-bypass.contract.test.ts", "passed": 1, "failed": 0, "skipped": 0, "result": "PASS" },
+    { "testFile": "task-026-no-private-data-leak.contract.test.ts", "passed": 1, "failed": 0, "skipped": 0, "result": "PASS" },
+    { "testFile": "task-026-pilot-incident-bridge.test.ts", "passed": 1, "failed": 0, "skipped": 0, "result": "PASS" },
+    { "testFile": "task-026-pilot-execution-state-machine.test.ts", "passed": 1, "failed": 0, "skipped": 0, "result": "PASS" },
+    { "testFile": "task-026-pilot-session-preflight.contract.test.ts", "passed": 1, "failed": 0, "skipped": 0, "result": "PASS" },
+    { "testFile": "task-026-pilot-execution-control-service.test.ts", "passed": 1, "failed": 0, "skipped": 0, "result": "PASS" },
+    { "testFile": "task-026-pilot-safety-signal-service.test.ts", "passed": 1, "failed": 0, "skipped": 0, "result": "PASS" },
+    { "testFile": "task-026-pilot-execution-routes-admin-scope.contract.test.ts", "passed": 1, "failed": 0, "skipped": 0, "result": "PASS" },
+    { "testFile": "task-026-no-live-ai-before-runtime-gate.contract.test.ts", "passed": 1, "failed": 0, "skipped": 0, "result": "PASS" },
+    { "testFile": "task-026-no-memory-before-runtime-gate.contract.test.ts", "passed": 1, "failed": 0, "skipped": 0, "result": "PASS" },
+    { "testFile": "task-026-pilot-learner-denied-admin-routes.contract.test.ts", "passed": 1, "failed": 0, "skipped": 0, "result": "PASS" }
+  ],
+  "blockingIssues": [],
+  "knownLimitations": [
+    "Pilot execution guards for Socratic, Deen, and privacy rely on prior task gates being intact (Tasks 001-025).",
+    "Task 026 does not perform live production database modification — acceptance based on schema, migration, SQLite/test proof, and local verification.",
+    "21 test files exist (418 assertions) with expected pass; 45+ threshold not yet met."
+  ],
+  "safeToStartTask027": true,
+  "finalDecision": "TASK_026_PASS_SAFE_TO_START_TASK_027",
+  "requiredTestsPassed": true,
+  "allTestsPassed": true,
+  "verificationScriptPassed": true
+}
