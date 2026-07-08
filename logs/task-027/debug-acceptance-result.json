@@ -1,0 +1,26 @@
+{
+  "scenarioRun": true,
+  "scenarioMode": "safe_synthetic_acceptance_fixture",
+  "task026ProofMode": "synthetic_safe_fixture_for_task027_acceptance",
+  "productionTask026ProofUsed": false,
+  "proposalCreated": true,
+  "evidencePackGenerated": true,
+  "riskAssessmentGenerated": true,
+  "requiredReviewsApproved": true,
+  "decisionServiceExecuted": true,
+  "decisionApproved": false,
+  "cohortChangePrepared": false,
+  "safeToExpand": false,
+  "safeToStartTask028": false,
+  "blockingIssues": [
+    "decision: Task 026 not accepted. Post-pilot review required."
+  ],
+  "rawPrivateDataUsed": false,
+  "liveProductionExpansionPerformed": false,
+  "cohortChangeMode": "synthetic_safe_preparation",
+  "productionCohortMutated": false,
+  "proposalId": "pep_1782697555034_fh4hgg9g",
+  "evidencePackId": "pepck_1782697555035_l0a7k115",
+  "riskAssessmentId": "pera_1782697555035_6zve9t4q",
+  "approvalId": "peap_1782697555037_p2wequrj"
+}

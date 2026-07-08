@@ -1,0 +1,82 @@
+{
+    "OverallResult":  "PASS",
+    "OverallExitCode":  0,
+    "GeneratedAt":  "2026-06-29T04:57:30.8188979+03:00",
+    "LogDirectory":  "C:\\Users\\HP\\Steadfast-AI\\logs\\task-027",
+    "TaskName":  "Controlled Pilot Expansion Governance, Evidence-Based Scale Decision, Teacher Review Loop, and Expansion Safety Gates",
+    "Steps":  [
+                  {
+                      "Name":  "Prisma Validate",
+                      "ExitCode":  0,
+                      "Command":  "npx prisma validate --schema backend/prisma/schema.prisma 2\u003e\u00261",
+                      "LogPath":  "C:\\Users\\HP\\Steadfast-AI\\logs\\task-027\\prisma-validate.log",
+                      "DurationSeconds":  5.4534289,
+                      "Result":  "PASS"
+                  },
+                  {
+                      "Name":  "Prisma Generate",
+                      "ExitCode":  0,
+                      "Command":  "npx prisma generate --schema backend/prisma/schema.prisma 2\u003e\u00261",
+                      "LogPath":  "C:\\Users\\HP\\Steadfast-AI\\logs\\task-027\\prisma-generate.log",
+                      "DurationSeconds":  5.3720213,
+                      "Result":  "PASS"
+                  },
+                  {
+                      "Name":  "Prisma Test Client Generate",
+                      "ExitCode":  0,
+                      "Command":  "npx prisma generate --schema backend/prisma/schema.test.sqlite.prisma 2\u003e\u00261",
+                      "LogPath":  "C:\\Users\\HP\\Steadfast-AI\\logs\\task-027\\prisma-test-client-generate.log",
+                      "DurationSeconds":  5.4172227,
+                      "Result":  "PASS"
+                  },
+                  {
+                      "Name":  "Backend Typecheck",
+                      "ExitCode":  0,
+                      "Command":  "npx tsc --noEmit -p backend/tsconfig.json 2\u003e\u00261",
+                      "LogPath":  "C:\\Users\\HP\\Steadfast-AI\\logs\\task-027\\backend-typecheck.log",
+                      "DurationSeconds":  30.5284272,
+                      "Result":  "PASS"
+                  },
+                  {
+                      "Name":  "Backend Build",
+                      "ExitCode":  0,
+                      "Command":  "npx tsc -p backend/tsconfig.json 2\u003e\u00261",
+                      "LogPath":  "C:\\Users\\HP\\Steadfast-AI\\logs\\task-027\\backend-build.log",
+                      "DurationSeconds":  22.7993702,
+                      "Result":  "PASS"
+                  },
+                  {
+                      "Name":  "Task 027 Tests",
+                      "ExitCode":  0,
+                      "Command":  "npx vitest run backend/src/tests/task-027- --reporter=verbose 2\u003e\u00261",
+                      "LogPath":  "C:\\Users\\HP\\Steadfast-AI\\logs\\task-027\\task027-targeted-tests.log",
+                      "DurationSeconds":  3.1598965,
+                      "Result":  "PASS"
+                  },
+                  {
+                      "Name":  "Generate Task 027 Report",
+                      "ExitCode":  0,
+                      "Command":  "node scripts/gen-task027-report.cjs 2\u003e\u00261",
+                      "LogPath":  "C:\\Users\\HP\\Steadfast-AI\\logs\\task-027\\report-generation.log",
+                      "DurationSeconds":  13.428733699999999,
+                      "Result":  "PASS"
+                  },
+                  {
+                      "Name":  "JSON Report Validation",
+                      "ExitCode":  0,
+                      "Command":  "node -e \"const fs=require(\u0027fs\u0027); const p=\u0027docs/ops/task-027/task-027-pilot-expansion-report.json\u0027; const raw=fs.readFileSync(p,\u0027utf8\u0027).replace(/^\\uFEFF/,\u0027\u0027); const r=JSON.parse(raw); const allowed=[\u0027TASK_027_PASS_SAFE_TO_START_TASK_028\u0027,\u0027TASK_027_FAIL_NOT_SAFE_TO_START_TASK_028\u0027]; if(r.taskId!==\u0027027\u0027) throw new Error(\u0027taskId must be 027\u0027); if(typeof r.safeToStartTask028!==\u0027boolean\u0027) throw new Error(\u0027safeToStartTask028 must be boolean, got \u0027+typeof r.safeToStartTask028); if(!allowed.includes(r.finalDecision)) throw new Error(\u0027invalid finalDecision\u0027); if(!Array.isArray(r.blockingIssues)) throw new Error(\u0027blockingIssues must be array\u0027); if(!Array.isArray(r.knownLimitations)) throw new Error(\u0027knownLimitations must be array\u0027); if(!Array.isArray(r.verificationCommands)) throw new Error(\u0027verificationCommands must be array\u0027); if(!Array.isArray(r.testResults)) throw new Error(\u0027testResults must be array\u0027); for(const k of [\u0027expansionProposal\u0027,\u0027evidencePack\u0027,\u0027riskAssessment\u0027,\u0027reviewWorkflow\u0027,\u0027decisionService\u0027,\u0027cohortChange\u0027,\u0027routeProtection\u0027,\u0027privacyLeakChecks\u0027,\u0027securityGateChecks\u0027,\u0027deenGateChecks\u0027,\u0027socraticGateChecks\u0027,\u0027curriculumGateChecks\u0027,\u0027rollbackReadiness\u0027,\u0027persistence\u0027,\u0027acceptanceScenario\u0027]) if(!(k in r)) throw new Error(\u0027missing \u0027+k); const text=JSON.stringify(r); const forbidden=[{p:\u0027Bearer \u0027,n:\u0027Bearer\u0027},{p:\u0027postgres://\u0027,n:\u0027postgres\u0027},{p:\u0027postgresql://\u0027,n:\u0027postgresql\u0027},{p:\u0027mysql://\u0027,n:\u0027mysql\u0027},{p:\u0027sk-proj-\u0027,n:\u0027sk-proj- (OpenAI key)\u0027},{p:\u0027raw student chat\u0027,n:\u0027raw student chat\u0027},{p:\u0027private learner memory\u0027,n:\u0027private learner memory\u0027},{p:\u0027teacher-only notes\u0027,n:\u0027teacher-only notes\u0027},{p:\u0027safeguarding raw details\u0027,n:\u0027safeguarding raw details\u0027},{p:\u0027Deen-sensitive private text\u0027,n:\u0027Deen-sensitive private text\u0027},{p:\u0027provider response\u0027,n:\u0027provider response\u0027},{p:\u0027AI prompt\u0027,n:\u0027AI prompt\u0027}]; for(const f of forbidden){ if(text.includes(f.p)) throw new Error(\u0027forbidden phrase found: \u0027+f.n); } console.log(\u0027TASK_027_REPORT_VALIDATION_PASS\u0027);\" 2\u003e\u00261",
+                      "LogPath":  "C:\\Users\\HP\\Steadfast-AI\\logs\\task-027\\json-validation.log",
+                      "DurationSeconds":  0.1571406,
+                      "Result":  "PASS"
+                  },
+                  {
+                      "Name":  "Privacy Leak Scan",
+                      "ExitCode":  0,
+                      "Command":  "node scripts/task027-privacy-scan.cjs 2\u003e\u00261",
+                      "LogPath":  "C:\\Users\\HP\\Steadfast-AI\\logs\\task-027\\privacy-scan.log",
+                      "DurationSeconds":  0.1276446,
+                      "Result":  "PASS"
+                  }
+              ],
+    "TaskId":  "027"
+}
