@@ -9,6 +9,8 @@ import voiceRoutes from './routes/voice';
 import latencyRoutes from './routes/latency';
 import anomalyRoutes from './routes/anomalies';
 import task024OperationsRoutes from './routes/task024OperationsRoutes';
+import task028ExpansionExecutionRoutes from './routes/task028ExpansionExecutionRoutes';
+import task028ControlledExpansionExecutionRoutes from './routes/task028ControlledExpansionExecutionRoutes';
 import { schoolAuthMiddleware } from './middleware/schoolAuthMiddleware';
 import { requireVerifiedSchoolContext } from './middleware/schoolContextGuardMiddleware';
 import { logger, httpLogger } from './utils/logger';
@@ -95,6 +97,18 @@ app.use(
   schoolAuthMiddleware,
   requireVerifiedSchoolContext,
   task024OperationsReadinessRoutes
+);
+
+// ─── Task 028: Controlled Expansion Execution Routes ──────
+// All expansion execution routes require school auth; admin role for control operations.
+app.use('/api', schoolAuthMiddleware, task028ExpansionExecutionRoutes);
+
+// Task 028 controlled expansion execution — requires school auth, verified school context, role scoping
+app.use(
+  '/api/task028/controlled-expansion-execution',
+  schoolAuthMiddleware,
+  requireVerifiedSchoolContext,
+  task028ControlledExpansionExecutionRoutes
 );
 
 // Global Error Handler

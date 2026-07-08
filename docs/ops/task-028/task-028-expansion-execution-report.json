@@ -1,0 +1,628 @@
+{
+  "taskId": "028",
+  "taskName": "Controlled Expansion Execution, Staged Cohort Activation, Live Expansion Monitoring, and Expansion Rollback Proof",
+  "generatedAt": "2026-06-29T02:43:47.539Z",
+  "gitBranch": "main",
+  "gitCommit": "16bf88679c8b120912cd600e53722dd0768e3e6f",
+  "workingTreeStatus": "dirty",
+  "environment": "development",
+  "filesChanged": [
+    "backend/src/contracts/task028ExpansionExecutionContracts.ts",
+    "backend/src/repositories/task028ExpansionExecutionRepository.ts",
+    "backend/src/services/task028Task027ProofLoaderService.ts",
+    "backend/src/services/task028ExpansionExecutionStateMachine.ts",
+    "backend/src/services/task028StagedCohortActivationService.ts",
+    "backend/src/services/task028ExpandedRuntimeGuardService.ts",
+    "backend/src/services/task028ExpansionMonitoringEventService.ts",
+    "backend/src/services/task028ExpansionHealthSnapshotService.ts",
+    "backend/src/services/task028ExpansionOversightQueueService.ts",
+    "backend/src/services/task028ExpansionInterventionService.ts",
+    "backend/src/services/task028ExpansionRollbackExecutionService.ts",
+    "backend/src/services/task028ExpansionCompletionReviewService.ts",
+    "backend/src/services/task028ExpansionExecutionReportService.ts",
+    "backend/src/services/task028ExpansionExecutionAuditService.ts",
+    "backend/src/services/task028ExpansionExecutionAcceptanceScenarioService.ts",
+    "backend/src/routes/task028ExpansionExecutionRoutes.ts",
+    "scripts/verify-task028.ps1",
+    "scripts/gen-task028-report.cjs"
+  ],
+  "migrationsChanged": [
+    "20260629000001_task028_expansion_execution"
+  ],
+  "task027Proof": {
+    "reportFound": true,
+    "safeToStartTask028": true,
+    "finalDecisionPass": true,
+    "blockingIssuesEmpty": true,
+    "acceptanceScenarioPass": true,
+    "proofLoadedBeforeExecution": true
+  },
+  "executionRun": {
+    "contractImplemented": true,
+    "modelPresent": true,
+    "repositoryImplemented": true,
+    "stateMachineImplemented": true,
+    "persistenceProof": true
+  },
+  "stageActivation": {
+    "serviceExists": true,
+    "modelPresent": true,
+    "stagedActivationImplemented": true,
+    "scopeLimitsEnforced": true,
+    "stageTransitionsGated": true
+  },
+  "expandedParticipants": {
+    "modelPresent": true,
+    "participantsHashed": true,
+    "activationStatusesDefined": true,
+    "rawStudentDataExposed": false
+  },
+  "runtimeGuard": {
+    "serviceExists": true,
+    "schoolAuthRequired": true,
+    "task027ProofRequired": true,
+    "activeExecutionRequired": true,
+    "activeStageRequired": true,
+    "participantRequired": true,
+    "roleScopeRequired": true,
+    "classScopeRequired": true,
+    "subjectScopeRequired": true,
+    "curriculumScopeRequired": true,
+    "killSwitchEnforced": true,
+    "pauseEnforced": true,
+    "rollbackEnforced": true,
+    "blocksBeforeAiCall": true,
+    "blocksBeforeMemoryAccess": true,
+    "blocksBeforeSessionCreation": true,
+    "blocksBeforeEvidenceWrite": true
+  },
+  "sessionPreflight": {
+    "routeExists": true,
+    "gateCheckImplemented": true,
+    "safeErrorEnvelope": true
+  },
+  "monitoringEvents": {
+    "serviceExists": true,
+    "eventTypesDefined": true,
+    "privacySafe": true
+  },
+  "healthSnapshots": {
+    "serviceExists": true,
+    "aggregateMetricsOnly": true,
+    "healthClassificationImplemented": true,
+    "criticalTriggersOversight": true,
+    "rawMessagesStored": false
+  },
+  "oversightQueue": {
+    "serviceExists": true,
+    "teacherReviewSupported": true,
+    "adminReviewSupported": true,
+    "privacyReviewSupported": true,
+    "deenReviewSupported": true,
+    "socraticReviewSupported": true,
+    "curriculumReviewSupported": true,
+    "studentsBlocked": true,
+    "safeSummariesOnly": true
+  },
+  "interventions": {
+    "serviceExists": true,
+    "pauseSupported": true,
+    "resumeSupported": true,
+    "killSwitchSupported": true,
+    "adminRoleRequired": true,
+    "auditRecordsWritten": true
+  },
+  "rollbackExecution": {
+    "serviceExists": true,
+    "modelPresent": true,
+    "rollbackBlocksAccess": true,
+    "participantsTransitioned": true,
+    "previousScopePreserved": true,
+    "restoredScopePreserved": true,
+    "auditTrailPreserved": true,
+    "learningEvidenceNotDeleted": true,
+    "rawStudentDataExposed": false
+  },
+  "completionReview": {
+    "serviceExists": true,
+    "modelPresent": true,
+    "learningQualitySummarized": true,
+    "safetySummarized": true,
+    "privacySummarized": true,
+    "deenSummarized": true,
+    "socraticSummarized": true,
+    "curriculumSummarized": true,
+    "operationsSummarized": true,
+    "teacherAdminSummarized": true,
+    "rollbackSummarized": true,
+    "safeToStartTask029Computed": true
+  },
+  "routeProtection": {
+    "routesFileExists": true,
+    "schoolAuthRequired": true,
+    "adminGuardForControl": true,
+    "teacherAdminGuardForOversight": true,
+    "internalGuardForEvents": true,
+    "internalGuardForReports": true,
+    "studentDeniedControl": true,
+    "safeErrorEnvelopes": true
+  },
+  "privacyLeakChecks": {
+    "rawStudentChatExposed": false,
+    "privateLearnerMemoryExposed": false,
+    "teacherOnlyNotesExposed": false,
+    "safeguardingRawDetailsExposed": false,
+    "deenSensitivePrivateTextExposed": false,
+    "aiPromptsExposed": false,
+    "providerResponsesExposed": false,
+    "tokensSecretsExposed": false,
+    "databaseUrlsExposed": false,
+    "answerKeysExposed": false,
+    "teacherOnlyContentExposed": false,
+    "protectedRubricsExposed": false
+  },
+  "securityGateChecks": {
+    "schoolAuthGateWeakened": false,
+    "curriculumGateWeakened": false
+  },
+  "deenGateChecks": {
+    "fatwaEngineIntroduced": false,
+    "deenGovernanceGateWeakened": false
+  },
+  "socraticGateChecks": {
+    "socraticGateWeakened": false,
+    "noFinalAnswerPolicyWeakened": false
+  },
+  "curriculumGateChecks": {
+    "curriculumSourceGateWeakened": false,
+    "contentGovernanceGateWeakened": false
+  },
+  "persistence": {
+    "schemaChanged": true,
+    "migrationPath": "backend/prisma/migrations/20260629000001_task028_expansion_execution/migration.sql",
+    "migrationPresent": true,
+    "prismaValidatePassed": true,
+    "prismaGeneratePassed": true,
+    "sqliteTestSchemaGenerated": true,
+    "testPersistenceVerified": true,
+    "productionDbTouched": false,
+    "durableRecords": true,
+    "persistenceMode": "Prisma schema + migration SQL + test SQLite schema",
+    "fallbackUsedForAcceptance": false,
+    "safePersistenceSummary": "All expansion execution models defined in Prisma schema. Migration SQL exists. No live production database was modified during this verification run."
+  },
+  "acceptanceScenario": {
+    "scenarioRun": true,
+    "scenarioMode": "safe_synthetic_execution_acceptance_fixture",
+    "task027ProofLoaded": true,
+    "executionPreflightPassed": true,
+    "executionRunCreated": true,
+    "stageOneActivated": true,
+    "expandedParticipantsActivated": true,
+    "runtimeGuardAllowedInScope": true,
+    "runtimeGuardBlockedOutOfScope": true,
+    "aiBeforeGuardBlocked": true,
+    "memoryBeforeGuardBlocked": true,
+    "evidenceBeforeGuardBlocked": true,
+    "healthSnapshotGenerated": true,
+    "oversightQueueVerified": true,
+    "pauseBlocksAccess": true,
+    "rollbackBlocksAccess": true,
+    "completionReviewGenerated": true,
+    "safeToStartTask029": true,
+    "blockingIssues": [],
+    "rawPrivateDataUsed": false,
+    "liveProductionExpansionPerformed": false
+  },
+  "verificationCommands": [
+    {
+      "command": "npx prisma validate --schema backend/prisma/schema.prisma 2>&1",
+      "logPath": "C:\\Users\\HP\\Steadfast-AI\\logs\\task-028\\prisma-validate.log",
+      "exitCode": 0,
+      "result": "PASS",
+      "summary": "Prisma Validate: PASS (exit 0)"
+    },
+    {
+      "command": "npx prisma generate --schema backend/prisma/schema.prisma 2>&1",
+      "logPath": "C:\\Users\\HP\\Steadfast-AI\\logs\\task-028\\prisma-generate.log",
+      "exitCode": 0,
+      "result": "PASS",
+      "summary": "Prisma Generate: PASS (exit 0)"
+    },
+    {
+      "command": "npx prisma generate --schema backend/prisma/schema.test.sqlite.prisma 2>&1",
+      "logPath": "C:\\Users\\HP\\Steadfast-AI\\logs\\task-028\\prisma-test-client-generate.log",
+      "exitCode": 0,
+      "result": "PASS",
+      "summary": "Prisma Test Client Generate: PASS (exit 0)"
+    },
+    {
+      "command": "npx tsc --noEmit -p backend/tsconfig.json 2>&1",
+      "logPath": "C:\\Users\\HP\\Steadfast-AI\\logs\\task-028\\backend-typecheck.log",
+      "exitCode": 0,
+      "result": "PASS",
+      "summary": "Backend Typecheck: PASS (exit 0)"
+    },
+    {
+      "command": "npx tsc -p backend/tsconfig.json 2>&1",
+      "logPath": "C:\\Users\\HP\\Steadfast-AI\\logs\\task-028\\backend-build.log",
+      "exitCode": 0,
+      "result": "PASS",
+      "summary": "Backend Build: PASS (exit 0)"
+    },
+    {
+      "command": "npx vitest run backend/src/tests/task-028- --reporter=verbose 2>&1",
+      "logPath": "C:\\Users\\HP\\Steadfast-AI\\logs\\task-028\\task028-targeted-tests.log",
+      "exitCode": 0,
+      "result": "PASS",
+      "summary": "Task 028 Tests: PASS (exit 0)"
+    },
+    {
+      "command": "npx vitest run backend/src/tests/task-028-acceptance-scenario.test.ts --reporter=verbose 2>&1",
+      "logPath": "C:\\Users\\HP\\Steadfast-AI\\logs\\task-028\\acceptance-scenario.log",
+      "exitCode": 0,
+      "result": "PASS",
+      "summary": "Task 028 Acceptance Scenario: PASS (exit 0)"
+    }
+  ],
+  "testResults": [
+    {
+      "testFile": "task-028-session-preflight.contract.test.ts",
+      "passed": 1,
+      "failed": 0,
+      "skipped": 0,
+      "result": "PASS"
+    },
+    {
+      "testFile": "task-028-expanded-runtime-guard.test.ts",
+      "passed": 1,
+      "failed": 0,
+      "skipped": 0,
+      "result": "PASS"
+    },
+    {
+      "testFile": "task-028-task027-proof-loader.test.ts",
+      "passed": 1,
+      "failed": 0,
+      "skipped": 0,
+      "result": "PASS"
+    },
+    {
+      "testFile": "task-028-oversight-queue-service.test.ts",
+      "passed": 1,
+      "failed": 0,
+      "skipped": 0,
+      "result": "PASS"
+    },
+    {
+      "testFile": "task-028-routes-admin-scope.contract.test.ts",
+      "passed": 1,
+      "failed": 0,
+      "skipped": 0,
+      "result": "PASS"
+    },
+    {
+      "testFile": "task-028-no-school-auth-bypass.contract.test.ts",
+      "passed": 1,
+      "failed": 0,
+      "skipped": 0,
+      "result": "PASS"
+    },
+    {
+      "testFile": "task-028-no-memory-before-runtime-gate.contract.test.ts",
+      "passed": 1,
+      "failed": 0,
+      "skipped": 0,
+      "result": "PASS"
+    },
+    {
+      "testFile": "task-028-no-curriculum-gate-bypass.contract.test.ts",
+      "passed": 1,
+      "failed": 0,
+      "skipped": 0,
+      "result": "PASS"
+    },
+    {
+      "testFile": "task-028-expansion-execution-repository-persistence.test.ts",
+      "passed": 1,
+      "failed": 0,
+      "skipped": 0,
+      "result": "PASS"
+    },
+    {
+      "testFile": "task-028-no-ai-before-runtime-gate.contract.test.ts",
+      "passed": 1,
+      "failed": 0,
+      "skipped": 0,
+      "result": "PASS"
+    },
+    {
+      "testFile": "task-028-learner-denied-expansion-control-routes.contract.test.ts",
+      "passed": 1,
+      "failed": 0,
+      "skipped": 0,
+      "result": "PASS"
+    },
+    {
+      "testFile": "task-028-staged-cohort-activation-service.test.ts",
+      "passed": 1,
+      "failed": 0,
+      "skipped": 0,
+      "result": "PASS"
+    },
+    {
+      "testFile": "task-028-acceptance-scenario.test.ts",
+      "passed": 1,
+      "failed": 0,
+      "skipped": 0,
+      "result": "PASS"
+    },
+    {
+      "testFile": "task-028-no-evidence-before-runtime-gate.contract.test.ts",
+      "passed": 1,
+      "failed": 0,
+      "skipped": 0,
+      "result": "PASS"
+    },
+    {
+      "testFile": "task-028-expansion-execution-state-machine.test.ts",
+      "passed": 1,
+      "failed": 0,
+      "skipped": 0,
+      "result": "PASS"
+    },
+    {
+      "testFile": "task-028-intervention-service.test.ts",
+      "passed": 1,
+      "failed": 0,
+      "skipped": 0,
+      "result": "PASS"
+    },
+    {
+      "testFile": "task-028-rollback-execution-service.test.ts",
+      "passed": 1,
+      "failed": 0,
+      "skipped": 0,
+      "result": "PASS"
+    },
+    {
+      "testFile": "task-028-expansion-execution-contracts.test.ts",
+      "passed": 1,
+      "failed": 0,
+      "skipped": 0,
+      "result": "PASS"
+    },
+    {
+      "testFile": "task-028-monitoring-event-service.test.ts",
+      "passed": 1,
+      "failed": 0,
+      "skipped": 0,
+      "result": "PASS"
+    },
+    {
+      "testFile": "task-028-report-generation.test.ts",
+      "passed": 1,
+      "failed": 0,
+      "skipped": 0,
+      "result": "PASS"
+    },
+    {
+      "testFile": "task-028-completion-review-service.test.ts",
+      "passed": 1,
+      "failed": 0,
+      "skipped": 0,
+      "result": "PASS"
+    },
+    {
+      "testFile": "task-028-health-snapshot-service.test.ts",
+      "passed": 1,
+      "failed": 0,
+      "skipped": 0,
+      "result": "PASS"
+    },
+    {
+      "testFile": "task-028-no-socratic-gate-bypass.contract.test.ts",
+      "passed": 1,
+      "failed": 0,
+      "skipped": 0,
+      "result": "PASS"
+    },
+    {
+      "testFile": "task-028-no-private-data-leak.contract.test.ts",
+      "passed": 1,
+      "failed": 0,
+      "skipped": 0,
+      "result": "PASS"
+    },
+    {
+      "testFile": "task-028-no-deen-gate-bypass.contract.test.ts",
+      "passed": 1,
+      "failed": 0,
+      "skipped": 0,
+      "result": "PASS"
+    },
+    {
+      "testFile": "task-028-task027-proof-loader.test.ts\u001b[2m",
+      "passed": 1,
+      "failed": 0,
+      "skipped": 0,
+      "result": "PASS"
+    },
+    {
+      "testFile": "task-028-expansion-execution-contracts.test.ts\u001b[2m",
+      "passed": 1,
+      "failed": 0,
+      "skipped": 0,
+      "result": "PASS"
+    },
+    {
+      "testFile": "task-028-oversight-queue-service.test.ts\u001b[2m",
+      "passed": 1,
+      "failed": 0,
+      "skipped": 0,
+      "result": "PASS"
+    },
+    {
+      "testFile": "task-028-monitoring-event-service.test.ts\u001b[2m",
+      "passed": 1,
+      "failed": 0,
+      "skipped": 0,
+      "result": "PASS"
+    },
+    {
+      "testFile": "task-028-completion-review-service.test.ts\u001b[2m",
+      "passed": 1,
+      "failed": 0,
+      "skipped": 0,
+      "result": "PASS"
+    },
+    {
+      "testFile": "task-028-health-snapshot-service.test.ts\u001b[2m",
+      "passed": 1,
+      "failed": 0,
+      "skipped": 0,
+      "result": "PASS"
+    },
+    {
+      "testFile": "task-028-intervention-service.test.ts\u001b[2m",
+      "passed": 1,
+      "failed": 0,
+      "skipped": 0,
+      "result": "PASS"
+    },
+    {
+      "testFile": "task-028-session-preflight.contract.test.ts\u001b[2m",
+      "passed": 1,
+      "failed": 0,
+      "skipped": 0,
+      "result": "PASS"
+    },
+    {
+      "testFile": "task-028-expansion-execution-state-machine.test.ts\u001b[2m",
+      "passed": 1,
+      "failed": 0,
+      "skipped": 0,
+      "result": "PASS"
+    },
+    {
+      "testFile": "task-028-rollback-execution-service.test.ts\u001b[2m",
+      "passed": 1,
+      "failed": 0,
+      "skipped": 0,
+      "result": "PASS"
+    },
+    {
+      "testFile": "task-028-expansion-execution-repository-persistence.test.ts\u001b[2m",
+      "passed": 1,
+      "failed": 0,
+      "skipped": 0,
+      "result": "PASS"
+    },
+    {
+      "testFile": "task-028-expanded-runtime-guard.test.ts\u001b[2m",
+      "passed": 1,
+      "failed": 0,
+      "skipped": 0,
+      "result": "PASS"
+    },
+    {
+      "testFile": "task-028-staged-cohort-activation-service.test.ts\u001b[2m",
+      "passed": 1,
+      "failed": 0,
+      "skipped": 0,
+      "result": "PASS"
+    },
+    {
+      "testFile": "task-028-no-deen-gate-bypass.contract.test.ts\u001b[2m",
+      "passed": 1,
+      "failed": 0,
+      "skipped": 0,
+      "result": "PASS"
+    },
+    {
+      "testFile": "task-028-no-private-data-leak.contract.test.ts\u001b[2m",
+      "passed": 1,
+      "failed": 0,
+      "skipped": 0,
+      "result": "PASS"
+    },
+    {
+      "testFile": "task-028-no-curriculum-gate-bypass.contract.test.ts\u001b[2m",
+      "passed": 1,
+      "failed": 0,
+      "skipped": 0,
+      "result": "PASS"
+    },
+    {
+      "testFile": "task-028-no-memory-before-runtime-gate.contract.test.ts\u001b[2m",
+      "passed": 1,
+      "failed": 0,
+      "skipped": 0,
+      "result": "PASS"
+    },
+    {
+      "testFile": "task-028-no-ai-before-runtime-gate.contract.test.ts\u001b[2m",
+      "passed": 1,
+      "failed": 0,
+      "skipped": 0,
+      "result": "PASS"
+    },
+    {
+      "testFile": "task-028-no-school-auth-bypass.contract.test.ts\u001b[2m",
+      "passed": 1,
+      "failed": 0,
+      "skipped": 0,
+      "result": "PASS"
+    },
+    {
+      "testFile": "task-028-no-evidence-before-runtime-gate.contract.test.ts\u001b[2m",
+      "passed": 1,
+      "failed": 0,
+      "skipped": 0,
+      "result": "PASS"
+    },
+    {
+      "testFile": "task-028-no-socratic-gate-bypass.contract.test.ts\u001b[2m",
+      "passed": 1,
+      "failed": 0,
+      "skipped": 0,
+      "result": "PASS"
+    },
+    {
+      "testFile": "task-028-routes-admin-scope.contract.test.ts\u001b[2m",
+      "passed": 1,
+      "failed": 0,
+      "skipped": 0,
+      "result": "PASS"
+    },
+    {
+      "testFile": "task-028-learner-denied-expansion-control-routes.contract.test.ts\u001b[2m",
+      "passed": 1,
+      "failed": 0,
+      "skipped": 0,
+      "result": "PASS"
+    },
+    {
+      "testFile": "task-028-report-generation.test.ts\u001b[2m",
+      "passed": 1,
+      "failed": 0,
+      "skipped": 0,
+      "result": "PASS"
+    },
+    {
+      "testFile": "task-028-acceptance-scenario.test.ts\u001b[2m",
+      "passed": 1,
+      "failed": 0,
+      "skipped": 0,
+      "result": "PASS"
+    }
+  ],
+  "blockingIssues": [],
+  "knownLimitations": [
+    "Expansion execution relies on prior task gates being intact (Tasks 001-027).",
+    "Task 028 does not perform live production database modification — acceptance based on schema, migration, SQLite/test proof, and safe synthetic expansion execution scenario."
+  ],
+  "safeToStartTask029": true,
+  "finalDecision": "TASK_028_PASS_SAFE_TO_START_TASK_029",
+  "verificationScriptPassed": true
+}
