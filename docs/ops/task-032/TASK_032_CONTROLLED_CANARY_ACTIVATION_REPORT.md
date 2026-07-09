@@ -84,3 +84,4 @@
 
 - JSON report: `reports/task-032-controlled-canary-activation-v1.json`
 - Handoff: `docs/ops/task-032/TASK_032_HANDOFF.md`
+
