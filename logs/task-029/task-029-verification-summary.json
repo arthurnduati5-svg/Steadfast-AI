@@ -1,0 +1,90 @@
+{
+    "OverallResult":  "PASS",
+    "OverallExitCode":  0,
+    "GeneratedAt":  "2026-07-09T04:14:42.2923573+03:00",
+    "LogDirectory":  "C:\\Users\\HP\\Steadfast-AI\\logs\\task-029",
+    "TaskName":  "Expansion Operations Console, School Staff Rollout UX, Student-Safe Expansion Status, and End-to-End UI/API Proof",
+    "Steps":  [
+                  {
+                      "Name":  "Task 028 Proof Validation",
+                      "ExitCode":  0,
+                      "Command":  "node -e \"const fs=require(\u0027fs\u0027); const p=\u0027docs/ops/task-028/task-028-expansion-execution-report.json\u0027; const r=JSON.parse(fs.readFileSync(p,\u0027utf8\u0027).replace(/^\\uFEFF/,\u0027\u0027)); if(r.taskId!==\u0027028\u0027) process.exit(1); if(r.safeToStartTask029!==true) process.exit(2); if(r.finalDecision!==\u0027TASK_028_PASS_SAFE_TO_START_TASK_029\u0027) process.exit(3); console.log(\u0027TASK_028_PROOF_VALID\u0027); process.exit(0);\" 2\u003e\u00261",
+                      "LogPath":  "C:\\Users\\HP\\Steadfast-AI\\logs\\task-029\\task028-proof-validation.log",
+                      "DurationSeconds":  0.13312469999999998,
+                      "Result":  "PASS"
+                  },
+                  {
+                      "Name":  "Prisma Validate",
+                      "ExitCode":  0,
+                      "Command":  "npx prisma validate --schema backend/prisma/schema.prisma 2\u003e\u00261",
+                      "LogPath":  "C:\\Users\\HP\\Steadfast-AI\\logs\\task-029\\prisma-validate.log",
+                      "DurationSeconds":  5.9591135999999993,
+                      "Result":  "PASS"
+                  },
+                  {
+                      "Name":  "Prisma Generate",
+                      "ExitCode":  0,
+                      "Command":  "npx prisma generate --schema backend/prisma/schema.prisma 2\u003e\u00261",
+                      "LogPath":  "C:\\Users\\HP\\Steadfast-AI\\logs\\task-029\\prisma-generate.log",
+                      "DurationSeconds":  5.9731286,
+                      "Result":  "PASS"
+                  },
+                  {
+                      "Name":  "Backend Typecheck",
+                      "ExitCode":  0,
+                      "Command":  "npx tsc --noEmit -p backend/tsconfig.json 2\u003e\u00261",
+                      "LogPath":  "C:\\Users\\HP\\Steadfast-AI\\logs\\task-029\\backend-typecheck.log",
+                      "DurationSeconds":  87.7014533,
+                      "Result":  "PASS"
+                  },
+                  {
+                      "Name":  "Backend Build",
+                      "ExitCode":  0,
+                      "Command":  "npx tsc -p backend/tsconfig.json 2\u003e\u00261",
+                      "LogPath":  "C:\\Users\\HP\\Steadfast-AI\\logs\\task-029\\backend-build.log",
+                      "DurationSeconds":  82.12824839999999,
+                      "Result":  "PASS"
+                  },
+                  {
+                      "Name":  "Task 029 Backend Tests",
+                      "ExitCode":  0,
+                      "Command":  "npx vitest run --config backend/vitest.config.ts --reporter=verbose -- backend/src/tests/task-029-*.test.ts backend/src/tests/task-029-smoke.test.ts backend/src/tests/task-028-no-task029-console.contract.test.ts 2\u003e\u00261",
+                      "LogPath":  "C:\\Users\\HP\\Steadfast-AI\\logs\\task-029\\task029-backend-tests.log",
+                      "DurationSeconds":  83.2567838,
+                      "Result":  "PASS"
+                  },
+                  {
+                      "Name":  "Task 029 UI/API Proof",
+                      "ExitCode":  0,
+                      "Command":  "npx vitest run --config backend/vitest.config.ts --reporter=verbose -- backend/src/tests/task-029-routes-*.contract.test.ts backend/src/tests/task-029-learner-denied-operations-console.contract.test.ts backend/src/tests/task-029-safe-error-envelope.contract.test.ts 2\u003e\u00261",
+                      "LogPath":  "C:\\Users\\HP\\Steadfast-AI\\logs\\task-029\\task029-uiapi-proof.log",
+                      "DurationSeconds":  92.72797589999999,
+                      "Result":  "PASS"
+                  },
+                  {
+                      "Name":  "Generate Task 029 Report",
+                      "ExitCode":  0,
+                      "Command":  "node scripts/gen-task029-report.cjs 2\u003e\u00261",
+                      "LogPath":  "C:\\Users\\HP\\Steadfast-AI\\logs\\task-029\\report-generation.log",
+                      "DurationSeconds":  0.19436019999999998,
+                      "Result":  "PASS"
+                  },
+                  {
+                      "Name":  "JSON Report Validation",
+                      "ExitCode":  0,
+                      "Command":  "node scripts/task029-json-validate.cjs 2\u003e\u00261",
+                      "LogPath":  "C:\\Users\\HP\\Steadfast-AI\\logs\\task-029\\json-validation.log",
+                      "DurationSeconds":  0.1797423,
+                      "Result":  "PASS"
+                  },
+                  {
+                      "Name":  "Privacy Leak Scan",
+                      "ExitCode":  0,
+                      "Command":  "node scripts/task029-privacy-scan.cjs 2\u003e\u00261",
+                      "LogPath":  "C:\\Users\\HP\\Steadfast-AI\\logs\\task-029\\privacy-scan.log",
+                      "DurationSeconds":  0.15601489999999998,
+                      "Result":  "PASS"
+                  }
+              ],
+    "TaskId":  "029"
+}
