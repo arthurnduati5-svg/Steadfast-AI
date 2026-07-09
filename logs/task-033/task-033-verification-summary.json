@@ -1,0 +1,138 @@
+{
+    "OverallResult":  "PASS",
+    "OverallExitCode":  0,
+    "GeneratedAt":  "2026-06-29T13:28:03.1567939+03:00",
+    "LogDirectory":  "C:\\Users\\HP\\Steadfast-AI\\logs\\task-033",
+    "TaskName":  "Controlled Canary Observation, Live Evidence Review, Staff Feedback Loop, Health Budget Enforcement, and Post-Canary Decision Gate",
+    "Steps":  [
+                  {
+                      "Name":  "Task 032 Proof Validation",
+                      "ExitCode":  0,
+                      "Command":  "node -e \"const fs=require(\u0027fs\u0027);const p=\u0027docs/ops/task-032/task-032-controlled-canary-report.json\u0027;const r=JSON.parse(fs.readFileSync(p,\u0027utf8\u0027).replace(/^\\uFEFF/,\u0027\u0027));if(r.taskId!==\u0027032\u0027)process.exit(1);if(r.safeToStartTask033!==true)process.exit(2);if(r.finalDecision!==\u0027TASK_032_PASS_SAFE_TO_START_TASK_033\u0027)process.exit(3);console.log(\u0027TASK_032_PROOF_VALID\u0027);process.exit(0);\" 2\u003e\u00261",
+                      "LogPath":  "C:\\Users\\HP\\Steadfast-AI\\logs\\task-033\\task032-proof-validation.log",
+                      "DurationSeconds":  0.1082534,
+                      "Result":  "PASS"
+                  },
+                  {
+                      "Name":  "Observation Environment Gate",
+                      "ExitCode":  0,
+                      "Command":  "node -e \"const ok=process.env.TASK033_CANARY_OBSERVATION===\u00271\u0027\u0026\u0026process.env.TASK033_REQUIRE_TASK032_PROOF===\u00271\u0027\u0026\u0026process.env.TASK033_NO_OPEN_ROLLOUT===\u00271\u0027\u0026\u0026process.env.TASK033_PRIVACY_SAFE_EVIDENCE===\u00271\u0027\u0026\u0026process.env.TASK033_REQUIRE_ROLLBACK_READY===\u00271\u0027;console.log(\u0027TASK033_CANARY_OBSERVATION:\u0027+(process.env.TASK033_CANARY_OBSERVATION||\u0027not_set\u0027));console.log(\u0027TASK033_REQUIRE_TASK032_PROOF:\u0027+(process.env.TASK033_REQUIRE_TASK032_PROOF||\u0027not_set\u0027));console.log(\u0027TASK033_NO_OPEN_ROLLOUT:\u0027+(process.env.TASK033_NO_OPEN_ROLLOUT||\u0027not_set\u0027));console.log(\u0027TASK033_PRIVACY_SAFE_EVIDENCE:\u0027+(process.env.TASK033_PRIVACY_SAFE_EVIDENCE||\u0027not_set\u0027));console.log(\u0027TASK033_REQUIRE_ROLLBACK_READY:\u0027+(process.env.TASK033_REQUIRE_ROLLBACK_READY||\u0027not_set\u0027));process.exit(ok?0:1)\" 2\u003e\u00261",
+                      "LogPath":  "C:\\Users\\HP\\Steadfast-AI\\logs\\task-033\\observation-environment-gate.log",
+                      "DurationSeconds":  0.0916676,
+                      "Result":  "PASS"
+                  },
+                  {
+                      "Name":  "Privacy-Safe Evidence Precheck",
+                      "ExitCode":  0,
+                      "Command":  "node -e \"const ok=process.env.TASK033_PRIVACY_SAFE_EVIDENCE===\u00271\u0027;console.log(\u0027TASK033_PRIVACY_SAFE_EVIDENCE:\u0027+(process.env.TASK033_PRIVACY_SAFE_EVIDENCE||\u0027not_set\u0027));process.exit(ok?0:1)\" 2\u003e\u00261",
+                      "LogPath":  "C:\\Users\\HP\\Steadfast-AI\\logs\\task-033\\privacy-safe-evidence-precheck.log",
+                      "DurationSeconds":  0.089833299999999991,
+                      "Result":  "PASS"
+                  },
+                  {
+                      "Name":  "Prisma Validate",
+                      "ExitCode":  0,
+                      "Command":  "npx prisma validate --schema backend/prisma/schema.prisma 2\u003e\u00261",
+                      "LogPath":  "C:\\Users\\HP\\Steadfast-AI\\logs\\task-033\\prisma-validate.log",
+                      "DurationSeconds":  4.2360103,
+                      "Result":  "PASS"
+                  },
+                  {
+                      "Name":  "Prisma Generate",
+                      "ExitCode":  0,
+                      "Command":  "npx prisma generate --schema backend/prisma/schema.prisma 2\u003e\u00261",
+                      "LogPath":  "C:\\Users\\HP\\Steadfast-AI\\logs\\task-033\\prisma-generate.log",
+                      "DurationSeconds":  3.8415877,
+                      "Result":  "PASS"
+                  },
+                  {
+                      "Name":  "SQLite Test Client Generate",
+                      "ExitCode":  0,
+                      "Command":  "npx prisma generate --schema backend/prisma/schema.test.sqlite.prisma 2\u003e\u00261",
+                      "LogPath":  "C:\\Users\\HP\\Steadfast-AI\\logs\\task-033\\sqlite-test-client-generate.log",
+                      "DurationSeconds":  3.9700705,
+                      "Result":  "PASS"
+                  },
+                  {
+                      "Name":  "Backend Typecheck",
+                      "ExitCode":  0,
+                      "Command":  "npx tsc --noEmit -p backend/tsconfig.json 2\u003e\u00261",
+                      "LogPath":  "C:\\Users\\HP\\Steadfast-AI\\logs\\task-033\\backend-typecheck.log",
+                      "DurationSeconds":  31.804732899999998,
+                      "Result":  "PASS"
+                  },
+                  {
+                      "Name":  "Backend Build",
+                      "ExitCode":  0,
+                      "Command":  "npx tsc -p backend/tsconfig.json 2\u003e\u00261",
+                      "LogPath":  "C:\\Users\\HP\\Steadfast-AI\\logs\\task-033\\backend-build.log",
+                      "DurationSeconds":  38.8274481,
+                      "Result":  "PASS"
+                  },
+                  {
+                      "Name":  "Controlled Canary Observation Runner",
+                      "ExitCode":  0,
+                      "Command":  "node scripts/run-task033-canary-observation.cjs 2\u003e\u00261",
+                      "LogPath":  "C:\\Users\\HP\\Steadfast-AI\\logs\\task-033\\controlled-canary-observation-runner.log",
+                      "DurationSeconds":  0.1267634,
+                      "Result":  "PASS"
+                  },
+                  {
+                      "Name":  "Generate Task 033 Report",
+                      "ExitCode":  0,
+                      "Command":  "node scripts/gen-task033-report.cjs 2\u003e\u00261",
+                      "LogPath":  "C:\\Users\\HP\\Steadfast-AI\\logs\\task-033\\report-generation.log",
+                      "DurationSeconds":  0.1201357,
+                      "Result":  "PASS"
+                  },
+                  {
+                      "Name":  "Task 033 Backend Tests",
+                      "ExitCode":  0,
+                      "Command":  "npx vitest run backend/src/tests/task-033- --reporter=verbose 2\u003e\u00261",
+                      "LogPath":  "C:\\Users\\HP\\Steadfast-AI\\logs\\task-033\\task033-backend-tests.log",
+                      "DurationSeconds":  2.8463716999999997,
+                      "Result":  "PASS"
+                  },
+                  {
+                      "Name":  "Regenerate Task 033 Report After Tests",
+                      "ExitCode":  0,
+                      "Command":  "node scripts/gen-task033-report.cjs 2\u003e\u00261",
+                      "LogPath":  "C:\\Users\\HP\\Steadfast-AI\\logs\\task-033\\report-generation-after-tests.log",
+                      "DurationSeconds":  0.11467669999999999,
+                      "Result":  "PASS"
+                  },
+                  {
+                      "Name":  "JSON Report Validation",
+                      "ExitCode":  0,
+                      "Command":  "node scripts/task033-json-validate.cjs 2\u003e\u00261",
+                      "LogPath":  "C:\\Users\\HP\\Steadfast-AI\\logs\\task-033\\json-validation.log",
+                      "DurationSeconds":  0.1074513,
+                      "Result":  "PASS"
+                  },
+                  {
+                      "Name":  "Privacy Leak Scan",
+                      "ExitCode":  0,
+                      "Command":  "node scripts/task033-privacy-scan.cjs 2\u003e\u00261",
+                      "LogPath":  "C:\\Users\\HP\\Steadfast-AI\\logs\\task-033\\privacy-scan.log",
+                      "DurationSeconds":  0.12968,
+                      "Result":  "PASS"
+                  },
+                  {
+                      "Name":  "Final JSON Report Validation",
+                      "ExitCode":  0,
+                      "Command":  "node scripts/task033-json-validate.cjs 2\u003e\u00261",
+                      "LogPath":  "C:\\Users\\HP\\Steadfast-AI\\logs\\task-033\\json-validation-final.log",
+                      "DurationSeconds":  0.0962401,
+                      "Result":  "PASS"
+                  },
+                  {
+                      "Name":  "Final Privacy Leak Scan",
+                      "ExitCode":  0,
+                      "Command":  "node scripts/task033-privacy-scan.cjs 2\u003e\u00261",
+                      "LogPath":  "C:\\Users\\HP\\Steadfast-AI\\logs\\task-033\\privacy-scan-final.log",
+                      "DurationSeconds":  0.1263109,
+                      "Result":  "PASS"
+                  }
+              ],
+    "TaskId":  "033"
+}

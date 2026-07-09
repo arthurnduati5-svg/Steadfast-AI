@@ -1,0 +1,138 @@
+{
+    "OverallResult":  "PASS",
+    "OverallExitCode":  0,
+    "GeneratedAt":  "2026-06-29T14:38:49.6214474+03:00",
+    "LogDirectory":  "C:\\Users\\HP\\Steadfast-AI\\logs\\task-035",
+    "TaskName":  "Controlled School-Wide Readiness Gate, 100% Rollout Simulation, Production-Safe Release Board, and Final School Launch Decision",
+    "Steps":  [
+                  {
+                      "Name":  "Task 034 Proof Validation",
+                      "ExitCode":  0,
+                      "Command":  "node -e \"const fs=require(\u0027fs\u0027);const p=\u0027docs/ops/task-034/task-034-controlled-rollout-report.json\u0027;const r=JSON.parse(fs.readFileSync(p,\u0027utf8\u0027).replace(/^\\uFEFF/,\u0027\u0027));if(r.taskId!==\u0027034\u0027)process.exit(1);if(r.safeToStartTask035!==true)process.exit(2);if(r.finalDecision!==\u0027TASK_034_PASS_SAFE_TO_START_TASK_035\u0027)process.exit(3);console.log(\u0027TASK_034_PROOF_VALID\u0027);process.exit(0);\" 2\u003e\u00261",
+                      "LogPath":  "C:\\Users\\HP\\Steadfast-AI\\logs\\task-035\\task034-proof-validation.log",
+                      "DurationSeconds":  0.097934399999999991,
+                      "Result":  "PASS"
+                  },
+                  {
+                      "Name":  "Production-Safe Environment Gate",
+                      "ExitCode":  0,
+                      "Command":  "node -e \"const ok=process.env.TASK035_SCHOOL_WIDE_READINESS===\u00271\u0027\u0026\u0026process.env.TASK035_REQUIRE_TASK034_PROOF===\u00271\u0027\u0026\u0026process.env.TASK035_NO_PUBLIC_ROLLOUT===\u00271\u0027\u0026\u0026process.env.TASK035_NO_MULTI_SCHOOL_ROLLOUT===\u00271\u0027\u0026\u0026process.env.TASK035_PRIVACY_SAFE_EVIDENCE===\u00271\u0027\u0026\u0026process.env.TASK035_REQUIRE_RELEASE_BOARD===\u00271\u0027\u0026\u0026process.env.TASK035_REQUIRE_ROLLBACK_READY===\u00271\u0027\u0026\u0026process.env.TASK035_FULL_SCHOOL_SIMULATION_ONLY===\u00271\u0027;console.log(\u0027TASK035_SCHOOL_WIDE_READINESS:\u0027+(process.env.TASK035_SCHOOL_WIDE_READINESS||\u0027not_set\u0027));console.log(\u0027TASK035_REQUIRE_TASK034_PROOF:\u0027+(process.env.TASK035_REQUIRE_TASK034_PROOF||\u0027not_set\u0027));console.log(\u0027TASK035_NO_PUBLIC_ROLLOUT:\u0027+(process.env.TASK035_NO_PUBLIC_ROLLOUT||\u0027not_set\u0027));console.log(\u0027TASK035_NO_MULTI_SCHOOL_ROLLOUT:\u0027+(process.env.TASK035_NO_MULTI_SCHOOL_ROLLOUT||\u0027not_set\u0027));console.log(\u0027TASK035_PRIVACY_SAFE_EVIDENCE:\u0027+(process.env.TASK035_PRIVACY_SAFE_EVIDENCE||\u0027not_set\u0027));console.log(\u0027TASK035_REQUIRE_RELEASE_BOARD:\u0027+(process.env.TASK035_REQUIRE_RELEASE_BOARD||\u0027not_set\u0027));console.log(\u0027TASK035_REQUIRE_ROLLBACK_READY:\u0027+(process.env.TASK035_REQUIRE_ROLLBACK_READY||\u0027not_set\u0027));console.log(\u0027TASK035_FULL_SCHOOL_SIMULATION_ONLY:\u0027+(process.env.TASK035_FULL_SCHOOL_SIMULATION_ONLY||\u0027not_set\u0027));process.exit(ok?0:1)\" 2\u003e\u00261",
+                      "LogPath":  "C:\\Users\\HP\\Steadfast-AI\\logs\\task-035\\production-environment-gate.log",
+                      "DurationSeconds":  0.08831,
+                      "Result":  "PASS"
+                  },
+                  {
+                      "Name":  "Privacy-Safe Evidence Precheck",
+                      "ExitCode":  0,
+                      "Command":  "node -e \"const ok=process.env.TASK035_PRIVACY_SAFE_EVIDENCE===\u00271\u0027;console.log(\u0027TASK035_PRIVACY_SAFE_EVIDENCE:\u0027+(process.env.TASK035_PRIVACY_SAFE_EVIDENCE||\u0027not_set\u0027));process.exit(ok?0:1)\" 2\u003e\u00261",
+                      "LogPath":  "C:\\Users\\HP\\Steadfast-AI\\logs\\task-035\\privacy-safe-evidence-precheck.log",
+                      "DurationSeconds":  0.0970442,
+                      "Result":  "PASS"
+                  },
+                  {
+                      "Name":  "Prisma Validate",
+                      "ExitCode":  0,
+                      "Command":  "npx prisma validate --schema backend/prisma/schema.prisma 2\u003e\u00261",
+                      "LogPath":  "C:\\Users\\HP\\Steadfast-AI\\logs\\task-035\\prisma-validate.log",
+                      "DurationSeconds":  4.460735,
+                      "Result":  "PASS"
+                  },
+                  {
+                      "Name":  "Prisma Generate",
+                      "ExitCode":  0,
+                      "Command":  "npx prisma generate --schema backend/prisma/schema.prisma 2\u003e\u00261",
+                      "LogPath":  "C:\\Users\\HP\\Steadfast-AI\\logs\\task-035\\prisma-generate.log",
+                      "DurationSeconds":  3.5815539,
+                      "Result":  "PASS"
+                  },
+                  {
+                      "Name":  "SQLite Test Client Generate",
+                      "ExitCode":  0,
+                      "Command":  "npx prisma generate --schema backend/prisma/schema.test.sqlite.prisma 2\u003e\u00261",
+                      "LogPath":  "C:\\Users\\HP\\Steadfast-AI\\logs\\task-035\\sqlite-test-client-generate.log",
+                      "DurationSeconds":  3.8956608,
+                      "Result":  "PASS"
+                  },
+                  {
+                      "Name":  "Backend Typecheck",
+                      "ExitCode":  0,
+                      "Command":  "npx tsc --noEmit -p backend/tsconfig.json 2\u003e\u00261",
+                      "LogPath":  "C:\\Users\\HP\\Steadfast-AI\\logs\\task-035\\backend-typecheck.log",
+                      "DurationSeconds":  16.6765845,
+                      "Result":  "PASS"
+                  },
+                  {
+                      "Name":  "Backend Build",
+                      "ExitCode":  0,
+                      "Command":  "npx tsc -p backend/tsconfig.json 2\u003e\u00261",
+                      "LogPath":  "C:\\Users\\HP\\Steadfast-AI\\logs\\task-035\\backend-build.log",
+                      "DurationSeconds":  40.3408681,
+                      "Result":  "PASS"
+                  },
+                  {
+                      "Name":  "School-Wide Readiness Runner",
+                      "ExitCode":  0,
+                      "Command":  "node scripts/run-task035-school-wide-readiness.cjs 2\u003e\u00261",
+                      "LogPath":  "C:\\Users\\HP\\Steadfast-AI\\logs\\task-035\\school-wide-readiness-runner.log",
+                      "DurationSeconds":  0.1180852,
+                      "Result":  "PASS"
+                  },
+                  {
+                      "Name":  "Generate Task 035 Report",
+                      "ExitCode":  0,
+                      "Command":  "node scripts/gen-task035-report.cjs 2\u003e\u00261",
+                      "LogPath":  "C:\\Users\\HP\\Steadfast-AI\\logs\\task-035\\report-generation.log",
+                      "DurationSeconds":  0.11950799999999999,
+                      "Result":  "PASS"
+                  },
+                  {
+                      "Name":  "Task 035 Backend Tests",
+                      "ExitCode":  0,
+                      "Command":  "npx vitest run backend/src/tests/task-035- --reporter=verbose 2\u003e\u00261",
+                      "LogPath":  "C:\\Users\\HP\\Steadfast-AI\\logs\\task-035\\task035-backend-tests.log",
+                      "DurationSeconds":  2.3585746,
+                      "Result":  "PASS"
+                  },
+                  {
+                      "Name":  "Regenerate Task 035 Report After Tests",
+                      "ExitCode":  0,
+                      "Command":  "node scripts/gen-task035-report.cjs 2\u003e\u00261",
+                      "LogPath":  "C:\\Users\\HP\\Steadfast-AI\\logs\\task-035\\report-generation-after-tests.log",
+                      "DurationSeconds":  0.0997946,
+                      "Result":  "PASS"
+                  },
+                  {
+                      "Name":  "JSON Report Validation",
+                      "ExitCode":  0,
+                      "Command":  "node scripts/task035-json-validate.cjs 2\u003e\u00261",
+                      "LogPath":  "C:\\Users\\HP\\Steadfast-AI\\logs\\task-035\\json-validation.log",
+                      "DurationSeconds":  0.1041144,
+                      "Result":  "PASS"
+                  },
+                  {
+                      "Name":  "Privacy Leak Scan",
+                      "ExitCode":  0,
+                      "Command":  "node scripts/task035-privacy-scan.cjs 2\u003e\u00261",
+                      "LogPath":  "C:\\Users\\HP\\Steadfast-AI\\logs\\task-035\\privacy-scan.log",
+                      "DurationSeconds":  0.12265619999999999,
+                      "Result":  "PASS"
+                  },
+                  {
+                      "Name":  "Final JSON Report Validation",
+                      "ExitCode":  0,
+                      "Command":  "node scripts/task035-json-validate.cjs 2\u003e\u00261",
+                      "LogPath":  "C:\\Users\\HP\\Steadfast-AI\\logs\\task-035\\json-validation-final.log",
+                      "DurationSeconds":  0.1098454,
+                      "Result":  "PASS"
+                  },
+                  {
+                      "Name":  "Final Privacy Leak Scan",
+                      "ExitCode":  0,
+                      "Command":  "node scripts/task035-privacy-scan.cjs 2\u003e\u00261",
+                      "LogPath":  "C:\\Users\\HP\\Steadfast-AI\\logs\\task-035\\privacy-scan-final.log",
+                      "DurationSeconds":  0.1034262,
+                      "Result":  "PASS"
+                  }
+              ],
+    "TaskId":  "035"
+}

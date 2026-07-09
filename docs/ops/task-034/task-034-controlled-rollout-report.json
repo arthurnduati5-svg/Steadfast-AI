@@ -1,0 +1,376 @@
+{
+  "taskId": "034",
+  "taskName": "Controlled Limited Rollout Expansion, 25% Cohort Gate, Expanded Runtime Safety, Staff Readiness, Health Budget Escalation, and Rollback-Protected Release Decision",
+  "generatedAt": "2026-06-29T11:09:43.737Z",
+  "gitBranch": "main",
+  "gitCommit": "16bf88679c8b120912cd600e53722dd0768e3e6f",
+  "workingTreeStatus": "dirty",
+  "environment": "development",
+  "filesChanged": [
+    "backend/src/contracts/task034ControlledRolloutContracts.ts",
+    "backend/src/services/task034Task033ProofLoaderService.ts",
+    "backend/src/services/task034ControlledRolloutConfigService.ts",
+    "backend/src/services/task034RolloutCapGateService.ts",
+    "backend/src/services/task034ExpandedCohortEligibilityService.ts",
+    "backend/src/services/task034StaffReadinessService.ts",
+    "backend/src/services/task034LearnerNoticeReadinessService.ts",
+    "backend/src/services/task034ControlledRolloutStateMachine.ts",
+    "backend/src/services/task034ExpandedRuntimeGuardService.ts",
+    "backend/src/services/task034ExpandedPrivacyBoundaryService.ts",
+    "backend/src/services/task034ControlledRolloutHealthBudgetService.ts",
+    "backend/src/services/task034CanaryBaselineComparisonService.ts",
+    "backend/src/services/task034ExpandedMonitoringSnapshotService.ts",
+    "backend/src/services/task034TeacherAdminReviewService.ts",
+    "backend/src/services/task034StudentSafeFeedbackContinuationService.ts",
+    "backend/src/services/task034IncidentRollbackBridgeService.ts",
+    "backend/src/services/task034RolloutRollbackProofService.ts",
+    "backend/src/services/task034SocraticIntegrityReviewService.ts",
+    "backend/src/services/task034DeenGovernanceReviewService.ts",
+    "backend/src/services/task034CurriculumSourceReviewService.ts",
+    "backend/src/services/task034PostLimitedRolloutDecisionService.ts",
+    "backend/src/routes/task034ControlledRolloutRoutes.ts",
+    "scripts/run-task034-controlled-rollout.cjs",
+    "scripts/gen-task034-report.cjs",
+    "scripts/task034-json-validate.cjs",
+    "scripts/task034-privacy-scan.cjs",
+    "scripts/verify-task034.ps1"
+  ],
+  "migrationsChanged": [],
+  "task033Proof": {
+    "ok": true,
+    "proofLoaded": true
+  },
+  "controlledRolloutConfig": {
+    "ok": true,
+    "rolloutRunId": "rollout_run_task034_safe",
+    "schoolId": "school_task034_limited_rollout_safe",
+    "cohortId": "cohort_task034_limited_rollout_safe",
+    "maxControlledRolloutPercent": 25,
+    "maxControlledRolloutStudents": 100,
+    "observationMode": "controlled_limited_rollout",
+    "allowOpenRegistration": false,
+    "allowPublicSignup": false,
+    "allowAllStudents": false,
+    "allowSchoolWideRollout": false,
+    "allowHundredPercentRollout": false,
+    "passed": true,
+    "blockingIssues": []
+  },
+  "rolloutCap": {
+    "ok": true,
+    "rolloutPercent": 20,
+    "rolloutPercentCap": 25,
+    "percentCapPassed": true,
+    "passed": true
+  },
+  "expandedCohortEligibility": {
+    "ok": true,
+    "approvedSchool": true,
+    "approvedTenant": true,
+    "approvedCohort": true,
+    "rawStudentIdentityExposed": false,
+    "passed": true
+  },
+  "staffReadiness": {
+    "ok": true,
+    "adminApproved": true,
+    "operatorRunbookAcknowledged": true,
+    "teacherSafeUseAcknowledged": true,
+    "teacherEscalationPathAcknowledged": true,
+    "privacyBoundaryAcknowledged": true,
+    "rollbackOwnerAcknowledged": true,
+    "safeguardingContactAcknowledged": true,
+    "rawStaffPrivateDataExposed": false,
+    "passed": true
+  },
+  "learnerNoticeReadiness": {
+    "ok": true,
+    "studentNoticeReady": true,
+    "noticeIsCalm": true,
+    "noticeMentionsThinkingFirst": true,
+    "noticeMentionsTeacherSupport": true,
+    "noInternalDetailsExposed": true,
+    "noOtherStudentsExposed": true,
+    "rawPrivateDataExposed": false,
+    "passed": true
+  },
+  "activationStateMachine": {
+    "ok": true,
+    "passed": true
+  },
+  "expandedRuntimeGuard": {
+    "ok": true,
+    "schoolIdentityRequired": true,
+    "approvedSchoolRequired": true,
+    "approvedCohortRequired": true,
+    "activeRolloutRequired": true,
+    "socraticGateRequired": true,
+    "deenGateRequired": true,
+    "privacyGateRequired": true,
+    "sessionBlockedBeforeGates": true,
+    "memoryBlockedBeforeGates": true,
+    "aiBlockedBeforeGates": true,
+    "pauseBlocksAccess": true,
+    "killSwitchBlocksAccess": true,
+    "rollbackBlocksAccess": true,
+    "passed": true
+  },
+  "expandedPrivacyBoundary": {
+    "ok": true,
+    "rawStudentChatExposed": false,
+    "privateLearnerMemoryExposed": false,
+    "teacherOnlyNotesExposed": false,
+    "safeguardingRawDetailsExposed": false,
+    "deenSensitivePrivateTextExposed": false,
+    "tokensSecretsExposed": false,
+    "databaseUrlsExposed": false,
+    "answerKeysExposed": false,
+    "teacherOnlyContentExposed": false,
+    "protectedRubricsExposed": false,
+    "passed": true
+  },
+  "healthBudget": {
+    "ok": true,
+    "latencyBudgetPassed": true,
+    "errorBudgetPassed": true,
+    "privacyBudgetPassed": true,
+    "schoolAuthBudgetPassed": true,
+    "rolloutMembershipBudgetPassed": true,
+    "socraticBudgetPassed": true,
+    "deenBudgetPassed": true,
+    "curriculumBudgetPassed": true,
+    "safeguardingBudgetPassed": true,
+    "openRolloutBudgetPassed": true,
+    "schoolWideRolloutBudgetPassed": true,
+    "hundredPercentRolloutBudgetPassed": true,
+    "passed": true
+  },
+  "canaryBaselineComparison": {
+    "ok": true,
+    "baselineLoaded": true,
+    "aggregateOnly": true,
+    "latencyRegressionWithinBudget": true,
+    "errorRegressionWithinBudget": true,
+    "safetyRegressionDetected": false,
+    "hardSafetyRegressionDetected": false,
+    "rawPrivateDataExposed": false,
+    "passed": true
+  },
+  "expandedMonitoringSnapshot": {
+    "ok": true,
+    "aggregateOnly": true,
+    "rawPrivateDataExposed": false,
+    "passed": true
+  },
+  "teacherAdminReview": {
+    "ok": true,
+    "teacherSafeSummaryOnly": true,
+    "rawPrivateDataExposed": false,
+    "passed": true
+  },
+  "studentSafeFeedbackContinuation": {
+    "ok": true,
+    "categoryOnly": true,
+    "rawFreeformBlocked": true,
+    "passed": true
+  },
+  "incidentRollbackBridge": {
+    "ok": true,
+    "safeSummariesOnly": true,
+    "pauseRecommended": false,
+    "killSwitchRecommended": false,
+    "rollbackRecommended": false,
+    "passed": true
+  },
+  "rollbackProof": {
+    "ok": true,
+    "pauseBlocksRuntime": true,
+    "killSwitchBlocksRuntime": true,
+    "rollbackBlocksRuntime": true,
+    "safeAuditSummaryPreserved": true,
+    "destructiveLearningEvidenceDeletionAvoided": true,
+    "passed": true
+  },
+  "socraticIntegrityReview": {
+    "ok": true,
+    "socraticGatePassed": true,
+    "noFinalAnswerPolicyWeakened": false,
+    "answerKeyExposureDetected": false,
+    "homeworkShortcutDetected": false,
+    "studentReasoningFirstPreserved": true,
+    "passed": true
+  },
+  "deenGovernanceReview": {
+    "ok": true,
+    "deenGatePassed": true,
+    "fatwaEngineIntroduced": false,
+    "inventedRulingDetected": false,
+    "deenSensitivePrivateTextExposed": false,
+    "safeReferralPathPreserved": true,
+    "passed": true
+  },
+  "curriculumSourceReview": {
+    "ok": true,
+    "curriculumGatePassed": true,
+    "approvedCurriculumScopeRequired": true,
+    "approvedSourceScopeRequired": true,
+    "unapprovedSubjectBlocked": true,
+    "teacherOnlyContentExposed": false,
+    "passed": true
+  },
+  "roleBoundaryReview": {
+    "ok": true,
+    "teacherDeniedAdminControls": true,
+    "teacherSafeOversightOnly": true,
+    "studentOwnStatusOnly": true,
+    "studentDeniedReports": true,
+    "unknownDeniedEverywhere": true,
+    "passed": true
+  },
+  "postLimitedRolloutDecision": {
+    "decision": "safe_to_prepare_next_rollout_stage",
+    "safeToStartTask035": true,
+    "blockingIssues": [],
+    "computedFromRealData": true,
+    "manuallyForced": false,
+    "passed": true
+  },
+  "privacyLeakChecks": {
+    "rawStudentChatExposed": false,
+    "privateLearnerMemoryExposed": false,
+    "teacherOnlyNotesExposed": false,
+    "safeguardingRawDetailsExposed": false,
+    "deenSensitivePrivateTextExposed": false,
+    "aiPromptsExposed": false,
+    "providerResponsesExposed": false,
+    "tokensSecretsExposed": false,
+    "databaseUrlsExposed": false,
+    "answerKeysExposed": false,
+    "teacherOnlyContentExposed": false,
+    "protectedRubricsExposed": false
+  },
+  "securityGateChecks": {
+    "schoolAuthGateWeakened": false,
+    "rolloutGateWeakened": false
+  },
+  "deenGateChecks": {
+    "fatwaEngineIntroduced": false,
+    "deenGovernanceGateWeakened": false
+  },
+  "socraticGateChecks": {
+    "socraticGateWeakened": false,
+    "noFinalAnswerPolicyWeakened": false
+  },
+  "curriculumGateChecks": {
+    "curriculumSourceGateWeakened": false,
+    "contentGovernanceGateWeakened": false
+  },
+  "rolloutScopeChecks": {
+    "openRegistrationEnabled": false,
+    "publicSignupEnabled": false,
+    "allStudentsEnabled": false,
+    "schoolWideRolloutPerformed": false,
+    "hundredPercentRolloutPerformed": false,
+    "twentyFivePercentCapExceeded": false,
+    "studentCapExceeded": false,
+    "unapprovedSchoolAllowed": false,
+    "unapprovedCohortAllowed": false,
+    "studentOutsideRolloutAllowed": false,
+    "unknownRoleAllowed": false
+  },
+  "verificationCommands": [
+    {
+      "command": "task-034-proof-loader-test",
+      "logPath": "logs/task-034/proof-loader-validation.log",
+      "exitCode": 0,
+      "result": "PASS",
+      "summary": "Task 034 Proof Loader Validation: PASS (exit 0)"
+    },
+    {
+      "command": "controllled-rollout-environment-gate",
+      "logPath": "logs/task-034/rollout-environment-gate.log",
+      "exitCode": 0,
+      "result": "PASS",
+      "summary": "Task 034 Controlled Rollout Environment Gate: PASS (exit 0)"
+    },
+    {
+      "command": "privacy-safe-evidence-precheck",
+      "logPath": "logs/task-034/privacy-safe-precheck.log",
+      "exitCode": 0,
+      "result": "PASS",
+      "summary": "Task 034 Privacy Safe Evidence Precheck: PASS (exit 0)"
+    },
+    {
+      "command": "npx prisma validate --schema backend/prisma/schema.prisma",
+      "logPath": "logs/task-034/prisma-validate.log",
+      "exitCode": 0,
+      "result": "PASS",
+      "summary": "Prisma Validate: PASS (exit 0)"
+    },
+    {
+      "command": "npx prisma generate --schema backend/prisma/schema.prisma",
+      "logPath": "logs/task-034/prisma-generate.log",
+      "exitCode": 0,
+      "result": "PASS",
+      "summary": "Prisma Generate: PASS (exit 0)"
+    },
+    {
+      "command": "npx prisma generate --schema backend/prisma/schema.test.sqlite.prisma",
+      "logPath": "logs/task-034/sqlite-test-client-generate.log",
+      "exitCode": 0,
+      "result": "PASS",
+      "summary": "SQLite Test Client Generate: PASS (exit 0)"
+    },
+    {
+      "command": "npx tsc --noEmit -p backend/tsconfig.json",
+      "logPath": "logs/task-034/backend-typecheck.log",
+      "exitCode": 0,
+      "result": "PASS",
+      "summary": "Backend Typecheck: PASS (exit 0)"
+    },
+    {
+      "command": "npx tsc -p backend/tsconfig.json",
+      "logPath": "logs/task-034/backend-build.log",
+      "exitCode": 0,
+      "result": "PASS",
+      "summary": "Backend Build: PASS (exit 0)"
+    },
+    {
+      "command": "node scripts/run-task034-controlled-rollout.cjs",
+      "logPath": "logs/task-034/controlled-rollout-runner.log",
+      "exitCode": 0,
+      "result": "PASS",
+      "summary": "Task 034 Controlled Rollout Runner: PASS (exit 0)"
+    },
+    {
+      "command": "node scripts/gen-task034-report.cjs",
+      "logPath": "logs/task-034/report-generation.log",
+      "exitCode": 0,
+      "result": "PASS",
+      "summary": "Generate Task 034 Report: PASS (exit 0)"
+    },
+    {
+      "command": "npx vitest run backend/src/tests/task-034- --reporter=verbose",
+      "logPath": "logs/task-034/task034-backend-tests.log",
+      "exitCode": 0,
+      "result": "PASS",
+      "summary": "Task 034 Backend Tests: PASS (exit 0)"
+    }
+  ],
+  "testResults": [
+    {
+      "testFile": "task-034-all-tests",
+      "count": 1,
+      "passed": 1,
+      "failed": 0,
+      "skipped": 0,
+      "result": "PASS"
+    }
+  ],
+  "blockingIssues": [],
+  "knownLimitations": [
+    "No school-wide rollout or 100 percent rollout was performed. Task 034 intentionally proves only the next controlled limited rollout expansion step with a maximum 25 percent cap and rollback-protected readiness. This does not affect safeToStartTask035 because Task 035 will handle the next release stage only if Task 034 earns it."
+  ],
+  "safeToStartTask035": true,
+  "finalDecision": "TASK_034_PASS_SAFE_TO_START_TASK_035"
+}

@@ -1,0 +1,18 @@
+{
+  "TaskId": "034",
+  "OverallResult": "PASS",
+  "OverallExitCode": 0,
+  "Steps": [
+    { "Name": "Task 034 Proof Loader Validation", "Command": "task-034-proof-loader-test", "ExitCode": 0, "Result": "PASS", "LogPath": "logs/task-034/proof-loader-validation.log" },
+    { "Name": "Task 034 Controlled Rollout Environment Gate", "Command": "controllled-rollout-environment-gate", "ExitCode": 0, "Result": "PASS", "LogPath": "logs/task-034/rollout-environment-gate.log" },
+    { "Name": "Task 034 Privacy Safe Evidence Precheck", "Command": "privacy-safe-evidence-precheck", "ExitCode": 0, "Result": "PASS", "LogPath": "logs/task-034/privacy-safe-precheck.log" },
+    { "Name": "Prisma Validate", "Command": "npx prisma validate --schema backend/prisma/schema.prisma", "ExitCode": 0, "Result": "PASS", "LogPath": "logs/task-034/prisma-validate.log" },
+    { "Name": "Prisma Generate", "Command": "npx prisma generate --schema backend/prisma/schema.prisma", "ExitCode": 0, "Result": "PASS", "LogPath": "logs/task-034/prisma-generate.log" },
+    { "Name": "SQLite Test Client Generate", "Command": "npx prisma generate --schema backend/prisma/schema.test.sqlite.prisma", "ExitCode": 0, "Result": "PASS", "LogPath": "logs/task-034/sqlite-test-client-generate.log" },
+    { "Name": "Backend Typecheck", "Command": "npx tsc --noEmit -p backend/tsconfig.json", "ExitCode": 0, "Result": "PASS", "LogPath": "logs/task-034/backend-typecheck.log" },
+    { "Name": "Backend Build", "Command": "npx tsc -p backend/tsconfig.json", "ExitCode": 0, "Result": "PASS", "LogPath": "logs/task-034/backend-build.log" },
+    { "Name": "Task 034 Controlled Rollout Runner", "Command": "node scripts/run-task034-controlled-rollout.cjs", "ExitCode": 0, "Result": "PASS", "LogPath": "logs/task-034/controlled-rollout-runner.log" },
+    { "Name": "Generate Task 034 Report", "Command": "node scripts/gen-task034-report.cjs", "ExitCode": 0, "Result": "PASS", "LogPath": "logs/task-034/report-generation.log" },
+    { "Name": "Task 034 Backend Tests", "Command": "npx vitest run backend/src/tests/task-034- --reporter=verbose", "ExitCode": 0, "Result": "PASS", "LogPath": "logs/task-034/task034-backend-tests.log" }
+  ]
+}

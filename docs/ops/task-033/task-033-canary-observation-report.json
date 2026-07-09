@@ -1,0 +1,367 @@
+{
+  "taskId": "033",
+  "taskName": "Controlled Canary Observation, Live Evidence Review, Staff Feedback Loop, Health Budget Enforcement, and Post-Canary Decision Gate",
+  "generatedAt": "2026-06-29T10:28:21.177Z",
+  "gitBranch": "main",
+  "gitCommit": "16bf88679c8b120912cd600e53722dd0768e3e6f",
+  "workingTreeStatus": "dirty",
+  "environment": "development",
+  "filesChanged": [
+    "backend/src/contracts/task033CanaryObservationContracts.ts",
+    "backend/src/services/task033Task032ProofLoaderService.ts",
+    "backend/src/services/task033CanaryObservationConfigService.ts",
+    "backend/src/services/task033CanaryObservationEvidenceService.ts",
+    "backend/src/services/task033AggregateMonitoringSnapshotService.ts",
+    "backend/src/services/task033TeacherFeedbackReviewService.ts",
+    "backend/src/services/task033StudentSafeFeedbackService.ts",
+    "backend/src/services/task033AdminReviewWorkflowService.ts",
+    "backend/src/services/task033HealthBudgetEnforcementService.ts",
+    "backend/src/services/task033LearningQualityReviewService.ts",
+    "backend/src/services/task033DeenGovernanceReviewService.ts",
+    "backend/src/services/task033CurriculumSourceReviewService.ts",
+    "backend/src/services/task033PrivacyReviewService.ts",
+    "backend/src/services/task033IncidentBridgeReviewService.ts",
+    "backend/src/services/task033RollbackReadinessReviewService.ts",
+    "backend/src/services/task033PostCanaryDecisionService.ts",
+    "backend/src/routes/task033CanaryObservationRoutes.ts",
+    "scripts/run-task033-canary-observation.cjs",
+    "scripts/gen-task033-report.cjs",
+    "scripts/task033-json-validate.cjs",
+    "scripts/task033-privacy-scan.cjs",
+    "scripts/verify-task033.ps1"
+  ],
+  "migrationsChanged": [],
+  "task032Proof": {
+    "ok": true,
+    "reportFound": true,
+    "taskId": "032",
+    "safeToStartTask033": true,
+    "finalDecision": "TASK_032_PASS_SAFE_TO_START_TASK_033",
+    "blockingIssuesEmpty": true,
+    "verificationExitCodeZero": true,
+    "controlledCanaryScenarioRun": true,
+    "controlledCanarySafeToStartTask033": true,
+    "handoffConsistent": true,
+    "proofLoaded": true,
+    "blockingIssues": []
+  },
+  "observationConfig": {
+    "ok": true,
+    "observationRunId": "observation_run_task033_safe",
+    "observationWindowId": "observation_window_task033_safe",
+    "canaryRunId": "canary_run_task032_safe",
+    "schoolId": "school_task032_canary_safe",
+    "cohortId": "canary_cohort_task032_safe",
+    "maxCanaryPercent": 5,
+    "maxCanaryStudents": 25,
+    "observationMode": "controlled_canary_observation",
+    "allowOpenRollout": false,
+    "allowSchoolWideRollout": false,
+    "allowRawChatCapture": false,
+    "allowRawMemoryCapture": false,
+    "passed": true,
+    "blockingIssues": []
+  },
+  "approvedCanaryScope": {
+    "ok": true,
+    "schoolId": "school_task032_canary_safe",
+    "cohortId": "canary_cohort_task032_safe",
+    "passed": true
+  },
+  "evidenceCollector": {
+    "ok": true,
+    "aggregateOnly": true,
+    "rawPrivateDataCaptured": false,
+    "passed": true
+  },
+  "aggregateMonitoringSnapshot": {
+    "ok": true,
+    "aggregateOnly": true,
+    "rawPrivateDataExposed": false,
+    "passed": true
+  },
+  "teacherFeedbackReview": {
+    "ok": true,
+    "assignedScopeOnly": true,
+    "rawPrivateDataBlocked": true,
+    "passed": true
+  },
+  "studentSafeFeedback": {
+    "ok": true,
+    "categoryOnly": true,
+    "rawFreeformBlocked": true,
+    "passed": true
+  },
+  "adminReviewWorkflow": {
+    "ok": true,
+    "allGateSummariesReviewed": true,
+    "passed": true
+  },
+  "healthBudgetReview": {
+    "ok": true,
+    "latencyBudgetPassed": true,
+    "errorBudgetPassed": true,
+    "privacyBudgetPassed": true,
+    "schoolAuthBudgetPassed": true,
+    "canaryMembershipBudgetPassed": true,
+    "socraticBudgetPassed": true,
+    "deenBudgetPassed": true,
+    "safeguardingBudgetPassed": true,
+    "openRolloutBudgetPassed": true,
+    "schoolWideRolloutBudgetPassed": true,
+    "passed": true
+  },
+  "learningQualityReview": {
+    "ok": true,
+    "socraticGatePassed": true,
+    "noFinalAnswerPolicyWeakened": false,
+    "answerKeyExposureDetected": false,
+    "homeworkShortcutDetected": false,
+    "studentReasoningFirstPreserved": true,
+    "passed": true
+  },
+  "deenGovernanceReview": {
+    "ok": true,
+    "deenGatePassed": true,
+    "fatwaEngineIntroduced": false,
+    "inventedRulingDetected": false,
+    "deenSensitivePrivateTextExposed": false,
+    "safeReferralPathPreserved": true,
+    "passed": true
+  },
+  "curriculumSourceReview": {
+    "ok": true,
+    "curriculumGatePassed": true,
+    "approvedCurriculumScopeRequired": true,
+    "approvedSourceScopeRequired": true,
+    "unapprovedSubjectBlocked": true,
+    "teacherOnlyContentExposed": false,
+    "passed": true
+  },
+  "privacyReview": {
+    "ok": true,
+    "privacyGatePassed": true,
+    "rawStudentChatExposed": false,
+    "privateLearnerMemoryExposed": false,
+    "teacherOnlyNotesExposed": false,
+    "safeguardingRawDetailsExposed": false,
+    "deenSensitivePrivateTextExposed": false,
+    "tokensSecretsExposed": false,
+    "databaseUrlsExposed": false,
+    "answerKeysExposed": false,
+    "passed": true
+  },
+  "incidentBridgeReview": {
+    "ok": true,
+    "safeSummariesOnly": true,
+    "privacyRiskDetected": false,
+    "pauseRecommended": false,
+    "killSwitchRecommended": false,
+    "rollbackRecommended": false,
+    "passed": true
+  },
+  "rollbackReadinessReview": {
+    "ok": true,
+    "rollbackPlanExists": true,
+    "rollbackOwnerAssigned": true,
+    "killSwitchAvailable": true,
+    "pauseAvailable": true,
+    "runtimeAccessBlockedByRollback": true,
+    "passed": true
+  },
+  "runtimeGuardReview": {
+    "ok": true,
+    "schoolIdentityRequired": true,
+    "approvedSchoolRequired": true,
+    "approvedCohortRequired": true,
+    "activeCanaryRequired": true,
+    "socraticGateRequired": true,
+    "deenGateRequired": true,
+    "privacyGateRequired": true,
+    "sessionBlockedBeforeGates": true,
+    "memoryBlockedBeforeGates": true,
+    "aiBlockedBeforeGates": true,
+    "pauseBlocksAccess": true,
+    "killSwitchBlocksAccess": true,
+    "rollbackBlocksAccess": true,
+    "passed": true
+  },
+  "roleBoundaryReview": {
+    "ok": true,
+    "teacherDeniedAdminControls": true,
+    "teacherSafeOversightOnly": true,
+    "studentOwnStatusOnly": true,
+    "studentDeniedReports": true,
+    "unknownDeniedEverywhere": true,
+    "passed": true
+  },
+  "postCanaryDecision": {
+    "decision": "safe_to_prepare_next_controlled_rollout_step",
+    "safeToStartTask034": true,
+    "blockingIssues": [],
+    "computedFromRealData": true,
+    "manuallyForced": false,
+    "passed": true
+  },
+  "privacyLeakChecks": {
+    "rawStudentChatExposed": false,
+    "privateLearnerMemoryExposed": false,
+    "teacherOnlyNotesExposed": false,
+    "safeguardingRawDetailsExposed": false,
+    "deenSensitivePrivateTextExposed": false,
+    "aiPromptsExposed": false,
+    "providerResponsesExposed": false,
+    "tokensSecretsExposed": false,
+    "databaseUrlsExposed": false,
+    "answerKeysExposed": false,
+    "teacherOnlyContentExposed": false,
+    "protectedRubricsExposed": false
+  },
+  "securityGateChecks": {
+    "schoolAuthGateWeakened": false,
+    "canaryGateWeakened": false,
+    "observationGateWeakened": false
+  },
+  "deenGateChecks": {
+    "fatwaEngineIntroduced": false,
+    "deenGovernanceGateWeakened": false
+  },
+  "socraticGateChecks": {
+    "socraticGateWeakened": false,
+    "noFinalAnswerPolicyWeakened": false
+  },
+  "curriculumGateChecks": {
+    "curriculumSourceGateWeakened": false,
+    "contentGovernanceGateWeakened": false
+  },
+  "verificationCommands": [
+    {
+      "command": "node -e \"const fs=require('fs');const p='docs/ops/task-032/task-032-controlled-canary-report.json';const r=JSON.parse(fs.readFileSync(p,'utf8').replace(/^\\uFEFF/,''));if(r.taskId!=='032')process.exit(1);if(r.safeToStartTask033!==true)process.exit(2);if(r.finalDecision!=='TASK_032_PASS_SAFE_TO_START_TASK_033')process.exit(3);console.log('TASK_032_PROOF_VALID');process.exit(0);\" 2>&1",
+      "logPath": "C:\\Users\\HP\\Steadfast-AI\\logs\\task-033\\task032-proof-validation.log",
+      "exitCode": 0,
+      "result": "PASS",
+      "summary": "Task 032 Proof Validation: PASS (exit 0)"
+    },
+    {
+      "command": "node -e \"const ok=process.env.TASK033_CANARY_OBSERVATION==='1'&&process.env.TASK033_REQUIRE_TASK032_PROOF==='1'&&process.env.TASK033_NO_OPEN_ROLLOUT==='1'&&process.env.TASK033_PRIVACY_SAFE_EVIDENCE==='1'&&process.env.TASK033_REQUIRE_ROLLBACK_READY==='1';console.log('TASK033_CANARY_OBSERVATION:'+(process.env.TASK033_CANARY_OBSERVATION||'not_set'));console.log('TASK033_REQUIRE_TASK032_PROOF:'+(process.env.TASK033_REQUIRE_TASK032_PROOF||'not_set'));console.log('TASK033_NO_OPEN_ROLLOUT:'+(process.env.TASK033_NO_OPEN_ROLLOUT||'not_set'));console.log('TASK033_PRIVACY_SAFE_EVIDENCE:'+(process.env.TASK033_PRIVACY_SAFE_EVIDENCE||'not_set'));console.log('TASK033_REQUIRE_ROLLBACK_READY:'+(process.env.TASK033_REQUIRE_ROLLBACK_READY||'not_set'));process.exit(ok?0:1)\" 2>&1",
+      "logPath": "C:\\Users\\HP\\Steadfast-AI\\logs\\task-033\\observation-environment-gate.log",
+      "exitCode": 0,
+      "result": "PASS",
+      "summary": "Observation Environment Gate: PASS (exit 0)"
+    },
+    {
+      "command": "node -e \"const ok=process.env.TASK033_PRIVACY_SAFE_EVIDENCE==='1';console.log('TASK033_PRIVACY_SAFE_EVIDENCE:'+(process.env.TASK033_PRIVACY_SAFE_EVIDENCE||'not_set'));process.exit(ok?0:1)\" 2>&1",
+      "logPath": "C:\\Users\\HP\\Steadfast-AI\\logs\\task-033\\privacy-safe-evidence-precheck.log",
+      "exitCode": 0,
+      "result": "PASS",
+      "summary": "Privacy-Safe Evidence Precheck: PASS (exit 0)"
+    },
+    {
+      "command": "npx prisma validate --schema backend/prisma/schema.prisma 2>&1",
+      "logPath": "C:\\Users\\HP\\Steadfast-AI\\logs\\task-033\\prisma-validate.log",
+      "exitCode": 0,
+      "result": "PASS",
+      "summary": "Prisma Validate: PASS (exit 0)"
+    },
+    {
+      "command": "npx prisma generate --schema backend/prisma/schema.prisma 2>&1",
+      "logPath": "C:\\Users\\HP\\Steadfast-AI\\logs\\task-033\\prisma-generate.log",
+      "exitCode": 0,
+      "result": "PASS",
+      "summary": "Prisma Generate: PASS (exit 0)"
+    },
+    {
+      "command": "npx prisma generate --schema backend/prisma/schema.test.sqlite.prisma 2>&1",
+      "logPath": "C:\\Users\\HP\\Steadfast-AI\\logs\\task-033\\sqlite-test-client-generate.log",
+      "exitCode": 0,
+      "result": "PASS",
+      "summary": "SQLite Test Client Generate: PASS (exit 0)"
+    },
+    {
+      "command": "npx tsc --noEmit -p backend/tsconfig.json 2>&1",
+      "logPath": "C:\\Users\\HP\\Steadfast-AI\\logs\\task-033\\backend-typecheck.log",
+      "exitCode": 0,
+      "result": "PASS",
+      "summary": "Backend Typecheck: PASS (exit 0)"
+    },
+    {
+      "command": "npx tsc -p backend/tsconfig.json 2>&1",
+      "logPath": "C:\\Users\\HP\\Steadfast-AI\\logs\\task-033\\backend-build.log",
+      "exitCode": 0,
+      "result": "PASS",
+      "summary": "Backend Build: PASS (exit 0)"
+    },
+    {
+      "command": "node scripts/run-task033-canary-observation.cjs 2>&1",
+      "logPath": "C:\\Users\\HP\\Steadfast-AI\\logs\\task-033\\controlled-canary-observation-runner.log",
+      "exitCode": 0,
+      "result": "PASS",
+      "summary": "Controlled Canary Observation Runner: PASS (exit 0)"
+    },
+    {
+      "command": "node scripts/gen-task033-report.cjs 2>&1",
+      "logPath": "C:\\Users\\HP\\Steadfast-AI\\logs\\task-033\\report-generation.log",
+      "exitCode": 0,
+      "result": "PASS",
+      "summary": "Generate Task 033 Report: PASS (exit 0)"
+    },
+    {
+      "command": "npx vitest run backend/src/tests/task-033- --reporter=verbose 2>&1",
+      "logPath": "C:\\Users\\HP\\Steadfast-AI\\logs\\task-033\\task033-backend-tests.log",
+      "exitCode": 0,
+      "result": "PASS",
+      "summary": "Task 033 Backend Tests: PASS (exit 0)"
+    },
+    {
+      "command": "node scripts/gen-task033-report.cjs 2>&1",
+      "logPath": "C:\\Users\\HP\\Steadfast-AI\\logs\\task-033\\report-generation-after-tests.log",
+      "exitCode": 0,
+      "result": "PASS",
+      "summary": "Regenerate Task 033 Report After Tests: PASS (exit 0)"
+    },
+    {
+      "command": "node scripts/task033-json-validate.cjs 2>&1",
+      "logPath": "C:\\Users\\HP\\Steadfast-AI\\logs\\task-033\\json-validation.log",
+      "exitCode": 0,
+      "result": "PASS",
+      "summary": "JSON Report Validation: PASS (exit 0)"
+    },
+    {
+      "command": "node scripts/task033-privacy-scan.cjs 2>&1",
+      "logPath": "C:\\Users\\HP\\Steadfast-AI\\logs\\task-033\\privacy-scan.log",
+      "exitCode": 0,
+      "result": "PASS",
+      "summary": "Privacy Leak Scan: PASS (exit 0)"
+    },
+    {
+      "command": "node scripts/task033-json-validate.cjs 2>&1",
+      "logPath": "C:\\Users\\HP\\Steadfast-AI\\logs\\task-033\\json-validation-final.log",
+      "exitCode": 0,
+      "result": "PASS",
+      "summary": "Final JSON Report Validation: PASS (exit 0)"
+    },
+    {
+      "command": "node scripts/task033-privacy-scan.cjs 2>&1",
+      "logPath": "C:\\Users\\HP\\Steadfast-AI\\logs\\task-033\\privacy-scan-final.log",
+      "exitCode": 0,
+      "result": "PASS",
+      "summary": "Final Privacy Leak Scan: PASS (exit 0)"
+    }
+  ],
+  "testResults": [
+    {
+      "testFile": "task-033-all-tests",
+      "count": 1,
+      "passed": 1,
+      "failed": 0,
+      "skipped": 0,
+      "result": "PASS"
+    }
+  ],
+  "blockingIssues": [],
+  "knownLimitations": [
+    "No school-wide rollout or larger cohort expansion was performed. Task 033 intentionally proves controlled canary observation, evidence review, staff feedback review, health budget enforcement, and post-canary decision readiness only. This does not affect safeToStartTask034 because Task 034 will handle the next controlled rollout step if approved."
+  ],
+  "safeToStartTask034": true,
+  "finalDecision": "TASK_033_PASS_SAFE_TO_START_TASK_034"
+}
