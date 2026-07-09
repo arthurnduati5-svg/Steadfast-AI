@@ -55,6 +55,7 @@ import task028ControlledExpansionExecutionRoutes from './routes/task028Controlle
 import task029ExpansionOperationsRoutes from './routes/task029ExpansionOperationsRoutes';
 import task030ControlledStagingRehearsalRoutes from './routes/task030ControlledStagingRehearsalRoutes';
 import task031StagingSmokeCanaryReadinessRoutes from './routes/task031StagingSmokeCanaryReadinessRoutes';
+import task032ControlledCanaryActivationRoutes from './routes/task032ControlledCanaryActivationRoutes';
 import task033CanaryObservationRoutes from './routes/task033CanaryObservationRoutes';
 import task034ControlledRolloutRoutes from './routes/task034ControlledRolloutRoutes';
 import task035SchoolWideReadinessRoutes from './routes/task035SchoolWideReadinessRoutes';
@@ -296,6 +297,15 @@ app.use(
   schoolAuthMiddleware,
   requireVerifiedSchoolContext,
   task031StagingSmokeCanaryReadinessRoutes
+);
+
+// ─── Task 032: Controlled Canary Activation Routes ──────
+// All canary activation routes require school auth and verified school context.
+app.use(
+  '/api/task032/controlled-canary-activation',
+  schoolAuthMiddleware,
+  requireVerifiedSchoolContext,
+  task032ControlledCanaryActivationRoutes
 );
 
 // ─── Task 033: Controlled Canary Observation Routes ──────
