@@ -1,0 +1,438 @@
+{
+  "taskId": "030",
+  "taskName": "Controlled Staging Rehearsal, School Role Token Matrix, Staff Training Pack, and No-Live-Student Release Gate",
+  "generatedAt": "2026-06-29T07:19:06.815Z",
+  "gitBranch": "main",
+  "gitCommit": "16bf88679c8b120912cd600e53722dd0768e3e6f",
+  "workingTreeStatus": "dirty",
+  "environment": "development",
+  "filesChanged": [
+    "backend/src/contracts/task030StagingRehearsalContracts.ts",
+    "backend/src/services/task030Task029ProofLoaderService.ts",
+    "backend/src/services/task030StagingEnvironmentGateService.ts",
+    "backend/src/services/task030NoLiveStudentGuardService.ts",
+    "backend/src/services/task030RoleTokenMatrixService.ts",
+    "backend/src/services/task030ControlledStagingRehearsalService.ts",
+    "backend/src/tests/fixtures/task030SyntheticSchoolFixture.ts",
+    "backend/src/tests/task-030-contracts.test.ts",
+    "backend/src/tests/task-030-task029-proof-loader.test.ts",
+    "backend/src/tests/task-030-staging-environment-gate.test.ts",
+    "backend/src/tests/task-030-no-live-student-guard.test.ts",
+    "backend/src/tests/task-030-synthetic-school-fixture.test.ts",
+    "backend/src/tests/task-030-role-token-matrix.test.ts",
+    "backend/src/tests/task-030-admin-operator-journey.test.ts",
+    "backend/src/tests/task-030-teacher-journey.test.ts",
+    "backend/src/tests/task-030-student-journey.test.ts",
+    "backend/src/tests/task-030-unknown-role-denial.test.ts",
+    "backend/src/tests/task-030-controlled-staging-rehearsal.test.ts",
+    "backend/src/tests/task-030-operations-console-rehearsal-proof.test.ts",
+    "backend/src/tests/task-030-control-action-rehearsal.test.ts",
+    "backend/src/tests/task-030-rollback-drill.test.ts",
+    "backend/src/tests/task-030-staff-training-pack.test.ts",
+    "backend/src/tests/task-030-report-generation.test.ts",
+    "backend/src/tests/task-030-no-private-data-leak.contract.test.ts",
+    "docs/ops/task-030/STAFF_TRAINING_PACK.md",
+    "docs/ops/task-030/ADMIN_OPERATOR_RUNBOOK.md",
+    "docs/ops/task-030/TEACHER_QUICK_START.md",
+    "docs/ops/task-030/STUDENT_SAFE_MESSAGE_TEMPLATE.md",
+    "docs/ops/task-030/ROLLBACK_AND_KILL_SWITCH_DRILL.md",
+    "docs/ops/task-030/REHEARSAL_DAY_CHECKLIST.md",
+    "scripts/verify-task030.ps1",
+    "scripts/gen-task030-report.cjs",
+    "scripts/task030-privacy-scan.cjs",
+    "scripts/task030-json-validate.cjs",
+    "scripts/run-task030-staging-rehearsal.cjs"
+  ],
+  "migrationsChanged": [],
+  "task029Proof": {
+    "reportFound": true,
+    "safeToStartTask030": true,
+    "finalDecisionPass": true,
+    "blockingIssuesEmpty": true,
+    "verificationExitCodeZero": true,
+    "backendTestsPassed": true,
+    "uiapiProofPassed": true,
+    "privacyScanPassed": true,
+    "roleScopeProved": true,
+    "handoffConsistent": true,
+    "proofLoadedBeforeTask030": true
+  },
+  "stagingEnvironmentGate": {
+    "stagingRehearsalEnabled": true,
+    "noLiveStudentsEnabled": true,
+    "nodeEnvClassification": "development",
+    "databaseUrlClassification": "not_set",
+    "rawDatabaseUrlExposed": false,
+    "productionLikeBlocked": true,
+    "passed": true
+  },
+  "noLiveStudentGuard": {
+    "ok": true,
+    "liveStudentDataDetected": false,
+    "productionDataTouched": false,
+    "allowedFixtureMode": "safe_synthetic_staging_rehearsal",
+    "passed": true
+  },
+  "syntheticSchoolFixture": {
+    "exists": true,
+    "safeIdentifiersOnly": true,
+    "noRealStudentData": true,
+    "passed": true
+  },
+  "roleTokenMatrix": {
+    "generated": true,
+    "adminPermissionsCorrect": true,
+    "teacherRestrictionsCorrect": true,
+    "studentRestrictionsCorrect": true,
+    "unknownRestrictionsCorrect": true,
+    "operatorSupported": true,
+    "passed": true
+  },
+  "adminOperatorJourney": {
+    "allPassed": true,
+    "stepsPassed": 12,
+    "stepsTotal": 12,
+    "passed": true
+  },
+  "teacherJourney": {
+    "allPassed": true,
+    "stepsPassed": 8,
+    "stepsTotal": 8,
+    "passed": true
+  },
+  "studentJourney": {
+    "allPassed": true,
+    "stepsPassed": 9,
+    "stepsTotal": 9,
+    "passed": true
+  },
+  "unknownRoleJourney": {
+    "allPassed": true,
+    "stepsPassed": 5,
+    "stepsTotal": 5,
+    "passed": true
+  },
+  "operationsConsoleRehearsal": {
+    "rehearsed": true,
+    "dashboardDataShapeSafe": true,
+    "stagePanelAggregateOnly": true,
+    "healthPanelAggregateOnly": true,
+    "timelineSafeSummaries": true,
+    "oversightSafeSummaries": true,
+    "passed": true
+  },
+  "controlActionRehearsal": {
+    "pauseRehearsed": true,
+    "resumeRehearsed": true,
+    "killSwitchRehearsed": true,
+    "rollbackRehearsed": true,
+    "completionReviewRehearsed": true,
+    "passed": true
+  },
+  "rollbackDrill": {
+    "rehearsed": true,
+    "blocksAccessAfterRollback": true,
+    "auditPreserved": true,
+    "safeSummaryGenerated": true,
+    "passed": true
+  },
+  "completionReviewRehearsal": {
+    "rehearsed": true,
+    "honestSafeToStart": true,
+    "blockingIssuesChecked": true,
+    "passed": true
+  },
+  "staffTrainingPack": {
+    "staffTrainingPackGenerated": true,
+    "adminOperatorRunbookGenerated": true,
+    "teacherQuickStartGenerated": true,
+    "studentSafeMessageTemplateGenerated": true,
+    "rollbackKillSwitchDrillGenerated": true,
+    "rehearsalDayChecklistGenerated": true,
+    "privacySafe": true,
+    "passed": true
+  },
+  "privacyLeakChecks": {
+    "rawStudentChatExposed": false,
+    "privateLearnerMemoryExposed": false,
+    "teacherOnlyNotesExposed": false,
+    "safeguardingRawDetailsExposed": false,
+    "deenSensitivePrivateTextExposed": false,
+    "aiPromptsExposed": false,
+    "providerResponsesExposed": false,
+    "tokensSecretsExposed": false,
+    "databaseUrlsExposed": false,
+    "answerKeysExposed": false,
+    "teacherOnlyContentExposed": false,
+    "protectedRubricsExposed": false
+  },
+  "securityGateChecks": {
+    "schoolAuthGateWeakened": false,
+    "teacherAdminOversightGateWeakened": false
+  },
+  "deenGateChecks": {
+    "fatwaEngineIntroduced": false,
+    "deenGovernanceGateWeakened": false
+  },
+  "socraticGateChecks": {
+    "socraticGateWeakened": false,
+    "noFinalAnswerPolicyWeakened": false
+  },
+  "curriculumGateChecks": {
+    "curriculumSourceGateWeakened": false,
+    "contentGovernanceGateWeakened": false
+  },
+  "verificationCommands": [
+    {
+      "command": "node -e \"const fs=require('fs'); const p='docs/ops/task-029/task-029-expansion-operations-console-report.json'; const r=JSON.parse(fs.readFileSync(p,'utf8').replace(/^\\uFEFF/,'')); if(r.taskId!=='029') process.exit(1); if(r.safeToStartTask030!==true) process.exit(2); if(r.finalDecision!=='TASK_029_PASS_SAFE_TO_START_TASK_030') process.exit(3); console.log('TASK_029_PROOF_VALID'); process.exit(0);\" 2>&1",
+      "logPath": "C:\\Users\\HP\\Steadfast-AI\\logs\\task-030\\task029-proof-validation.log",
+      "exitCode": 0,
+      "result": "PASS",
+      "summary": "Task 029 Proof Validation: PASS (exit 0)"
+    },
+    {
+      "command": "node -e \"const ok=process.env.TASK030_STAGING_REHEARSAL==='1'&&process.env.TASK030_NO_LIVE_STUDENTS==='1'&&process.env.NODE_ENV!=='production';console.log('TASK030_STAGING_REHEARSAL:'+(process.env.TASK030_STAGING_REHEARSAL||'not_set'));console.log('TASK030_NO_LIVE_STUDENTS:'+(process.env.TASK030_NO_LIVE_STUDENTS||'not_set'));console.log('NODE_ENV:'+(process.env.NODE_ENV||'not_set'));process.exit(ok?0:1)\" 2>&1",
+      "logPath": "C:\\Users\\HP\\Steadfast-AI\\logs\\task-030\\staging-environment-gate.log",
+      "exitCode": 0,
+      "result": "PASS",
+      "summary": "Staging Environment Gate: PASS (exit 0)"
+    },
+    {
+      "command": "node -e \"const noLive=process.env.TASK030_NO_LIVE_STUDENTS==='1';console.log('TASK030_NO_LIVE_STUDENTS:'+(process.env.TASK030_NO_LIVE_STUDENTS||'not_set'));process.exit(noLive?0:1)\" 2>&1",
+      "logPath": "C:\\Users\\HP\\Steadfast-AI\\logs\\task-030\\no-live-student-guard.log",
+      "exitCode": 0,
+      "result": "PASS",
+      "summary": "No-Live-Student Guard: PASS (exit 0)"
+    },
+    {
+      "command": "npx prisma validate --schema backend/prisma/schema.prisma 2>&1",
+      "logPath": "C:\\Users\\HP\\Steadfast-AI\\logs\\task-030\\prisma-validate.log",
+      "exitCode": 0,
+      "result": "PASS",
+      "summary": "Prisma Validate: PASS (exit 0)"
+    },
+    {
+      "command": "npx prisma generate --schema backend/prisma/schema.prisma 2>&1",
+      "logPath": "C:\\Users\\HP\\Steadfast-AI\\logs\\task-030\\prisma-generate.log",
+      "exitCode": 0,
+      "result": "PASS",
+      "summary": "Prisma Generate: PASS (exit 0)"
+    },
+    {
+      "command": "npx tsc --noEmit -p backend/tsconfig.json 2>&1",
+      "logPath": "C:\\Users\\HP\\Steadfast-AI\\logs\\task-030\\backend-typecheck.log",
+      "exitCode": 0,
+      "result": "PASS",
+      "summary": "Backend Typecheck: PASS (exit 0)"
+    },
+    {
+      "command": "npx tsc -p backend/tsconfig.json 2>&1",
+      "logPath": "C:\\Users\\HP\\Steadfast-AI\\logs\\task-030\\backend-build.log",
+      "exitCode": 0,
+      "result": "PASS",
+      "summary": "Backend Build: PASS (exit 0)"
+    },
+    {
+      "command": "npx vitest run backend/src/tests/task-030- --reporter=verbose 2>&1",
+      "logPath": "C:\\Users\\HP\\Steadfast-AI\\logs\\task-030\\task030-backend-tests.log",
+      "exitCode": 0,
+      "result": "PASS",
+      "summary": "Task 030 Backend Tests: PASS (exit 0)"
+    },
+    {
+      "command": "node scripts/run-task030-staging-rehearsal.cjs 2>&1",
+      "logPath": "C:\\Users\\HP\\Steadfast-AI\\logs\\task-030\\staging-rehearsal.log",
+      "exitCode": 0,
+      "result": "PASS",
+      "summary": "Controlled Staging Rehearsal: PASS (exit 0)"
+    },
+    {
+      "command": "node -e \"const fs=require('fs'); const docs=['docs/ops/task-030/STAFF_TRAINING_PACK.md','docs/ops/task-030/ADMIN_OPERATOR_RUNBOOK.md','docs/ops/task-030/TEACHER_QUICK_START.md','docs/ops/task-030/STUDENT_SAFE_MESSAGE_TEMPLATE.md','docs/ops/task-030/ROLLBACK_AND_KILL_SWITCH_DRILL.md','docs/ops/task-030/REHEARSAL_DAY_CHECKLIST.md']; const missing=docs.filter(d=>!fs.existsSync(d)); if(missing.length>0){console.log('MISSING:'+missing.join(','));process.exit(1)}console.log('ALL_TRAINING_DOCS_PRESENT');process.exit(0);\" 2>&1",
+      "logPath": "C:\\Users\\HP\\Steadfast-AI\\logs\\task-030\\training-docs-validation.log",
+      "exitCode": 0,
+      "result": "PASS",
+      "summary": "Staff Training Docs Validation: PASS (exit 0)"
+    },
+    {
+      "command": "node scripts/task030-json-validate.cjs 2>&1",
+      "logPath": "C:\\Users\\HP\\Steadfast-AI\\logs\\task-030\\json-validation-pre.log",
+      "exitCode": 0,
+      "result": "PASS",
+      "summary": "JSON Report Validation (preliminary): PASS (exit 0)"
+    },
+    {
+      "command": "node scripts/task030-privacy-scan.cjs 2>&1",
+      "logPath": "C:\\Users\\HP\\Steadfast-AI\\logs\\task-030\\privacy-scan-pre.log",
+      "exitCode": 0,
+      "result": "PASS",
+      "summary": "Privacy Leak Scan (preliminary): PASS (exit 0)"
+    },
+    {
+      "command": "node scripts/gen-task030-report.cjs 2>&1",
+      "logPath": "C:\\Users\\HP\\Steadfast-AI\\logs\\task-030\\report-generation.log",
+      "exitCode": 0,
+      "result": "PASS",
+      "summary": "Generate Task 030 Final Report: PASS (exit 0)"
+    },
+    {
+      "command": "node scripts/task030-json-validate.cjs 2>&1",
+      "logPath": "C:\\Users\\HP\\Steadfast-AI\\logs\\task-030\\json-validation.log",
+      "exitCode": 0,
+      "result": "PASS",
+      "summary": "Final JSON Report Validation: PASS (exit 0)"
+    },
+    {
+      "command": "node scripts/task030-privacy-scan.cjs 2>&1",
+      "logPath": "C:\\Users\\HP\\Steadfast-AI\\logs\\task-030\\privacy-scan.log",
+      "exitCode": 0,
+      "result": "PASS",
+      "summary": "Final Privacy Leak Scan: PASS (exit 0)"
+    }
+  ],
+  "testResults": [
+    {
+      "testFile": "task-030-contracts.test.ts",
+      "count": 11,
+      "passed": 11,
+      "failed": 0,
+      "skipped": 0,
+      "result": "PASS"
+    },
+    {
+      "testFile": "task-030-task029-proof-loader.test.ts",
+      "count": 7,
+      "passed": 7,
+      "failed": 0,
+      "skipped": 0,
+      "result": "PASS"
+    },
+    {
+      "testFile": "task-030-staging-environment-gate.test.ts",
+      "count": 5,
+      "passed": 5,
+      "failed": 0,
+      "skipped": 0,
+      "result": "PASS"
+    },
+    {
+      "testFile": "task-030-no-live-student-guard.test.ts",
+      "count": 5,
+      "passed": 5,
+      "failed": 0,
+      "skipped": 0,
+      "result": "PASS"
+    },
+    {
+      "testFile": "task-030-synthetic-school-fixture.test.ts",
+      "count": 5,
+      "passed": 5,
+      "failed": 0,
+      "skipped": 0,
+      "result": "PASS"
+    },
+    {
+      "testFile": "task-030-role-token-matrix.test.ts",
+      "count": 6,
+      "passed": 6,
+      "failed": 0,
+      "skipped": 0,
+      "result": "PASS"
+    },
+    {
+      "testFile": "task-030-admin-operator-journey.test.ts",
+      "count": 2,
+      "passed": 2,
+      "failed": 0,
+      "skipped": 0,
+      "result": "PASS"
+    },
+    {
+      "testFile": "task-030-teacher-journey.test.ts",
+      "count": 2,
+      "passed": 2,
+      "failed": 0,
+      "skipped": 0,
+      "result": "PASS"
+    },
+    {
+      "testFile": "task-030-student-journey.test.ts",
+      "count": 2,
+      "passed": 2,
+      "failed": 0,
+      "skipped": 0,
+      "result": "PASS"
+    },
+    {
+      "testFile": "task-030-unknown-role-denial.test.ts",
+      "count": 2,
+      "passed": 2,
+      "failed": 0,
+      "skipped": 0,
+      "result": "PASS"
+    },
+    {
+      "testFile": "task-030-controlled-staging-rehearsal.test.ts",
+      "count": 5,
+      "passed": 5,
+      "failed": 0,
+      "skipped": 0,
+      "result": "PASS"
+    },
+    {
+      "testFile": "task-030-operations-console-rehearsal-proof.test.ts",
+      "count": 3,
+      "passed": 3,
+      "failed": 0,
+      "skipped": 0,
+      "result": "PASS"
+    },
+    {
+      "testFile": "task-030-control-action-rehearsal.test.ts",
+      "count": 3,
+      "passed": 3,
+      "failed": 0,
+      "skipped": 0,
+      "result": "PASS"
+    },
+    {
+      "testFile": "task-030-rollback-drill.test.ts",
+      "count": 3,
+      "passed": 3,
+      "failed": 0,
+      "skipped": 0,
+      "result": "PASS"
+    },
+    {
+      "testFile": "task-030-staff-training-pack.test.ts",
+      "count": 2,
+      "passed": 2,
+      "failed": 0,
+      "skipped": 0,
+      "result": "PASS"
+    },
+    {
+      "testFile": "task-030-report-generation.test.ts",
+      "count": 3,
+      "passed": 3,
+      "failed": 0,
+      "skipped": 0,
+      "result": "PASS"
+    },
+    {
+      "testFile": "task-030-no-private-data-leak.contract.test.ts",
+      "count": 4,
+      "passed": 4,
+      "failed": 0,
+      "skipped": 0,
+      "result": "PASS"
+    }
+  ],
+  "blockingIssues": [],
+  "knownLimitations": [
+    "No live production students were used or activated. Task 030 intentionally used safe synthetic staging rehearsal fixtures only. This does not affect safeToStartTask031 because Task 030 proves no-live-student rehearsal readiness, not live rollout completion.",
+    "Teacher oversight view is scoped to permission model. Journey tests prove permission boundaries.",
+    "Operator role is supported in contracts. Both admin and operator have equivalent permissions."
+  ],
+  "safeToStartTask031": true,
+  "finalDecision": "TASK_030_PASS_SAFE_TO_START_TASK_031"
+}
