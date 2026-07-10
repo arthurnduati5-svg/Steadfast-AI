@@ -1,12 +1,12 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeAll } from 'vitest';
 import fs from 'fs';
 import path from 'path';
 
 describe('Task 032 - Task 030 Staging Rehearsal Continuity Contract', () => {
-  const backendSrc = path.resolve(__dirname, '../');
+  const backendSrc = path.resolve(process.cwd(), 'backend/src');
   const task032Files: string[] = [];
 
-  before(() => {
+  beforeAll(() => {
     const gather = (dir: string, acc: string[]) => {
       if (!fs.existsSync(dir)) return;
       const entries = fs.readdirSync(dir, { withFileTypes: true });
@@ -14,7 +14,7 @@ describe('Task 032 - Task 030 Staging Rehearsal Continuity Contract', () => {
         const full = path.join(dir, e.name);
         if (e.isDirectory() && !e.name.startsWith('node_modules') && !e.name.startsWith('.git')) {
           gather(full, acc);
-        } else if ((e.name.endsWith('.ts') || e.name.endsWith('.js') || e.name.endsWith('.cjs')) && e.name.includes('task-032')) {
+        } else if ((e.name.endsWith('.ts') || e.name.endsWith('.js') || e.name.endsWith('.cjs')) && (e.name.includes('task-032') || e.name.includes('task032')) && !e.name.endsWith('.test.ts')) {
           acc.push(full);
         }
       }

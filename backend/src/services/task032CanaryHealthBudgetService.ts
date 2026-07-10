@@ -3,7 +3,8 @@ import type { Task032CanaryHealthBudgetInput, Task032CanaryHealthBudgetResult } 
 export async function runTask032CanaryHealthBudget(input: Task032CanaryHealthBudgetInput): Promise<Task032CanaryHealthBudgetResult> {
   const blockingIssues: string[] = [];
 
-  // Deterministic internal metrics (no live measurement)
+  if (!input.schoolId) blockingIssues.push('school_id_missing');
+  if (!input.activationId) blockingIssues.push('activation_id_missing');
   const activationPreflightP95Ms = 150;
   const safeViewP95Ms = 100;
   const controlActionP95Ms = 80;

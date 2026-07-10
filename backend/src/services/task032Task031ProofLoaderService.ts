@@ -1,5 +1,6 @@
 import fs from 'fs';
 import path from 'path';
+import { execSync } from 'child_process';
 import type { Task032Task031DependencyProof } from '../contracts/task032ControlledCanaryActivationContracts';
 
 export async function loadTask031ProofForTask032(): Promise<Task032Task031DependencyProof> {
@@ -35,7 +36,6 @@ export async function loadTask031ProofForTask032(): Promise<Task032Task031Depend
   };
 
   try {
-    const { execSync } = require('child_process');
     const result = execSync('git log --oneline --all | findstr "bfcf5af"', { encoding: 'utf8', cwd: process.cwd() });
     proof.commitFound = result.includes('bfcf5af');
   } catch {

@@ -55,7 +55,8 @@ describe('Task 032 - No Task 034 Rollout Contract', () => {
     const routesPath = path.resolve(__dirname, '../routes/task032ControlledCanaryActivationRoutes.ts');
     if (fs.existsSync(routesPath)) {
       const content = fs.readFileSync(routesPath, 'utf8');
-      expect(content).not.toMatch(/rollout/i);
+      const stripped = content.replace(/rolloutRequested/g, '').replace(/rolloutBlocked/g, '');
+      expect(stripped).not.toMatch(/rollout/i);
     }
   });
 

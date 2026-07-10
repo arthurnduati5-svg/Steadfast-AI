@@ -165,30 +165,51 @@ export interface Task032LiveStudentPrivacyBoundaryResult {
 }
 
 export interface Task032CanaryRuntimeGuardInput {
+  actorRole: string;
+  actorHash: string;
   schoolId: string;
-  actorRole: Task032ActorRole;
-  activationId: string;
+  cohortId: string;
+  canaryRunId: string;
+  studentHash: string;
+  curriculumScope: string;
+  sourceScope: string;
+  subjectId: string;
+  classId: string;
+}
+
+export interface Task032CanaryRuntimeGuardFullInput {
+  input: Task032CanaryRuntimeGuardInput;
+  canaryState: string;
+  isPaused: boolean;
+  isKillSwitchActive: boolean;
+  rollbackActive: boolean;
+  hasCurriculumScope: boolean;
+  hasSourceScope: boolean;
+  socraticGatePassed: boolean;
+  deenGatePassed: boolean;
+  privacyGatePassed: boolean;
+  isStudentInCohort: boolean;
+  isApprovedSchool: boolean;
+  isApprovedCohort: boolean;
+  isActive: boolean;
+  consentAuthorizationOk: boolean;
+}
+
+export interface Task032CanaryGateCheck {
+  name: string;
+  passed: boolean;
 }
 
 export interface Task032CanaryRuntimeGuardResult {
-  ok: boolean;
-  verifiedSchoolContextRequired: boolean;
-  adminOperatorActorRequired: boolean;
-  actorRoleValid: boolean;
-  task031ProofRequired: boolean;
-  approvedConfigRequired: boolean;
-  cohortEligibilityRequired: boolean;
-  consentAuthorizationReadinessRequired: boolean;
-  privacyBoundaryRequired: boolean;
-  healthBudgetRequired: boolean;
-  rollbackReadinessRequired: boolean;
-  incidentBridgeRequired: boolean;
-  noLiveAi: boolean;
-  noLiveConnector: boolean;
-  noLiveNotification: boolean;
-  noDeployment: boolean;
-  noRollout: boolean;
-  noObservation: boolean;
+  ok?: boolean;
+  allowed: boolean;
+  decision: string;
+  safeToCreateSession: boolean;
+  safeToAccessMemory: boolean;
+  safeToCallAi: boolean;
+  safeReasonCode: string;
+  rawPrivateDataExposed: boolean;
+  gateChecks: Task032CanaryGateCheck[];
   blockingIssues: string[];
 }
 
@@ -302,6 +323,49 @@ export interface Task032CanarySafeView {
   safeToStartTask033: boolean;
   reasonCodes: string[];
   createdAt: string;
+}
+
+export interface Task032CanaryAdminSummary {
+  canaryRunId: string;
+  aggregateMetrics: {
+    eligibleStudentCount: number;
+    activatedStudentCount: number;
+    activeSessionCount: number;
+    requestCount: number;
+    successfulRequestCount: number;
+    safeDenialCount: number;
+    errorCount: number;
+    needsAttentionCount: number;
+  };
+  controlAvailable: boolean;
+  safeEventSummaries: string[];
+  rawPrivateDataExposed: boolean;
+}
+
+export interface Task032CanaryTeacherSummary {
+  eligibleStudentCount: number;
+  rawChatExposed: boolean;
+  privateMemoryExposed: boolean;
+  safeguardingDetailsExposed: boolean;
+  deenSensitiveTextExposed: boolean;
+  adminControlsVisible: boolean;
+}
+
+export interface Task032CanaryStudentStatus {
+  available: boolean;
+  statusLabel: string;
+  otherStudentsVisible: boolean;
+  monitoringInternalsVisible: boolean;
+  teacherAdminNotesVisible: boolean;
+  reportsVisible: boolean;
+  controlActionsVisible: boolean;
+}
+
+export interface Task032CanaryViewResult {
+  adminSummary: Task032CanaryAdminSummary | null;
+  teacherSummary: Task032CanaryTeacherSummary | null;
+  studentStatus: Task032CanaryStudentStatus | null;
+  denied: boolean;
 }
 
 export interface Task032CanaryEvidenceEvent {
@@ -512,10 +576,18 @@ export const TASK032_FORBIDDEN_SIDE_EFFECT_PATTERNS: string[] = [
   'deployProduction', 'runMigration', 'observeCanaryTraffic', 'startRollout', 'schoolWideEnable'
 ];
 
+export const TASK032_FORBIDDEN_OUTPUT_PATTERNS: string[] = [
+  'raw student chat', 'private learner memory', 'raw student answer',
+  'raw student work', 'safeguarding raw notes', 'private deen text',
+  'answer key', 'marking scheme', 'provider prompt', 'provider response',
+  'hidden reasoning', 'teacher private notes', 'AI prompt',
+  'studentName', 'studentEmail', 'studentPhone', 'parentName', 'parentEmail', 'parentPhone'
+];
+
 export const TASK032_REQUIRED_DEPENDENCY_COMMITS: string[] = ['bfcf5af'];
 
 export const TASK032_VALID_STATE_TRANSITIONS: Record<Task032CanaryActivationStatus, Task032CanaryActivationStatus[]> = {
-  'created': ['dependency_checking', 'blocked'],
+  'created': ['dependency_checking', 'paused', 'kill_switch_enabled', 'rollback_requested', 'blocked'],
   'dependency_checking': ['dependency_passed', 'blocked'],
   'dependency_passed': ['config_checking', 'blocked'],
   'config_checking': ['config_passed', 'blocked'],
@@ -533,16 +605,16 @@ export const TASK032_VALID_STATE_TRANSITIONS: Record<Task032CanaryActivationStat
   'activation_ready': ['activated_internal', 'blocked'],
   'activated_internal': ['paused', 'kill_switch_enabled', 'rollback_requested', 'blocked'],
   'paused': ['activated_internal', 'kill_switch_enabled', 'rollback_requested', 'blocked'],
-  'kill_switch_enabled': ['rollback_requested', 'blocked'],
+  'kill_switch_enabled': ['paused', 'rollback_requested', 'blocked'],
   'rollback_requested': ['blocked'],
   'blocked': []
 };
 
 export function resolveTask032ActorRole(rawRole: string): Task032ActorRole {
   const r = rawRole?.toLowerCase() || 'unknown';
-  if (r === 'school_admin') return 'school_admin';
+  if (r === 'admin' || r === 'school_admin') return 'school_admin';
   if (r === 'system_admin') return 'system_admin';
-  if (r === 'internal_operator') return 'internal_operator';
+  if (r === 'operator' || r === 'internal_operator') return 'internal_operator';
   if (r === 'authorized_canary_operator') return 'authorized_canary_operator';
   if (r === 'operations_reviewer') return 'operations_reviewer';
   if (r === 'student') return 'student';

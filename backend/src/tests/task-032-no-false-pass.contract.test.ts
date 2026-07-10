@@ -1,16 +1,18 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeAll } from 'vitest';
 import fs from 'fs';
 import path from 'path';
 
 describe('Task 032 - No False Pass Contract', () => {
-  const task032TestDir = path.resolve(__dirname, '../tests');
+  const task032TestDir = path.resolve(process.cwd(), 'backend/src/tests');
   const task032TestFiles: string[] = [];
 
-  before(() => {
+  const selfName = 'task-032-no-false-pass.contract.test.ts';
+
+  beforeAll(() => {
     if (!fs.existsSync(task032TestDir)) return;
     const entries = fs.readdirSync(task032TestDir, { withFileTypes: true });
     for (const e of entries) {
-      if (e.name.startsWith('task-032') && e.name.endsWith('.test.ts')) {
+      if (e.name.startsWith('task-032') && e.name.endsWith('.test.ts') && e.name !== selfName) {
         task032TestFiles.push(path.join(task032TestDir, e.name));
       }
     }

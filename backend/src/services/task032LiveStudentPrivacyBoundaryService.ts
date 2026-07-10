@@ -1,5 +1,11 @@
 import type { Task032LiveStudentPrivacyBoundaryInput, Task032LiveStudentPrivacyBoundaryResult } from '../contracts/task032ControlledCanaryActivationContracts';
 
+export async function checkTask032PrivacyBoundary(content: string, context: string): Promise<{ ok: boolean }> {
+  const sanitized = typeof content === 'string' ? content : JSON.stringify(content);
+  const hasPrivateData = /student(Name|Email|Phone)|parent(Name|Email|Phone)/.test(sanitized);
+  return { ok: !hasPrivateData };
+}
+
 export async function runTask032LiveStudentPrivacyBoundary(input: Task032LiveStudentPrivacyBoundaryInput): Promise<Task032LiveStudentPrivacyBoundaryResult> {
   const blockingIssues: string[] = [];
 

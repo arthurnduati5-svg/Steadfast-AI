@@ -1,101 +1,124 @@
 {
-  "taskId": "TASK-032",
-  "scope": "controlled-canary-activation-runtime-backend",
-  "generatedAt": "2026-07-09T00:00:00.000Z",
+  "taskId": "032",
+  "taskName": "Controlled Real-School Canary Gate, Approved Cohort Activation Runtime, Live-Student Privacy Boundary, and Rollback Proof",
+  "generatedAt": "2026-07-10T06:27:35.981Z",
   "gitBranch": "main",
-  "gitCommit": "d38d409",
-  "workingTreeStatus": "committed",
-  "verdict": "ACCEPTED_READY_YES",
+  "gitCommit": "2b267a34681ff7af66b57e6e12e9d952255476d1",
+  "workingTreeStatus": "dirty",
+  "environment": "development",
+  "verdict": "TASK_032_PASS_SAFE_TO_START_TASK_033",
   "safeToStartTask033": true,
-  "safeToStartTask034": false,
-  "safeToStartTask035": false,
-  "safeToStartTask040": false,
   "blockingIssues": [],
-  "remainingBlockers": [],
-  "task031DependencyCommit": "bfcf5af",
-  "task031DependencyVerified": true,
-  "task032Started": true,
-  "task033Started": false,
-  "task034Started": false,
-  "task035Started": false,
-  "task040Started": false,
-  "frontendUiCreated": false,
-  "productionDeploymentIntroduced": false,
-  "realNotificationsSent": false,
-  "liveAiCallIntroduced": false,
-  "liveSchoolConnectorWriteIntroduced": false,
-  "productionDataMutationExecuted": false,
-  "uncontrolledProductionMutationExecuted": false,
-  "realStudentDataExposed": false,
-  "rawPrivateDataStored": false,
-  "controlledCanaryActivationCreated": true,
-  "canaryObservationCreated": false,
-  "rolloutCreated": false,
-  "schoolWideLaunchCreated": false,
-  "backendFreezeCreated": false,
-  "contractsCreatedOrUpdated": true,
-  "validationCreatedOrUpdated": true,
-  "repositoryCreatedOrUpdated": true,
-  "servicesCreatedOrUpdated": true,
-  "routesCreatedOrUpdated": true,
-  "routesMountedOrDirectlyTested": true,
-  "verifiedSchoolContextRequired": true,
-  "task031AcceptanceRequired": true,
-  "canaryEnvironmentGatePassed": true,
-  "approvedSchoolCanaryConfigPassed": true,
-  "canaryCohortEligibilityPassed": true,
-  "consentAuthorizationReadinessPassed": true,
-  "privacyBoundaryPassed": true,
-  "runtimeGuardPassed": true,
-  "activationStateMachinePassed": true,
-  "activationCommandPassed": true,
-  "controlActionsPassed": true,
-  "healthBudgetPassed": true,
-  "incidentBridgePassed": true,
-  "monitoringSnapshotPlaceholderPassed": true,
-  "safeViewPassed": true,
-  "evidenceLedgerPassed": true,
-  "diagnosticsPassed": true,
-  "reportPassed": true,
-  "task032FocusedTestsRun": true,
-  "task032FocusedTestsPassed": true,
-  "task032FocusedTestFiles": 73,
-  "task032FocusedTestsPassedCount": 1602,
-  "task032FocusedTestsFailedCount": 0,
-  "task020To031RegressionRun": true,
-  "task020To031RegressionPassed": true,
-  "phase3RegressionRun": true,
-  "phase3RegressionPassed": true,
-  "fullBackendSuiteRun": true,
-  "fullBackendSuitePassed": true,
-  "fullBackendSuiteFailedFiles": 0,
-  "fullBackendSuiteFailedTests": 0,
-  "prismaValidateRun": true,
-  "prismaValidatePassed": true,
-  "prismaGenerateRun": true,
-  "prismaGeneratePassed": true,
-  "backendBuildRun": true,
-  "backendBuildPassed": true,
-  "backendTypecheckRun": true,
-  "backendTypecheckPassed": true,
-  "task032VerificationScriptRun": true,
-  "task032VerificationScriptPassed": true,
-  "privacyScanRun": true,
-  "privacyScanPassed": true,
-  "noProductionMutationScanRun": true,
-  "noProductionMutationScanPassed": true,
-  "noLiveConnectorAiScanRun": true,
-  "noLiveConnectorAiScanPassed": true,
-  "noLiveNotificationScanRun": true,
-  "noLiveNotificationScanPassed": true,
-  "noFrontendUiScanRun": true,
-  "noFrontendUiScanPassed": true,
-  "noTask033ToTask040ScanRun": true,
-  "noTask033ToTask040ScanPassed": true,
-  "noFalsePassScanRun": true,
-  "noFalsePassScanPassed": true,
+  "task031Dependency": {
+    "reportFound": true,
+    "verdictOk": true,
+    "safeToStartTask032": true,
+    "passed": true
+  },
+  "canaryEnvironmentGate": {
+    "controlledCanaryEnabled": true,
+    "dryRunMode": true,
+    "approvedSchoolRequired": true,
+    "liveStudentProtectionEnabled": true,
+    "passed": true
+  },
+  "approvedSchoolCanaryConfig": {
+    "schoolId": "school_task032_canary_safe",
+    "cohortId": "canary_cohort_task032_safe",
+    "curriculumScopes": [
+      "curriculum_scope_task032_safe_001"
+    ],
+    "passed": true
+  },
+  "consentAuthorizationMatrix": {
+    "schoolAuthorized": true,
+    "adminApproved": true,
+    "teacherNotified": true,
+    "guardianPolicyStatus": "not_required_by_school_policy",
+    "passed": true
+  },
+  "cohortEligibility": {
+    "approvedSchool": true,
+    "approvedCohort": true,
+    "eligibleStudentCount": 20,
+    "requestedStudentCount": 10,
+    "canaryCapPassed": true,
+    "passed": true
+  },
+  "liveStudentPrivacyBoundary": {
+    "rawStudentIdentityExposed": false,
+    "rawStudentChatExposed": false,
+    "privateLearnerMemoryExposed": false,
+    "tokensSecretsExposed": false,
+    "passed": true
+  },
+  "activationStateMachine": {
+    "allowedTransitionsValidated": true,
+    "invalidTransitionsBlocked": true,
+    "passed": true
+  },
+  "runtimeGuard": {
+    "schoolIdentityRequired": true,
+    "approvedSchoolRequired": true,
+    "activeCanaryRequired": true,
+    "curriculumScopeRequired": true,
+    "socraticGateRequired": true,
+    "deenGateRequired": true,
+    "privacyGateRequired": true,
+    "passed": true
+  },
+  "controlActions": {
+    "pauseResumePassed": true,
+    "killSwitchPassed": true,
+    "rollbackPassed": true,
+    "passed": true
+  },
+  "healthBudget": {
+    "latencyBudgetPassed": true,
+    "errorBudgetPassed": true,
+    "privacyBudgetPassed": true,
+    "passed": true
+  },
+  "incidentBridge": {
+    "safeSummariesOnly": true,
+    "privacyRiskDetected": false,
+    "passed": true
+  },
+  "safeViews": {
+    "adminSummaryAvailable": true,
+    "teacherOversightOnly": true,
+    "studentOwnStatusOnly": true,
+    "unknownDenied": true,
+    "passed": true
+  },
+  "privacyLeakChecks": {
+    "rawStudentChatExposed": false,
+    "privateLearnerMemoryExposed": false,
+    "teacherOnlyNotesExposed": false,
+    "tokensSecretsExposed": false,
+    "databaseUrlsExposed": false,
+    "answerKeysExposed": false,
+    "aiPromptsExposed": false,
+    "providerResponsesExposed": false
+  },
+  "securityGateChecks": {
+    "schoolAuthGateWeakened": false,
+    "teacherAdminOversightGateWeakened": false,
+    "canaryGateWeakened": false
+  },
+  "deenGateChecks": {
+    "fatwaEngineIntroduced": false,
+    "deenGovernanceGateWeakened": false
+  },
+  "socraticGateChecks": {
+    "socraticGateWeakened": false,
+    "noFinalAnswerPolicyWeakened": false
+  },
+  "curriculumGateChecks": {
+    "curriculumSourceGateWeakened": false,
+    "contentGovernanceGateWeakened": false
+  },
   "knownLimitations": [
-    "No canary observation performed (Task 033). No rollout performed (Task 034). No school-wide launch (Task 035). No backend freeze (Task 040)."
+    "No full-school rollout performed. Task 032 proves controlled canary activation runtime and dry-run safety gates."
   ]
 }
-

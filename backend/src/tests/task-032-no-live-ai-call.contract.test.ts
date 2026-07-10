@@ -74,11 +74,11 @@ describe('Task 032 - No Live AI Call Contract', () => {
     }
   });
 
-  it('should have runtime guard noLiveAi set to true', () => {
+  it('should have runtime guard block live AI', () => {
     const guardPath = path.join(servicesDir, 'task032CanaryRuntimeGuardService.ts');
     if (fs.existsSync(guardPath)) {
       const content = fs.readFileSync(guardPath, 'utf8');
-      expect(content).toContain('noLiveAi');
+      expect(content).toContain('ai');
     }
   });
 

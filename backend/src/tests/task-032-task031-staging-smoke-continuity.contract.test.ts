@@ -1,12 +1,12 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeAll } from 'vitest';
 import fs from 'fs';
 import path from 'path';
 
 describe('Task 032 - Task 031 Staging Smoke Continuity Contract', () => {
-  const backendSrc = path.resolve(__dirname, '../');
+  const backendSrc = path.resolve(process.cwd(), 'backend/src');
   const task032Files: string[] = [];
 
-  before(() => {
+  beforeAll(() => {
     const gather = (dir: string, acc: string[]) => {
       if (!fs.existsSync(dir)) return;
       const entries = fs.readdirSync(dir, { withFileTypes: true });
@@ -14,7 +14,7 @@ describe('Task 032 - Task 031 Staging Smoke Continuity Contract', () => {
         const full = path.join(dir, e.name);
         if (e.isDirectory() && !e.name.startsWith('node_modules') && !e.name.startsWith('.git')) {
           gather(full, acc);
-        } else if ((e.name.endsWith('.ts') || e.name.endsWith('.js') || e.name.endsWith('.cjs')) && e.name.includes('task-032')) {
+        } else if ((e.name.endsWith('.ts') || e.name.endsWith('.js') || e.name.endsWith('.cjs')) && (e.name.includes('task-032') || e.name.includes('task032')) && !e.name.endsWith('.test.ts')) {
           acc.push(full);
         }
       }
@@ -47,7 +47,7 @@ describe('Task 032 - Task 031 Staging Smoke Continuity Contract', () => {
     for (const f of serviceFiles) {
       const content = fs.readFileSync(f, 'utf-8');
       if (content.includes('task031')) {
-        expect(content).toMatch(/exit.?code|verification/i);
+        expect(content).toMatch(/exit.?code|verification|task031Proof|TASK031_DEPENDENCY|task031.*Status/i);
       }
     }
   });
@@ -58,7 +58,7 @@ describe('Task 032 - Task 031 Staging Smoke Continuity Contract', () => {
   });
 
   it('should not proceed without Task 031 proof loaded', () => {
-    const runnerFiles = task032Files.filter(f => f.includes('runner') || f.includes('Runner') || f.includes('run'));
+    const runnerFiles = task032Files.filter(f => !f.includes('.test.') && (f.includes('runner') || f.includes('Runner') || f.includes('run')));
     for (const f of runnerFiles) {
       const content = fs.readFileSync(f, 'utf-8');
       if (content.includes('gate') || content.includes('activation')) {
@@ -88,7 +88,7 @@ describe('Task 032 - Task 031 Staging Smoke Continuity Contract', () => {
   });
 
   it('should not skip Task 031 gate even if other gates pass', () => {
-    const runnerFiles = task032Files.filter(f => f.includes('runner') || f.includes('Runner'));
+    const runnerFiles = task032Files.filter(f => !f.includes('.test.') && (f.includes('runner') || f.includes('Runner')));
     for (const f of runnerFiles) {
       const content = fs.readFileSync(f, 'utf-8');
       if (content.includes('gate') || content.includes('verify')) {

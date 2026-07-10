@@ -1,6 +1,14 @@
-import type { Task032CanaryMonitoringSnapshotPlaceholder } from '../contracts/task032ControlledCanaryActivationContracts';
+import type { Task032CanaryMonitoringSnapshot } from '../contracts/task032ControlledCanaryContracts';
 
-export async function createTask032CanaryMonitoringSnapshotPlaceholder(input: { activationId: string, safeSummary: string, reasonCodes: string[] }): Promise<Task032CanaryMonitoringSnapshotPlaceholder> {
+export async function captureTask032MonitoringSnapshot(input: Task032CanaryMonitoringSnapshot): Promise<Task032CanaryMonitoringSnapshot> {
+  return {
+    ...input,
+    generatedAt: new Date().toISOString(),
+    rawPrivateDataExposed: false,
+  };
+}
+
+export async function createTask032CanaryMonitoringSnapshotPlaceholder(input: { activationId: string, safeSummary: string, reasonCodes: string[] }): Promise<{ snapshotId: string; activationId: string; observationStarted: boolean; safeSummary: string; reasonCodes: string[]; createdAt: string; safeToStartTask033Candidate: boolean }> {
   return {
     snapshotId: `snap_${input.activationId}_${Date.now()}`,
     activationId: input.activationId,

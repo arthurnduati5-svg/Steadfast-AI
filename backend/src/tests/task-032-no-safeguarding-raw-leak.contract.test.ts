@@ -1,13 +1,13 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeAll } from 'vitest';
 import fs from 'fs';
 import path from 'path';
 
 describe('Task 032 - No Safeguarding Raw Data Leak Contract', () => {
-  const task032Dir = path.resolve(__dirname, '../../');
+  const task032Dir = path.resolve(process.cwd(), 'backend/src');
   const testFiles: string[] = [];
   const srcFiles: string[] = [];
 
-  before(() => {
+  beforeAll(() => {
     const gatherFiles = (dir: string, ext: string, acc: string[]) => {
       if (!fs.existsSync(dir)) return;
       const entries = fs.readdirSync(dir, { withFileTypes: true });
@@ -15,7 +15,7 @@ describe('Task 032 - No Safeguarding Raw Data Leak Contract', () => {
         const full = path.join(dir, e.name);
         if (e.isDirectory() && !e.name.startsWith('node_modules') && !e.name.startsWith('.git')) {
           gatherFiles(full, ext, acc);
-        } else if (e.name.endsWith(ext) && e.name.includes('task-032')) {
+        } else if (e.name.endsWith(ext) && (e.name.includes('task-032') || e.name.includes('task032')) && !e.name.endsWith('.test.ts')) {
           acc.push(full);
         }
       }

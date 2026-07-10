@@ -202,6 +202,7 @@ describe('Task 032 - validateTask032CanaryEnvironmentGateInput', () => {
 describe('Task 032 - validateTask032ApprovedSchoolCanaryConfig', () => {
   function validConfig() {
     return {
+      configId: 'config_task032_safe',
       schoolId: 'school_task032_safe',
       approvedByRole: 'school_admin',
       activationMode: 'internal_controlled_activation',
@@ -249,21 +250,21 @@ describe('Task 032 - validateTask032ApprovedSchoolCanaryConfig', () => {
   });
 
   it('should fail with missing allowedClassIds', () => {
-    const input = { ...validConfig(), allowedClassIds: [] };
+    const input = { ...validConfig(), allowedClassIds: null };
     const result = validateTask032ApprovedSchoolCanaryConfig(input);
     expect(result.ok).toBe(false);
     expect(result.reasonCodes).toContain('allowedClassIds_not_array');
   });
 
   it('should fail with missing allowedSubjectIds', () => {
-    const input = { ...validConfig(), allowedSubjectIds: [] };
+    const input = { ...validConfig(), allowedSubjectIds: null };
     const result = validateTask032ApprovedSchoolCanaryConfig(input);
     expect(result.ok).toBe(false);
     expect(result.reasonCodes).toContain('allowedSubjectIds_not_array');
   });
 
   it('should fail with missing allowedCohortIds', () => {
-    const input = { ...validConfig(), allowedCohortIds: [] };
+    const input = { ...validConfig(), allowedCohortIds: null };
     const result = validateTask032ApprovedSchoolCanaryConfig(input);
     expect(result.ok).toBe(false);
     expect(result.reasonCodes).toContain('allowedCohortIds_not_array');

@@ -17,7 +17,13 @@ export async function runTask032CanaryActivationCommand(input: Task032CanaryActi
   // Step 1: Load Task 031 proof
   const proof = await loadTask031ProofForTask032();
   await task032ControlledCanaryActivationRepository.recordTask031DependencyProof(proof);
-  if (!proof.ok) throw new Error(`Task 031 dependency proof failed: ${proof.blockingIssues.join(', ')}`);
+  if (!proof.ok) {
+    const blockedRecord = await createTask032CanaryActivationRecord({
+      schoolId: input.schoolId,
+      configuredCohortSize: input.config.maxCanaryLearners
+    });
+    return blockTask032CanaryActivation(blockedRecord.activationId, proof.blockingIssues);
+  }
 
   // Step 2: Create activation record
   const activationRecord = await createTask032CanaryActivationRecord({
