@@ -1,0 +1,20 @@
+{
+  "scenarioRun": true,
+  "scenarioMode": "controlled_limited_rollout",
+  "task033DependencyGatePassed": true,
+  "rolloutEnvironmentGatePassed": true,
+  "limitedRolloutConfigLoaded": true,
+  "rolloutCapGatePassed": true,
+  "expandedCohortEligibilityPassed": true,
+  "staffReadinessGatePassed": true,
+  "learnerNoticeReadinessPassed": true,
+  "controlledRolloutStateMachinePassed": true,
+  "expandedRuntimeGuardPassed": true,
+  "healthIncidentRollbackPassed": true,
+  "privacyContentSocraticDeenPassed": true,
+  "safeRolloutReadModelPassed": true,
+  "noSchoolWideNoFreezeBoundaryPassed": true,
+  "reportPassed": true,
+  "task033ProofLoaded": true,
+  "blockingIssues": []
+}

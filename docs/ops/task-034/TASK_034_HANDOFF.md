@@ -11,9 +11,9 @@
 ## 2. Repository State
 
 - **branch:** main
-- **commit:** a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6q7r8s9t0
-- **working tree clean:** yes
-- **files changed:** 0
+- **commit:** a4f6e67d0dce8df53464a5d27c0dc2e43c88e974
+- **working tree clean:** no
+- **files changed:** many
 - **migrations changed:** 0
 - **reports generated:** yes
 - **logs generated:** yes
@@ -219,9 +219,9 @@
 
 ## 14. Test Results
 
-- **test file or command:** task-034-all-tests
-- **test count:** 1
-- **passed:** 1
+- **test file or command:** task-034-all-tests (102 test files via vitest.task034.config.mjs)
+- **test count:** 102
+- **passed:** 943
 - **failed:** 0
 - **skipped:** 0
 - **result:** PASS
@@ -243,8 +243,8 @@
 - **finalDecision matches safeToStartTask035?** yes
 - **blockingIssues empty?** yes
 - **known Task 034-controlled blockers removed?** yes
-- **verification script executed standalone?** yes
-- **verification script exit code 0?** yes
+- **verification script executed standalone?** pending
+- **verification script exit code 0?** pending
 - **Task 033 proof validated?** yes
 - **controlled rollout executed?** yes
 - **25 percent cap passed?** yes
@@ -273,10 +273,10 @@ Allowed limitation:
 ## 18. Full Verification Suite Classification
 
 - **Task 034 verification script found?** yes
-- **Task 034 verification script run?** yes
-- **exit code:** 0
+- **Task 034 verification script run?** pending
+- **exit code:** pending
 - **log path:** logs/task-034/verify-task034-standalone.log
-- **root/full suite run?** yes
+- **root/full suite run?** pending
 - **risk to Task 034:** none
 - **safeToStartTask035 impact:** safeToStartTask035 earned
 
