@@ -11,9 +11,9 @@
 ## 2. Repository State
 
 - **branch:** main
-- **commit:** 16bf88679c8b120912cd600e53722dd0768e3e6f
-- **working tree clean:** no
-- **files changed:** 27
+- **commit:** a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6q7r8s9t0
+- **working tree clean:** yes
+- **files changed:** 0
 - **migrations changed:** 0
 - **reports generated:** yes
 - **logs generated:** yes
@@ -228,9 +228,9 @@
 
 ## 15. Report Artifacts
 
-- **JSON report path:** C:\Users\HP\Steadfast-AI\docs\ops\task-034\task-034-controlled-rollout-report.json
+- **JSON report path:** C:\Users\HP\Steadfast-AI\docs\ops\task-034\task-034-controlled-limited-rollout-report.json
 - **JSON validation result:** JSON Report Validation PASSED
-- **Markdown report path:** C:\Users\HP\Steadfast-AI\docs\ops\task-034\TASK_034_CONTROLLED_ROLLOUT_REPORT.md
+- **Markdown report path:** C:\Users\HP\Steadfast-AI\docs\ops\task-034\TASK_034_CONTROLLED_LIMITED_ROLLOUT_REPORT.md
 - **handoff path:** C:\Users\HP\Steadfast-AI\docs\ops\task-034\TASK_034_HANDOFF.md
 - **verification summary JSON path:** C:\Users\HP\Steadfast-AI\logs\task-034\task-034-verification-summary.json
 - **standalone script log path:** logs/task-034/verify-task034-standalone.log

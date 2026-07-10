@@ -56,8 +56,8 @@ import task029ExpansionOperationsRoutes from './routes/task029ExpansionOperation
 import task030ControlledStagingRehearsalRoutes from './routes/task030ControlledStagingRehearsalRoutes';
 import task031StagingSmokeCanaryReadinessRoutes from './routes/task031StagingSmokeCanaryReadinessRoutes';
 import task032ControlledCanaryActivationRoutes from './routes/task032ControlledCanaryActivationRoutes';
-import task033CanaryObservationRoutes from './routes/task033CanaryObservationRoutes';
-import task034ControlledRolloutRoutes from './routes/task034ControlledRolloutRoutes';
+import task033ControlledCanaryObservationRoutes from './routes/task033ControlledCanaryObservationRoutes';
+import task034ControlledLimitedRolloutRoutes from './routes/task034ControlledLimitedRolloutRoutes';
 import task035SchoolWideReadinessRoutes from './routes/task035SchoolWideReadinessRoutes';
 import learningModeRoutes from './routes/learningModeRoutes';
 import learningProfileRoutes from './routes/learningProfileRoutes';
@@ -309,12 +309,22 @@ app.use(
 );
 
 // ─── Task 033: Controlled Canary Observation Routes ──────
-// All observation routes require school auth; role gated per-route.
-app.use('/', task033CanaryObservationRoutes);
+// All observation routes require school auth, verified school context, and role gating.
+app.use(
+  '/api/task033/controlled-canary-observation',
+  schoolAuthMiddleware,
+  requireVerifiedSchoolContext,
+  task033ControlledCanaryObservationRoutes
+);
 
 // ─── Task 034: Controlled Limited Rollout Routes ──────
 // All rollout routes require school auth; role gated per-route.
-app.use('/', task034ControlledRolloutRoutes);
+app.use(
+  '/api/task034/controlled-limited-rollout',
+  schoolAuthMiddleware,
+  requireVerifiedSchoolContext,
+  task034ControlledLimitedRolloutRoutes
+);
 
 // ─── Task 035: School-Wide Readiness Routes ──────────
 // All readiness routes require school auth; role gated per-route.
