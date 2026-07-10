@@ -105,58 +105,58 @@ describe('Task 032 - Canary Environment Gate', () => {
   it('should block when productionDeploymentRequested is true', async () => {
     const result = await runTask032CanaryEnvironmentGate({ ...validInput(), productionDeploymentRequested: true });
     expect(result.ok).toBe(false);
-    expect(result.productionDeploymentBlocked).toBe(false);
+    expect(result.productionDeploymentBlocked).toBe(true);
     expect(result.blockingIssues).toContain('production_deployment_requested');
   });
 
   it('should block when liveNotificationRequested is true', async () => {
     const result = await runTask032CanaryEnvironmentGate({ ...validInput(), liveNotificationRequested: true });
     expect(result.ok).toBe(false);
-    expect(result.liveNotificationBlocked).toBe(false);
+    expect(result.liveNotificationBlocked).toBe(true);
     expect(result.blockingIssues).toContain('live_notification_requested');
   });
 
   it('should block when liveAiRequested is true', async () => {
     const result = await runTask032CanaryEnvironmentGate({ ...validInput(), liveAiRequested: true });
     expect(result.ok).toBe(false);
-    expect(result.liveAiBlocked).toBe(false);
+    expect(result.liveAiBlocked).toBe(true);
     expect(result.blockingIssues).toContain('live_ai_requested');
   });
 
   it('should block when liveSchoolConnectorRequested is true', async () => {
     const result = await runTask032CanaryEnvironmentGate({ ...validInput(), liveSchoolConnectorRequested: true });
     expect(result.ok).toBe(false);
-    expect(result.liveSchoolConnectorBlocked).toBe(false);
+    expect(result.liveSchoolConnectorBlocked).toBe(true);
   });
 
   it('should block when productionMutationRequested is true', async () => {
     const result = await runTask032CanaryEnvironmentGate({ ...validInput(), productionMutationRequested: true });
     expect(result.ok).toBe(false);
-    expect(result.productionMutationBlocked).toBe(false);
+    expect(result.productionMutationBlocked).toBe(true);
   });
 
   it('should block when canaryObservationRequested is true', async () => {
     const result = await runTask032CanaryEnvironmentGate({ ...validInput(), canaryObservationRequested: true });
     expect(result.ok).toBe(false);
-    expect(result.canaryObservationBlocked).toBe(false);
+    expect(result.canaryObservationBlocked).toBe(true);
   });
 
   it('should block when rolloutRequested is true', async () => {
     const result = await runTask032CanaryEnvironmentGate({ ...validInput(), rolloutRequested: true });
     expect(result.ok).toBe(false);
-    expect(result.rolloutBlocked).toBe(false);
+    expect(result.rolloutBlocked).toBe(true);
   });
 
   it('should block when schoolWideLaunchRequested is true', async () => {
     const result = await runTask032CanaryEnvironmentGate({ ...validInput(), schoolWideLaunchRequested: true });
     expect(result.ok).toBe(false);
-    expect(result.schoolWideLaunchBlocked).toBe(false);
+    expect(result.schoolWideLaunchBlocked).toBe(true);
   });
 
   it('should block when backendFreezeRequested is true', async () => {
     const result = await runTask032CanaryEnvironmentGate({ ...validInput(), backendFreezeRequested: true });
     expect(result.ok).toBe(false);
-    expect(result.backendFreezeBlocked).toBe(false);
+    expect(result.backendFreezeBlocked).toBe(true);
     expect(result.blockingIssues).toContain('backend_freeze_requested');
   });
 });

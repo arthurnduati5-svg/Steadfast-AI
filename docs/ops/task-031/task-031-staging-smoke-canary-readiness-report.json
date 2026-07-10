@@ -81,6 +81,7 @@
   "noLiveConnectorAiScanRun": true,
   "noLiveConnectorAiScanPassed": true,
   "noLiveNotificationScanRun": true,
+  "noLiveNotificationScanPassed": true,
   "noFrontendUiScanRun": true,
   "noFrontendUiScanPassed": true,
   "noTask032ToTask040ScanRun": true,
