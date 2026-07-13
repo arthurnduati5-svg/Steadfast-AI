@@ -327,8 +327,23 @@ app.use(
 );
 
 // ─── Task 035: School-Wide Readiness Routes ──────────
-// All readiness routes require school auth; role gated per-route.
-app.use('/', schoolAuthMiddleware, task035SchoolWideReadinessRoutes);
+// All readiness routes require school auth, verified school context; role gated per-route.
+app.use(
+  '/api/task035/school-wide-readiness',
+  schoolAuthMiddleware,
+  requireVerifiedSchoolContext,
+  task035SchoolWideReadinessRoutes
+);
+
+// ─── Task 036: Controlled Live School Launch Routes ──
+// All launch routes require school auth, verified school context, role gated per endpoint.
+import task036LiveSchoolLaunchRoutes from './routes/task036LiveSchoolLaunchRoutes';
+app.use(
+  '/api/task036/live-school-launch',
+  schoolAuthMiddleware,
+  requireVerifiedSchoolContext,
+  task036LiveSchoolLaunchRoutes
+);
 
 // ─── Phase 2: Learning Mode Runtime Routes ──────────────
 app.use('/api', schoolAuthMiddleware, requireVerifiedSchoolContext, learningModeRoutes);
