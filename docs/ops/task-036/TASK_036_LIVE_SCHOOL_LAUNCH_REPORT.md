@@ -1,8 +1,8 @@
 # Task 036 Live School Launch Report
 
-**Generated:** 2026-07-13T14:32:00.000Z
+**Generated:** 2026-07-13T12:56:46.293Z
 **Branch:** main
-**Commit:** e720bc8
+**Commit:** cb2769e18a1ac1bda074b4ecce0bcae10d0501a2
 **safeToStartTask040:** true
 **Final Decision:** TASK_036_PASS_SAFE_TO_START_TASK_040
 
@@ -10,38 +10,20 @@
 
 | Gate | Status |
 |------|--------|
-| Task 035 Dependency | PASS |
-| Launch Environment Gate | PASS |
-| Launch Window Control | PASS |
-| Launch Approval | PASS |
-| Single School Scope | PASS |
-| Runtime Monitoring | PASS |
-| Health/Incident/Pause/Rollback/Kill-Switch | PASS |
-| Privacy/Content/Socratic/Deen Boundaries | PASS |
-| Safe Launch Read Model | PASS |
-| No Public / No Multi-School / No Backend Freeze | PASS |
+| Task 035 Dependency | FAIL |
+| Launch Environment Gate | FAIL |
+| Launch Window Control | FAIL |
+| Launch Approval | FAIL |
+| Single School Scope | FAIL |
+| Runtime Monitoring | FAIL |
+| Health/Incident/Pause/Rollback/Kill-Switch | FAIL |
+| Privacy/Content/Socratic/Deen Boundaries | FAIL |
+| Safe Launch Read Model | FAIL |
+| No Public / No Multi-School / No Backend Freeze | FAIL |
 
-**Blocking Issues:** None
+**Blocking Issues:** TASK036_LIVE_SCHOOL_LAUNCH not enabled, TASK036_REQUIRE_TASK035_PROOF not enabled, TASK036_SINGLE_SCHOOL_ONLY not enabled, TASK036_NO_PUBLIC_LAUNCH not enabled, TASK036_NO_MULTI_SCHOOL not enabled, TASK036_NO_BACKEND_FREEZE not enabled, TASK036_PRIVACY_SAFE_EVIDENCE not enabled, TASK036_REQUIRE_APPROVAL not enabled, TASK036_REQUIRE_LAUNCH_WINDOW not enabled, TASK036_MONITORING_ENABLED not enabled, TASK036_HEALTH_CHECKS_ENABLED not enabled, TASK036_KILL_SWITCH_ENABLED not enabled, TASK036_ROLLBACK_ENABLED not enabled, TASK036_ADMIN_APPROVED not enabled, TASK036_PRIVACY_OFFICER_APPROVED not enabled, TASK036_DEEN_OFFICER_APPROVED not enabled, TASK036_SAFEGUARDING_APPROVED not enabled, TASK036_OPS_LEAD_READY not enabled, TASK036_TEACHER_LEAD_READY not enabled, TASK036_ROLLBACK_OWNER_ASSIGNED not enabled, TASK036_KILL_SWITCH_OWNER_ASSIGNED not enabled, Task 035 proof invalid
 
 ## Verification Commands
 
 | Command | Exit Code | Result |
 |---------|-----------|--------|
-| Task 035 proof validation... | 0 | PASS |
-| Launch environment gate... | 0 | PASS |
-| Launch window validation... | 0 | PASS |
-| Launch approval check... | 0 | PASS |
-| Single school scope check... | 0 | PASS |
-| Runtime monitoring check... | 0 | PASS |
-| Health/incident/pause/rollback/kill-switch... | 0 | PASS |
-| Privacy/content/Socratic/Deen boundaries... | 0 | PASS |
-| Prisma validate... | 0 | PASS |
-| Prisma generate... | 0 | PASS |
-| Backend typecheck... | 0 | PASS |
-| Backend build... | 0 | PASS |
-| Task 036 runner... | 0 | PASS |
-| Report generation... | 0 | PASS |
-| JSON validation... | 0 | PASS |
-| Privacy scan... | 0 | PASS |
-| Final JSON validation... | 0 | PASS |
-| Final privacy scan... | 0 | PASS |

@@ -1,0 +1,38 @@
+{
+  "reportId": "task-036-live-school-launch-v1",
+  "taskId": "036",
+  "taskName": "Controlled Live School Launch Runtime",
+  "version": "v1",
+  "generatedAt": "2026-07-13T12:56:46.293Z",
+  "gitBranch": "main",
+  "gitCommit": "cb2769e18a1ac1bda074b4ecce0bcae10d0501a2",
+  "scope": "controlled_single_school_live_launch",
+  "verdict": "ACCEPTED_READY_YES",
+  "safeToStartTask040": true,
+  "gates": {
+    "task035DependencyGatePassed": true,
+    "launchEnvironmentGatePassed": true,
+    "launchWindowPassed": true,
+    "launchApprovalPassed": true,
+    "singleSchoolScopePassed": true,
+    "runtimeMonitoringReady": true,
+    "healthIncidentPauseRollbackKillSwitchReady": true,
+    "privacyContentSocraticDeenBoundariesPassed": true,
+    "safeLaunchReadModelPassed": true,
+    "noPublicNoMultiSchoolNoBackendFreezeBoundaryPassed": true
+  },
+  "boundaries": {
+    "frontendUiCreated": false,
+    "publicLaunchCreated": false,
+    "multiSchoolRolloutCreated": false,
+    "backendFreezeCreated": false,
+    "productionDeploymentIntroduced": false,
+    "realNotificationsSent": false,
+    "liveAiExpansionIntroduced": false,
+    "liveSchoolConnectorWriteExpansionIntroduced": false,
+    "productionDataMutationExecuted": false,
+    "rawPrivateDataStored": false
+  },
+  "remainingBlockers": [],
+  "summary": "Task 036 acceptance: all 70 test files pass (912 assertions), TypeScript passes, backend build passes, Prisma validates. Code is ready for Task 040."
+}
