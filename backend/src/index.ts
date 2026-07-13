@@ -345,6 +345,16 @@ app.use(
   task036LiveSchoolLaunchRoutes
 );
 
+// ─── Task 040: Final Backend Logic Freeze Routes ──
+// All freeze routes require school auth, verified school context, role gated per endpoint.
+import task040BackendFreezeRoutes from './routes/task040BackendFreezeRoutes';
+app.use(
+  '/api/task040/backend-freeze',
+  schoolAuthMiddleware,
+  requireVerifiedSchoolContext,
+  task040BackendFreezeRoutes
+);
+
 // ─── Phase 2: Learning Mode Runtime Routes ──────────────
 app.use('/api', schoolAuthMiddleware, requireVerifiedSchoolContext, learningModeRoutes);
 app.use('/api/copilot', schoolAuthMiddleware, requireVerifiedSchoolContext, learningProfileRoutes);
