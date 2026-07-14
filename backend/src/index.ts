@@ -355,6 +355,14 @@ app.use(
   task040BackendFreezeRoutes
 );
 
+// ─── Question Bank Routes ───────────────────────────────
+import questionBankRoutes from './routes/questionBank';
+app.use('/api/question-bank', schoolAuthMiddleware, questionBankRoutes);
+
+// ─── Exam Blueprint Routes (Package 4) ─────────────────
+import examBlueprintRoutes from './routes/examBlueprint';
+app.use('/api/question-bank', schoolAuthMiddleware, examBlueprintRoutes);
+
 // ─── Phase 2: Learning Mode Runtime Routes ──────────────
 app.use('/api', schoolAuthMiddleware, requireVerifiedSchoolContext, learningModeRoutes);
 app.use('/api/copilot', schoolAuthMiddleware, requireVerifiedSchoolContext, learningProfileRoutes);

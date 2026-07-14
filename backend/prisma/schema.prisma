@@ -4244,3 +4244,204 @@ model QuestionIngestionCandidateRecord {
   @@index([schoolId, status])
   @@index([contentHash])
 }
+
+// ─── Package 4: Exam Blueprinting, Question Selection, Draft Sets ──────────────
+
+model ExamBlueprintRecord {
+  blueprintId         String   @id @default(uuid())
+  schoolId            String
+  status              String   @default("draft")
+  title               String
+  subjectId           String
+  curriculumVersionId String
+  gradeBand           String
+  examType            String
+  createdByActorId    String
+  createdByRole       String
+  currentVersionId    String?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+  archivedAt          DateTime?
+
+  @@index([schoolId])
+  @@index([schoolId, status])
+  @@index([schoolId, subjectId])
+  @@index([curriculumVersionId])
+  @@index([currentVersionId])
+}
+
+model ExamBlueprintVersionRecord {
+  blueprintVersionId      String   @id @default(uuid())
+  blueprintId             String
+  versionNumber           Int
+  status                  String   @default("draft")
+  title                   String
+  safeDescription         String   @db.Text
+  durationMinutes         Int      @default(0)
+  totalMarks              Int      @default(0)
+  targetQuestionCount     Int      @default(0)
+  difficultyMixJson       Json?
+  questionTypeMixJson     Json?
+  securityClassRequirement String  @default("practice_safe")
+  coveragePolicy          String   @default("balanced_weighted")
+  selectionStrategy       String   @default("balanced")
+  createdByActorId        String
+  createdAt               DateTime @default(now())
+  approvedAt              DateTime?
+  supersededAt            DateTime?
+
+  @@index([blueprintId])
+  @@index([blueprintId, versionNumber])
+  @@index([status])
+  @@index([securityClassRequirement])
+}
+
+model ExamBlueprintRequirementRecord {
+  requirementId        String   @id @default(uuid())
+  blueprintVersionId   String
+  schoolId             String
+  requirementType      String
+  subjectId            String
+  topicId              String
+  skillId              String
+  objectiveId          String
+  requiredQuestionCount Int     @default(0)
+  requiredMarks        Int      @default(0)
+  minimumDifficulty    String   @default("recall")
+  maximumDifficulty    String   @default("creation")
+  questionType         String   @default("multiple_choice")
+  weight               Int      @default(1)
+  isMandatory          Boolean  @default(true)
+  createdAt            DateTime @default(now())
+
+  @@index([blueprintVersionId])
+  @@index([schoolId])
+  @@index([objectiveId])
+  @@index([topicId])
+  @@index([skillId])
+  @@index([questionType])
+}
+
+model ExamDraftSetRecord {
+  draftSetId          String   @id @default(uuid())
+  schoolId            String
+  blueprintId         String
+  blueprintVersionId  String
+  status              String   @default("draft")
+  requestedDraftCount Int      @default(3)
+  generatedDraftCount Int      @default(0)
+  selectionStrategy   String   @default("balanced")
+  createdByActorId    String
+  createdByRole       String
+  safeSummary         String   @db.Text
+  coverageGapSummary  String   @db.Text
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+  completedAt         DateTime?
+
+  @@index([schoolId])
+  @@index([schoolId, status])
+  @@index([blueprintId])
+  @@index([blueprintVersionId])
+  @@index([createdAt])
+}
+
+model ExamDraftRecord {
+  draftId                   String   @id @default(uuid())
+  draftSetId                String
+  schoolId                  String
+  blueprintId               String
+  blueprintVersionId        String
+  rank                      Int      @default(0)
+  status                    String   @default("candidate")
+  draftTitle                String
+  totalMarks                Int      @default(0)
+  estimatedDurationMinutes  Int      @default(0)
+  questionCount             Int      @default(0)
+  coverageScore             Float    @default(0)
+  difficultyBalanceScore    Float    @default(0)
+  securityScore             Float    @default(0)
+  freshnessScore            Float    @default(0)
+  overallScore              Float    @default(0)
+  recommendationReason      String   @db.Text
+  safeTeacherSummary        String   @db.Text
+  differenceFromPreviousDraft String @db.Text
+  warningCodesJson          Json?
+  createdAt                 DateTime @default(now())
+  updatedAt                 DateTime @updatedAt
+
+  @@index([draftSetId])
+  @@index([schoolId])
+  @@index([rank])
+  @@index([status])
+  @@index([overallScore])
+}
+
+model ExamDraftQuestionRecord {
+  draftQuestionId   String   @id @default(uuid())
+  draftId           String
+  schoolId          String
+  questionId        String
+  questionVersionId String
+  position          Int      @default(0)
+  sectionKey        String   @default("default")
+  marksAllocated    Int      @default(0)
+  selectionReason   String   @db.Text
+  requirementId     String
+  coverageTagsJson  Json?
+  warningCodesJson  Json?
+  createdAt         DateTime @default(now())
+
+  @@index([draftId])
+  @@index([schoolId])
+  @@index([questionId])
+  @@index([questionVersionId])
+  @@index([requirementId])
+  @@index([position])
+}
+
+model QuestionSelectionRunRecord {
+  selectionRunId       String   @id @default(uuid())
+  schoolId             String
+  blueprintId          String
+  blueprintVersionId   String
+  draftSetId           String
+  status               String   @default("started")
+  strategy             String   @default("balanced")
+  candidatePoolSize    Int      @default(0)
+  eligiblePoolSize     Int      @default(0)
+  selectedCount        Int      @default(0)
+  rejectedCount        Int      @default(0)
+  gapCount             Int      @default(0)
+  safeSummary          String   @db.Text
+  createdAt            DateTime @default(now())
+  completedAt          DateTime?
+
+  @@index([schoolId])
+  @@index([blueprintVersionId])
+  @@index([draftSetId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model QuestionSelectionCandidateRecord {
+  selectionCandidateId   String   @id @default(uuid())
+  selectionRunId         String
+  schoolId               String
+  questionId             String
+  questionVersionId      String
+  eligible               Boolean  @default(false)
+  selected               Boolean  @default(false)
+  rejectionReasonCode    String
+  score                  Float    @default(0)
+  coverageContributionJson Json?
+  riskFlagsJson          Json?
+  createdAt              DateTime @default(now())
+
+  @@index([selectionRunId])
+  @@index([schoolId])
+  @@index([questionId])
+  @@index([questionVersionId])
+  @@index([eligible])
+  @@index([selected])
+}
