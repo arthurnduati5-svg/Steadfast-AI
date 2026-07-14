@@ -5878,3 +5878,287 @@ model ResultLearningEvidenceIdempotencyRecord {
   @@index([expiresAt])
   @@index([createdAt])
 }
+
+// ── Package 11: Parent-Safe Result Release, Student Report Snapshots, Audience Boundary Enforcement ──
+
+model ResultReleasePacketRecord {
+  resultReleasePacketId              String   @id @default(uuid())
+  schoolId                           String
+  resultFinalizationDecisionId       String
+  resultReleaseReadinessId           String
+  resultReleaseBoundaryId            String
+  resultLearningEvidenceBridgeId     String?
+  markingResultVersionId             String
+  studentRef                         String
+  paperId                            String?
+  paperVersionId                     String?
+  deliverySessionId                  String?
+  packetStatus                       String   @default("draft")
+  packetAudience                     String   @default("student")
+  packetMode                         String   @default("student_safe_result")
+  safePacketSummary                  String   @db.Text
+  allowedFieldsJson                  Json?
+  blockedFieldsJson                  Json?
+  sourceRefsJson                     Json?
+  createdByActorId                   String
+  createdByRole                      String
+  createdAt                          DateTime @default(now())
+  updatedAt                          DateTime @updatedAt
+  approvedAt                         DateTime?
+  blockedAt                          DateTime?
+  cancelledAt                        DateTime?
+  voidedAt                           DateTime?
+
+  @@index([schoolId])
+  @@index([resultFinalizationDecisionId])
+  @@index([resultReleaseReadinessId])
+  @@index([resultReleaseBoundaryId])
+  @@index([resultLearningEvidenceBridgeId])
+  @@index([markingResultVersionId])
+  @@index([studentRef])
+  @@index([packetStatus])
+  @@index([packetAudience])
+  @@index([packetMode])
+  @@index([createdAt])
+  @@index([updatedAt])
+}
+
+model ResultReleaseApprovalRecord {
+  resultReleaseApprovalId    String   @id @default(uuid())
+  schoolId                   String
+  resultReleasePacketId      String
+  resultFinalizationDecisionId String
+  studentRef                 String
+  approvalStatus             String   @default("draft")
+  approvalType               String   @default("teacher_release_approval")
+  approvedAudience           String   @default("student")
+  approvedByActorId          String
+  approvedByRole             String
+  safeApprovalSummary        String   @db.Text
+  reasonCodesJson            Json?
+  createdAt                  DateTime @default(now())
+  updatedAt                  DateTime @updatedAt
+  approvedAt                 DateTime?
+  rejectedAt                 DateTime?
+  voidedAt                   DateTime?
+
+  @@index([schoolId])
+  @@index([resultReleasePacketId])
+  @@index([resultFinalizationDecisionId])
+  @@index([studentRef])
+  @@index([approvalStatus])
+  @@index([approvalType])
+  @@index([approvedByActorId])
+  @@index([createdAt])
+  @@index([updatedAt])
+}
+
+model ResultAudienceProjectionRecord {
+  resultAudienceProjectionId String   @id @default(uuid())
+  schoolId                   String
+  resultReleasePacketId      String
+  studentRef                 String
+  audienceType               String   @default("student")
+  projectionStatus           String   @default("draft")
+  projectionVersion          Int      @default(1)
+  safeProjectionJson         Json?
+  allowedFieldsJson          Json?
+  blockedFieldsJson          Json?
+  redactionRulesJson         Json?
+  safeProjectionSummary      String   @db.Text
+  createdByActorId           String
+  createdByRole              String
+  createdAt                  DateTime @default(now())
+  updatedAt                  DateTime @updatedAt
+  voidedAt                   DateTime?
+
+  @@index([schoolId])
+  @@index([resultReleasePacketId])
+  @@index([studentRef])
+  @@index([audienceType])
+  @@index([projectionStatus])
+  @@index([createdAt])
+  @@index([updatedAt])
+}
+
+model StudentResultReportSnapshotRecord {
+  studentResultReportSnapshotId String   @id @default(uuid())
+  schoolId                      String
+  resultReleasePacketId         String
+  resultAudienceProjectionId    String
+  studentRef                    String
+  snapshotStatus                String   @default("draft")
+  snapshotType                  String   @default("student_safe_exam_result")
+  safeReportTitle               String
+  safeReportSummary             String   @db.Text
+  safeStrengthsJson             Json?
+  safeGrowthAreasJson           Json?
+  safeNextStepsJson             Json?
+  safeSupportGuidanceJson       Json?
+  sourceRefsJson                Json?
+  createdByActorId              String
+  createdByRole                 String
+  createdAt                     DateTime @default(now())
+  updatedAt                     DateTime @updatedAt
+  approvedAt                    DateTime?
+  voidedAt                      DateTime?
+
+  @@index([schoolId])
+  @@index([resultReleasePacketId])
+  @@index([resultAudienceProjectionId])
+  @@index([studentRef])
+  @@index([snapshotStatus])
+  @@index([snapshotType])
+  @@index([createdAt])
+  @@index([updatedAt])
+}
+
+model ParentSafeResultSummaryRecord {
+  parentSafeResultSummaryId   String   @id @default(uuid())
+  schoolId                    String
+  resultReleasePacketId       String
+  resultAudienceProjectionId  String
+  studentRef                  String
+  summaryStatus               String   @default("draft")
+  safeProgressSummary         String   @db.Text
+  safeSupportSummary          String   @db.Text
+  safeStrengthsJson           Json?
+  safeGrowthAreasJson         Json?
+  safeRecommendedSupportJson  Json?
+  notYetReleasedReason        String?
+  allowedFieldNamesJson       Json?
+  blockedFieldNamesJson       Json?
+  createdByActorId            String
+  createdByRole               String
+  createdAt                   DateTime @default(now())
+  updatedAt                   DateTime @updatedAt
+  approvedAt                  DateTime?
+  voidedAt                    DateTime?
+
+  @@index([schoolId])
+  @@index([resultReleasePacketId])
+  @@index([resultAudienceProjectionId])
+  @@index([studentRef])
+  @@index([summaryStatus])
+  @@index([createdAt])
+  @@index([updatedAt])
+}
+
+model StudentSafeResultSummaryRecord {
+  studentSafeResultSummaryId   String   @id @default(uuid())
+  schoolId                     String
+  resultReleasePacketId        String
+  resultAudienceProjectionId   String
+  studentRef                   String
+  summaryStatus                String   @default("draft")
+  safeAchievementSummary       String   @db.Text
+  safeLearningProgressSummary  String   @db.Text
+  safeNextPracticeSummary      String   @db.Text
+  safeConfidenceGuidanceJson   Json?
+  safeRevisionGuidanceJson     Json?
+  allowedFieldNamesJson        Json?
+  blockedFieldNamesJson        Json?
+  createdByActorId             String
+  createdByRole                String
+  createdAt                    DateTime @default(now())
+  updatedAt                    DateTime @updatedAt
+  approvedAt                   DateTime?
+  voidedAt                     DateTime?
+
+  @@index([schoolId])
+  @@index([resultReleasePacketId])
+  @@index([resultAudienceProjectionId])
+  @@index([studentRef])
+  @@index([summaryStatus])
+  @@index([createdAt])
+  @@index([updatedAt])
+}
+
+model ResultReleaseDeliveryIntentRecord {
+  resultReleaseDeliveryIntentId String   @id @default(uuid())
+  schoolId                      String
+  resultReleasePacketId         String
+  resultReleaseApprovalId       String
+  studentRef                    String
+  audienceType                  String   @default("student")
+  deliveryChannel               String   @default("student_portal_future")
+  intentStatus                  String   @default("draft")
+  safeIntentSummary             String   @db.Text
+  blockedReasonCodesJson        Json?
+  createdByActorId              String
+  createdByRole                 String
+  createdAt                     DateTime @default(now())
+  updatedAt                     DateTime @updatedAt
+  approvedAt                    DateTime?
+  blockedAt                     DateTime?
+  voidedAt                      DateTime?
+
+  @@index([schoolId])
+  @@index([resultReleasePacketId])
+  @@index([resultReleaseApprovalId])
+  @@index([studentRef])
+  @@index([audienceType])
+  @@index([deliveryChannel])
+  @@index([intentStatus])
+  @@index([createdAt])
+  @@index([updatedAt])
+}
+
+model ResultReleaseAuditRecord {
+  resultReleaseAuditId             String   @id @default(uuid())
+  schoolId                         String
+  resultReleasePacketId            String?
+  resultReleaseApprovalId          String?
+  resultAudienceProjectionId       String?
+  studentResultReportSnapshotId    String?
+  parentSafeResultSummaryId        String?
+  studentSafeResultSummaryId       String?
+  resultReleaseDeliveryIntentId    String?
+  actorId                          String
+  actorRole                        String
+  eventType                        String
+  decision                         String
+  safeSummary                      String   @db.Text
+  reasonCodesJson                  Json?
+  metadataJson                     Json?
+  requestId                        String?
+  correlationId                    String?
+  createdAt                        DateTime @default(now())
+
+  @@index([schoolId])
+  @@index([resultReleasePacketId])
+  @@index([resultReleaseApprovalId])
+  @@index([resultAudienceProjectionId])
+  @@index([studentResultReportSnapshotId])
+  @@index([parentSafeResultSummaryId])
+  @@index([studentSafeResultSummaryId])
+  @@index([resultReleaseDeliveryIntentId])
+  @@index([actorId])
+  @@index([eventType])
+  @@index([createdAt])
+  @@index([requestId])
+  @@index([correlationId])
+}
+
+model ResultReleaseIdempotencyRecord {
+  resultReleaseIdempotencyId String   @id @default(uuid())
+  schoolId                   String
+  operation                  String
+  idempotencyKey             String
+  requestHash                String
+  status                     String   @default("in_progress")
+  resourceType               String?
+  resourceId                 String?
+  safeResultSummary          String?
+  createdAt                  DateTime @default(now())
+  updatedAt                  DateTime @updatedAt
+  expiresAt                  DateTime?
+
+  @@unique([schoolId, operation, idempotencyKey])
+  @@index([schoolId])
+  @@index([operation])
+  @@index([idempotencyKey])
+  @@index([status])
+  @@index([expiresAt])
+  @@index([createdAt])
+}
