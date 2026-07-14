@@ -10,7 +10,7 @@ f990e8d docs(qbank): finalize package 6 accountability with real verification re
 6f7a6ec feat(qbank): add package 7 exam delivery session foundation with variant assignment, attempt capture, timing, submission snapshots, routes, and docs
 
 ## HEAD After Closure Repair
-846fe0d fix(qbank): close package 7 delivery session acceptance
+4ac9048 fix(qbank): close package 7 delivery session acceptance
 
 ## Dirty Workspace Before Package 7
 No dirty tracked files. Only untracked files from other workstreams present.
