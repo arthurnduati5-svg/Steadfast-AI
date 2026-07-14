@@ -363,6 +363,10 @@ app.use('/api/question-bank', schoolAuthMiddleware, questionBankRoutes);
 import examBlueprintRoutes from './routes/examBlueprint';
 app.use('/api/question-bank', schoolAuthMiddleware, examBlueprintRoutes);
 
+// ─── Marking Routes (Package 5) ──────────────────────
+import markingRoutes from './routes/marking';
+app.use('/api/question-bank/marking', schoolAuthMiddleware, requireVerifiedSchoolContext, markingRoutes);
+
 // ─── Phase 2: Learning Mode Runtime Routes ──────────────
 app.use('/api', schoolAuthMiddleware, requireVerifiedSchoolContext, learningModeRoutes);
 app.use('/api/copilot', schoolAuthMiddleware, requireVerifiedSchoolContext, learningProfileRoutes);

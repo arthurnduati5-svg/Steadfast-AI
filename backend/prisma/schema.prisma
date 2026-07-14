@@ -4445,3 +4445,226 @@ model QuestionSelectionCandidateRecord {
   @@index([eligible])
   @@index([selected])
 }
+
+// ─── Package 5: Marking, Teacher Review, Moderation, Student Challenge ──────────────
+
+model MarkingRunRecord {
+  markingRunId         String   @id @default(uuid())
+  schoolId             String
+  status               String   @default("draft")
+  sourceType           String
+  sourceRef            String
+  blueprintId          String?
+  blueprintVersionId   String?
+  draftId              String?
+  createdByActorId     String
+  createdByRole        String
+  policyVersionRefsJson Json?
+  inputSnapshotCount   Int      @default(0)
+  markedCount          Int      @default(0)
+  reviewRequiredCount  Int      @default(0)
+  blockedCount         Int      @default(0)
+  safeSummary          String   @db.Text
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+  completedAt          DateTime?
+
+  @@index([schoolId])
+  @@index([schoolId, status])
+  @@index([sourceType])
+  @@index([sourceRef])
+  @@index([blueprintVersionId])
+  @@index([draftId])
+  @@index([createdAt])
+}
+
+model MarkingResultVersionRecord {
+  markingResultVersionId String   @id @default(uuid())
+  schoolId               String
+  markingRunId           String
+  questionId             String
+  questionVersionId      String
+  answerSnapshotRef      String   @db.Text
+  resultVersionNumber    Int      @default(1)
+  status                 String   @default("draft")
+  questionType           String
+  markingMethod          String
+  marksAwarded           Float    @default(0)
+  marksAvailable         Float    @default(0)
+  confidence             Float    @default(0)
+  requiresTeacherReview  Boolean  @default(false)
+  reviewReasonCode       String
+  safeStudentFeedback    String   @db.Text
+  safeTeacherSummary     String   @db.Text
+  rubricVersionId        String?
+  answerKeyVersionId     String?
+  createdByActorId       String
+  createdByRole          String
+  createdAt              DateTime @default(now())
+  supersededAt           DateTime?
+
+  @@index([schoolId])
+  @@index([markingRunId])
+  @@index([questionId])
+  @@index([questionVersionId])
+  @@index([status])
+  @@index([requiresTeacherReview])
+  @@index([rubricVersionId])
+  @@index([answerKeyVersionId])
+  @@index([createdAt])
+}
+
+model MarkingBreakdownItemRecord {
+  breakdownItemId           String   @id @default(uuid())
+  schoolId                  String
+  markingResultVersionId    String
+  criterionKey              String
+  criterionLabel            String
+  marksAwarded              Float    @default(0)
+  marksAvailable            Float    @default(0)
+  confidence                Float    @default(0)
+  decision                  String   @default("uncertain")
+  safeReason                String   @db.Text
+  teacherOnlyNotes          String   @db.Text
+  createdAt                 DateTime @default(now())
+
+  @@index([schoolId])
+  @@index([markingResultVersionId])
+  @@index([criterionKey])
+  @@index([decision])
+}
+
+model ScoringSuggestionRecord {
+  scoringSuggestionId String   @id @default(uuid())
+  schoolId            String
+  markingResultVersionId String
+  suggestionSource    String
+  status              String   @default("suggested")
+  suggestedMarks      Float    @default(0)
+  confidence          Float    @default(0)
+  safeRationale       String   @db.Text
+  reviewRequired      Boolean  @default(false)
+  reasonCodesJson     Json?
+  createdAt           DateTime @default(now())
+  acceptedAt          DateTime?
+  rejectedAt          DateTime?
+  decidedByActorId    String?
+
+  @@index([schoolId])
+  @@index([markingResultVersionId])
+  @@index([suggestionSource])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model TeacherReviewGroupRecord {
+  teacherReviewGroupId String   @id @default(uuid())
+  schoolId             String
+  markingRunId         String
+  status               String   @default("open")
+  groupType            String
+  reasonCode           String
+  questionId           String
+  questionVersionId    String
+  itemCount            Int      @default(0)
+  safeSummary          String   @db.Text
+  recommendedAction    String
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+  closedAt             DateTime?
+
+  @@index([schoolId])
+  @@index([markingRunId])
+  @@index([status])
+  @@index([groupType])
+  @@index([questionVersionId])
+  @@index([createdAt])
+}
+
+model TeacherReviewItemRecord {
+  teacherReviewItemId   String   @id @default(uuid())
+  schoolId              String
+  teacherReviewGroupId  String
+  markingRunId          String
+  markingResultVersionId String
+  status                String   @default("open")
+  reviewReasonCode      String
+  priority              Int      @default(0)
+  assignedToActorId     String?
+  safeSummary           String   @db.Text
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+  resolvedAt            DateTime?
+
+  @@index([schoolId])
+  @@index([teacherReviewGroupId])
+  @@index([markingRunId])
+  @@index([markingResultVersionId])
+  @@index([status])
+  @@index([priority])
+  @@index([assignedToActorId])
+}
+
+model TeacherOverrideRecord {
+  teacherOverrideId   String   @id @default(uuid())
+  schoolId            String
+  markingResultVersionId String
+  teacherReviewItemId String?
+  decision            String
+  previousMarks       Float    @default(0)
+  newMarks            Float    @default(0)
+  overrideReasonCode  String
+  safeReason          String   @db.Text
+  decidedByActorId    String
+  decidedByRole       String
+  createdAt           DateTime @default(now())
+
+  @@index([schoolId])
+  @@index([markingResultVersionId])
+  @@index([teacherReviewItemId])
+  @@index([decision])
+  @@index([decidedByActorId])
+  @@index([createdAt])
+}
+
+model ModerationDecisionRecord {
+  moderationDecisionId String   @id @default(uuid())
+  schoolId             String
+  markingResultVersionId String
+  teacherOverrideId    String?
+  status               String   @default("pending")
+  decision             String
+  safeReason           String   @db.Text
+  decidedByActorId     String
+  decidedByRole        String
+  createdAt            DateTime @default(now())
+
+  @@index([schoolId])
+  @@index([markingResultVersionId])
+  @@index([teacherOverrideId])
+  @@index([status])
+  @@index([decision])
+  @@index([createdAt])
+}
+
+model StudentMarkChallengeRecord {
+  studentMarkChallengeId String   @id @default(uuid())
+  schoolId               String
+  studentId              String
+  markingResultVersionId String
+  status                 String   @default("submitted")
+  challengeReasonCode    String
+  safeStudentStatement   String   @db.Text
+  createdAt              DateTime @default(now())
+  reviewedByActorId      String?
+  reviewedByRole         String?
+  reviewedAt             DateTime?
+  resolution             String?
+  safeResolutionSummary  String   @db.Text
+
+  @@index([schoolId])
+  @@index([studentId])
+  @@index([markingResultVersionId])
+  @@index([status])
+  @@index([createdAt])
+}
