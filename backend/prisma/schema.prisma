@@ -4446,6 +4446,256 @@ model QuestionSelectionCandidateRecord {
   @@index([selected])
 }
 
+// ─── Package 6: Exam Paper Assembly, Versioning, Variant Planning, Access, Approval, Delivery Bridge ──
+
+model ExamPaperRecord {
+  paperId             String   @id @default(uuid())
+  schoolId            String
+  status              String   @default("draft")
+  sourceDraftSetId    String
+  sourceDraftId       String
+  blueprintId         String
+  blueprintVersionId  String
+  title               String
+  subjectId           String
+  curriculumVersionId String
+  gradeBand           String
+  examType            String
+  createdByActorId    String
+  createdByRole       String
+  currentVersionId    String?
+  safeSummary         String   @db.Text
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+  archivedAt          DateTime?
+
+  @@index([schoolId])
+  @@index([schoolId, status])
+  @@index([sourceDraftId])
+  @@index([sourceDraftSetId])
+  @@index([blueprintVersionId])
+  @@index([subjectId])
+  @@index([curriculumVersionId])
+  @@index([createdAt])
+}
+
+model ExamPaperVersionRecord {
+  paperVersionId      String   @id @default(uuid())
+  paperId             String
+  schoolId            String
+  versionNumber       Int
+  status              String   @default("draft")
+  title               String
+  instructionsSafeText String  @db.Text
+  durationMinutes     Int      @default(0)
+  totalMarks          Int      @default(0)
+  questionCount       Int      @default(0)
+  sectionCount        Int      @default(0)
+  variantCount        Int      @default(0)
+  assemblyPolicyJson  Json?
+  securityClass       String   @default("practice_safe")
+  createdByActorId    String
+  createdAt           DateTime @default(now())
+  approvedAt          DateTime?
+  supersededAt        DateTime?
+
+  @@index([paperId])
+  @@index([paperId, versionNumber])
+  @@index([schoolId])
+  @@index([status])
+  @@index([securityClass])
+  @@index([createdAt])
+}
+
+model ExamPaperSectionRecord {
+  sectionId              String   @id @default(uuid())
+  schoolId               String
+  paperVersionId         String
+  sectionKey             String
+  sectionTitle           String
+  sectionOrder           Int      @default(0)
+  instructionsSafeText   String   @db.Text
+  marksAvailable         Int      @default(0)
+  questionCount          Int      @default(0)
+  timingGuidanceMinutes  Int      @default(0)
+  createdAt              DateTime @default(now())
+
+  @@index([schoolId])
+  @@index([paperVersionId])
+  @@index([sectionKey])
+  @@index([sectionOrder])
+}
+
+model ExamPaperQuestionRecord {
+  paperQuestionId      String   @id @default(uuid())
+  schoolId             String
+  paperVersionId       String
+  sectionId            String
+  questionId           String
+  questionVersionId    String
+  sourceDraftQuestionId String
+  position             Int      @default(0)
+  marksAllocated       Int      @default(0)
+  required             Boolean  @default(true)
+  studentVisible       Boolean  @default(true)
+  answerKeyLinked      Boolean  @default(false)
+  rubricLinked         Boolean  @default(false)
+  selectionReason      String   @db.Text
+  safeTeacherSummary   String   @db.Text
+  createdAt            DateTime @default(now())
+
+  @@index([schoolId])
+  @@index([paperVersionId])
+  @@index([sectionId])
+  @@index([questionId])
+  @@index([questionVersionId])
+  @@index([sourceDraftQuestionId])
+  @@index([position])
+}
+
+model ExamVariantRecord {
+  variantId            String   @id @default(uuid())
+  schoolId             String
+  paperVersionId       String
+  variantCode          String
+  status               String   @default("draft")
+  variantStrategy      String   @default("same_questions_reordered")
+  questionCount        Int      @default(0)
+  totalMarks           Int      @default(0)
+  shuffleSections      Boolean  @default(false)
+  shuffleQuestionsWithinSections Boolean @default(true)
+  safeSummary          String   @db.Text
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+  approvedAt           DateTime?
+
+  @@index([schoolId])
+  @@index([paperVersionId])
+  @@index([variantCode])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model ExamVariantQuestionRecord {
+  variantQuestionId    String   @id @default(uuid())
+  schoolId             String
+  variantId            String
+  paperQuestionId      String
+  questionId           String
+  questionVersionId    String
+  sectionKey           String
+  variantPosition      Int      @default(0)
+  marksAllocated       Int      @default(0)
+  mappingReason        String   @db.Text
+  createdAt            DateTime @default(now())
+
+  @@index([schoolId])
+  @@index([variantId])
+  @@index([paperQuestionId])
+  @@index([questionId])
+  @@index([questionVersionId])
+  @@index([sectionKey])
+  @@index([variantPosition])
+}
+
+model ExamAccessPolicyRecord {
+  accessPolicyId           String   @id @default(uuid())
+  schoolId                 String
+  paperId                  String
+  paperVersionId           String
+  status                   String   @default("draft")
+  intendedAudienceType     String   @default("class")
+  classScopeRefsJson       Json?
+  roleScopeRefsJson        Json?
+  availabilityMode         String   @default("manual_teacher_activation")
+  requiresTeacherActivation Boolean @default(true)
+  allowStudentSelfStart    Boolean  @default(false)
+  allowRetake              Boolean  @default(false)
+  maxAttempts              Int      @default(1)
+  safePolicySummary        String   @db.Text
+  createdByActorId         String
+  createdAt                DateTime @default(now())
+  updatedAt                DateTime @updatedAt
+
+  @@index([schoolId])
+  @@index([paperId])
+  @@index([paperVersionId])
+  @@index([status])
+  @@index([intendedAudienceType])
+  @@index([createdAt])
+}
+
+model ExamPaperApprovalRecord {
+  paperApprovalId     String   @id @default(uuid())
+  schoolId            String
+  paperId             String
+  paperVersionId      String
+  decision            String
+  decisionReasonCode  String
+  safeReason          String   @db.Text
+  decidedByActorId    String
+  decidedByRole       String
+  createdAt           DateTime @default(now())
+
+  @@index([schoolId])
+  @@index([paperId])
+  @@index([paperVersionId])
+  @@index([decision])
+  @@index([decidedByActorId])
+  @@index([createdAt])
+}
+
+model ExamPaperAssemblyRunRecord {
+  assemblyRunId        String   @id @default(uuid())
+  schoolId             String
+  sourceDraftSetId     String
+  sourceDraftId        String
+  paperId              String
+  paperVersionId       String
+  status               String   @default("started")
+  assemblyStrategy     String   @default("from_selected_draft")
+  inputQuestionCount   Int      @default(0)
+  assembledQuestionCount Int   @default(0)
+  warningCount         Int      @default(0)
+  blockedCount         Int      @default(0)
+  safeSummary          String   @db.Text
+  createdByActorId     String
+  createdByRole        String
+  createdAt            DateTime @default(now())
+  completedAt          DateTime?
+
+  @@index([schoolId])
+  @@index([sourceDraftId])
+  @@index([sourceDraftSetId])
+  @@index([paperId])
+  @@index([paperVersionId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model ExamPaperDeliveryBridgeRecord {
+  deliveryBridgeId     String   @id @default(uuid())
+  schoolId             String
+  paperId              String
+  paperVersionId       String
+  status               String   @default("draft")
+  bridgeType           String   @default("exam_mode_contract")
+  compatibleRuntime    String   @default("exam_mode_future")
+  contractVersion      String   @default("1.0")
+  safeContractSummary  String   @db.Text
+  blockedReasonCode    String?
+  createdAt            DateTime @default(now())
+  validatedAt          DateTime?
+
+  @@index([schoolId])
+  @@index([paperId])
+  @@index([paperVersionId])
+  @@index([status])
+  @@index([bridgeType])
+  @@index([compatibleRuntime])
+  @@index([createdAt])
+}
+
 // ─── Package 5: Marking, Teacher Review, Moderation, Student Challenge ──────────────
 
 model MarkingRunRecord {
