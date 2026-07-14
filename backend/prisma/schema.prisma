@@ -6472,3 +6472,354 @@ model ResultDeliveryIdempotencyRecord {
   @@index([expiresAt])
   @@index([createdAt])
 }
+
+model ResultReportCardTemplateRecord {
+  resultReportCardTemplateId String   @id @default(uuid())
+  schoolId                   String
+  templateKey                String
+  templateName               String
+  templateStatus             String   @default("draft")
+  templateAudience           String   @default("student")
+  templatePurpose            String
+  safeTemplateSummary        String   @db.Text
+  createdByActorId           String
+  createdByRole              String
+  createdAt                  DateTime @default(now())
+  updatedAt                  DateTime @updatedAt
+  disabledAt                 DateTime?
+  voidedAt                   DateTime?
+
+  @@index([schoolId])
+  @@index([templateKey])
+  @@index([templateStatus])
+  @@index([templateAudience])
+  @@index([createdAt])
+  @@index([updatedAt])
+}
+
+model ResultReportCardTemplateVersionRecord {
+  resultReportCardTemplateVersionId String   @id @default(uuid())
+  schoolId                          String
+  resultReportCardTemplateId        String
+  templateVersion                   String
+  versionStatus                     String   @default("draft")
+  layoutMode                        String   @default("exam_result_summary")
+  sectionSchemaJson                 Json?
+  allowedSectionTypesJson           Json?
+  blockedFieldNamesJson             Json?
+  redactionRulesJson                Json?
+  safeVersionSummary                String   @db.Text
+  createdByActorId                  String
+  createdByRole                     String
+  createdAt                         DateTime @default(now())
+  updatedAt                         DateTime @updatedAt
+  activatedAt                       DateTime?
+  retiredAt                         DateTime?
+  voidedAt                          DateTime?
+
+  @@index([schoolId])
+  @@index([resultReportCardTemplateId])
+  @@index([templateVersion])
+  @@index([versionStatus])
+  @@index([layoutMode])
+  @@index([createdAt])
+  @@index([updatedAt])
+}
+
+model ResultReportCardAssemblyRecord {
+  resultReportCardAssemblyId        String   @id @default(uuid())
+  schoolId                          String
+  resultReportCardTemplateId        String
+  resultReportCardTemplateVersionId String
+  resultReleasePacketId             String
+  resultReleaseApprovalId           String
+  resultAudienceProjectionId        String
+  studentResultReportSnapshotId     String
+  parentSafeResultSummaryId         String?
+  studentSafeResultSummaryId        String?
+  resultDeliveryJobId               String?
+  resultDeliveryReceiptId           String?
+  resultFinalizationDecisionId      String
+  resultReleaseBoundaryId           String
+  resultLearningEvidenceBridgeId    String?
+  markingResultVersionId            String
+  studentRef                        String
+  paperId                           String
+  paperVersionId                    String
+  deliverySessionId                 String
+  assemblyStatus                    String   @default("draft")
+  assemblyMode                      String   @default("student_safe_report_card")
+  audienceType                      String   @default("student")
+  safeReportTitle                   String   @db.Text
+  safeReportSummary                 String   @db.Text
+  sourceRefsJson                    Json?
+  allowedFieldsJson                 Json?
+  blockedFieldsJson                 Json?
+  createdByActorId                  String
+  createdByRole                     String
+  createdAt                         DateTime @default(now())
+  updatedAt                         DateTime @updatedAt
+  assembledAt                       DateTime?
+  safetyCheckedAt                   DateTime?
+  sealedAt                          DateTime?
+  blockedAt                         DateTime?
+  cancelledAt                       DateTime?
+  voidedAt                          DateTime?
+
+  @@index([schoolId])
+  @@index([resultReportCardTemplateId])
+  @@index([resultReleasePacketId])
+  @@index([resultReleaseApprovalId])
+  @@index([studentResultReportSnapshotId])
+  @@index([studentRef])
+  @@index([paperId])
+  @@index([deliverySessionId])
+  @@index([assemblyStatus])
+  @@index([assemblyMode])
+  @@index([audienceType])
+  @@index([createdAt])
+  @@index([updatedAt])
+}
+
+model ResultReportCardSectionRecord {
+  resultReportCardSectionId String   @id @default(uuid())
+  schoolId                  String
+  resultReportCardAssemblyId String
+  sectionKey                String
+  sectionType               String
+  sectionStatus             String   @default("draft")
+  sectionOrder              Int      @default(0)
+  safeHeading               String   @db.Text
+  safeSummary               String   @db.Text
+  safeBodyJson              Json?
+  sourceRefsJson            Json?
+  allowedFieldNamesJson     Json?
+  blockedFieldNamesJson     Json?
+  redactionRulesJson        Json?
+  createdByActorId          String
+  createdByRole             String
+  createdAt                 DateTime @default(now())
+  updatedAt                 DateTime @updatedAt
+  sealedAt                  DateTime?
+  blockedAt                 DateTime?
+  voidedAt                  DateTime?
+
+  @@index([schoolId])
+  @@index([resultReportCardAssemblyId])
+  @@index([sectionKey])
+  @@index([sectionType])
+  @@index([sectionStatus])
+  @@index([sectionOrder])
+  @@index([createdAt])
+  @@index([updatedAt])
+}
+
+model ResultReportCardEvidenceLinkRecord {
+  resultReportCardEvidenceLinkId String   @id @default(uuid())
+  schoolId                       String
+  resultReportCardAssemblyId     String
+  resultReportCardSectionId      String?
+  sourceRecordType               String
+  sourceRecordId                 String
+  sourcePackage                  String
+  evidenceStatus                 String   @default("active")
+  evidenceUse                    String   @default("reference")
+  safeEvidenceSummary            String   @db.Text
+  allowedUseJson                 Json?
+  blockedUseJson                 Json?
+  createdByActorId               String
+  createdByRole                  String
+  createdAt                      DateTime @default(now())
+  updatedAt                      DateTime @updatedAt
+  voidedAt                       DateTime?
+
+  @@index([schoolId])
+  @@index([resultReportCardAssemblyId])
+  @@index([resultReportCardSectionId])
+  @@index([sourceRecordType])
+  @@index([sourceRecordId])
+  @@index([sourcePackage])
+  @@index([evidenceStatus])
+  @@index([createdAt])
+  @@index([updatedAt])
+}
+
+model ResultReportCardAudienceProjectionRecord {
+  resultReportCardAudienceProjectionId String   @id @default(uuid())
+  schoolId                             String
+  resultReportCardAssemblyId           String
+  audienceType                         String
+  projectionStatus                     String   @default("draft")
+  projectionVersion                    String   @default("v1")
+  safeProjectionJson                   Json?
+  allowedFieldNamesJson                Json?
+  blockedFieldNamesJson                Json?
+  redactionRulesJson                   Json?
+  safeProjectionSummary                String   @db.Text
+  createdByActorId                     String
+  createdByRole                        String
+  createdAt                            DateTime @default(now())
+  updatedAt                            DateTime @updatedAt
+  sealedAt                             DateTime?
+  blockedAt                            DateTime?
+  voidedAt                             DateTime?
+
+  @@index([schoolId])
+  @@index([resultReportCardAssemblyId])
+  @@index([audienceType])
+  @@index([projectionStatus])
+  @@index([createdAt])
+  @@index([updatedAt])
+}
+
+model ResultReportCardReviewRecord {
+  resultReportCardReviewId            String   @id @default(uuid())
+  schoolId                            String
+  resultReportCardAssemblyId          String
+  resultReportCardAudienceProjectionId String?
+  reviewStatus                        String   @default("draft")
+  reviewType                          String   @default("teacher_report_review")
+  reviewDecision                      String   @default("pending")
+  reviewedByActorId                   String
+  reviewedByRole                      String
+  safeReviewSummary                   String   @db.Text
+  reasonCodesJson                     Json?
+  createdAt                           DateTime @default(now())
+  updatedAt                           DateTime @updatedAt
+  approvedAt                          DateTime?
+  rejectedAt                          DateTime?
+  blockedAt                           DateTime?
+  voidedAt                            DateTime?
+
+  @@index([schoolId])
+  @@index([resultReportCardAssemblyId])
+  @@index([resultReportCardAudienceProjectionId])
+  @@index([reviewStatus])
+  @@index([reviewType])
+  @@index([reviewDecision])
+  @@index([reviewedByActorId])
+  @@index([createdAt])
+  @@index([updatedAt])
+}
+
+model ResultReportCardExportIntentRecord {
+  resultReportCardExportIntentId  String   @id @default(uuid())
+  schoolId                        String
+  resultReportCardAssemblyId      String
+  resultReportCardReviewId        String
+  resultReportCardAudienceProjectionId String
+  exportStatus                    String   @default("draft")
+  exportChannel                   String   @default("pdf_export_future")
+  exportMode                      String   @default("intent_only")
+  safeExportIntentSummary         String   @db.Text
+  blockedReasonCodesJson          Json?
+  sourceRefsJson                  Json?
+  createdByActorId                String
+  createdByRole                   String
+  createdAt                       DateTime @default(now())
+  updatedAt                       DateTime @updatedAt
+  eligibleAt                      DateTime?
+  blockedAt                       DateTime?
+  voidedAt                        DateTime?
+
+  @@index([schoolId])
+  @@index([resultReportCardAssemblyId])
+  @@index([resultReportCardReviewId])
+  @@index([resultReportCardAudienceProjectionId])
+  @@index([exportStatus])
+  @@index([exportChannel])
+  @@index([exportMode])
+  @@index([createdAt])
+  @@index([updatedAt])
+}
+
+model ResultReportCardRenderManifestRecord {
+  resultReportCardRenderManifestId String   @id @default(uuid())
+  schoolId                         String
+  resultReportCardAssemblyId       String
+  resultReportCardTemplateVersionId String
+  manifestStatus                   String   @default("draft")
+  renderMode                       String   @default("preview_only")
+  safeManifestSummary              String   @db.Text
+  layoutJson                       Json?
+  sectionOrderJson                 Json?
+  assetRefsJson                    Json?
+  blockedFieldNamesJson            Json?
+  createdByActorId                 String
+  createdByRole                    String
+  createdAt                        DateTime @default(now())
+  updatedAt                        DateTime @updatedAt
+  sealedAt                         DateTime?
+  blockedAt                        DateTime?
+  voidedAt                         DateTime?
+
+  @@index([schoolId])
+  @@index([resultReportCardAssemblyId])
+  @@index([resultReportCardTemplateVersionId])
+  @@index([manifestStatus])
+  @@index([renderMode])
+  @@index([createdAt])
+  @@index([updatedAt])
+}
+
+model ResultReportCardAuditRecord {
+  resultReportCardAuditId            String   @id @default(uuid())
+  schoolId                           String
+  resultReportCardTemplateId         String?
+  resultReportCardTemplateVersionId  String?
+  resultReportCardAssemblyId         String?
+  resultReportCardSectionId          String?
+  resultReportCardEvidenceLinkId     String?
+  resultReportCardAudienceProjectionId String?
+  resultReportCardReviewId           String?
+  resultReportCardExportIntentId     String?
+  resultReportCardRenderManifestId   String?
+  actorId                            String
+  actorRole                          String
+  eventType                          String
+  decision                           String
+  safeSummary                        String   @db.Text
+  reasonCodesJson                    Json?
+  metadataJson                       Json?
+  requestId                          String?
+  correlationId                      String?
+  createdAt                          DateTime @default(now())
+
+  @@index([schoolId])
+  @@index([resultReportCardTemplateId])
+  @@index([resultReportCardAssemblyId])
+  @@index([resultReportCardSectionId])
+  @@index([resultReportCardEvidenceLinkId])
+  @@index([resultReportCardAudienceProjectionId])
+  @@index([resultReportCardReviewId])
+  @@index([resultReportCardExportIntentId])
+  @@index([resultReportCardRenderManifestId])
+  @@index([actorId])
+  @@index([eventType])
+  @@index([createdAt])
+  @@index([requestId])
+  @@index([correlationId])
+}
+
+model ResultReportCardIdempotencyRecord {
+  resultReportCardIdempotencyId String   @id @default(uuid())
+  schoolId                      String
+  operation                     String
+  idempotencyKey                String
+  requestHash                   String
+  status                        String   @default("in_progress")
+  resourceType                  String?
+  resourceId                    String?
+  safeResultSummary             String?
+  createdAt                     DateTime @default(now())
+  updatedAt                     DateTime @updatedAt
+  expiresAt                     DateTime?
+
+  @@unique([schoolId, operation, idempotencyKey])
+  @@index([schoolId])
+  @@index([operation])
+  @@index([idempotencyKey])
+  @@index([status])
+  @@index([expiresAt])
+  @@index([createdAt])
+}
