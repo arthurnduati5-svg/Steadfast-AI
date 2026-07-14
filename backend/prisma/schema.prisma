@@ -4696,6 +4696,275 @@ model ExamPaperDeliveryBridgeRecord {
   @@index([createdAt])
 }
 
+// ─── Package 7: Exam Delivery Session, Variant Assignment, Student Attempt, Capture ──
+
+model ExamDeliverySessionRecord {
+  deliverySessionId   String   @id @default(uuid())
+  schoolId            String
+  paperId             String
+  paperVersionId      String
+  deliveryBridgeId    String
+  accessPolicyId      String
+  status              String   @default("draft")
+  sessionMode         String   @default("teacher_controlled")
+  title               String
+  safeInstructions    String   @db.Text
+  intendedAudienceType String  @default("class")
+  classScopeRefsJson  Json?
+  roleScopeRefsJson   Json?
+  activationMode      String   @default("manual_teacher_activation")
+  createdByActorId    String
+  createdByRole       String
+  openedAt            DateTime?
+  closedAt            DateTime?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+  archivedAt          DateTime?
+
+  @@index([schoolId])
+  @@index([schoolId, status])
+  @@index([paperId])
+  @@index([paperVersionId])
+  @@index([deliveryBridgeId])
+  @@index([accessPolicyId])
+  @@index([createdAt])
+  @@index([openedAt])
+  @@index([closedAt])
+}
+
+model ExamDeliverySessionStateRecord {
+  sessionStateId        String   @id @default(uuid())
+  schoolId              String
+  deliverySessionId     String
+  status                String   @default("draft")
+  activeAttemptCount    Int      @default(0)
+  submittedAttemptCount Int      @default(0)
+  pausedAttemptCount    Int      @default(0)
+  blockedAttemptCount   Int      @default(0)
+  lastStateChangeReason String?
+  safeStateSummary      String   @db.Text
+  version               Int      @default(1)
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  @@index([schoolId])
+  @@index([deliverySessionId])
+  @@index([status])
+  @@index([updatedAt])
+}
+
+model ExamVariantAssignmentRecord {
+  variantAssignmentId   String   @id @default(uuid())
+  schoolId              String
+  deliverySessionId     String
+  paperId               String
+  paperVersionId        String
+  variantId             String
+  studentRef            String
+  learnerRefType        String   @default("mock_student_ref")
+  assignmentStatus      String   @default("assigned")
+  assignmentStrategy    String   @default("manual_teacher_assignment")
+  assignedByActorId     String
+  assignedByRole        String
+  safeAssignmentSummary String   @db.Text
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+  revokedAt             DateTime?
+
+  @@index([schoolId])
+  @@index([deliverySessionId])
+  @@index([studentRef])
+  @@index([variantId])
+  @@index([assignmentStatus])
+  @@index([createdAt])
+}
+
+model ExamAttemptRecord {
+  attemptId               String   @id @default(uuid())
+  schoolId                String
+  deliverySessionId       String
+  variantAssignmentId     String
+  paperId                 String
+  paperVersionId          String
+  variantId               String
+  studentRef              String
+  status                  String   @default("not_started")
+  attemptNumber           Int      @default(1)
+  startedAt               DateTime?
+  lastSeenAt              DateTime?
+  submittedAt             DateTime?
+  autoSubmittedAt         DateTime?
+  cancelledAt             DateTime?
+  blockedAt               DateTime?
+  durationSecondsAllowed  Int      @default(0)
+  durationSecondsUsed     Int      @default(0)
+  safeAttemptSummary      String   @db.Text
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
+
+  @@index([schoolId])
+  @@index([deliverySessionId])
+  @@index([studentRef])
+  @@index([variantAssignmentId])
+  @@index([paperVersionId])
+  @@index([variantId])
+  @@index([status])
+  @@index([startedAt])
+  @@index([submittedAt])
+}
+
+model ExamAttemptQuestionSnapshotRecord {
+  attemptQuestionSnapshotId String   @id @default(uuid())
+  schoolId                  String
+  attemptId                 String
+  deliverySessionId         String
+  paperQuestionId           String
+  variantQuestionId         String
+  questionId                String
+  questionVersionId         String
+  sectionKey                String
+  displayOrder              Int      @default(0)
+  marksAvailable            Int      @default(0)
+  studentVisiblePromptSafe  String   @db.Text
+  answerInputType           String   @default("text")
+  snapshotStatus            String   @default("active")
+  createdAt                 DateTime @default(now())
+
+  @@index([schoolId])
+  @@index([attemptId])
+  @@index([deliverySessionId])
+  @@index([questionId])
+  @@index([questionVersionId])
+  @@index([paperQuestionId])
+  @@index([variantQuestionId])
+  @@index([displayOrder])
+}
+
+model ExamAnswerSubmissionRecord {
+  answerSubmissionId      String   @id @default(uuid())
+  schoolId                String
+  attemptId               String
+  attemptQuestionSnapshotId String
+  deliverySessionId       String
+  studentRef              String
+  answerStatus            String   @default("draft_saved")
+  answerTextSafe          String?  @db.Text
+  answerPayloadJson       Json?
+  attachmentRefsJson      Json?
+  clientSavedAt           DateTime?
+  serverReceivedAt        DateTime @default(now())
+  revisionNumber          Int      @default(1)
+  isFinal                 Boolean  @default(false)
+  safeSubmissionSummary   String   @db.Text
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
+
+  @@index([schoolId])
+  @@index([attemptId])
+  @@index([attemptQuestionSnapshotId])
+  @@index([studentRef])
+  @@index([answerStatus])
+  @@index([isFinal])
+  @@index([serverReceivedAt])
+}
+
+model ExamAttemptTimingEventRecord {
+  timingEventId         String   @id @default(uuid())
+  schoolId              String
+  attemptId             String
+  deliverySessionId     String
+  eventType             String
+  eventAt               DateTime @default(now())
+  durationSecondsUsed   Int      @default(0)
+  durationSecondsRemaining Int  @default(0)
+  safeTimingSummary     String   @db.Text
+  metadataJson          Json?
+  createdAt             DateTime @default(now())
+
+  @@index([schoolId])
+  @@index([attemptId])
+  @@index([deliverySessionId])
+  @@index([eventType])
+  @@index([eventAt])
+  @@index([createdAt])
+}
+
+model ExamAttemptSubmissionSnapshotRecord {
+  submissionSnapshotId    String   @id @default(uuid())
+  schoolId                String
+  attemptId               String
+  deliverySessionId       String
+  paperId                 String
+  paperVersionId          String
+  variantId               String
+  studentRef              String
+  snapshotStatus          String   @default("draft")
+  submittedAnswerCount    Int      @default(0)
+  questionSnapshotCount   Int      @default(0)
+  totalMarksAvailable     Int      @default(0)
+  submissionPayloadJson   Json?
+  safeSnapshotSummary     String   @db.Text
+  createdAt               DateTime @default(now())
+  sealedAt                DateTime?
+
+  @@index([schoolId])
+  @@index([attemptId])
+  @@index([deliverySessionId])
+  @@index([studentRef])
+  @@index([snapshotStatus])
+  @@index([createdAt])
+  @@index([sealedAt])
+}
+
+model ExamDeliveryAuditRecord {
+  deliveryAuditId   String   @id @default(uuid())
+  schoolId          String
+  deliverySessionId String?
+  attemptId         String?
+  actorId           String
+  actorRole         String
+  eventType         String
+  decision          String
+  safeSummary       String   @db.Text
+  reasonCodesJson   Json?
+  metadataJson      Json?
+  requestId         String?
+  correlationId     String?
+  createdAt         DateTime @default(now())
+
+  @@index([schoolId])
+  @@index([deliverySessionId])
+  @@index([attemptId])
+  @@index([actorId])
+  @@index([eventType])
+  @@index([createdAt])
+  @@index([requestId])
+  @@index([correlationId])
+}
+
+model ExamDeliveryIdempotencyRecord {
+  deliveryIdempotencyId String   @id @default(uuid())
+  schoolId              String
+  operation             String
+  idempotencyKey        String
+  requestHash           String
+  status                String   @default("in_progress")
+  resourceType          String?
+  resourceId            String?
+  safeResultSummary     String?
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+  expiresAt             DateTime?
+
+  @@unique([schoolId, operation, idempotencyKey])
+  @@index([schoolId])
+  @@index([operation])
+  @@index([idempotencyKey])
+  @@index([status])
+  @@index([expiresAt])
+  @@index([createdAt])
+}
+
 // ─── Package 5: Marking, Teacher Review, Moderation, Student Challenge ──────────────
 
 model MarkingRunRecord {
@@ -4916,5 +5185,225 @@ model StudentMarkChallengeRecord {
   @@index([studentId])
   @@index([markingResultVersionId])
   @@index([status])
+  @@index([createdAt])
+}
+
+// ─── Package 8: Marking Invocation Bridge, Snapshot Intake, Batch Orchestration ──────
+
+model MarkingInvocationRequestRecord {
+  markingInvocationRequestId String   @id @default(uuid())
+  schoolId                   String
+  deliverySessionId          String
+  paperId                    String
+  paperVersionId             String
+  requestedByActorId         String
+  requestedByRole            String
+  invocationStatus           String   @default("draft")
+  invocationMode             String   @default("deterministic_plus_teacher_review")
+  sourceType                 String   @default("delivery_session_snapshot_batch")
+  submittedSnapshotRefsJson   Json?
+  safeRequestSummary         String   @db.Text
+  createdAt                  DateTime @default(now())
+  updatedAt                  DateTime @updatedAt
+  cancelledAt                DateTime?
+
+  @@index([schoolId])
+  @@index([schoolId, invocationStatus])
+  @@index([deliverySessionId])
+  @@index([paperId])
+  @@index([paperVersionId])
+  @@index([createdAt])
+  @@index([updatedAt])
+}
+
+model SubmittedSnapshotIntakeRecord {
+  snapshotIntakeId         String   @id @default(uuid())
+  schoolId                 String
+  markingInvocationRequestId String
+  submissionSnapshotId     String
+  attemptId                String
+  deliverySessionId        String
+  paperId                  String
+  paperVersionId           String
+  variantId                String
+  studentRef               String
+  intakeStatus             String   @default("received")
+  readinessStatus          String   @default("ready")
+  readinessReasonCodesJson Json?
+  safeIntakeSummary        String   @db.Text
+  createdAt                DateTime @default(now())
+  updatedAt                DateTime @updatedAt
+  blockedAt                DateTime?
+
+  @@unique([schoolId, submissionSnapshotId])
+  @@index([schoolId])
+  @@index([markingInvocationRequestId])
+  @@index([submissionSnapshotId])
+  @@index([attemptId])
+  @@index([deliverySessionId])
+  @@index([studentRef])
+  @@index([intakeStatus])
+  @@index([readinessStatus])
+  @@index([createdAt])
+}
+
+model MarkingBatchRecord {
+  markingBatchId            String   @id @default(uuid())
+  schoolId                  String
+  markingInvocationRequestId String
+  markingRunId              String
+  batchStatus               String   @default("planned")
+  batchMode                 String   @default("deterministic_plus_teacher_review")
+  batchSequence             Int      @default(1)
+  totalItems                Int      @default(0)
+  deterministicItemCount    Int      @default(0)
+  teacherReviewItemCount    Int      @default(0)
+  blockedItemCount          Int      @default(0)
+  safeBatchSummary          String   @db.Text
+  createdAt                 DateTime @default(now())
+  updatedAt                 DateTime @updatedAt
+  startedAt                 DateTime?
+  completedAt               DateTime?
+
+  @@index([schoolId])
+  @@index([markingInvocationRequestId])
+  @@index([markingRunId])
+  @@index([batchStatus])
+  @@index([batchMode])
+  @@index([createdAt])
+}
+
+model MarkingBatchItemRecord {
+  markingBatchItemId        String   @id @default(uuid())
+  schoolId                  String
+  markingBatchId            String
+  snapshotIntakeId          String
+  submissionSnapshotId      String
+  attemptId                 String
+  attemptQuestionSnapshotId String
+  answerSubmissionId        String
+  questionId                String
+  questionVersionId         String
+  paperQuestionId           String
+  variantQuestionId         String
+  studentRef                String
+  itemStatus                String   @default("planned")
+  itemMode                  String   @default("deterministic")
+  marksAvailable            Float    @default(0)
+  safeItemSummary           String   @db.Text
+  createdAt                 DateTime @default(now())
+  updatedAt                 DateTime @updatedAt
+  completedAt               DateTime?
+
+  @@index([schoolId])
+  @@index([markingBatchId])
+  @@index([snapshotIntakeId])
+  @@index([submissionSnapshotId])
+  @@index([attemptId])
+  @@index([answerSubmissionId])
+  @@index([questionVersionId])
+  @@index([itemStatus])
+  @@index([itemMode])
+  @@index([createdAt])
+}
+
+model MarkingResultLinkRecord {
+  markingResultLinkId    String   @id @default(uuid())
+  schoolId               String
+  markingInvocationRequestId String
+  markingBatchId         String
+  markingBatchItemId     String
+  markingRunId           String
+  markingResultVersionId String
+  submissionSnapshotId   String
+  attemptId              String
+  answerSubmissionId     String
+  linkStatus             String   @default("linked")
+  safeLinkSummary        String   @db.Text
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+
+  @@index([schoolId])
+  @@index([markingInvocationRequestId])
+  @@index([markingBatchId])
+  @@index([markingBatchItemId])
+  @@index([markingRunId])
+  @@index([markingResultVersionId])
+  @@index([submissionSnapshotId])
+  @@index([attemptId])
+  @@index([createdAt])
+}
+
+model MarkingDispatchAuditRecord {
+  markingDispatchAuditId String   @id @default(uuid())
+  schoolId               String
+  markingInvocationRequestId String?
+  markingBatchId         String?
+  markingBatchItemId     String?
+  markingRunId           String?
+  actorId                String
+  actorRole              String
+  eventType              String
+  decision               String
+  safeSummary            String   @db.Text
+  reasonCodesJson        Json?
+  metadataJson           Json?
+  requestId              String?
+  correlationId          String?
+  createdAt              DateTime @default(now())
+
+  @@index([schoolId])
+  @@index([markingInvocationRequestId])
+  @@index([markingBatchId])
+  @@index([markingBatchItemId])
+  @@index([markingRunId])
+  @@index([actorId])
+  @@index([eventType])
+  @@index([createdAt])
+  @@index([requestId])
+  @@index([correlationId])
+}
+
+model MarkingInvocationIdempotencyRecord {
+  markingInvocationIdempotencyId String   @id @default(uuid())
+  schoolId                       String
+  operation                      String
+  idempotencyKey                 String
+  requestHash                    String
+  status                         String   @default("in_progress")
+  resourceType                   String?
+  resourceId                     String?
+  safeResultSummary              String?
+  createdAt                      DateTime @default(now())
+  updatedAt                      DateTime @updatedAt
+  expiresAt                      DateTime?
+
+  @@unique([schoolId, operation, idempotencyKey])
+  @@index([schoolId])
+  @@index([operation])
+  @@index([idempotencyKey])
+  @@index([status])
+  @@index([expiresAt])
+  @@index([createdAt])
+}
+
+model MarkingReadinessCheckRecord {
+  markingReadinessCheckId String   @id @default(uuid())
+  schoolId                String
+  markingInvocationRequestId String?
+  submissionSnapshotId    String?
+  markingBatchId          String?
+  checkType               String
+  checkStatus             String   @default("passed")
+  reasonCodesJson         Json?
+  safeCheckSummary        String   @db.Text
+  createdAt               DateTime @default(now())
+
+  @@index([schoolId])
+  @@index([markingInvocationRequestId])
+  @@index([submissionSnapshotId])
+  @@index([markingBatchId])
+  @@index([checkType])
+  @@index([checkStatus])
   @@index([createdAt])
 }
