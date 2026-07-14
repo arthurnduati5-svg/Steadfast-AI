@@ -5407,3 +5407,223 @@ model MarkingReadinessCheckRecord {
   @@index([checkStatus])
   @@index([createdAt])
 }
+
+// ─── Package 9: Result Finalization Governance, Release Readiness, Regrade Foundation ──
+
+model ResultFinalizationReviewRecord {
+  resultFinalizationReviewId String   @id @default(uuid())
+  schoolId                   String
+  markingInvocationRequestId String?
+  markingRunId               String?
+  deliverySessionId          String?
+  paperId                    String?
+  paperVersionId             String?
+  reviewStatus               String   @default("draft")
+  reviewMode                 String   @default("teacher_reviewed")
+  reviewedResultVersionRefsJson Json?
+  requiredCheckRefsJson      Json?
+  safeReviewSummary          String   @db.Text
+  createdByActorId           String
+  createdByRole              String
+  createdAt                  DateTime @default(now())
+  updatedAt                  DateTime @updatedAt
+  completedAt                DateTime?
+  blockedAt                  DateTime?
+
+  @@index([schoolId])
+  @@index([markingInvocationRequestId])
+  @@index([markingRunId])
+  @@index([deliverySessionId])
+  @@index([paperId])
+  @@index([paperVersionId])
+  @@index([reviewStatus])
+  @@index([createdAt])
+  @@index([updatedAt])
+}
+
+model ResultFinalizationDecisionRecord {
+  resultFinalizationDecisionId String   @id @default(uuid())
+  schoolId                     String
+  resultFinalizationReviewId   String
+  markingInvocationRequestId   String?
+  markingRunId                 String?
+  decisionStatus               String   @default("approved_for_finalization")
+  decisionType                 String   @default("teacher_finalization")
+  decidedByActorId             String
+  decidedByRole                String
+  safeDecisionSummary          String   @db.Text
+  reasonCodesJson              Json?
+  affectedResultVersionRefsJson Json?
+  createdAt                    DateTime @default(now())
+  updatedAt                    DateTime @updatedAt
+  voidedAt                     DateTime?
+
+  @@index([schoolId])
+  @@index([resultFinalizationReviewId])
+  @@index([markingInvocationRequestId])
+  @@index([markingRunId])
+  @@index([decisionStatus])
+  @@index([decidedByActorId])
+  @@index([createdAt])
+  @@index([updatedAt])
+}
+
+model ResultReleaseReadinessRecord {
+  resultReleaseReadinessId   String   @id @default(uuid())
+  schoolId                   String
+  resultFinalizationDecisionId String
+  resultFinalizationReviewId String?
+  markingInvocationRequestId String?
+  releaseReadinessStatus     String   @default("not_ready")
+  releaseAudienceType        String   @default("internal_school")
+  safeReadinessSummary       String   @db.Text
+  blockingReasonCodesJson    Json?
+  allowedChannelRefsJson     Json?
+  createdByActorId           String
+  createdByRole              String
+  createdAt                  DateTime @default(now())
+  updatedAt                  DateTime @updatedAt
+  expiresAt                  DateTime?
+
+  @@index([schoolId])
+  @@index([resultFinalizationDecisionId])
+  @@index([resultFinalizationReviewId])
+  @@index([markingInvocationRequestId])
+  @@index([releaseReadinessStatus])
+  @@index([releaseAudienceType])
+  @@index([createdAt])
+  @@index([expiresAt])
+}
+
+model ResultReleaseBoundaryRecord {
+  resultReleaseBoundaryId  String   @id @default(uuid())
+  schoolId                 String
+  resultReleaseReadinessId String
+  resultFinalizationDecisionId String?
+  audienceType             String   @default("student")
+  boundaryStatus           String   @default("draft")
+  allowedFieldsJson        Json?
+  blockedFieldsJson        Json?
+  redactionRulesJson       Json?
+  safeBoundarySummary      String   @db.Text
+  createdByActorId         String
+  createdByRole            String
+  createdAt                DateTime @default(now())
+  updatedAt                DateTime @updatedAt
+  voidedAt                 DateTime?
+
+  @@index([schoolId])
+  @@index([resultReleaseReadinessId])
+  @@index([resultFinalizationDecisionId])
+  @@index([audienceType])
+  @@index([boundaryStatus])
+  @@index([createdAt])
+  @@index([updatedAt])
+}
+
+model ResultRegradeRequestRecord {
+  resultRegradeRequestId String   @id @default(uuid())
+  schoolId               String
+  resultFinalizationDecisionId String?
+  markingResultVersionId String
+  markingRunId           String?
+  studentRef             String
+  requesterActorId       String
+  requesterRole          String
+  requestStatus          String   @default("submitted")
+  requestType            String   @default("student_challenge_escalation")
+  safeRequestSummary     String   @db.Text
+  reasonCodesJson        Json?
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+  cancelledAt            DateTime?
+  resolvedAt             DateTime?
+
+  @@index([schoolId])
+  @@index([resultFinalizationDecisionId])
+  @@index([markingResultVersionId])
+  @@index([markingRunId])
+  @@index([studentRef])
+  @@index([requesterActorId])
+  @@index([requestStatus])
+  @@index([requestType])
+  @@index([createdAt])
+  @@index([updatedAt])
+}
+
+model ResultRegradeIntakeRecord {
+  resultRegradeIntakeId     String   @id @default(uuid())
+  schoolId                  String
+  resultRegradeRequestId    String
+  intakeStatus              String   @default("received")
+  assignedReviewerActorId   String?
+  assignedReviewerRole      String?
+  safeIntakeSummary         String   @db.Text
+  triageReasonCodesJson     Json?
+  createdAt                 DateTime @default(now())
+  updatedAt                 DateTime @updatedAt
+  completedAt               DateTime?
+  blockedAt                 DateTime?
+
+  @@index([schoolId])
+  @@index([resultRegradeRequestId])
+  @@index([intakeStatus])
+  @@index([assignedReviewerActorId])
+  @@index([createdAt])
+  @@index([updatedAt])
+}
+
+model ResultGovernanceAuditRecord {
+  resultGovernanceAuditId  String   @id @default(uuid())
+  schoolId                 String
+  resultFinalizationReviewId String?
+  resultFinalizationDecisionId String?
+  resultReleaseReadinessId String?
+  resultReleaseBoundaryId  String?
+  resultRegradeRequestId   String?
+  actorId                  String
+  actorRole                String
+  eventType                String
+  decision                 String
+  safeSummary              String   @db.Text
+  reasonCodesJson          Json?
+  metadataJson             Json?
+  requestId                String?
+  correlationId            String?
+  createdAt                DateTime @default(now())
+
+  @@index([schoolId])
+  @@index([resultFinalizationReviewId])
+  @@index([resultFinalizationDecisionId])
+  @@index([resultReleaseReadinessId])
+  @@index([resultReleaseBoundaryId])
+  @@index([resultRegradeRequestId])
+  @@index([actorId])
+  @@index([eventType])
+  @@index([createdAt])
+  @@index([requestId])
+  @@index([correlationId])
+}
+
+model ResultGovernanceIdempotencyRecord {
+  resultGovernanceIdempotencyId String   @id @default(uuid())
+  schoolId                       String
+  operation                      String
+  idempotencyKey                 String
+  requestHash                    String
+  status                         String   @default("in_progress")
+  resourceType                   String?
+  resourceId                     String?
+  safeResultSummary              String?
+  createdAt                      DateTime @default(now())
+  updatedAt                      DateTime @updatedAt
+  expiresAt                      DateTime?
+
+  @@unique([schoolId, operation, idempotencyKey])
+  @@index([schoolId])
+  @@index([operation])
+  @@index([idempotencyKey])
+  @@index([status])
+  @@index([expiresAt])
+  @@index([createdAt])
+}

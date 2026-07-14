@@ -375,6 +375,14 @@ app.use('/api/question-bank/exam-papers', schoolAuthMiddleware, requireVerifiedS
 import examDeliveryRoutes from './routes/examDelivery';
 app.use('/api/question-bank/exam-delivery', schoolAuthMiddleware, requireVerifiedSchoolContext, examDeliveryRoutes);
 
+// ─── Marking Invocation Routes (Package 8) ──────
+import markingInvocationRoutes from './routes/markingInvocation';
+app.use('/api/question-bank/marking-invocation', schoolAuthMiddleware, requireVerifiedSchoolContext, markingInvocationRoutes);
+
+// ─── Result Governance Routes (Package 9) ────
+import resultGovernanceRoutes from './routes/resultGovernance';
+app.use('/api/question-bank/result-governance', schoolAuthMiddleware, requireVerifiedSchoolContext, resultGovernanceRoutes);
+
 // ─── Phase 2: Learning Mode Runtime Routes ──────────────
 app.use('/api', schoolAuthMiddleware, requireVerifiedSchoolContext, learningModeRoutes);
 app.use('/api/copilot', schoolAuthMiddleware, requireVerifiedSchoolContext, learningProfileRoutes);
