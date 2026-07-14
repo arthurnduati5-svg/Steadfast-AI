@@ -391,6 +391,10 @@ app.use('/api/question-bank/result-learning-evidence', schoolAuthMiddleware, req
 import resultReleaseRoutes from './routes/resultRelease';
 app.use('/api/question-bank/result-release', schoolAuthMiddleware, requireVerifiedSchoolContext, resultReleaseRoutes);
 
+// ─── Result Delivery Routes (Package 12) ──
+import resultDeliveryRoutes from './routes/resultDelivery';
+app.use('/api/question-bank/result-delivery', schoolAuthMiddleware, requireVerifiedSchoolContext, resultDeliveryRoutes);
+
 // ─── Phase 2: Learning Mode Runtime Routes ──────────────
 app.use('/api', schoolAuthMiddleware, requireVerifiedSchoolContext, learningModeRoutes);
 app.use('/api/copilot', schoolAuthMiddleware, requireVerifiedSchoolContext, learningProfileRoutes);

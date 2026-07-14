@@ -6162,3 +6162,313 @@ model ResultReleaseIdempotencyRecord {
   @@index([expiresAt])
   @@index([createdAt])
 }
+
+// ── Package 12: Controlled Result Delivery Adapter, Mock Channel Outbox, Recipient Boundary Resolution, Dry-Run Delivery Receipts ──
+
+model ResultDeliveryJobRecord {
+  resultDeliveryJobId              String   @id @default(uuid())
+  schoolId                         String
+  resultReleaseDeliveryIntentId    String
+  resultReleasePacketId            String
+  resultReleaseApprovalId          String
+  resultAudienceProjectionId       String
+  studentRef                       String
+  audienceType                     String   @default("student")
+  deliveryChannel                  String   @default("student_portal_mock")
+  jobStatus                        String   @default("draft")
+  jobMode                          String   @default("dry_run_only")
+  safeJobSummary                   String   @db.Text
+  sourceRefsJson                   Json?
+  allowedFieldsJson                Json?
+  blockedFieldsJson                Json?
+  createdByActorId                 String
+  createdByRole                    String
+  createdAt                        DateTime @default(now())
+  updatedAt                        DateTime @updatedAt
+  validatedAt                      DateTime?
+  queuedAt                         DateTime?
+  completedAt                      DateTime?
+  blockedAt                        DateTime?
+  cancelledAt                      DateTime?
+  voidedAt                         DateTime?
+
+  @@index([schoolId])
+  @@index([resultReleaseDeliveryIntentId])
+  @@index([resultReleasePacketId])
+  @@index([resultReleaseApprovalId])
+  @@index([resultAudienceProjectionId])
+  @@index([studentRef])
+  @@index([audienceType])
+  @@index([deliveryChannel])
+  @@index([jobStatus])
+  @@index([jobMode])
+  @@index([createdAt])
+  @@index([updatedAt])
+}
+
+model ResultDeliveryRecipientRecord {
+  resultDeliveryRecipientId   String   @id @default(uuid())
+  schoolId                    String
+  resultDeliveryJobId         String
+  studentRef                  String
+  audienceType                String   @default("student")
+  recipientScope              String   @default("student_self")
+  recipientStatus             String   @default("draft")
+  recipientRefHash            String
+  recipientDisplayLabel       String
+  relationshipToStudent       String   @default("self")
+  resolutionSource            String   @default("system")
+  safeRecipientSummary        String   @db.Text
+  blockedReasonCodesJson      Json?
+  createdByActorId            String
+  createdByRole               String
+  createdAt                   DateTime @default(now())
+  updatedAt                   DateTime @updatedAt
+  verifiedAt                  DateTime?
+  blockedAt                   DateTime?
+  voidedAt                    DateTime?
+
+  @@index([schoolId])
+  @@index([resultDeliveryJobId])
+  @@index([studentRef])
+  @@index([audienceType])
+  @@index([recipientScope])
+  @@index([recipientStatus])
+  @@index([createdAt])
+  @@index([updatedAt])
+}
+
+model ResultDeliveryChannelEnvelopeRecord {
+  resultDeliveryChannelEnvelopeId String   @id @default(uuid())
+  schoolId                         String
+  resultDeliveryJobId              String
+  resultDeliveryRecipientId        String
+  resultAudienceProjectionId       String
+  envelopeStatus                   String   @default("draft")
+  audienceType                     String   @default("student")
+  deliveryChannel                  String   @default("student_portal_mock")
+  safeSubject                      String
+  safePreview                      String
+  safeBodyJson                     Json?
+  allowedFieldNamesJson            Json?
+  blockedFieldNamesJson            Json?
+  redactionRulesJson               Json?
+  sourceRefsJson                   Json?
+  createdByActorId                 String
+  createdByRole                    String
+  createdAt                        DateTime @default(now())
+  updatedAt                        DateTime @updatedAt
+  sealedAt                         DateTime?
+  blockedAt                        DateTime?
+  voidedAt                         DateTime?
+
+  @@index([schoolId])
+  @@index([resultDeliveryJobId])
+  @@index([resultDeliveryRecipientId])
+  @@index([resultAudienceProjectionId])
+  @@index([audienceType])
+  @@index([deliveryChannel])
+  @@index([envelopeStatus])
+  @@index([createdAt])
+  @@index([updatedAt])
+}
+
+model ResultDeliverySuppressionRecord {
+  resultDeliverySuppressionId     String   @id @default(uuid())
+  schoolId                        String
+  resultDeliveryJobId             String
+  resultDeliveryRecipientId       String?
+  resultDeliveryChannelEnvelopeId String?
+  suppressionStatus               String   @default("active")
+  suppressionType                 String   @default("privacy_boundary")
+  suppressionReasonCode           String
+  safeSuppressionSummary          String   @db.Text
+  sourceRefsJson                  Json?
+  createdByActorId                String
+  createdByRole                   String
+  createdAt                       DateTime @default(now())
+  updatedAt                       DateTime @updatedAt
+  clearedAt                       DateTime?
+  voidedAt                        DateTime?
+
+  @@index([schoolId])
+  @@index([resultDeliveryJobId])
+  @@index([resultDeliveryRecipientId])
+  @@index([resultDeliveryChannelEnvelopeId])
+  @@index([suppressionStatus])
+  @@index([suppressionType])
+  @@index([createdAt])
+  @@index([updatedAt])
+}
+
+model ResultDeliveryAttemptRecord {
+  resultDeliveryAttemptId        String   @id @default(uuid())
+  schoolId                       String
+  resultDeliveryJobId            String
+  resultDeliveryRecipientId      String
+  resultDeliveryChannelEnvelopeId String
+  deliveryChannel                String   @default("student_portal_mock")
+  attemptStatus                  String   @default("created")
+  attemptMode                    String   @default("dry_run_only")
+  mockProviderName               String
+  safeAttemptSummary             String   @db.Text
+  attemptNumber                  Int      @default(1)
+  blockedReasonCodesJson         Json?
+  createdByActorId               String
+  createdByRole                  String
+  createdAt                      DateTime @default(now())
+  updatedAt                      DateTime @updatedAt
+  startedAt                      DateTime?
+  completedAt                    DateTime?
+  failedAt                       DateTime?
+  blockedAt                      DateTime?
+  voidedAt                       DateTime?
+
+  @@index([schoolId])
+  @@index([resultDeliveryJobId])
+  @@index([resultDeliveryRecipientId])
+  @@index([resultDeliveryChannelEnvelopeId])
+  @@index([deliveryChannel])
+  @@index([attemptStatus])
+  @@index([attemptMode])
+  @@index([createdAt])
+  @@index([updatedAt])
+}
+
+model ResultDeliveryReceiptRecord {
+  resultDeliveryReceiptId        String   @id @default(uuid())
+  schoolId                       String
+  resultDeliveryAttemptId        String
+  resultDeliveryJobId            String
+  resultDeliveryRecipientId      String
+  resultDeliveryChannelEnvelopeId String
+  receiptStatus                  String   @default("created")
+  receiptType                    String   @default("dry_run_preview")
+  safeReceiptSummary             String   @db.Text
+  providerSimulationJson         Json?
+  blockedReasonCodesJson         Json?
+  createdByActorId               String
+  createdByRole                  String
+  createdAt                      DateTime @default(now())
+  updatedAt                      DateTime @updatedAt
+  voidedAt                       DateTime?
+
+  @@index([schoolId])
+  @@index([resultDeliveryAttemptId])
+  @@index([resultDeliveryJobId])
+  @@index([resultDeliveryRecipientId])
+  @@index([resultDeliveryChannelEnvelopeId])
+  @@index([receiptStatus])
+  @@index([receiptType])
+  @@index([createdAt])
+  @@index([updatedAt])
+}
+
+model ResultDeliveryRetryPlanRecord {
+  resultDeliveryRetryPlanId String   @id @default(uuid())
+  schoolId                  String
+  resultDeliveryJobId       String
+  resultDeliveryAttemptId   String
+  retryStatus               String   @default("draft")
+  retryPolicy               String   @default("linear_backoff")
+  nextMockRetryAt           DateTime?
+  maxMockAttempts           Int      @default(3)
+  attemptsUsed              Int      @default(0)
+  safeRetrySummary          String   @db.Text
+  blockedReasonCodesJson    Json?
+  createdByActorId          String
+  createdByRole             String
+  createdAt                 DateTime @default(now())
+  updatedAt                 DateTime @updatedAt
+  cancelledAt               DateTime?
+  voidedAt                  DateTime?
+
+  @@index([schoolId])
+  @@index([resultDeliveryJobId])
+  @@index([resultDeliveryAttemptId])
+  @@index([retryStatus])
+  @@index([createdAt])
+  @@index([updatedAt])
+}
+
+model ResultDeliveryMockProviderRecord {
+  resultDeliveryMockProviderId String   @id @default(uuid())
+  schoolId                     String
+  providerName                 String
+  providerStatus               String   @default("active")
+  supportedChannelsJson        Json?
+  simulationMode               String   @default("always_success")
+  safeProviderSummary          String   @db.Text
+  createdByActorId             String
+  createdByRole                String
+  createdAt                    DateTime @default(now())
+  updatedAt                    DateTime @updatedAt
+  disabledAt                   DateTime?
+  voidedAt                     DateTime?
+
+  @@index([schoolId])
+  @@index([providerName])
+  @@index([providerStatus])
+  @@index([simulationMode])
+  @@index([createdAt])
+  @@index([updatedAt])
+}
+
+model ResultDeliveryAuditRecord {
+  resultDeliveryAuditId          String   @id @default(uuid())
+  schoolId                       String
+  resultDeliveryJobId            String?
+  resultDeliveryRecipientId      String?
+  resultDeliveryChannelEnvelopeId String?
+  resultDeliveryAttemptId        String?
+  resultDeliveryReceiptId        String?
+  resultDeliverySuppressionId    String?
+  resultDeliveryRetryPlanId      String?
+  actorId                        String
+  actorRole                      String
+  eventType                      String
+  decision                       String
+  safeSummary                    String   @db.Text
+  reasonCodesJson                Json?
+  metadataJson                   Json?
+  requestId                      String?
+  correlationId                  String?
+  createdAt                      DateTime @default(now())
+
+  @@index([schoolId])
+  @@index([resultDeliveryJobId])
+  @@index([resultDeliveryRecipientId])
+  @@index([resultDeliveryChannelEnvelopeId])
+  @@index([resultDeliveryAttemptId])
+  @@index([resultDeliveryReceiptId])
+  @@index([resultDeliverySuppressionId])
+  @@index([resultDeliveryRetryPlanId])
+  @@index([actorId])
+  @@index([eventType])
+  @@index([createdAt])
+  @@index([requestId])
+  @@index([correlationId])
+}
+
+model ResultDeliveryIdempotencyRecord {
+  resultDeliveryIdempotencyId String   @id @default(uuid())
+  schoolId                    String
+  operation                   String
+  idempotencyKey              String
+  requestHash                 String
+  status                      String   @default("in_progress")
+  resourceType                String?
+  resourceId                  String?
+  safeResultSummary           String?
+  createdAt                   DateTime @default(now())
+  updatedAt                   DateTime @updatedAt
+  expiresAt                   DateTime?
+
+  @@unique([schoolId, operation, idempotencyKey])
+  @@index([schoolId])
+  @@index([operation])
+  @@index([idempotencyKey])
+  @@index([status])
+  @@index([expiresAt])
+  @@index([createdAt])
+}
