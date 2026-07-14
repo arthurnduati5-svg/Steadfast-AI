@@ -10,7 +10,7 @@ Package 10 created `ResultLearningEvidenceBridgeRecord` for bridging finalized r
 
 - Package 10 commit: `2865831 feat(qbank): add package 10 mastery evidence bridge`
 - Package 10 closure: `44eb2a9 docs(qbank): finalize package 10 accountability with real verification results`
-- Current HEAD: `7c1947f docs(qbank): update package 11 readiness status after commit`
+- Current HEAD: `d3e6510 feat(task-041): implement Package 11 parent-safe result release readiness`
 - Package 11 builds directly on Package 10: release packets can optionally carry `resultLearningEvidenceBridgeId` to link evidence bridge provenance.
 
 ## 3. Package 9 Release Boundary Reuse Proof
@@ -223,17 +223,19 @@ All delivery channels in DeliveryIntentRecord are suffixed `_future` to encode t
 
 ## 19. Tests Run
 
-No Package 11 tests exist yet. Test files need to be created in `backend/src/domains/assessment/result-release/tests/`. Planned test files (9):
+9 Test files exist with 177 tests in `backend/src/domains/assessment/result-release/tests/`:
 
-1. `package-11-result-release-contracts.test.ts` – Contract type definitions
-2. `package-11-release-packet-lifecycle.test.ts` – Packet lifecycle transitions
-3. `package-11-boundary-enforcement.test.ts` – Boundary allow/block field enforcement
-4. `package-11-release-approval.test.ts` – Approval lifecycle and role gating
-5. `package-11-audience-projection.test.ts` – Projection generation and versioning
-6. `package-11-report-snapshot.test.ts` – Report snapshot lifecycle
-7. `package-11-parent-student-summaries.test.ts` – Safe summary lifecycle
-8. `package-11-delivery-intent-deferral.test.ts` – Delivery intent lifecycle
-9. `package-11-projection-safety-routes.test.ts` – Projection safety route contracts
+1. `package-11-result-release-contracts.test.ts` – 29 contract type definition tests
+2. `package-11-release-packet-lifecycle.test.ts` – 14 packet lifecycle transition tests
+3. `package-11-boundary-enforcement.test.ts` – 19 boundary enforcement tests
+4. `package-11-approval-workflow.test.ts` – 15 approval lifecycle and role gating tests
+5. `package-11-audience-projections.test.ts` – 10 projection generation and versioning tests
+6. `package-11-report-snapshots.test.ts` – 16 report snapshot lifecycle tests
+7. `package-11-delivery-intent-deferral.test.ts` – 15 delivery intent deferral tests
+8. `package-11-projection-safety-routes.test.ts` – 24 projection safety route contract tests
+9. `package-11-no-duplication.test.ts` – 35 no-duplication tests
+
+All 177 tests PASSED.
 
 ## 20. Known Deferred Items
 
@@ -247,4 +249,4 @@ No Package 11 tests exist yet. Test files need to be created in `backend/src/dom
 
 ## 21. Whether Package 12 is Ready to Prompt
 
-Yes. Package 11 completes the backend release pipeline from finalized result to governed audience projections, safe summaries, report snapshots, and deferred delivery intents. The next package can implement actual delivery (notifications, portal publishing, PDF) or integrate with AI narrative generation.
+Yes. Package 11 is acceptance-sealed with all verification gates passing. Package 12 is ready to prompt for implementing actual delivery (notifications, portal publishing, PDF) or integrating with AI narrative generation.
