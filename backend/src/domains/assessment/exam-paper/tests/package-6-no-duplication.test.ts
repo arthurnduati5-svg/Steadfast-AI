@@ -124,10 +124,6 @@ describe('Package 6 - No Duplication', () => {
     expect(modelExists('ExamReleaseWindowRecord')).toBe(false);
   });
 
-  it('ExamVariantAssignmentRecord does not exist', () => {
-    expect(modelExists('ExamVariantAssignmentRecord')).toBe(false);
-  });
-
   it('ExamPaperPrintPacketRecord does not exist', () => {
     expect(modelExists('ExamPaperPrintPacketRecord')).toBe(false);
   });

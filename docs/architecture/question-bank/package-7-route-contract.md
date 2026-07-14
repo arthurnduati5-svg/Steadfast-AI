@@ -95,8 +95,10 @@ AUTH_REQUIRED, SCHOOL_CONTEXT_REQUIRED, VALIDATION_FAILED, POLICY_BLOCKED, IDEMP
 ## Forbidden Fields in Student Projection
 answerKeySafeRef, answerKeyText, correctAnswerSummary, rubricInternal, rubricText, markingNotesTeacherOnly, teacherOnlyNotes, selectionReasonInternal, variantAlgorithmInternals, sourceDraftScoringInternals, hiddenReasoning, chainOfThought, rawQuestionMetadata, deliveryActivationToken, markingResult, score, finalGrade, parentReleaseStatus, masteryMutation
 
+## Mounting
+Mounted in `backend/src/index.ts` at `/api/question-bank/exam-delivery` with `schoolAuthMiddleware` and `requireVerifiedSchoolContext` (same pattern as Packages 4-6).
+
 ## Deferred Behavior
-- Route mounting in backend index.ts (deferred to integration step).
 - No marking run creation.
 - No score calculation.
 - No finalization.

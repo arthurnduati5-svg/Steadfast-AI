@@ -4,6 +4,7 @@ import * as path from 'path';
 
 describe('Package 7 - Route Contracts', () => {
   const routePath = path.resolve(__dirname, '../../../../routes/examDelivery.ts');
+  const indexPath = path.resolve(__dirname, '../../../../index.ts');
 
   it('route file exists', () => {
     expect(fs.existsSync(routePath)).toBe(true);
@@ -82,5 +83,22 @@ describe('Package 7 - Route Contracts', () => {
   it('heartbeat does not require idempotency key', () => {
     const content = fs.readFileSync(routePath, 'utf-8');
     expect(content).toContain('/timing/heartbeat');
+  });
+
+  it('route is mounted in index.ts under /api/question-bank/exam-delivery', () => {
+    const content = fs.readFileSync(indexPath, 'utf-8');
+    expect(content).toContain("from './routes/examDelivery'");
+    expect(content).toContain('/api/question-bank/exam-delivery');
+    expect(content).toContain('examDeliveryRoutes');
+  });
+
+  it('exam-delivery mount follows same auth pattern as exam-paper mount', () => {
+    const content = fs.readFileSync(indexPath, 'utf-8');
+    const examPaperLine = content.split('\n').find(l => l.includes('/api/question-bank/exam-papers'));
+    const examDeliveryLine = content.split('\n').find(l => l.includes('/api/question-bank/exam-delivery'));
+    expect(examPaperLine).toBeTruthy();
+    expect(examDeliveryLine).toBeTruthy();
+    expect(examDeliveryLine).toContain('schoolAuthMiddleware');
+    expect(examDeliveryLine).toContain('requireVerifiedSchoolContext');
   });
 });

@@ -371,6 +371,10 @@ app.use('/api/question-bank/marking', schoolAuthMiddleware, requireVerifiedSchoo
 import examPaperRoutes from './routes/examPaper';
 app.use('/api/question-bank/exam-papers', schoolAuthMiddleware, requireVerifiedSchoolContext, examPaperRoutes);
 
+// ─── Exam Delivery Routes (Package 7) ─────────────
+import examDeliveryRoutes from './routes/examDelivery';
+app.use('/api/question-bank/exam-delivery', schoolAuthMiddleware, requireVerifiedSchoolContext, examDeliveryRoutes);
+
 // ─── Phase 2: Learning Mode Runtime Routes ──────────────
 app.use('/api', schoolAuthMiddleware, requireVerifiedSchoolContext, learningModeRoutes);
 app.use('/api/copilot', schoolAuthMiddleware, requireVerifiedSchoolContext, learningProfileRoutes);
