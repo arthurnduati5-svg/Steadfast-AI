@@ -7,7 +7,7 @@ main
 70f8a73 docs(qbank): finalize package 5 accountability with real verification results
 
 ## HEAD After Package 6
-[To be recorded after commit]
+3a39c4a feat(qbank): add package 6 exam paper assembly
 
 ## Dirty Workspace Before
 - Many untracked files (teacher-insight, tutor-turn, etc.) — unrelated to QBank
@@ -139,13 +139,17 @@ Clean — no `expect(true).toBe(true)` or `.skip` in Package 6 tests.
 
 None. Package 6 is complete.
 
+## Closure Repair Commit
+
+No separate closure repair commit was needed. The Package 6 initial commit (3a39c4a) was created after all verification gates passed and the accountability document was updated.
+
 ## Package 7 Readiness
 
-Package 7 is ready to prompt only after Package 6 is committed cleanly and all verification gates pass.
+Package 7 is ready to prompt.
 
 ## Commit Hash and Message
 
-[To be recorded after commit]
+3a39c4a feat(qbank): add package 6 exam paper assembly
 
 ## Final Status
 
