@@ -257,3 +257,230 @@ export class InMemoryQuestionGovernanceRepository implements QuestionGovernanceR
     this.safetyReviews.clear();
   }
 }
+
+import type { QuestionApprovalRequest, QuestionApprovalRecord, ApprovalRequestStatus, ApprovalDecision } from '../contracts/questionApprovalContracts';
+import type { QuestionApprovalRequestRepository, QuestionApprovalRecordRepository } from '../contracts/questionApprovalContracts';
+import type { QuestionIngestionBatch, QuestionIngestionCandidate, IngestionBatchStatus, IngestionCandidateStatus } from '../contracts/questionIngestionContracts';
+import type { QuestionIngestionBatchRepository, QuestionIngestionCandidateRepository } from '../contracts/questionIngestionContracts';
+import type { QuestionDuplicateCandidate, QuestionExposureHold, DuplicateCandidateStatus } from '../contracts/questionDuplicateExposureContracts';
+import type { QuestionDuplicateCandidateRepository, QuestionExposureHoldRepository } from '../contracts/questionDuplicateExposureContracts';
+
+export class InMemoryQuestionApprovalRequestRepository implements QuestionApprovalRequestRepository {
+  private requests = new Map<string, QuestionApprovalRequest>();
+
+  async create(request: QuestionApprovalRequest): Promise<QuestionApprovalRequest> {
+    this.requests.set(request.approvalRequestId, { ...request });
+    return request;
+  }
+
+  async findById(approvalRequestId: string): Promise<QuestionApprovalRequest | null> {
+    return this.requests.get(approvalRequestId) ?? null;
+  }
+
+  async findBySchoolId(schoolId: string): Promise<QuestionApprovalRequest[]> {
+    return Array.from(this.requests.values()).filter(r => r.schoolId === schoolId);
+  }
+
+  async findByQuestionVersionId(questionVersionId: string): Promise<QuestionApprovalRequest[]> {
+    return Array.from(this.requests.values()).filter(r => r.questionVersionId === questionVersionId);
+  }
+
+  async findPendingBySchoolId(schoolId: string): Promise<QuestionApprovalRequest[]> {
+    return Array.from(this.requests.values()).filter(r => r.schoolId === schoolId && r.status === 'pending');
+  }
+
+  async updateStatus(approvalRequestId: string, status: ApprovalRequestStatus, closedAt: string | null): Promise<QuestionApprovalRequest | null> {
+    const req = this.requests.get(approvalRequestId);
+    if (!req) return null;
+    req.status = status;
+    req.closedAt = closedAt;
+    return { ...req };
+  }
+
+  reset(): void {
+    this.requests.clear();
+  }
+}
+
+export class InMemoryQuestionApprovalRecordRepository implements QuestionApprovalRecordRepository {
+  private records = new Map<string, QuestionApprovalRecord>();
+
+  async create(record: QuestionApprovalRecord): Promise<QuestionApprovalRecord> {
+    this.records.set(record.approvalRecordId, { ...record });
+    return record;
+  }
+
+  async findByApprovalRequestId(approvalRequestId: string): Promise<QuestionApprovalRecord[]> {
+    return Array.from(this.records.values()).filter(r => r.approvalRequestId === approvalRequestId);
+  }
+
+  async findByQuestionVersionId(questionVersionId: string): Promise<QuestionApprovalRecord[]> {
+    return Array.from(this.records.values()).filter(r => r.questionVersionId === questionVersionId);
+  }
+
+  reset(): void {
+    this.records.clear();
+  }
+}
+
+export class InMemoryQuestionIngestionBatchRepository implements QuestionIngestionBatchRepository {
+  private batches = new Map<string, QuestionIngestionBatch>();
+
+  async create(batch: QuestionIngestionBatch): Promise<QuestionIngestionBatch> {
+    this.batches.set(batch.ingestionBatchId, { ...batch });
+    return batch;
+  }
+
+  async findById(ingestionBatchId: string): Promise<QuestionIngestionBatch | null> {
+    return this.batches.get(ingestionBatchId) ?? null;
+  }
+
+  async findBySchoolId(schoolId: string): Promise<QuestionIngestionBatch[]> {
+    return Array.from(this.batches.values()).filter(b => b.schoolId === schoolId);
+  }
+
+  async updateStatus(ingestionBatchId: string, status: IngestionBatchStatus, completedAt: string | null): Promise<QuestionIngestionBatch | null> {
+    const batch = this.batches.get(ingestionBatchId);
+    if (!batch) return null;
+    batch.status = status;
+    batch.completedAt = completedAt;
+    return { ...batch };
+  }
+
+  async updateCounts(ingestionBatchId: string, candidateCount: number, acceptedCount: number, rejectedCount: number, warningCount: number): Promise<QuestionIngestionBatch | null> {
+    const batch = this.batches.get(ingestionBatchId);
+    if (!batch) return null;
+    batch.candidateCount = candidateCount;
+    batch.acceptedCount = acceptedCount;
+    batch.rejectedCount = rejectedCount;
+    batch.warningCount = warningCount;
+    return { ...batch };
+  }
+
+  reset(): void {
+    this.batches.clear();
+  }
+}
+
+export class InMemoryQuestionIngestionCandidateRepository implements QuestionIngestionCandidateRepository {
+  private candidates = new Map<string, QuestionIngestionCandidate>();
+
+  async create(candidate: QuestionIngestionCandidate): Promise<QuestionIngestionCandidate> {
+    this.candidates.set(candidate.candidateId, { ...candidate });
+    return candidate;
+  }
+
+  async findById(candidateId: string): Promise<QuestionIngestionCandidate | null> {
+    return this.candidates.get(candidateId) ?? null;
+  }
+
+  async findByBatchId(ingestionBatchId: string): Promise<QuestionIngestionCandidate[]> {
+    return Array.from(this.candidates.values()).filter(c => c.ingestionBatchId === ingestionBatchId);
+  }
+
+  async findBySchoolId(schoolId: string): Promise<QuestionIngestionCandidate[]> {
+    return Array.from(this.candidates.values()).filter(c => c.schoolId === schoolId);
+  }
+
+  async findByContentHash(schoolId: string, contentHash: string): Promise<QuestionIngestionCandidate[]> {
+    return Array.from(this.candidates.values()).filter(c => c.schoolId === schoolId && c.contentHash === contentHash);
+  }
+
+  async updateStatus(candidateId: string, status: IngestionCandidateStatus): Promise<QuestionIngestionCandidate | null> {
+    const c = this.candidates.get(candidateId);
+    if (!c) return null;
+    c.status = status;
+    return { ...c };
+  }
+
+  async updateAcceptedRef(candidateId: string, acceptedQuestionId: string, acceptedQuestionVersionId: string): Promise<QuestionIngestionCandidate | null> {
+    const c = this.candidates.get(candidateId);
+    if (!c) return null;
+    c.acceptedQuestionId = acceptedQuestionId;
+    c.acceptedQuestionVersionId = acceptedQuestionVersionId;
+    c.status = 'accepted';
+    return { ...c };
+  }
+
+  async rejectCandidate(candidateId: string, rejectedReasonCode: string): Promise<QuestionIngestionCandidate | null> {
+    const c = this.candidates.get(candidateId);
+    if (!c) return null;
+    c.rejectedReasonCode = rejectedReasonCode;
+    c.status = 'rejected';
+    return { ...c };
+  }
+
+  reset(): void {
+    this.candidates.clear();
+  }
+}
+
+export class InMemoryQuestionDuplicateCandidateRepository implements QuestionDuplicateCandidateRepository {
+  private candidates = new Map<string, QuestionDuplicateCandidate>();
+
+  async create(candidate: QuestionDuplicateCandidate): Promise<QuestionDuplicateCandidate> {
+    this.candidates.set(candidate.duplicateCandidateId, { ...candidate });
+    return candidate;
+  }
+
+  async findById(duplicateCandidateId: string): Promise<QuestionDuplicateCandidate | null> {
+    return this.candidates.get(duplicateCandidateId) ?? null;
+  }
+
+  async findByContentHash(schoolId: string, contentHash: string): Promise<QuestionDuplicateCandidate[]> {
+    return Array.from(this.candidates.values()).filter(c => c.schoolId === schoolId && c.contentHash === contentHash);
+  }
+
+  async findBySourceQuestionVersionId(questionVersionId: string): Promise<QuestionDuplicateCandidate[]> {
+    return Array.from(this.candidates.values()).filter(c => c.sourceQuestionVersionId === questionVersionId);
+  }
+
+  async updateStatus(duplicateCandidateId: string, status: DuplicateCandidateStatus, resolvedAt: string | null, resolvedByActorId: string | null, resolutionReason: string | null): Promise<QuestionDuplicateCandidate | null> {
+    const c = this.candidates.get(duplicateCandidateId);
+    if (!c) return null;
+    c.status = status;
+    c.resolvedAt = resolvedAt;
+    c.resolvedByActorId = resolvedByActorId;
+    c.resolutionReason = resolutionReason;
+    return { ...c };
+  }
+
+  reset(): void {
+    this.candidates.clear();
+  }
+}
+
+export class InMemoryQuestionExposureHoldRepository implements QuestionExposureHoldRepository {
+  private holds = new Map<string, QuestionExposureHold>();
+
+  async create(hold: QuestionExposureHold): Promise<QuestionExposureHold> {
+    this.holds.set(hold.exposureHoldId, { ...hold });
+    return hold;
+  }
+
+  async findById(exposureHoldId: string): Promise<QuestionExposureHold | null> {
+    return this.holds.get(exposureHoldId) ?? null;
+  }
+
+  async findByQuestionId(questionId: string): Promise<QuestionExposureHold[]> {
+    return Array.from(this.holds.values()).filter(h => h.questionId === questionId);
+  }
+
+  async findActiveByQuestionId(questionId: string): Promise<QuestionExposureHold[]> {
+    return Array.from(this.holds.values()).filter(h => h.questionId === questionId && h.status === 'active');
+  }
+
+  async releaseHold(exposureHoldId: string, releasedByActorId: string, releaseReason: string, releasedAt: string): Promise<QuestionExposureHold | null> {
+    const hold = this.holds.get(exposureHoldId);
+    if (!hold) return null;
+    hold.status = 'released';
+    hold.releasedByActorId = releasedByActorId;
+    hold.releaseReason = releaseReason;
+    hold.releasedAt = releasedAt;
+    return { ...hold };
+  }
+
+  reset(): void {
+    this.holds.clear();
+  }
+}

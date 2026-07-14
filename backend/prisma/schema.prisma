@@ -518,6 +518,30 @@ model VoiceLedgerEntry {
   @@index([studentId, type, createdAt])
 }
 
+model TutorState {
+  id                String    @id @default(cuid())
+  studentId         String
+  schoolId          String    @default("")
+  sessionId         String?
+  activeSubject     String?
+  activeTopic       String?
+  activeSkillIds    String[]  @default([])
+  activeArtifactIds String[]  @default([])
+  activeVideoId     String?
+  learningMode      String    @default("learn")
+  primaryLanguage   String    @default("en")
+  supportLanguage   String?
+  stateQuality      String    @default("no_data_yet")
+  evidence          Json      @default("[]")
+  stateVersion      Int       @default(1)
+  lastResolvedAt    DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  @@index([schoolId, studentId])
+  @@index([sessionId])
+}
+
 model SafetyAlert {
   id                  String            @id @default(uuid())
   studentId           String
@@ -634,4 +658,3589 @@ enum SafetyAlertStatus {
 enum LatencyThresholdLevel {
   warn
   critical
+}
+// ── Universal Islamic Tutor: School Auth Bridge, Tutor Learner Identity Map v1 ──
+
+model TutorLearnerIdentityMap {
+  id                String   @id @default(uuid())
+  tutorLearnerId    String   @unique
+  externalUserId    String?
+  externalStudentId String
+  externalTeacherId String?
+  schoolId          String
+  classId           String?
+  grade             String?
+  role              String   @default("student")
+  status            String   @default("active")
+  reasonCodes       Json     @default("[]")
+  firstSeenAt       DateTime @default(now())
+  lastSeenAt        DateTime @updatedAt
+
+  @@unique([externalStudentId, schoolId])
+  @@index([schoolId])
+  @@index([externalUserId])
+  @@index([classId])
+}
+
+model TutorSession {
+  id                  String   @id @default(uuid())
+  tutorLearnerId      String
+  schoolId            String
+  externalStudentId   String
+  status              String   @default("active")
+  sessionPurpose      String   @default("copilot_default")
+  displayMode         String?
+  lastActiveSchoolPage String?
+  lastSeenAt          DateTime @default(now())
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  @@index([tutorLearnerId, status])
+  @@index([tutorLearnerId, schoolId, sessionPurpose, status])
+  @@index([schoolId])
+}
+
+// ── Durable Audit Persistence, Operational Event Storage, Privacy-Safe Review Trail v1 ──
+
+model DurableAuditEvent {
+  id                String   @id @default(cuid())
+  category          String
+  eventType         String
+  severity          String
+  visibility        String
+  actorType         String
+  actorIdHash       String?
+  studentIdHash     String?
+  schoolIdHash      String?
+  classIdHash       String?
+  requestId         String?
+  traceId           String?
+  route             String?
+  method            String?
+  serviceName       String?
+  operation         String?
+  safeSummary       String
+  safeMetadataJson  Json?
+  redactionJson     Json
+  occurredAt        DateTime
+  persistedAt       DateTime @default(now())
+
+  @@index([category, occurredAt])
+  @@index([visibility, occurredAt])
+  @@index([requestId])
+  @@index([traceId])
+  @@index([schoolIdHash, occurredAt])
+  @@index([studentIdHash, occurredAt])
+}
+
+// ── Teacher Intervention Backend Hardening v1 ──
+
+model TeacherInterventionAssignment {
+  id                    String   @id @default(cuid())
+  sourceRecommendationId String?
+  teacherId             String
+  studentId             String
+  schoolId              String
+  classId               String?
+  subject               String?
+  topic                 String?
+  skillId               String?
+  skillLabel            String?
+  artifactId            String?
+  questionId            String?
+  videoId               String?
+  watchSessionId        String?
+  analyticsEvidenceRefs Json     @default("[]")
+  actionType            String
+  priority              String   @default("medium")
+  status                String   @default("draft")
+  outcomeStatus         String   @default("not_started")
+  teacherReason         String
+  learnerFacingInstruction String?
+  teacherPrivateNote    String?
+  dueAt                 DateTime?
+  followUpRequired      Boolean  @default(false)
+  followUpStatus        String   @default("not_required")
+  evidenceSummary       String   @default("")
+  warnings              Json     @default("[]")
+  metadata              Json     @default("{}")
+
+  startedAt             DateTime?
+  completedAt           DateTime?
+  cancelledAt           DateTime?
+  closedAt              DateTime?
+
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  @@index([schoolId, studentId])
+  @@index([schoolId, teacherId])
+  @@index([schoolId, studentId, status])
+  @@index([schoolId, teacherId, priority, status])
+  @@index([schoolId, classId])
+  @@index([dueAt])
+}
+
+model TeacherInterventionAuditEvent {
+  id                  String   @id @default(cuid())
+  interventionId      String
+  actorId             String
+  actorRole           String   @default("teacher")
+  schoolId            String
+  classId             String?
+  studentId           String
+  eventType           String
+  eventTime           DateTime @default(now())
+  safeSummary         String
+  redactedPayloadJson String   @default("{}")
+  metadata            Json     @default("{}")
+  requestId           String?
+  createdAt           DateTime @default(now())
+
+  @@index([schoolId, studentId])
+  @@index([schoolId, interventionId])
+  @@index([schoolId, actorId])
+  @@index([eventType])
+  @@index([eventTime])
+}
+
+// ── Structured Artifact Pipeline v1 ──
+
+model LearningArtifact {
+  id                String   @id @default(cuid())
+  schoolId          String
+  ownerStudentId    String?
+  ownerTeacherId    String?
+  classId           String?
+  kind              String
+  accessScope       String
+  title             String
+  description       String?
+  originalFileName  String?
+  mimeType          String?
+  sizeBytes         Int?
+  source            String
+  parseStatus       String   @default("not_parsed")
+  structureQuality  String   @default("unavailable")
+  blockCount        Int      @default(0)
+  questionCount     Int      @default(0)
+  diagramCount      Int      @default(0)
+  answerKeyCount    Int      @default(0)
+  contentFingerprint String
+  warnings          Json     @default("[]")
+  parsedAt          DateTime?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  blocks            LearningArtifactBlock[]
+
+  @@index([schoolId])
+  @@index([schoolId, ownerStudentId])
+  @@index([schoolId, classId])
+  @@index([contentFingerprint])
+}
+
+model LearningArtifactBlock {
+  id                 String   @id @default(cuid())
+  artifactId          String
+  schoolId            String
+  kind                String
+  order               Int
+  text                String?  @db.Text
+  normalizedText      String?  @db.Text
+  summary             String?
+  pageNumber          Int?
+  sectionTitle        String?
+  headingPath         Json     @default("[]")
+  confidence          Float    @default(0)
+  provenance          Json
+  educationalTags     Json     @default("{}")
+  metadata            Json     @default("{}")
+  contentFingerprint  String
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  artifact            LearningArtifact @relation(fields: [artifactId], references: [id], onDelete: Cascade)
+
+  @@index([schoolId, artifactId])
+  @@index([kind])
+  @@index([contentFingerprint])
+}
+
+// ── Durable Learner Memory v1 ──
+
+model LearnerMemoryItem {
+  id               String   @id @default(cuid())
+  schoolId         String
+  studentId        String
+
+  kind             String
+  status           String   @default("active")
+  visibility       String   @default("system_only")
+
+  subject          String?
+  topic            String?
+  skillIds         Json     @default("[]")
+
+  label            String
+  summary          String
+  tutorUse         String
+
+  evidence         Json     @default("[]")
+  confidence       String   @default("low")
+  confidenceScore  Float    @default(0.3)
+
+  firstObservedAt  DateTime @default(now())
+  lastObservedAt   DateTime @default(now())
+  observationCount Int      @default(1)
+
+  source           String
+  sourceEventIds   Json     @default("[]")
+
+  artifactIds      Json     @default("[]")
+  artifactBlockIds Json     @default("[]")
+
+  expiresAt        DateTime?
+  softDeletedAt    DateTime?
+  deletedReason    String?
+
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@index([schoolId, studentId])
+  @@index([schoolId, studentId, kind])
+  @@index([schoolId, studentId, subject, topic])
+  @@index([status])
+  @@unique([schoolId, studentId, kind, subject, topic])
+}
+
+model LearningEvent {
+  id              String   @id @default(cuid())
+  schoolId        String
+  studentId       String
+  sessionId       String?
+
+  kind            String
+  subject         String?
+  topic           String?
+  skillIds        Json     @default("[]")
+
+  artifactId      String?
+  artifactBlockId String?
+
+  promptSummary   String?
+  responseSummary String?
+  outcomeSummary  String?
+
+  signals         Json     @default("[]")
+  source          String
+  privacyLevel    String   @default("medium")
+
+  createdAt       DateTime @default(now())
+
+  @@index([schoolId, studentId])
+  @@index([schoolId, studentId, sessionId])
+  @@index([schoolId, studentId, kind])
+  @@index([artifactId])
+}
+
+// ── Practice and Mastery Scaffolding v1 ──
+
+model PracticeAttempt {
+  id                   String   @id @default(cuid())
+  schoolId             String
+  studentId            String
+  sessionId            String?
+
+  kind                 String
+  status               String   @default("submitted")
+  outcome              String   @default("not_evaluated")
+
+  subject              String?
+  topic                String?
+  skillIds             Json     @default("[]")
+
+  promptSummary        String
+  learnerAnswerSummary String?
+  expectedAnswerSummary String?
+  feedbackSummary      String?
+
+  artifactId           String?
+  artifactBlockId      String?
+  sourceQuestionId     String?
+
+  hintsRequested       Int      @default(0)
+  attemptNumber        Int      @default(1)
+  timeSpentSeconds     Int?
+
+  confidence           Float    @default(0.3)
+
+  misconceptionSignals Json     @default("[]")
+  evidence             Json     @default("[]")
+
+  createdAt            DateTime @default(now())
+  evaluatedAt          DateTime?
+
+  @@index([schoolId, studentId])
+  @@index([schoolId, studentId, subject, topic])
+  @@index([artifactId])
+}
+
+model SkillMasterySnapshot {
+  id                  String   @id @default(cuid())
+  schoolId            String
+  studentId           String
+
+  subject             String
+  topic               String
+  skillId             String
+  skillLabel          String
+
+  level               String   @default("not_started")
+  status              String   @default("active")
+
+  confidenceScore     Float    @default(0)
+  evidenceCount       Int      @default(0)
+  attemptCount        Int      @default(0)
+  correctCount        Int      @default(0)
+  partialCount        Int      @default(0)
+  incorrectCount      Int      @default(0)
+  misconceptionCount  Int      @default(0)
+
+  lastAttemptAt       DateTime?
+  lastCorrectAt       DateTime?
+  lastIncorrectAt     DateTime?
+
+  nextReviewAt        DateTime?
+  reviewIntervalDays  Int?
+
+  evidence            Json     @default("[]")
+
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  @@unique([schoolId, studentId, subject, topic, skillId])
+  @@index([schoolId, studentId])
+  @@index([schoolId, studentId, subject, topic])
+  @@index([status])
+}
+
+model PracticeMisconceptionSignal {
+  id                 String   @id @default(cuid())
+  schoolId           String
+  studentId          String
+
+  subject            String?
+  topic              String?
+  skillIds           Json     @default("[]")
+
+  label              String
+  summary            String
+
+  evidenceAttemptIds Json     @default("[]")
+  evidenceMemoryIds  Json     @default("[]")
+
+  confidenceScore    Float    @default(0.3)
+  observationCount   Int      @default(1)
+
+  status             String   @default("active")
+
+  firstObservedAt    DateTime @default(now())
+  lastObservedAt     DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  @@index([schoolId, studentId])
+  @@index([schoolId, studentId, subject, topic])
+  @@index([status])
+}
+
+model SpacedReviewItem {
+  id             String   @id @default(cuid())
+  schoolId       String
+  studentId      String
+
+  subject        String
+  topic          String
+  skillId        String
+  skillLabel     String
+
+  masteryId      String?
+
+  dueAt          DateTime
+  intervalDays   Int
+  status         String   @default("scheduled")
+  reason         String
+
+  createdAt      DateTime @default(now())
+  completedAt    DateTime?
+
+  @@index([schoolId, studentId])
+  @@index([schoolId, studentId, dueAt])
+  @@index([status])
+}
+
+// ── PostgreSQL Tutor Data Schema, Long-Retention Storage Foundation v1 (Task 003) ──
+// ── Extended for Conversation Archive Runtime, Safe Memory, Retention Policy v1 (Task 005) ──
+
+model ConversationArchiveRecord {
+  id              String   @id @default(cuid())
+  schoolId        String
+  tutorLearnerId  String
+  externalStudentId String?
+  sessionId       String?
+  archiveDate     DateTime @default(now())
+  retentionUntil  DateTime
+  visibilityTier  String   @default("system_only")
+  redactionStatus String   @default("not_redacted")
+  summary         String?  @db.Text
+  messageCount    Int      @default(0)
+  subjectTags     String[] @default([])
+  firstMessageAt  DateTime
+  lastMessageAt   DateTime
+  tokenCount      Int?
+  metadata        Json?
+
+  // ── Task 005 extension fields ──
+  rawContent      String?  @db.Text
+  redactedContent String?  @db.Text
+  redactionApplied Boolean  @default(false)
+  storagePolicy   String   @default("retained_raw")
+  sender          String   @default("learner")
+  sourceSurface   String   @default("unknown")
+  safetyTags      String[] @default([])
+  topicId         String?
+  subjectId       String?
+  curriculumTrack String   @default("unknown")
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([schoolId, tutorLearnerId])
+  @@index([retentionUntil])
+  @@index([visibilityTier])
+  @@index([schoolId, archiveDate])
+  @@index([tutorLearnerId, archiveDate])
+  @@index([storagePolicy])
+  @@index([sender])
+}
+
+model SafeMemorySummary {
+  id                String   @id @default(cuid())
+  schoolId          String
+  tutorLearnerId    String
+  externalStudentId String?
+  kind              String
+  summary           String   @db.Text
+  confidenceScore   Float    @default(0.3)
+  observationCount  Int      @default(1)
+  sourceArchiveIds  String[] @default([])
+  firstObservedAt   DateTime @default(now())
+  lastObservedAt    DateTime @default(now())
+  expiresAt         DateTime?
+  metadata          Json?
+
+  // ── Task 005 extension fields ──
+  subjectId         String?
+  topicId           String?
+  curriculumTrack   String   @default("unknown")
+  strengths         String[] @default([])
+  weakAreas         String[] @default([])
+  commonMistakes    String[] @default([])
+
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@index([schoolId, tutorLearnerId])
+  @@index([expiresAt])
+  @@index([kind])
+  @@index([schoolId, kind])
+  @@index([subjectId])
+  @@index([topicId])
+}
+
+model LearnerPreferenceFeedbackRecord {
+  id                  String   @id @default(uuid())
+  schoolId            String
+  tutorLearnerId      String
+  studentId           String?
+  sessionId           String?
+  recommendationId    String
+  recommendationType  String?
+  feedbackType        String?
+  subject             String?
+  topic               String?
+  skillTag            String?
+  safeReasonCodes     Json?
+  safetyFlags         Json?
+  privacyMetadata     Json?
+  supportLevelAdjustment String?
+  difficultyAdjustment   String?
+  stepSizeAdjustment     String?
+  recommendationBiases   Json?
+  profileSnapshot        Json?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  @@index([schoolId, tutorLearnerId])
+  @@index([tutorLearnerId])
+  @@index([schoolId])
+}
+
+model RecommendationInteractionRecord {
+  id                  String   @id @default(uuid())
+  schoolId            String
+  tutorLearnerId      String
+  studentId           String?
+  sessionId           String?
+  recommendationId    String?
+  recommendationType  String?
+  interactionType     String
+  subject             String?
+  topic               String?
+  skillTag            String?
+  safeReasonCodes     Json?
+  safetyFlags         Json?
+  privacyMetadata     Json?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  @@index([schoolId, tutorLearnerId])
+  @@index([tutorLearnerId])
+  @@index([interactionType])
+}
+
+model AdaptiveRecommendationProfileRecord {
+  id                      String   @id @default(uuid())
+  schoolId                String
+  tutorLearnerId          String   @unique
+  preferredSupportLevel   String   @default("guided_support")
+  preferredStepSize       String   @default("standard")
+  practiceModePreference  String   @default("balanced")
+  challengeReadinessSignal String  @default("medium")
+  foundationReviewPreference String @default("medium")
+  hintFrequencySignal      String  @default("medium")
+  difficultyCalibration    Float   @default(0.5)
+  recentTooHardCount       Int     @default(0)
+  recentTooEasyCount       Int     @default(0)
+  recentConfusionCount     Int     @default(0)
+  recentChallengeRequestCount Int @default(0)
+  recentTeacherHelpRequestCount Int @default(0)
+  profileSnapshot          Json?
+  privacyMetadata          Json?
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
+
+  @@index([schoolId])
+  @@index([schoolId, tutorLearnerId])
+}
+
+model PersonalizationAuditRecord {
+  id                        String   @id @default(uuid())
+  schoolId                  String
+  tutorLearnerId            String
+  studentId                 String?
+  sessionId                 String?
+  recommendationId          String
+  feedbackType              String?
+  interactionType           String?
+  tuningReasonCodes         Json?
+  safetyFlags               Json?
+  privacyDecision           String   @default("teacher_safe_learner_preference")
+  deenSensitivityHandled    Boolean  @default(false)
+  safeguardingBoundaryApplied Boolean @default(false)
+  createdAt                 DateTime @default(now())
+  updatedAt                 DateTime @updatedAt
+
+  @@index([schoolId, tutorLearnerId])
+  @@index([tutorLearnerId])
+  @@index([createdAt])
+}
+
+// ── Adaptive Challenge, Remediation, Difficulty Calibration v1 (Task 015) ──
+
+model AdaptiveChallengeRecord {
+  id                    String   @id @default(cuid())
+  schoolId              String
+  tutorLearnerId        String
+  studentId             String?
+  sessionId             String?
+
+  subject               String
+  topic                 String?
+  skillTag              String?
+
+  challengeType         String
+  difficultyLevel       String
+  status                String   @default("active")
+
+  learnerPrompt         String
+  socraticOpeningQuestion String?
+  allowedHints          Json     @default("[]")
+  safeEvidenceRefs      Json     @default("[]")
+  reasonCodes           Json     @default("[]")
+  privacyMetadata       Json     @default("{}")
+
+  attemptSubmitted      Boolean  @default(false)
+  attemptOutcome        String?
+  hintLevelUsed         Int      @default(0)
+
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  @@index([schoolId, tutorLearnerId])
+  @@index([schoolId, tutorLearnerId, status])
+  @@index([tutorLearnerId])
+}
+
+model RemediationPathRecord {
+  id                    String   @id @default(cuid())
+  schoolId              String
+  tutorLearnerId        String
+  studentId             String?
+  sessionId             String?
+
+  subject               String
+  topic                 String?
+  skillTag              String?
+  blockingSkillTag      String?
+  prerequisiteSkillTags Json     @default("[]")
+
+  steps                 Json     @default("[]")
+  currentStepIndex      Int      @default(0)
+  status                String   @default("active")
+  reasonCodes           Json     @default("[]")
+  privacyMetadata       Json     @default("{}")
+
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  @@index([schoolId, tutorLearnerId])
+  @@index([schoolId, tutorLearnerId, status])
+  @@index([tutorLearnerId])
+}
+
+model DifficultyCalibrationRecord {
+  id                    String   @id @default(cuid())
+  schoolId              String
+  tutorLearnerId        String
+  subject               String
+  topic                 String?
+  skillTag              String?
+
+  currentDifficultyLevel String  @default("standard")
+  supportLevel          String   @default("moderate")
+
+  calibrationSignals    Json     @default("[]")
+  recentSuccessCount    Int      @default(0)
+  recentStruggleCount   Int      @default(0)
+  recentHintDependency  Int      @default(0)
+  recentTooHardCount    Int      @default(0)
+  recentTooEasyCount    Int      @default(0)
+
+  lastCalibratedAt      DateTime @default(now())
+  privacyMetadata       Json     @default("{}")
+
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  @@unique([schoolId, tutorLearnerId, subject, skillTag])
+  @@index([schoolId, tutorLearnerId])
+  @@index([tutorLearnerId])
+}
+
+// ── Student Learning Session State & Event Records v1 (Task 016) ──
+
+model StudentLearningSessionState {
+  id                      String   @id @default(cuid())
+  schoolId                String
+  tutorLearnerId          String
+  studentId               String?
+  externalStudentId       String?
+
+  status                  String   @default("active")
+  currentMode             String   @default("session_start")
+  previousMode            String?
+  subject                 String?
+  topic                   String?
+  skillTag                String?
+
+  activeChallengeId       String?
+  activeRemediationPathId String?
+  activeRevisionItemId    String?
+
+  supportLevel            String?
+  difficultyLevel         String?
+  safeProgressSummary     String?
+  safeEvidenceRefs        Json     @default("[]")
+  reasonCodes             Json     @default("[]")
+  privacyMetadata         Json     @default("{}")
+
+  lastTransitionAt        DateTime @default(now())
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
+
+  @@index([schoolId, tutorLearnerId])
+  @@index([schoolId, tutorLearnerId, status])
+  @@index([tutorLearnerId, status])
+}
+
+model StudentLearningSessionEvent {
+  id                  String   @id @default(cuid())
+  schoolId            String
+  tutorLearnerId      String
+  sessionId           String
+
+  eventType           String
+  previousMode        String?
+  nextMode            String?
+  subject             String?
+  topic               String?
+  skillTag            String?
+
+  safeEventSummary    String?
+  safeEvidenceRefs    Json     @default("[]")
+  reasonCodes         Json     @default("[]")
+  privacyMetadata     Json     @default("{}")
+
+  createdAt           DateTime @default(now())
+
+  @@index([schoolId, tutorLearnerId])
+  @@index([schoolId, tutorLearnerId, sessionId])
+  @@index([sessionId, createdAt])
+}
+
+// ── Task 021: School Integration Durable Persistence v1 ──
+
+model SchoolRosterSyncJobRecord {
+  id                 String   @id @default(cuid())
+  schoolId           String
+  syncBatchId        String
+  idempotencyKey     String?
+  status             String
+  startedAt          DateTime @default(now())
+  completedAt        DateTime?
+  createdMappings    Int      @default(0)
+  updatedMappings    Int      @default(0)
+  inactivatedMappings Int     @default(0)
+  reactivatedMappings Int    @default(0)
+  conflictCount      Int      @default(0)
+  quarantinedCount   Int      @default(0)
+  reasonCodes        Json     @default("[]")
+  privacyMetadata    Json     @default("{}")
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  @@unique([schoolId, syncBatchId])
+  @@index([schoolId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model SchoolRosterSyncConflictRecord {
+  id                 String   @id @default(cuid())
+  schoolId           String
+  syncBatchId        String
+  conflictType       String
+  externalUserId     String?
+  externalStudentId  String?
+  externalTeacherId  String?
+  tutorLearnerId     String?
+  status             String   @default("quarantined")
+  safeSummary        String
+  reasonCodes        Json     @default("[]")
+  privacyMetadata    Json     @default("{}")
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  @@index([schoolId])
+  @@index([syncBatchId])
+  @@index([status])
+}
+
+model SchoolIntegrationIdempotencyRecord {
+  id                 String   @id @default(cuid())
+  schoolId           String
+  idempotencyKey     String
+  operation          String
+  requestHash        String
+  status             String   @default("in_progress")
+  safeResultSummary  String?
+  reasonCodes        Json     @default("[]")
+  expiresAt          DateTime?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  @@unique([schoolId, operation, idempotencyKey])
+  @@index([expiresAt])
+  @@index([status])
+}
+
+model SchoolIntegrationAuditRecord {
+  id                 String   @id @default(cuid())
+  schoolId           String?
+  actorId            String?
+  actorRole          String
+  externalUserId     String?
+  tutorLearnerId     String?
+  eventType          String
+  operation          String?
+  decision           String
+  reasonCodes        Json     @default("[]")
+  privacyMetadata    Json     @default("{}")
+  requestId          String?
+  correlationId      String?
+  createdAt          DateTime @default(now())
+
+  @@index([schoolId])
+  @@index([eventType])
+  @@index([createdAt])
+}
+
+// ── Task 022: Curriculum & Content Governance Durable Persistence v1 ──
+
+model CurriculumVersionRecord {
+  id               String   @id @default(uuid())
+  schoolId         String?
+  curriculumFamily String
+  versionCode      String
+  title            String
+  status           String   @default("draft")
+  effectiveFrom    DateTime?
+  effectiveTo      DateTime?
+  metadata         Json?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  topics           CurriculumTopicRecord[]
+
+  @@index([schoolId])
+  @@index([curriculumFamily])
+  @@index([status])
+  @@unique([schoolId, curriculumFamily, versionCode])
+}
+
+model CurriculumTopicRecord {
+  id                   String   @id @default(uuid())
+  curriculumVersionId  String
+  subject              String
+  stage                String?
+  topicCode            String?
+  title                String
+  descriptionSafe      String?
+  status               String   @default("active")
+  metadata             Json?
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  curriculumVersion    CurriculumVersionRecord @relation(fields: [curriculumVersionId], references: [id], onDelete: Cascade)
+  skills               CurriculumSkillRecord[]
+
+  @@index([curriculumVersionId])
+  @@index([subject])
+  @@index([status])
+}
+
+model CurriculumSkillRecord {
+  id                      String   @id @default(uuid())
+  curriculumTopicId       String
+  skillCode               String?
+  title                   String
+  studentSafeDescription  String?
+  teacherSafeDescription  String?
+  difficultyBand          String?
+  status                  String   @default("active")
+  metadata                Json?
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
+
+  curriculumTopic         CurriculumTopicRecord @relation(fields: [curriculumTopicId], references: [id], onDelete: Cascade)
+  learningObjectives      LearningObjectiveRecord[]
+  prerequisiteLinksFrom   PrerequisiteLinkRecord[] @relation("PrerequisiteLinkFrom")
+  prerequisiteLinksTo     PrerequisiteLinkRecord[] @relation("PrerequisiteLinkTo")
+
+  @@index([curriculumTopicId])
+  @@index([status])
+}
+
+model LearningObjectiveRecord {
+  id                        String   @id @default(uuid())
+  curriculumSkillId         String
+  objectiveCode             String?
+  title                     String
+  studentSafeDescription    String?
+  teacherSafeDescription    String?
+  status                    String   @default("active")
+  sourceRequirement         Json?
+  metadata                  Json?
+  createdAt                 DateTime @default(now())
+  updatedAt                 DateTime @updatedAt
+
+  curriculumSkill           CurriculumSkillRecord @relation(fields: [curriculumSkillId], references: [id], onDelete: Cascade)
+
+  @@index([curriculumSkillId])
+  @@index([status])
+}
+
+model PrerequisiteLinkRecord {
+  id               String   @id @default(uuid())
+  fromSkillId      String
+  toSkillId        String
+  relationshipType String
+  reasonCodes      Json?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  fromSkill        CurriculumSkillRecord @relation("PrerequisiteLinkFrom", fields: [fromSkillId], references: [id], onDelete: Cascade)
+  toSkill          CurriculumSkillRecord @relation("PrerequisiteLinkTo", fields: [toSkillId], references: [id], onDelete: Cascade)
+
+  @@index([fromSkillId])
+  @@index([toSkillId])
+}
+
+model ApprovedSourceRecord {
+  id                String   @id @default(uuid())
+  schoolId          String?
+  sourceKey         String
+  title             String
+  sourceType        String
+  curriculumFamily  String
+  subject           String?
+  stage             String?
+  topic             String?
+  deenCategory      String?
+  trustLevel        String
+  approvalStatus    String   @default("pending_review")
+  approvedByActorId String?
+  approvedByRole    String?
+  approvedAt        DateTime?
+  reviewRequired    Boolean  @default(true)
+  restrictedUse     Boolean  @default(false)
+  citationMetadata  Json?
+  metadata          Json?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@index([schoolId])
+  @@index([curriculumFamily])
+  @@index([approvalStatus])
+  @@index([trustLevel])
+}
+
+model ContentItemRecord {
+  id                    String   @id @default(uuid())
+  schoolId              String?
+  curriculumVersionId   String?
+  topicId               String?
+  skillId               String?
+  learningObjectiveId   String?
+  sourceId              String?
+  contentType           String
+  status                String   @default("draft")
+  sensitivity           String   @default("basic")
+  studentSafeContent    String?  @db.Text
+  teacherSafeContent    String?  @db.Text
+  answerKeyProtected    Boolean  @default(false)
+  teacherOnly           Boolean  @default(false)
+  reviewState           String   @default("not_reviewed")
+  reasonCodes           Json?
+  metadata              Json?
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  @@index([schoolId])
+  @@index([curriculumVersionId])
+  @@index([topicId])
+  @@index([skillId])
+  @@index([learningObjectiveId])
+  @@index([status])
+  @@index([reviewState])
+}
+
+model ContentGapRecord {
+  id               String   @id @default(uuid())
+  schoolId         String?
+  curriculumFamily String
+  subject          String?
+  topic            String?
+  skill            String?
+  gapType          String
+  status           String   @default("open")
+  safeSummary      String
+  reasonCodes      Json     @default("[]")
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@index([schoolId])
+  @@index([curriculumFamily])
+  @@index([gapType])
+  @@index([status])
+}
+
+model ContentGovernanceAuditRecord {
+  id                  String   @id @default(uuid())
+  schoolId            String?
+  actorId             String?
+  actorRole           String
+  eventType           String
+  curriculumFamily    String?
+  curriculumVersionId String?
+  sourceId            String?
+  contentItemId       String?
+  decision            String
+  reasonCodes         Json     @default("[]")
+  privacyMetadata     Json?
+  requestId           String?
+  correlationId       String?
+  createdAt           DateTime @default(now())
+
+  @@index([schoolId])
+  @@index([eventType])
+  @@index([curriculumFamily])
+  @@index([createdAt])
+}
+
+model ContentReviewRecord {
+  id                String   @id @default(uuid())
+  schoolId          String?
+  targetType        String
+  targetId          String
+  reviewState       String   @default("not_reviewed")
+  reviewedByActorId String?
+  reviewedByRole    String?
+  reviewedAt        DateTime?
+  decision          String
+  reasonCodes       Json?
+  safeNotes         String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@index([schoolId])
+  @@index([targetType, targetId])
+  @@index([reviewState])
+}
+
+model OpsIncident {
+  id                         String   @id @default(uuid())
+  schoolId                   String?
+  category                   String
+  severity                   String
+  status                     String   @default("open")
+  source                     String?
+  safeTitle                  String
+  safeSummary                String
+  redactionStatus            String   @default("redacted")
+  reasonCodes                Json     @default("[]")
+  affectedComponents         Json     @default("[]")
+  recommendedOwnerRole       String   @default("admin")
+  studentSafetyRelevant      Boolean  @default(false)
+  privacyRelevant            Boolean  @default(false)
+  deenGovernanceRelevant     Boolean  @default(false)
+  metadataSafeJson           Json?
+  detectedAt                 DateTime @default(now())
+  classifiedAt               DateTime?
+  acknowledgedAt             DateTime?
+  investigatingAt            DateTime?
+  mitigatedAt                DateTime?
+  resolvedAt                 DateTime?
+  falsePositiveAt            DateTime?
+  createdAt                  DateTime @default(now())
+  updatedAt                  DateTime @updatedAt
+
+  auditRecords               OpsIncidentAudit[]
+
+  @@index([schoolId])
+  @@index([category])
+  @@index([severity])
+  @@index([status])
+  @@index([detectedAt])
+}
+
+model OpsIncidentAudit {
+  id              String   @id @default(uuid())
+  incidentId      String
+  schoolId        String?
+  actorRole       String   @default("unknown")
+  actorIdSafe     String?
+  action          String
+  previousStatus  String?
+  newStatus       String   @default("open")
+  safeNote        String?
+  metadataSafeJson Json?
+  redactionStatus String   @default("redacted")
+  createdAt       DateTime @default(now())
+  requestId       String?
+  correlationId   String?
+
+  incident        OpsIncident @relation(fields: [incidentId], references: [id], onDelete: Cascade)
+
+  @@index([incidentId])
+  @@index([schoolId])
+  @@index([action])
+  @@index([createdAt])
+}
+
+model OpsMetricSnapshot {
+  id                     String   @id @default(uuid())
+  schoolId               String?
+  requestCount           Int      @default(0)
+  errorCount             Int      @default(0)
+  rateLimitCount         Int      @default(0)
+  p50LatencyMs           Int?
+  p95LatencyMs           Int?
+  p99LatencyMs           Int?
+  statusCodeFamilyCounts Json     @default("{}")
+  routeFamilyCounts      Json     @default("{}")
+  incidentCount          Int      @default(0)
+  openIncidentCount      Int      @default(0)
+  databaseStatus         String   @default("unknown")
+  redisStatus            String?
+  aiProviderFailureCount Int      @default(0)
+  backupStatus           String   @default("unknown")
+  lastBackupAt           DateTime?
+  restoreDrillStatus     String   @default("unknown")
+  lastRestoreDrillAt     DateTime?
+  metadataSafeJson       Json?
+  createdAt              DateTime @default(now())
+
+  @@index([schoolId])
+  @@index([createdAt])
+}
+
+model OpsBackupCheck {
+  id                            String   @id @default(uuid())
+  backupConfigured              Boolean  @default(false)
+  backupProvider                String   @default("unknown")
+  backupMode                    String   @default("local_drill")
+  lastBackupAt                  DateTime?
+  lastBackupStatus              String   @default("unknown")
+  backupAgeHours                Int?
+  expectedBackupFrequencyHours  Int?
+  safeSummary                   String
+  blockingIssues                Json     @default("[]")
+  metadataSafeJson              Json?
+  createdAt                     DateTime @default(now())
+
+  @@index([createdAt])
+}
+
+model OpsRestoreDrill {
+  id                           String   @id @default(uuid())
+  drillId                      String
+  status                       String   @default("pending")
+  startedAt                    DateTime @default(now())
+  completedAt                  DateTime?
+  backupArtifactRefSafe        String
+  checksum                     String?
+  restoreTargetSafe            String
+  integrityChecks              Json     @default("[]")
+  blockingIssues               Json     @default("[]")
+  safeSummary                  String
+  destructiveCommandExecuted   Boolean  @default(false)
+  realProductionDataOverwritten Boolean @default(false)
+  metadataSafeJson             Json?
+  createdAt                    DateTime @default(now())
+
+  @@index([drillId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model OpsReport {
+  id                   String   @id @default(uuid())
+  taskId               String
+  taskName             String
+  reportKind           String   @default("task-024")
+  status               String   @default("draft")
+  safeSummary          String
+  safeToStartNextTask  Boolean  @default(false)
+  blockingIssues       Json     @default("[]")
+  knownLimitations     Json     @default("[]")
+  verificationSummary  Json     @default("{}")
+  artifactPaths        Json     @default("[]")
+  metadataSafeJson     Json?
+  generatedAt          DateTime @default(now())
+  createdAt            DateTime @default(now())
+
+  @@index([taskId])
+  @@index([status])
+  @@index([generatedAt])
+}
+
+// ── Task 025: Controlled School Pilot Readiness v1 ──
+
+model PilotProgram {
+  id                String   @id @default(uuid())
+  schoolId          String
+  name              String
+  status            String   @default("draft")
+  pilotMode         String   @default("controlled")
+  scopeSummarySafe  String
+  allowedSubjects   Json     @default("[]")
+  allowedYearGroups Json     @default("[]")
+  allowedCurriculumTracks Json @default("[]")
+  allowedRoles      Json     @default("[]")
+  maxStudents       Int      @default(50)
+  maxTeachers       Int      @default(10)
+  startAt           DateTime?
+  endAt             DateTime?
+  createdByRole     String   @default("admin")
+  createdByActorIdHash String?
+  approvalStatus    String   @default("pending")
+  approvedByRole    String?
+  approvedAt        DateTime?
+  rollbackEnabled   Boolean  @default(true)
+  killSwitchEnabled Boolean  @default(true)
+  metadataSafeJson  Json     @default("{}")
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  cohorts           PilotCohort[]
+  participants      PilotParticipant[]
+  readinessChecks   PilotReadinessCheck[]
+  dryRuns           PilotDryRun[]
+  auditRecords      PilotAuditRecord[]
+  pilotExecutionRuns PilotExecutionRun[]
+  expansionProposals PilotExpansionProposal[]
+
+  @@index([schoolId])
+  @@index([schoolId, status])
+  @@index([status])
+}
+
+model PilotCohort {
+  id                    String   @id @default(uuid())
+  pilotProgramId        String
+  schoolId              String
+  name                  String
+  status                String   @default("active")
+  studentCount          Int      @default(0)
+  teacherCount          Int      @default(0)
+  allowedClassIds       Json     @default("[]")
+  allowedSubjectIds     Json     @default("[]")
+  allowedCurriculumScopes Json   @default("[]")
+  metadataSafeJson      Json     @default("{}")
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  pilotProgram          PilotProgram @relation(fields: [pilotProgramId], references: [id], onDelete: Cascade)
+
+  @@index([pilotProgramId])
+  @@index([schoolId])
+  @@index([status])
+}
+
+model PilotParticipant {
+  id                String   @id @default(uuid())
+  pilotProgramId    String
+  cohortId          String?
+  schoolId          String
+  actorIdHash       String
+  role              String   @default("student")
+  eligibilityStatus String   @default("pending_review")
+  reasonCodes       Json     @default("[]")
+  joinedAt          DateTime?
+  removedAt         DateTime?
+  metadataSafeJson  Json     @default("{}")
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  pilotProgram      PilotProgram @relation(fields: [pilotProgramId], references: [id], onDelete: Cascade)
+
+  @@unique([pilotProgramId, actorIdHash])
+  @@index([pilotProgramId])
+  @@index([cohortId])
+  @@index([schoolId])
+  @@index([eligibilityStatus])
+}
+
+model PilotReadinessCheck {
+  id              String   @id @default(uuid())
+  pilotProgramId  String
+  schoolId        String
+  checkType       String
+  status          String   @default("not_run")
+  safeSummary     String
+  blockingIssues  Json     @default("[]")
+  warnings        Json     @default("[]")
+  evidenceRefs    Json     @default("[]")
+  createdAt       DateTime @default(now())
+
+  pilotProgram    PilotProgram @relation(fields: [pilotProgramId], references: [id], onDelete: Cascade)
+
+  @@index([pilotProgramId])
+  @@index([schoolId])
+  @@index([checkType])
+  @@index([status])
+}
+
+model PilotDryRun {
+  id              String   @id @default(uuid())
+  pilotProgramId  String
+  schoolId        String
+  status          String   @default("pending")
+  scenarioName    String
+  startedAt       DateTime @default(now())
+  completedAt     DateTime?
+  checksPassed    Json     @default("[]")
+  checksFailed    Json     @default("[]")
+  safeSummary     String
+  metadataSafeJson Json    @default("{}")
+  createdAt       DateTime @default(now())
+
+  pilotProgram    PilotProgram @relation(fields: [pilotProgramId], references: [id], onDelete: Cascade)
+
+  @@index([pilotProgramId])
+  @@index([schoolId])
+  @@index([status])
+}
+
+model PilotAuditRecord {
+  id              String   @id @default(uuid())
+  pilotProgramId  String?
+  schoolId        String?
+  actorRole       String   @default("unknown")
+  actorIdHash     String?
+  action          String
+  safeSummary     String
+  metadataSafeJson Json    @default("{}")
+  requestId       String?
+  correlationId   String?
+  createdAt       DateTime @default(now())
+
+  pilotProgram    PilotProgram? @relation(fields: [pilotProgramId], references: [id], onDelete: SetNull)
+
+  @@index([pilotProgramId])
+  @@index([schoolId])
+  @@index([action])
+  @@index([createdAt])
+}
+
+// ── Task 027: Controlled Pilot Expansion Governance v1 ──
+
+model PilotExpansionProposal {
+  id                       String   @id @default(uuid())
+  pilotProgramId           String
+  executionRunId           String?
+  postPilotReviewId        String?
+  schoolId                 String
+  status                   String   @default("draft")
+  proposalName             String
+  safeSummary              String
+  requestedStudentIncrease Int      @default(0)
+  requestedTeacherIncrease Int      @default(0)
+  requestedClassIds        Json     @default("[]")
+  requestedSubjectIds      Json     @default("[]")
+  requestedCurriculumScopes Json    @default("[]")
+  requestedYearGroups      Json     @default("[]")
+  requestedStartAt         DateTime?
+  requestedEndAt           DateTime?
+  createdByRole            String
+  createdByActorIdHash     String?
+  blockingIssues           Json     @default("[]")
+  warnings                 Json     @default("[]")
+  metadataSafeJson         Json     @default("{}")
+  createdAt                DateTime @default(now())
+  updatedAt                DateTime @updatedAt
+
+  pilotProgram    PilotProgram @relation(fields: [pilotProgramId], references: [id], onDelete: Cascade)
+
+  reviews         PilotExpansionReview[]
+  evidencePacks   PilotExpansionEvidencePack[]
+  riskAssessments PilotExpansionRiskAssessment[]
+  approvals       PilotExpansionApproval[]
+  cohortChanges   PilotExpansionCohortChange[]
+  auditRecords    PilotExpansionAuditRecord[]
+
+  @@index([schoolId])
+  @@index([pilotProgramId])
+  @@index([status])
+}
+
+model PilotExpansionReview {
+  id                   String   @id @default(uuid())
+  expansionProposalId  String
+  schoolId             String
+  reviewType           String
+  reviewStatus         String   @default("draft")
+  reviewerRole         String
+  reviewerActorIdHash  String?
+  safeSummary          String
+  blockingIssues       Json     @default("[]")
+  warnings             Json     @default("[]")
+  evidenceRefs         Json     @default("[]")
+  metadataSafeJson     Json     @default("{}")
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  expansionProposal    PilotExpansionProposal @relation(fields: [expansionProposalId], references: [id], onDelete: Cascade)
+
+  @@index([expansionProposalId])
+  @@index([reviewType])
+}
+
+model PilotExpansionEvidencePack {
+  id                   String   @id @default(uuid())
+  expansionProposalId  String
+  schoolId             String
+  status               String   @default("draft")
+  safeSummary          String
+  learningQualityEvidence Json  @default("{}")
+  socraticEvidence     Json     @default("{}")
+  deenEvidence         Json     @default("{}")
+  privacyEvidence      Json     @default("{}")
+  curriculumEvidence   Json     @default("{}")
+  operationsEvidence   Json     @default("{}")
+  feedbackEvidence     Json     @default("{}")
+  incidentEvidence     Json     @default("{}")
+  rollbackEvidence     Json     @default("{}")
+  artifactPaths        Json     @default("[]")
+  blockingIssues       Json     @default("[]")
+  warnings             Json     @default("[]")
+  metadataSafeJson     Json     @default("{}")
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  expansionProposal    PilotExpansionProposal @relation(fields: [expansionProposalId], references: [id], onDelete: Cascade)
+
+  @@index([expansionProposalId])
+}
+
+model PilotExpansionRiskAssessment {
+  id                    String   @id @default(uuid())
+  expansionProposalId   String
+  schoolId              String
+  overallRiskLevel      String   @default("medium")
+  learningRiskLevel     String   @default("medium")
+  privacyRiskLevel      String   @default("medium")
+  deenRiskLevel         String   @default("medium")
+  socraticRiskLevel     String   @default("medium")
+  curriculumRiskLevel   String   @default("medium")
+  operationsRiskLevel   String   @default("medium")
+  safeguardingRiskLevel String   @default("medium")
+  riskReasons           Json     @default("[]")
+  mitigations           Json     @default("[]")
+  blockingIssues        Json     @default("[]")
+  safeSummary           String
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  expansionProposal     PilotExpansionProposal @relation(fields: [expansionProposalId], references: [id], onDelete: Cascade)
+
+  @@index([expansionProposalId])
+}
+
+model PilotExpansionApproval {
+  id                    String   @id @default(uuid())
+  expansionProposalId   String
+  schoolId              String
+  decision              String
+  approvalStatus        String   @default("pending")
+  approvedByRole        String?
+  approvedByActorIdHash String?
+  approvedAt            DateTime?
+  rejectedAt            DateTime?
+  safeDecisionSummary   String
+  conditions            Json     @default("[]")
+  blockingIssues        Json     @default("[]")
+  metadataSafeJson      Json     @default("{}")
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  expansionProposal     PilotExpansionProposal @relation(fields: [expansionProposalId], references: [id], onDelete: Cascade)
+
+  @@index([expansionProposalId])
+}
+
+model PilotExpansionCohortChange {
+  id                     String   @id @default(uuid())
+  expansionProposalId    String
+  pilotProgramId         String
+  schoolId               String
+  changeStatus           String   @default("pending")
+  previousCohortSnapshot Json     @default("{}")
+  newCohortSnapshot      Json     @default("{}")
+  addedStudentCount      Int      @default(0)
+  addedTeacherCount      Int      @default(0)
+  addedClassIds          Json     @default("[]")
+  addedSubjectIds        Json     @default("[]")
+  safeSummary            String
+  rollbackPlan           Json     @default("{}")
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+
+  expansionProposal      PilotExpansionProposal @relation(fields: [expansionProposalId], references: [id], onDelete: Cascade)
+
+  @@index([expansionProposalId])
+  @@index([pilotProgramId])
+}
+
+model PilotExpansionReport {
+  id                String   @id @default(uuid())
+  expansionProposalId String?
+  schoolId          String?
+  taskId            String
+  taskName          String
+  status            String   @default("draft")
+  safeToStartNextTask Boolean @default(false)
+  safeSummary       String
+  decisionSummary   Json     @default("{}")
+  evidenceSummary   Json     @default("{}")
+  riskSummary       Json     @default("{}")
+  reviewSummary     Json     @default("{}")
+  blockingIssues    Json     @default("[]")
+  knownLimitations  Json     @default("[]")
+  verificationSummary Json  @default("{}")
+  artifactPaths     Json     @default("[]")
+  generatedAt       DateTime @default(now())
+  createdAt         DateTime @default(now())
+
+  @@index([taskId])
+}
+
+model PilotExpansionAuditRecord {
+  id                  String   @id @default(uuid())
+  expansionProposalId String?
+  pilotProgramId      String?
+  schoolId            String?
+  actorRole           String   @default("unknown")
+  actorIdHash         String?
+  action              String
+  safeSummary         String
+  metadataSafeJson    Json     @default("{}")
+  requestId           String?
+  correlationId       String?
+  createdAt           DateTime @default(now())
+
+  expansionProposal   PilotExpansionProposal? @relation(fields: [expansionProposalId], references: [id], onDelete: SetNull)
+
+  @@index([expansionProposalId])
+  @@index([pilotProgramId])
+  @@index([action])
+  @@index([createdAt])
+}
+
+// ── Task 026: Controlled Pilot Execution Runtime v1 ──
+
+model PilotExecutionRun {
+  id                String   @id @default(uuid())
+  pilotProgramId    String
+  schoolId          String
+  status            String   @default("not_started")
+  startedAt         DateTime?
+  pausedAt          DateTime?
+  resumedAt         DateTime?
+  rolledBackAt      DateTime?
+  completedAt       DateTime?
+  startedByRole     String?
+  startedByActorIdHash String?
+  safeSummary       String
+  activeStudentCount Int     @default(0)
+  activeTeacherCount Int     @default(0)
+  allowedCohortIds  Json     @default("[]")
+  executionGateSnapshot Json @default("{}")
+  blockingIssues    Json     @default("[]")
+  warnings          Json     @default("[]")
+  metadataSafeJson  Json     @default("{}")
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  pilotProgram      PilotProgram @relation(fields: [pilotProgramId], references: [id], onDelete: Cascade)
+
+  events            PilotExecutionEvent[]
+  metricSnapshots   PilotRuntimeMetricSnapshot[]
+  feedbackRecords   PilotFeedbackRecord[]
+  safetySignals     PilotSafetySignal[]
+  postPilotReviews  PilotPostPilotReview[]
+  auditRecords      PilotExecutionAuditRecord[]
+
+  @@index([pilotProgramId])
+  @@index([schoolId])
+  @@index([status])
+}
+
+model PilotExecutionEvent {
+  id              String   @id @default(uuid())
+  executionRunId  String
+  pilotProgramId  String
+  schoolId        String
+  actorRole       String
+  actorIdHash     String?
+  eventType       String
+  eventStatus     String
+  safeSummary     String
+  reasonCodes     Json     @default("[]")
+  metadataSafeJson Json    @default("{}")
+  requestId       String?
+  correlationId   String?
+  createdAt       DateTime @default(now())
+
+  executionRun    PilotExecutionRun @relation(fields: [executionRunId], references: [id], onDelete: Cascade)
+
+  @@index([executionRunId])
+  @@index([pilotProgramId])
+  @@index([eventType])
+}
+
+model PilotRuntimeMetricSnapshot {
+  id                      String   @id @default(uuid())
+  executionRunId          String
+  pilotProgramId          String
+  schoolId                String
+  activeSessions          Int       @default(0)
+  allowedSessionStarts    Int       @default(0)
+  blockedSessionStarts    Int       @default(0)
+  pilotAccessDeniedCount  Int       @default(0)
+  curriculumGateBlockCount Int      @default(0)
+  schoolAuthGateBlockCount Int      @default(0)
+  socraticGateBlockCount  Int       @default(0)
+  deenGateBlockCount      Int       @default(0)
+  privacyGateBlockCount   Int       @default(0)
+  aiCallBlockedCount      Int       @default(0)
+  aiCallAllowedCount      Int       @default(0)
+  feedbackCount           Int       @default(0)
+  safetySignalCount       Int       @default(0)
+  incidentBridgeCount     Int       @default(0)
+  p95LatencyMs            Int?
+  errorCount              Int       @default(0)
+  metadataSafeJson        Json      @default("{}")
+  createdAt               DateTime  @default(now())
+
+  executionRun            PilotExecutionRun @relation(fields: [executionRunId], references: [id], onDelete: Cascade)
+
+  @@index([executionRunId])
+  @@index([pilotProgramId])
+  @@index([createdAt])
+}
+
+model PilotFeedbackRecord {
+  id                    String   @id @default(uuid())
+  executionRunId        String
+  pilotProgramId        String
+  schoolId              String
+  actorRole             String
+  actorIdHash           String?
+  feedbackType          String
+  sentiment             String?
+  safeSummary           String
+  redactionStatus       String   @default("not_redacted")
+  riskFlags             Json     @default("[]")
+  teacherActionRequested Boolean @default(false)
+  safeguardingRelevant  Boolean  @default(false)
+  deenRelevant          Boolean  @default(false)
+  privacyRelevant       Boolean  @default(false)
+  metadataSafeJson      Json     @default("{}")
+  createdAt             DateTime @default(now())
+
+  executionRun          PilotExecutionRun @relation(fields: [executionRunId], references: [id], onDelete: Cascade)
+
+  @@index([executionRunId])
+  @@index([pilotProgramId])
+  @@index([feedbackType])
+}
+
+model PilotSafetySignal {
+  id                    String   @id @default(uuid())
+  executionRunId        String
+  pilotProgramId        String
+  schoolId              String
+  signalType            String
+  severity              String
+  source                String
+  status                String   @default("open")
+  safeSummary           String
+  reasonCodes           Json     @default("[]")
+  linkedIncidentId      String?
+  requiresPause         Boolean  @default(false)
+  requiresRollback      Boolean  @default(false)
+  requiresTeacherReview Boolean  @default(false)
+  requiresSafeguardingReview Boolean @default(false)
+  requiresDeenReview    Boolean  @default(false)
+  metadataSafeJson      Json     @default("{}")
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  executionRun          PilotExecutionRun @relation(fields: [executionRunId], references: [id], onDelete: Cascade)
+
+  @@index([executionRunId])
+  @@index([pilotProgramId])
+  @@index([severity])
+  @@index([status])
+}
+
+model PilotPostPilotReview {
+  id                    String   @id @default(uuid())
+  executionRunId        String
+  pilotProgramId        String
+  schoolId              String
+  status                String   @default("draft")
+  safeSummary           String
+  learningQualitySummary Json    @default("{}")
+  safetySummary         Json     @default("{}")
+  privacySummary        Json     @default("{}")
+  deenSummary           Json     @default("{}")
+  operationsSummary     Json     @default("{}")
+  feedbackSummary       Json     @default("{}")
+  recommendedDecision   String   @default("pause_and_fix")
+  safeToStartNextTask   Boolean  @default(false)
+  blockingIssues        Json     @default("[]")
+  knownLimitations      Json     @default("[]")
+  artifactPaths         Json     @default("[]")
+  metadataSafeJson      Json     @default("{}")
+  generatedAt           DateTime @default(now())
+  createdAt             DateTime @default(now())
+
+  executionRun          PilotExecutionRun @relation(fields: [executionRunId], references: [id], onDelete: Cascade)
+
+  @@index([executionRunId])
+  @@index([pilotProgramId])
+}
+
+model PilotExecutionAuditRecord {
+  id              String   @id @default(uuid())
+  executionRunId  String?
+  pilotProgramId  String?
+  schoolId        String?
+  actorRole       String
+  actorIdHash     String?
+  action          String
+  safeSummary     String
+  metadataSafeJson Json    @default("{}")
+  requestId       String?
+  correlationId   String?
+  createdAt       DateTime @default(now())
+
+  executionRun    PilotExecutionRun? @relation(fields: [executionRunId], references: [id], onDelete: SetNull)
+
+  @@index([executionRunId])
+  @@index([pilotProgramId])
+  @@index([action])
+  @@index([createdAt])
+}
+
+// ── Task 028: Controlled Expansion Execution v1 ──
+
+model ExpansionExecutionRun {
+  id                String   @id @default(uuid())
+  expansionProposalId String
+  pilotProgramId    String
+  schoolId          String
+  status            String   @default("not_started")
+  approvedDecisionRef String?
+  task027ReportRef  String?
+  safeSummary       String
+  startedAt         DateTime?
+  pausedAt          DateTime?
+  rolledBackAt      DateTime?
+  completedAt       DateTime?
+  startedByRole     String?
+  startedByActorIdHash String?
+  currentStage      Int      @default(0)
+  stagePlan         Json     @default("{}")
+  approvedScopeSnapshot Json @default("{}")
+  blockingIssues    Json     @default("[]")
+  warnings          Json     @default("[]")
+  metadataSafeJson  Json     @default("{}")
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  stages            ExpansionExecutionStage[]
+  participants      ExpandedPilotParticipant[]
+  runtimeEvents     ExpansionRuntimeEvent[]
+  healthSnapshots   ExpansionHealthSnapshot[]
+  oversightItems    ExpansionOversightItem[]
+  interventions     ExpansionInterventionRecord[]
+  rollbackRecords   ExpansionRollbackRecord[]
+
+  @@index([expansionProposalId])
+  @@index([pilotProgramId])
+  @@index([schoolId])
+  @@index([status])
+}
+
+model ExpansionExecutionStage {
+  id                      String   @id @default(uuid())
+  executionRunId          String
+  expansionProposalId     String
+  schoolId                String
+  stageNumber             Int
+  status                  String   @default("pending")
+  plannedStudentCount     Int      @default(0)
+  plannedTeacherCount     Int      @default(0)
+  activatedStudentCount   Int      @default(0)
+  activatedTeacherCount   Int      @default(0)
+  allowedClassIds         Json     @default("[]")
+  allowedSubjectIds       Json     @default("[]")
+  allowedCurriculumScopes Json     @default("[]")
+  startedAt               DateTime?
+  completedAt             DateTime?
+  pausedAt                DateTime?
+  safeSummary             String
+  blockingIssues          Json     @default("[]")
+  warnings                Json     @default("[]")
+  metadataSafeJson        Json     @default("{}")
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
+
+  executionRun            ExpansionExecutionRun @relation(fields: [executionRunId], references: [id], onDelete: Cascade)
+
+  @@index([executionRunId])
+  @@index([status])
+}
+
+model ExpandedPilotParticipant {
+  id                  String   @id @default(uuid())
+  executionRunId      String
+  stageId             String?
+  pilotProgramId      String
+  schoolId            String
+  actorIdHash         String
+  role                String   @default("student")
+  classId             String?
+  subjectIds          Json     @default("[]")
+  curriculumScopes    Json     @default("[]")
+  activationStatus    String   @default("pending")
+  activationReasonCodes Json   @default("[]")
+  joinedAt            DateTime?
+  removedAt           DateTime?
+  metadataSafeJson    Json     @default("{}")
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  executionRun        ExpansionExecutionRun @relation(fields: [executionRunId], references: [id], onDelete: Cascade)
+
+  @@index([executionRunId])
+  @@index([actorIdHash])
+  @@index([activationStatus])
+}
+
+model ExpansionRuntimeEvent {
+  id              String   @id @default(uuid())
+  executionRunId  String
+  stageId         String?
+  pilotProgramId  String
+  schoolId        String
+  actorRole       String
+  actorIdHash     String?
+  eventType       String
+  eventStatus     String
+  safeSummary     String
+  reasonCodes     Json     @default("[]")
+  metadataSafeJson Json    @default("{}")
+  requestId       String?
+  correlationId   String?
+  createdAt       DateTime @default(now())
+
+  executionRun    ExpansionExecutionRun @relation(fields: [executionRunId], references: [id], onDelete: Cascade)
+
+  @@index([executionRunId])
+  @@index([eventType])
+}
+
+model ExpansionHealthSnapshot {
+  id                       String   @id @default(uuid())
+  executionRunId           String
+  stageId                  String?
+  pilotProgramId           String
+  schoolId                 String
+  activeExpandedSessions   Int      @default(0)
+  allowedExpandedSessionStarts Int  @default(0)
+  blockedExpandedSessionStarts Int  @default(0)
+  schoolAuthBlocks         Int      @default(0)
+  cohortScopeBlocks        Int      @default(0)
+  curriculumGateBlocks     Int      @default(0)
+  socraticGateBlocks       Int      @default(0)
+  deenGateBlocks           Int      @default(0)
+  privacyGateBlocks        Int      @default(0)
+  aiCallBlocks             Int      @default(0)
+  memoryAccessBlocks       Int      @default(0)
+  evidenceWriteBlocks      Int      @default(0)
+  feedbackCount            Int      @default(0)
+  oversightItemCount       Int      @default(0)
+  interventionCount        Int      @default(0)
+  incidentBridgeCount      Int      @default(0)
+  errorCount               Int      @default(0)
+  p95LatencyMs             Int?
+  safeSummary              String
+  metadataSafeJson         Json     @default("{}")
+  createdAt                DateTime @default(now())
+
+  executionRun             ExpansionExecutionRun @relation(fields: [executionRunId], references: [id], onDelete: Cascade)
+
+  @@index([executionRunId])
+}
+
+model ExpansionOversightItem {
+  id                    String   @id @default(uuid())
+  executionRunId        String
+  stageId               String?
+  pilotProgramId        String
+  schoolId              String
+  itemType              String
+  severity              String
+  status                String   @default("open")
+  source                String
+  safeSummary           String
+  reasonCodes           Json     @default("[]")
+  assignedRole          String?
+  requiresTeacherReview Boolean  @default(false)
+  requiresAdminReview   Boolean  @default(false)
+  requiresPrivacyReview Boolean  @default(false)
+  requiresDeenReview    Boolean  @default(false)
+  requiresSocraticReview Boolean @default(false)
+  requiresCurriculumReview Boolean @default(false)
+  requiresPause         Boolean  @default(false)
+  requiresRollback      Boolean  @default(false)
+  metadataSafeJson      Json     @default("{}")
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  executionRun          ExpansionExecutionRun @relation(fields: [executionRunId], references: [id], onDelete: Cascade)
+
+  @@index([executionRunId])
+  @@index([severity])
+  @@index([status])
+}
+
+model ExpansionInterventionRecord {
+  id              String   @id @default(uuid())
+  executionRunId  String
+  stageId         String?
+  pilotProgramId  String
+  schoolId        String
+  interventionType String
+  status          String   @default("requested")
+  actorRole       String
+  actorIdHash     String?
+  safeSummary     String
+  reasonCodes     Json     @default("[]")
+  beforeSnapshot  Json     @default("{}")
+  afterSnapshot   Json     @default("{}")
+  metadataSafeJson Json    @default("{}")
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  executionRun    ExpansionExecutionRun @relation(fields: [executionRunId], references: [id], onDelete: Cascade)
+
+  @@index([executionRunId])
+}
+
+model ExpansionRollbackRecord {
+  id                    String   @id @default(uuid())
+  executionRunId        String
+  stageId               String?
+  pilotProgramId        String
+  schoolId              String
+  rollbackStatus        String   @default("pending")
+  rollbackReason        String
+  safeSummary           String
+  previousScopeSnapshot Json     @default("{}")
+  restoredScopeSnapshot Json     @default("{}")
+  affectedParticipantCount Int   @default(0)
+  dataDeleted           Boolean  @default(false)
+  auditPreserved        Boolean  @default(true)
+  metadataSafeJson      Json     @default("{}")
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  executionRun          ExpansionExecutionRun @relation(fields: [executionRunId], references: [id], onDelete: Cascade)
+
+  @@index([executionRunId])
+}
+
+model ExpansionCompletionReview {
+  id                    String   @id @default(uuid())
+  executionRunId        String
+  pilotProgramId        String
+  schoolId              String
+  status                String   @default("draft")
+  safeSummary           String
+  learningQualitySummary Json    @default("{}")
+  safetySummary         Json     @default("{}")
+  privacySummary        Json     @default("{}")
+  deenSummary           Json     @default("{}")
+  socraticSummary       Json     @default("{}")
+  curriculumSummary     Json     @default("{}")
+  operationsSummary     Json     @default("{}")
+  teacherAdminSummary   Json     @default("{}")
+  rollbackSummary       Json     @default("{}")
+  recommendedDecision   String   @default("continue_controlled_expansion")
+  safeToStartNextTask   Boolean  @default(false)
+  blockingIssues        Json     @default("[]")
+  knownLimitations      Json     @default("[]")
+  artifactPaths         Json     @default("[]")
+  generatedAt           DateTime @default(now())
+  createdAt             DateTime @default(now())
+
+  @@index([executionRunId])
+}
+
+model ExpansionExecutionReport {
+  id                   String   @id @default(uuid())
+  executionRunId       String?
+  schoolId             String?
+  taskId               String
+  taskName             String
+  status               String   @default("draft")
+  safeToStartNextTask  Boolean  @default(false)
+  safeSummary          String
+  executionSummary     Json     @default("{}")
+  stageSummary         Json     @default("{}")
+  runtimeGateSummary   Json     @default("{}")
+  monitoringSummary    Json     @default("{}")
+  oversightSummary     Json     @default("{}")
+  rollbackSummary      Json     @default("{}")
+  completionReviewSummary Json @default("{}")
+  blockingIssues       Json     @default("[]")
+  knownLimitations     Json     @default("[]")
+  verificationSummary  Json     @default("{}")
+  artifactPaths        Json     @default("[]")
+  generatedAt          DateTime @default(now())
+  createdAt            DateTime @default(now())
+
+  @@index([taskId])
+}
+
+model ExpansionExecutionAuditRecord {
+  id              String   @id @default(uuid())
+  executionRunId  String?
+  stageId         String?
+  pilotProgramId  String?
+  schoolId        String?
+  actorRole       String   @default("unknown")
+  actorIdHash     String?
+  action          String
+  safeSummary     String
+  metadataSafeJson Json    @default("{}")
+  requestId       String?
+  correlationId   String?
+  createdAt       DateTime @default(now())
+
+  @@index([executionRunId])
+  @@index([createdAt])
+}
+
+// ── Phase 2: Learning Mode Runtime & Safe Signal Backbone ──
+
+model LearningModeSession {
+  id              String   @id @default(cuid())
+  schoolId        String
+  studentId       String
+  conversationId  String?
+
+  mode            String
+  status          String   @default("requested")
+  stage           String   @default("entry")
+
+  subjectId       String?
+  topicId         String?
+  skillId         String?
+
+  requestedAt     DateTime @default(now())
+  startedAt       DateTime?
+  endedAt         DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  signals         LearningModeSignal[]
+  attempts        LearningModeAttempt[]
+  hintEvents      LearningModeHintEvent[]
+  exitSummary     LearningModeExitSummary?
+
+  @@index([schoolId, studentId])
+  @@index([schoolId, mode])
+  @@index([schoolId, studentId, status])
+  @@index([createdAt])
+}
+
+model LearningModeSignal {
+  id              String   @id @default(cuid())
+  modeSessionId   String
+  modeSession     LearningModeSession @relation(fields: [modeSessionId], references: [id], onDelete: Cascade)
+  schoolId        String
+  studentId       String
+
+  signalType      String
+  stage           String?
+
+  topicId         String?
+  subjectId       String?
+  skillId         String?
+
+  attemptNumber   Int?
+  hintLevel       String?
+  answerQuality   String?
+  mistakeCategory String?
+  supportActionType String?
+  confidenceSignal String?
+  timeSpentBucket String?
+  difficultyBucket String?
+  sourceType      String?
+
+  createdAt       DateTime @default(now())
+
+  @@index([modeSessionId])
+  @@index([schoolId, studentId])
+  @@index([signalType])
+  @@index([createdAt])
+}
+
+model LearningModeAttempt {
+  id              String   @id @default(cuid())
+  modeSessionId   String
+  modeSession     LearningModeSession @relation(fields: [modeSessionId], references: [id], onDelete: Cascade)
+  schoolId        String
+  studentId       String
+
+  stage           String
+  attemptNumber   Int
+  answerQuality   String?
+  isCorrect       Boolean?
+  mistakeCategory String?
+  usedHint        Boolean  @default(false)
+  hintLevel       String?
+  timeSpentBucket String?
+  topicId         String?
+  skillId         String?
+
+  createdAt       DateTime @default(now())
+
+  @@index([modeSessionId])
+  @@index([schoolId, studentId])
+  @@index([schoolId, studentId, createdAt])
+}
+
+model LearningModeHintEvent {
+  id                    String   @id @default(cuid())
+  modeSessionId         String
+  modeSession           LearningModeSession @relation(fields: [modeSessionId], references: [id], onDelete: Cascade)
+  schoolId              String
+  studentId             String
+
+  hintLevel             String
+  stage                 String?
+  attemptNumber         Int?
+  wasRequestedByStudent Boolean  @default(false)
+  wasSuggestedBySystem  Boolean  @default(false)
+  effectivenessUnknown  Boolean  @default(true)
+
+  createdAt             DateTime @default(now())
+
+  @@index([modeSessionId])
+  @@index([schoolId, studentId])
+  @@index([hintLevel])
+}
+
+model LearningModeExitSummary {
+  id                    String   @id @default(cuid())
+  modeSessionId         String   @unique
+  modeSession           LearningModeSession @relation(fields: [modeSessionId], references: [id], onDelete: Cascade)
+  schoolId              String
+  studentId             String
+
+  mode                  String
+  topicId               String?
+  subjectId             String?
+  skillsTouched         Json     @default("[]")
+  strengthSignals       Json     @default("[]")
+  weaknessSignals       Json     @default("[]")
+  hintsUsedCount        Int      @default(0)
+  attemptsCount         Int      @default(0)
+  stuckCount            Int      @default(0)
+  recoveryCount         Int      @default(0)
+  finalUnderstandingLevel String?
+  recommendedNextAction String?
+
+  createdAt             DateTime @default(now())
+
+  @@index([modeSessionId])
+  @@index([schoolId, studentId])
+  @@index([createdAt])
+}
+
+// ── Phase 2 Task 011: Safe Learning Evidence Ledger ──
+
+model SafeLearningEvidenceRecord {
+  id                         String   @id @default(cuid())
+  idempotencyKey             String   @unique
+  schoolId                   String
+  studentId                  String
+  tutorLearnerId             String?
+  conversationId             String?
+  tutorSessionId             String?
+  turnId                     String?
+  modeSessionId              String?
+  sourceTask                 String
+  sourceMode                 String
+  evidenceType               String
+  evidenceStrength           String
+  sourceTruthStatus          String
+  dataQualityStatus          String
+  approvedContentRef         String?
+  contentFingerprint         String?
+  subjectId                  String?
+  topicId                    String?
+  skillId                    String?
+  objectiveId                String?
+  targetType                 String?
+  targetRef                  String?
+  attemptNumber              Int?
+  timeSpentBucket            String?
+  difficultyBucket           String?
+  supportNeed                String?
+  hintLevel                  String?
+  hintDependencyBucket       String?
+  mistakeCategory            String?
+  misconceptionCategory      String?
+  recallQuality              String?
+  explanationQualityBucket   String?
+  reflectionQualityBucket    String?
+  readinessBucket            String?
+  masterySignal              String?
+  weakTopicSignal            String?
+  revisionSignal             String?
+  growthProofSignal          String?
+  policyDecision             String
+  safeReasonCodesJson        Json     @default("[]")
+  safeEvidenceRefsJson       Json     @default("[]")
+  safeMetadataJson           Json     @default("{}")
+  createdAt                  DateTime @default(now())
+  updatedAt                  DateTime @updatedAt
+
+  @@index([idempotencyKey])
+  @@index([schoolId, studentId])
+  @@index([schoolId, tutorLearnerId])
+  @@index([schoolId, sourceTask])
+  @@index([schoolId, sourceMode])
+  @@index([schoolId, evidenceType])
+  @@index([schoolId, subjectId, topicId, skillId])
+  @@index([schoolId, studentId, createdAt])
+  @@index([createdAt])
+}
+
+model SafeLearningEvidenceAggregateRecord {
+  id                   String   @id @default(cuid())
+  schoolId             String
+  studentId            String
+  tutorLearnerId       String?
+  aggregateWindow      String
+  subjectId            String?
+  topicId              String?
+  skillId              String?
+  evidenceCount        Int      @default(0)
+  realEvidenceCount    Int      @default(0)
+  weakSignalCount      Int      @default(0)
+  masterySignalCount   Int      @default(0)
+  revisionSignalCount  Int      @default(0)
+  mistakeSignalCount   Int      @default(0)
+  hintDependencyCount  Int      @default(0)
+  reflectionCount      Int      @default(0)
+  teachBackCount       Int      @default(0)
+  quizRecallCount      Int      @default(0)
+  lastEvidenceAt       DateTime?
+  confidenceBucket     String   @default("none")
+  safeSummaryJson      Json     @default("{}")
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  @@unique([schoolId, studentId, aggregateWindow])
+  @@index([schoolId, studentId])
+  @@index([schoolId, studentId, aggregateWindow])
+  @@index([createdAt])
+}
+
+model GrowthProofRecord {
+  id                   String   @id @default(cuid())
+  schoolId             String
+  studentId            String
+  tutorLearnerId       String?
+  subjectId            String?
+  topicId              String?
+  skillId              String?
+  proofStatus          String
+  proofStrength        String
+  sourceEvidenceIdsJson Json   @default("[]")
+  safeEvidenceRefsJson  Json   @default("[]")
+  safeReasonCodesJson   Json   @default("[]")
+  sourceTruthStatus    String
+  confidenceBucket     String   @default("none")
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  @@index([schoolId, studentId])
+  @@index([schoolId, studentId, subjectId, skillId])
+  @@index([createdAt])
+}
+
+model SafeLearningEvidenceAuditRecord {
+  id                 String   @id @default(cuid())
+  schoolId           String
+  studentId          String?
+  eventType          String
+  policyDecision     String
+  safeReasonCodesJson Json   @default("[]")
+  safeMetadataJson   Json     @default("{}")
+  createdAt          DateTime @default(now())
+
+  @@index([schoolId])
+  @@index([schoolId, studentId])
+  @@index([eventType])
+  @@index([createdAt])
+}
+
+// ── Phase 2 Task 002: Student Learning Profile + Mastery Foundation ──
+
+model StudentLearningProfileSnapshot {
+  id                       String   @id @default(cuid())
+  schoolId                 String
+  studentId                String
+  tutorLearnerId           String?
+
+  profileVersion           Int      @default(1)
+  status                   String   @default("active")
+  profileJson              Json     @default("{}")
+  subjectSummariesJson     Json     @default("[]")
+  topicSummariesJson       Json     @default("[]")
+  supportPatternsJson      Json     @default("[]")
+  recommendedActionsJson   Json     @default("[]")
+  safeEvidenceRefsJson     Json     @default("[]")
+  privacyLevel             String   @default("student_only")
+  confidenceScore          Float    @default(0)
+  generatedFromEventCount  Int      @default(0)
+  lastEvidenceAt           DateTime?
+  createdAt                DateTime @default(now())
+  updatedAt                DateTime @updatedAt
+
+  @@unique([schoolId, studentId])
+  @@index([schoolId, studentId])
+  @@index([schoolId, tutorLearnerId])
+  @@index([status])
+  @@index([updatedAt])
+}
+
+model StudentSupportPatternSnapshot {
+  id                    String   @id @default(cuid())
+  schoolId              String
+  studentId             String
+
+  supportType           String
+  effectivenessSignal   String   @default("unknown")
+  timesUsed             Int      @default(0)
+  recoveryAfterUseCount Int      @default(0)
+  hintLevelMostHelpful  String?
+  confidenceScore       Float    @default(0)
+  safeEvidenceRefsJson  Json     @default("[]")
+  lastEffectiveAt       DateTime?
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  @@unique([schoolId, studentId, supportType])
+  @@index([schoolId, studentId])
+  @@index([schoolId, studentId, supportType])
+}
+
+model StudentMasteryAggregationRun {
+  id                 String   @id @default(cuid())
+  schoolId           String
+  studentId          String
+
+  status             String   @default("pending")
+  sourceEventCount   Int      @default(0)
+  updatedSkillCount  Int      @default(0)
+  updatedTopicCount  Int      @default(0)
+  weakTopicCount     Int      @default(0)
+  mistakePatternCount Int     @default(0)
+  warningsJson       Json     @default("[]")
+  startedAt          DateTime @default(now())
+  completedAt        DateTime?
+  createdAt          DateTime @default(now())
+
+  @@index([schoolId, studentId])
+  @@index([schoolId, studentId, status])
+  @@index([createdAt])
+}
+
+// ── Phase 2 Task 003: Tutor Action Ranking + Hint Ladder Engine ──
+
+model TutorActionDecisionRecord {
+  id                    String   @id @default(cuid())
+  schoolId              String
+  studentId             String
+  tutorLearnerId        String?
+
+  modeSessionId         String?
+  conversationId        String?
+  mode                  String?
+  stage                 String?
+  subjectId             String?
+  topicId               String?
+  skillId               String?
+
+  selectedAction        String
+  hintLevel             String?
+  supportLevel          String
+  learnerNeedCategory   String
+
+  rankedActionsJson     Json     @default("[]")
+  answerPolicyJson      Json     @default("{}")
+  contentPolicyJson     Json     @default("{}")
+  decisionReasonCodesJson Json   @default("[]")
+  safeEvidenceRefsJson  Json     @default("[]")
+  confidenceScore       Float    @default(0)
+
+  createdAt             DateTime @default(now())
+
+  @@index([schoolId, studentId])
+  @@index([schoolId, tutorLearnerId])
+  @@index([modeSessionId])
+  @@index([selectedAction])
+  @@index([createdAt])
+}
+
+model TutorHintLadderStateRecord {
+  id                String   @id @default(cuid())
+  schoolId          String
+  studentId         String
+  tutorLearnerId    String?
+
+  modeSessionId     String?
+  topicId           String?
+  skillId           String?
+
+  currentHintLevel  String   @default("attention_hint")
+  hintCount         Int      @default(0)
+  lastHintAt        DateTime?
+  stuckCount        Int      @default(0)
+  recoveryCount     Int      @default(0)
+  status            String   @default("active")
+
+  safeEvidenceRefsJson Json  @default("[]")
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@index([schoolId, studentId])
+  @@index([schoolId, studentId, topicId, skillId])
+  @@index([modeSessionId])
+  @@index([status])
+}
+
+model TutorActionEffectivenessRecord {
+  id                  String   @id @default(cuid())
+  schoolId            String
+  studentId           String
+  tutorLearnerId      String?
+
+  decisionId          String
+  selectedAction      String
+  hintLevel           String?
+
+  effectivenessSignal String
+  recoveryDetected    Boolean  @default(false)
+  studentProgressSignal String?
+
+  safeEvidenceRefsJson Json    @default("[]")
+  createdAt           DateTime @default(now())
+
+  @@index([schoolId, studentId])
+  @@index([decisionId])
+  @@index([selectedAction])
+  @@index([createdAt])
+}
+
+// ── Phase 2 Task 004: Focus Mode Runtime + One-Problem Learning Chamber ──
+
+model FocusModeSessionRecord {
+  id                String   @id @default(cuid())
+  schoolId          String
+  studentId         String
+  tutorLearnerId    String?
+  modeSessionId     String
+  conversationId    String?
+  subjectId         String?
+  topicId           String?
+  skillId           String?
+  approvedContentRef String?
+  problemRef        String?
+  problemFingerprint String?
+  targetType        String
+  focusGoalCategory String
+  status            String   @default("active")
+  currentStage      String   @default("awaiting_problem")
+  currentStepKey    String?
+  attemptCount      Int      @default(0)
+  hintCount         Int      @default(0)
+  stuckCount        Int      @default(0)
+  recoveryCount     Int      @default(0)
+  safeEvidenceRefsJson Json   @default("[]")
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  startedAt         DateTime @default(now())
+  endedAt           DateTime?
+
+  steps             FocusModeStepRecord[]
+  attempts          FocusModeAttemptRecord[]
+  summaries         FocusModeSummaryRecord[]
+
+  @@index([schoolId, studentId])
+  @@index([schoolId, tutorLearnerId])
+  @@index([modeSessionId])
+  @@index([conversationId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model FocusModeStepRecord {
+  id                    String   @id @default(cuid())
+  schoolId              String
+  studentId             String
+  focusSessionId        String
+  modeSessionId         String
+  stepKey               String
+  stepType              String
+  stage                 String
+  status                String   @default("active")
+  selectedTutorAction   String?
+  hintLevel             String?
+  supportLevel          String?
+  learnerNeedCategory   String?
+  attemptNumber         Int?
+  safeReasonCodesJson   Json     @default("[]")
+  safeEvidenceRefsJson  Json     @default("[]")
+  createdAt             DateTime @default(now())
+  completedAt           DateTime?
+
+  focusSession          FocusModeSessionRecord @relation(fields: [focusSessionId], references: [id], onDelete: Cascade)
+
+  @@index([focusSessionId])
+  @@index([modeSessionId])
+  @@index([schoolId, studentId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model FocusModeAttemptRecord {
+  id                String   @id @default(cuid())
+  schoolId          String
+  studentId         String
+  focusSessionId    String
+  modeSessionId     String
+  stepKey           String?
+  stage             String
+  attemptNumber     Int
+  answerQuality     String?
+  isCorrect         Boolean?
+  mistakeCategory   String?
+  usedHint          Boolean  @default(false)
+  hintLevel         String?
+  timeSpentBucket   String?
+  safeEvidenceRefsJson Json  @default("[]")
+  createdAt         DateTime @default(now())
+
+  focusSession      FocusModeSessionRecord @relation(fields: [focusSessionId], references: [id], onDelete: Cascade)
+
+  @@index([focusSessionId])
+  @@index([modeSessionId])
+  @@index([schoolId, studentId])
+  @@index([attemptNumber])
+  @@index([createdAt])
+}
+
+model FocusModeSummaryRecord {
+  id                    String   @id @default(cuid())
+  schoolId              String
+  studentId             String
+  focusSessionId        String
+  modeSessionId         String
+  finalStage            String
+  exitReason            String
+  attemptCount          Int      @default(0)
+  hintCount             Int      @default(0)
+  stuckCount            Int      @default(0)
+  recoveryCount         Int      @default(0)
+  masterySignal         String?
+  summarySignalJson     Json     @default("{}")
+  safeEvidenceRefsJson  Json     @default("[]")
+  createdAt             DateTime @default(now())
+
+  focusSession          FocusModeSessionRecord @relation(fields: [focusSessionId], references: [id], onDelete: Cascade)
+
+  @@index([focusSessionId])
+  @@index([modeSessionId])
+  @@index([schoolId, studentId])
+  @@index([createdAt])
+}
+
+// ── Phase 2 Task 005: Exam Mode Runtime + Honest Attempt Exam Chamber ──
+
+model ExamModeSessionRecord {
+  id                  String   @id @default(cuid())
+  schoolId            String
+  studentId           String
+  tutorLearnerId      String?
+  modeSessionId       String
+  conversationId      String?
+  subjectId           String?
+  topicId             String?
+  skillId             String?
+  approvedContentRef  String?
+  paperRef            String?
+  examSetRef          String?
+  targetType          String
+  examGoalCategory    String
+  examSessionType     String
+  timerMode           String   @default("untimed")
+  status              String   @default("active")
+  currentStage        String   @default("awaiting_exam_target")
+  currentQuestionIndex Int     @default(0)
+  questionCount       Int      @default(0)
+  attemptCount        Int      @default(0)
+  hintCount           Int      @default(0)
+  stuckCount          Int      @default(0)
+  recoveryCount       Int      @default(0)
+  skippedCount        Int      @default(0)
+  flaggedCount        Int      @default(0)
+  safeEvidenceRefsJson Json    @default("[]")
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+  startedAt           DateTime @default(now())
+  submittedAt         DateTime?
+  endedAt             DateTime?
+
+  questionStates      ExamModeQuestionStateRecord[]
+  attempts            ExamModeAttemptRecord[]
+  summaries           ExamModeSummaryRecord[]
+
+  @@index([schoolId, studentId])
+  @@index([schoolId, tutorLearnerId])
+  @@index([modeSessionId])
+  @@index([conversationId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model ExamModeQuestionStateRecord {
+  id                    String   @id @default(cuid())
+  schoolId              String
+  studentId             String
+  examSessionId         String
+  modeSessionId         String
+  questionKey           String
+  questionIndex         Int
+  questionRef           String?
+  questionFingerprint   String?
+  topicId               String?
+  skillId               String?
+  difficultyBucket      String?
+  status                String   @default("not_started")
+  attemptNumber         Int      @default(0)
+  answerQuality         String?
+  isCorrect             Boolean?
+  mistakeCategory       String?
+  confidenceBucket      String?
+  timeSpentBucket       String?
+  scoreBucket           String?
+  selectedTutorAction   String?
+  hintLevel             String?
+  safeReasonCodesJson   Json     @default("[]")
+  safeEvidenceRefsJson  Json     @default("[]")
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+  completedAt           DateTime?
+
+  examSession           ExamModeSessionRecord @relation(fields: [examSessionId], references: [id], onDelete: Cascade)
+
+  @@index([examSessionId])
+  @@index([modeSessionId])
+  @@index([schoolId, studentId])
+  @@index([questionIndex])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model ExamModeAttemptRecord {
+  id                String   @id @default(cuid())
+  schoolId          String
+  studentId         String
+  examSessionId     String
+  modeSessionId     String
+  questionKey       String
+  questionIndex     Int
+  questionRef       String?
+  stage             String
+  attemptNumber     Int
+  answerQuality     String?
+  isCorrect         Boolean?
+  mistakeCategory   String?
+  usedHint          Boolean  @default(false)
+  hintLevel         String?
+  timeSpentBucket   String?
+  confidenceBucket  String?
+  scoreBucket       String?
+  safeEvidenceRefsJson Json  @default("[]")
+  createdAt         DateTime @default(now())
+
+  examSession       ExamModeSessionRecord @relation(fields: [examSessionId], references: [id], onDelete: Cascade)
+
+  @@index([examSessionId])
+  @@index([modeSessionId])
+  @@index([schoolId, studentId])
+  @@index([questionKey])
+  @@index([questionIndex])
+  @@index([createdAt])
+}
+
+model ExamModeSummaryRecord {
+  id                    String   @id @default(cuid())
+  schoolId              String
+  studentId             String
+  examSessionId         String
+  modeSessionId         String
+  finalStage            String
+  exitReason            String
+  questionCount         Int      @default(0)
+  attemptCount          Int      @default(0)
+  hintCount             Int      @default(0)
+  stuckCount            Int      @default(0)
+  recoveryCount         Int      @default(0)
+  skippedCount          Int      @default(0)
+  flaggedCount          Int      @default(0)
+  estimatedReadinessBucket String?
+  masterySignal         String?
+  summarySignalJson     Json     @default("{}")
+  safeEvidenceRefsJson  Json     @default("[]")
+  createdAt             DateTime @default(now())
+
+  examSession           ExamModeSessionRecord @relation(fields: [examSessionId], references: [id], onDelete: Cascade)
+
+  @@index([examSessionId])
+  @@index([modeSessionId])
+  @@index([schoolId, studentId])
+  @@index([createdAt])
+}
+
+// �� Phase 2 Task 006: Quiz Mode Runtime + Safe Knowledge Check Chamber ��
+
+model QuizModeSessionRecord {
+  id                  String   @id @default(cuid())
+  schoolId            String
+  studentId           String
+  tutorLearnerId      String?
+  modeSessionId       String
+  conversationId      String?
+  subjectId           String?
+  topicId             String?
+  skillId             String?
+  approvedContentRef  String?
+  quizSetRef          String?
+  targetType          String
+  quizGoalCategory    String
+  quizSessionType     String
+  status              String   @default("active")
+  currentStage        String   @default("awaiting_quiz_target")
+  currentQuestionIndex Int     @default(0)
+  questionCount       Int      @default(0)
+  attemptCount        Int      @default(0)
+  correctCount        Int      @default(0)
+  partialCount        Int      @default(0)
+  incorrectCount      Int      @default(0)
+  hintCount           Int      @default(0)
+  stuckCount          Int      @default(0)
+  recoveryCount       Int      @default(0)
+  skippedCount        Int      @default(0)
+  flaggedCount        Int      @default(0)
+  safeEvidenceRefsJson Json    @default("[]")
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+  startedAt           DateTime @default(now())
+  submittedAt         DateTime?
+  endedAt             DateTime?
+
+  questionStates      QuizModeQuestionStateRecord[]
+  attempts            QuizModeAttemptRecord[]
+  summaries           QuizModeSummaryRecord[]
+
+  @@index([schoolId, studentId])
+  @@index([schoolId, tutorLearnerId])
+  @@index([modeSessionId])
+  @@index([conversationId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model QuizModeQuestionStateRecord {
+  id                    String   @id @default(cuid())
+  schoolId              String
+  studentId             String
+  quizSessionId         String
+  modeSessionId         String
+  questionKey           String
+  questionIndex         Int
+  questionRef           String?
+  questionFingerprint   String?
+  topicId               String?
+  skillId               String?
+  difficultyBucket      String?
+  status                String   @default("not_started")
+  attemptNumber         Int      @default(0)
+  answerQuality         String?
+  isCorrect             Boolean?
+  mistakeCategory       String?
+  confidenceBucket      String?
+  timeSpentBucket       String?
+  scoreBucket           String?
+  retrievalSignal       String?
+  selectedTutorAction   String?
+  hintLevel             String?
+  safeReasonCodesJson   Json     @default("[]")
+  safeEvidenceRefsJson  Json     @default("[]")
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+  completedAt           DateTime?
+
+  quizSession           QuizModeSessionRecord @relation(fields: [quizSessionId], references: [id], onDelete: Cascade)
+
+  @@index([quizSessionId])
+  @@index([modeSessionId])
+  @@index([schoolId, studentId])
+  @@index([questionIndex])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model QuizModeAttemptRecord {
+  id                String   @id @default(cuid())
+  schoolId          String
+  studentId         String
+  quizSessionId     String
+  modeSessionId     String
+  questionKey       String
+  questionIndex     Int
+  questionRef       String?
+  stage             String
+  attemptNumber     Int
+  answerQuality     String?
+  isCorrect         Boolean?
+  mistakeCategory   String?
+  usedHint          Boolean  @default(false)
+  hintLevel         String?
+  timeSpentBucket   String?
+  confidenceBucket  String?
+  scoreBucket       String?
+  retrievalSignal   String?
+  safeEvidenceRefsJson Json  @default("[]")
+  createdAt         DateTime @default(now())
+
+  quizSession       QuizModeSessionRecord @relation(fields: [quizSessionId], references: [id], onDelete: Cascade)
+
+  @@index([quizSessionId])
+  @@index([modeSessionId])
+  @@index([schoolId, studentId])
+  @@index([questionKey])
+  @@index([questionIndex])
+  @@index([createdAt])
+}
+
+model QuizModeSummaryRecord {
+  id                    String   @id @default(cuid())
+  schoolId              String
+  studentId             String
+  quizSessionId         String
+  modeSessionId         String
+  finalStage            String
+  exitReason            String
+  questionCount         Int      @default(0)
+  attemptCount          Int      @default(0)
+  correctCount          Int      @default(0)
+  partialCount          Int      @default(0)
+  incorrectCount        Int      @default(0)
+  hintCount             Int      @default(0)
+  stuckCount            Int      @default(0)
+  recoveryCount         Int      @default(0)
+  skippedCount          Int      @default(0)
+  flaggedCount          Int      @default(0)
+  estimatedRecallStrengthBucket String?
+  estimatedReadinessBucket String?
+  masterySignal         String?
+  summarySignalJson     Json     @default("{}")
+  safeEvidenceRefsJson  Json     @default("[]")
+  createdAt             DateTime @default(now())
+
+  quizSession           QuizModeSessionRecord @relation(fields: [quizSessionId], references: [id], onDelete: Cascade)
+
+  @@index([quizSessionId])
+  @@index([modeSessionId])
+  @@index([schoolId, studentId])
+  @@index([createdAt])
+}
+
+model TeachBackModeSessionRecord {
+  id                    String   @id @default(cuid())
+  schoolId              String
+  studentId             String
+  tutorLearnerId        String?
+  modeSessionId         String
+  conversationId        String?
+  subjectId             String?
+  topicId               String?
+  skillId               String?
+  approvedContentRef    String?
+  targetRef             String?
+  promptSetRef          String?
+  targetType            String
+  teachBackGoalCategory String
+  teachBackSessionType  String
+  status                String   @default("active")
+  currentStage          String   @default("awaiting_teach_back_target")
+  currentPromptIndex    Int      @default(0)
+  promptCount           Int      @default(0)
+  attemptCount          Int      @default(0)
+  strongExplanationCount Int     @default(0)
+  partialExplanationCount Int   @default(0)
+  weakExplanationCount  Int      @default(0)
+  misconceptionCount    Int      @default(0)
+  hintCount             Int      @default(0)
+  stuckCount            Int      @default(0)
+  recoveryCount         Int      @default(0)
+  reflectionCount       Int      @default(0)
+  safeEvidenceRefsJson  Json     @default("[]")
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+  startedAt             DateTime @default(now())
+  submittedAt           DateTime?
+  endedAt               DateTime?
+
+  promptStates          TeachBackModePromptStateRecord[]
+  attempts              TeachBackModeAttemptRecord[]
+  summaries             TeachBackModeSummaryRecord[]
+
+  @@index([schoolId, studentId])
+  @@index([schoolId, tutorLearnerId])
+  @@index([modeSessionId])
+  @@index([conversationId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model TeachBackModePromptStateRecord {
+  id                    String   @id @default(cuid())
+  schoolId              String
+  studentId             String
+  teachBackSessionId    String
+  modeSessionId         String
+  promptKey             String
+  promptIndex           Int
+  promptRef             String?
+  questionRef           String?
+  contentFingerprint    String?
+  topicId               String?
+  skillId               String?
+  difficultyBucket      String?
+  status                String   @default("not_started")
+  attemptNumber         Int      @default(0)
+  explanationQuality    String?
+  conceptCoverageBucket String?
+  clarityBucket         String?
+  confidenceBucket      String?
+  misconceptionSignal   String?
+  supportNeed           String?
+  masterySignal         String?
+  readinessSignal       String?
+  selectedTutorAction   String?
+  hintLevel             String?
+  safeReasonCodesJson   Json     @default("[]")
+  safeEvidenceRefsJson  Json     @default("[]")
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+  completedAt           DateTime?
+
+  teachBackSession      TeachBackModeSessionRecord @relation(fields: [teachBackSessionId], references: [id], onDelete: Cascade)
+
+  @@index([teachBackSessionId])
+  @@index([modeSessionId])
+  @@index([schoolId, studentId])
+  @@index([promptIndex])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model TeachBackModeAttemptRecord {
+  id                    String   @id @default(cuid())
+  schoolId              String
+  studentId             String
+  teachBackSessionId    String
+  modeSessionId         String
+  promptKey             String
+  promptIndex           Int
+  promptRef             String?
+  stage                 String
+  attemptNumber         Int
+  explanationQuality    String
+  conceptCoverageBucket String?
+  clarityBucket         String?
+  confidenceBucket      String?
+  misconceptionSignal   String?
+  supportNeed           String?
+  masterySignal         String?
+  readinessSignal       String?
+  usedHint              Boolean  @default(false)
+  hintLevel             String?
+  safeEvidenceRefsJson  Json     @default("[]")
+  createdAt             DateTime @default(now())
+
+  teachBackSession      TeachBackModeSessionRecord @relation(fields: [teachBackSessionId], references: [id], onDelete: Cascade)
+
+  @@index([teachBackSessionId])
+  @@index([modeSessionId])
+  @@index([schoolId, studentId])
+  @@index([promptKey])
+  @@index([promptIndex])
+  @@index([createdAt])
+}
+
+model TeachBackModeSummaryRecord {
+  id                              String   @id @default(cuid())
+  schoolId                        String
+  studentId                       String
+  teachBackSessionId              String
+  modeSessionId                   String
+  finalStage                      String
+  exitReason                      String
+  promptCount                     Int      @default(0)
+  attemptCount                    Int      @default(0)
+  strongExplanationCount          Int      @default(0)
+  partialExplanationCount         Int      @default(0)
+  weakExplanationCount            Int      @default(0)
+  misconceptionCount              Int      @default(0)
+  hintCount                       Int      @default(0)
+  stuckCount                      Int      @default(0)
+  recoveryCount                   Int      @default(0)
+  reflectionCount                 Int      @default(0)
+  estimatedExplanationStrengthBucket String?
+  estimatedReadinessSignal        String?
+  masterySignal                   String?
+  summarySignalJson               Json     @default("{}")
+  safeEvidenceRefsJson            Json     @default("[]")
+  createdAt                       DateTime @default(now())
+
+  teachBackSession                TeachBackModeSessionRecord @relation(fields: [teachBackSessionId], references: [id], onDelete: Cascade)
+
+  @@index([teachBackSessionId])
+  @@index([modeSessionId])
+  @@index([schoolId, studentId])
+  @@index([createdAt])
+}
+
+// ── Phase 2 Task 008: Revision Mode Runtime + Living Revision Queue ──
+
+model RevisionModeSessionRecord {
+  id                    String   @id @default(cuid())
+  schoolId              String
+  studentId             String
+  tutorLearnerId        String?
+  modeSessionId         String
+  conversationId        String?
+  subjectId             String?
+  topicId               String?
+  skillId               String?
+  approvedContentRef    String?
+  targetRef             String?
+  revisionGoalCategory  String
+  revisionSessionType   String
+  status                String   @default("active")
+  currentStage          String   @default("awaiting_revision_target")
+  currentItemIndex      Int      @default(0)
+  itemCount             Int      @default(0)
+  attemptCount          Int      @default(0)
+  weakRecallCount       Int      @default(0)
+  strongRecallCount     Int      @default(0)
+  mistakeCount          Int      @default(0)
+  hintCount             Int      @default(0)
+  stuckCount            Int      @default(0)
+  recoveryCount         Int      @default(0)
+  reflectionCount       Int      @default(0)
+  completedItemCount    Int      @default(0)
+  skippedItemCount      Int      @default(0)
+  pinnedItemCount       Int      @default(0)
+  safeEvidenceRefsJson  Json     @default("[]")
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+  startedAt             DateTime @default(now())
+  submittedAt           DateTime?
+  endedAt               DateTime?
+
+  queues                RevisionModeQueueRecord[]
+  itemStates            RevisionModeItemStateRecord[]
+  attempts              RevisionModeAttemptRecord[]
+  summaries             RevisionModeSummaryRecord[]
+
+  @@index([schoolId, studentId])
+  @@index([schoolId, tutorLearnerId])
+  @@index([modeSessionId])
+  @@index([conversationId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model RevisionModeQueueRecord {
+  id                    String   @id @default(cuid())
+  schoolId              String
+  studentId             String
+  revisionSessionId     String?
+  modeSessionId         String?
+  conversationId        String?
+  subjectId             String?
+  topicId               String?
+  skillId               String?
+  queueType             String
+  queueStatus           String   @default("active")
+  sourceType            String
+  sourceRefsJson        Json     @default("[]")
+  itemCount             Int      @default(0)
+  currentItemIndex      Int      @default(0)
+  dueItemCount          Int      @default(0)
+  completedItemCount    Int      @default(0)
+  skippedItemCount      Int      @default(0)
+  pinnedItemCount       Int      @default(0)
+  safeReasonCodesJson   Json     @default("[]")
+  safeEvidenceRefsJson  Json     @default("[]")
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  revisionSession       RevisionModeSessionRecord? @relation(fields: [revisionSessionId], references: [id], onDelete: Cascade)
+  itemStates            RevisionModeItemStateRecord[]
+
+  @@index([schoolId, studentId])
+  @@index([revisionSessionId])
+  @@index([modeSessionId])
+  @@index([queueStatus])
+  @@index([queueType])
+  @@index([createdAt])
+}
+
+model RevisionModeItemStateRecord {
+  id                    String   @id @default(cuid())
+  schoolId              String
+  studentId             String
+  revisionSessionId     String
+  revisionQueueId       String?
+  modeSessionId         String
+  itemKey               String
+  itemIndex             Int
+  targetType            String
+  targetRef             String?
+  approvedContentRef    String?
+  sourceMode            String?
+  sourceSessionRef      String?
+  sourceSummaryRef      String?
+  contentFingerprint    String?
+  topicId               String?
+  skillId               String?
+  difficultyBucket      String?
+  priorityBucket        String?
+  status                String   @default("not_started")
+  attemptNumber         Int      @default(0)
+  recallQuality         String?
+  retrievalSignal       String?
+  mistakeCategory       String?
+  explanationQuality    String?
+  supportNeed           String?
+  masterySignal         String?
+  readinessSignal       String?
+  selectedTutorAction   String?
+  hintLevel             String?
+  dueAt                 DateTime?
+  lastReviewedAt        DateTime?
+  nextReviewAt          DateTime?
+  reviewIntervalBucket  String?
+  safeReasonCodesJson   Json     @default("[]")
+  safeEvidenceRefsJson  Json     @default("[]")
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+  completedAt           DateTime?
+
+  revisionSession       RevisionModeSessionRecord @relation(fields: [revisionSessionId], references: [id], onDelete: Cascade)
+  revisionQueue         RevisionModeQueueRecord?  @relation(fields: [revisionQueueId], references: [id], onDelete: SetNull)
+  attempts              RevisionModeAttemptRecord[]
+
+  @@index([revisionSessionId])
+  @@index([revisionQueueId])
+  @@index([modeSessionId])
+  @@index([schoolId, studentId])
+  @@index([itemIndex])
+  @@index([status])
+  @@index([dueAt])
+  @@index([nextReviewAt])
+  @@index([createdAt])
+}
+
+model RevisionModeAttemptRecord {
+  id                    String   @id @default(cuid())
+  schoolId              String
+  studentId             String
+  revisionSessionId     String
+  revisionQueueId       String?
+  revisionItemStateId   String?
+  modeSessionId         String
+  itemKey               String
+  itemIndex             Int
+  targetRef             String?
+  stage                 String
+  attemptNumber         Int
+  recallQuality         String
+  retrievalSignal       String?
+  mistakeCategory       String?
+  explanationQuality    String?
+  supportNeed           String?
+  masterySignal         String?
+  readinessSignal       String?
+  usedHint              Boolean  @default(false)
+  hintLevel             String?
+  safeEvidenceRefsJson  Json     @default("[]")
+  createdAt             DateTime @default(now())
+
+  revisionSession       RevisionModeSessionRecord    @relation(fields: [revisionSessionId], references: [id], onDelete: Cascade)
+  revisionItemState     RevisionModeItemStateRecord? @relation(fields: [revisionItemStateId], references: [id], onDelete: SetNull)
+
+  @@index([revisionSessionId])
+  @@index([revisionQueueId])
+  @@index([revisionItemStateId])
+  @@index([modeSessionId])
+  @@index([schoolId, studentId])
+  @@index([itemKey])
+  @@index([itemIndex])
+  @@index([createdAt])
+}
+
+model RevisionModeSummaryRecord {
+  id                              String   @id @default(cuid())
+  schoolId                        String
+  studentId                       String
+  revisionSessionId               String
+  revisionQueueId                 String?
+  modeSessionId                   String
+  finalStage                      String
+  exitReason                      String
+  itemCount                       Int      @default(0)
+  attemptCount                    Int      @default(0)
+  weakRecallCount                 Int      @default(0)
+  strongRecallCount               Int      @default(0)
+  mistakeCount                    Int      @default(0)
+  hintCount                       Int      @default(0)
+  stuckCount                      Int      @default(0)
+  recoveryCount                   Int      @default(0)
+  reflectionCount                 Int      @default(0)
+  completedItemCount              Int      @default(0)
+  skippedItemCount                Int      @default(0)
+  pinnedItemCount                 Int      @default(0)
+  estimatedRecallStrengthBucket   String?
+  estimatedReadinessSignal        String?
+  masterySignal                   String?
+  nextReviewAt                    DateTime?
+  summarySignalJson               Json     @default("{}")
+  safeEvidenceRefsJson            Json     @default("[]")
+  createdAt                       DateTime @default(now())
+
+  revisionSession                 RevisionModeSessionRecord @relation(fields: [revisionSessionId], references: [id], onDelete: Cascade)
+
+  @@index([revisionSessionId])
+  @@index([revisionQueueId])
+  @@index([modeSessionId])
+  @@index([schoolId, studentId])
+  @@index([createdAt])
+}
+
+model QuestionBankItemRecord {
+  questionId         String   @id @default(uuid())
+  schoolId           String
+  status             String   @default("draft")
+  subjectId          String
+  topicId            String
+  skillId            String
+  curriculumVersionId String
+  primaryObjectiveId String
+  currentVersionId   String
+  createdByActorId   String
+  createdByRole      String
+  sourceType         String
+  securityClass      String   @default("practice_safe")
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+  archivedAt         DateTime?
+
+  @@index([schoolId])
+  @@index([schoolId, status])
+  @@index([schoolId, subjectId])
+  @@index([status])
+  @@index([subjectId])
+}
+
+model QuestionVersionRecord {
+  questionVersionId    String   @id @default(uuid())
+  questionId           String
+  versionNumber        Int
+  status               String   @default("draft")
+  stemSafeText         String   @db.Text
+  questionType         String
+  difficultyBand       String   @default("recall")
+  language             String   @default("English")
+  studentSafeExplanation String @db.Text
+  teacherExplanation   String   @db.Text
+  estimatedTimeSeconds Int      @default(0)
+  createdByActorId     String
+  createdAt            DateTime @default(now())
+  approvedAt           DateTime?
+  supersededAt         DateTime?
+  contentHash          String
+
+  @@index([questionId])
+  @@index([questionId, versionNumber])
+  @@index([contentHash])
+}
+
+model QuestionPartVersionRecord {
+  questionPartVersionId    String   @id @default(uuid())
+  questionVersionId        String
+  partKey                  String
+  partOrder                Int
+  promptSafeText           String   @db.Text
+  marksAvailable           Int      @default(0)
+  expectedWorkingVisibility Boolean @default(true)
+  studentInputMode         String   @default("text")
+  createdAt                DateTime @default(now())
+
+  @@index([questionVersionId])
+}
+
+model QuestionAssetVersionRecord {
+  assetVersionId    String   @id @default(uuid())
+  questionVersionId String
+  assetType         String
+  assetRef          String
+  assetFingerprint  String
+  studentVisible    Boolean  @default(true)
+  teacherOnly       Boolean  @default(false)
+  altText           String
+  createdAt         DateTime @default(now())
+
+  @@index([questionVersionId])
+}
+
+model AnswerKeyVersionRecord {
+  answerKeyVersionId   String   @id @default(uuid())
+  questionVersionId    String
+  status               String   @default("draft")
+  answerKeySafeRef     String   @db.Text
+  correctAnswerSummary String   @db.Text
+  markingNotesTeacherOnly String @db.Text
+  createdByActorId     String
+  createdAt            DateTime @default(now())
+  approvedAt           DateTime?
+
+  @@index([questionVersionId])
+}
+
+model RubricVersionRecord {
+  rubricVersionId     String   @id @default(uuid())
+  questionVersionId   String
+  status              String   @default("draft")
+  rubricPublicSummary String   @db.Text
+  rubricInternal      String   @db.Text
+  marksTotal          Int      @default(0)
+  criteriaJson        Json?
+  createdByActorId    String
+  createdAt           DateTime @default(now())
+  approvedAt          DateTime?
+
+  @@index([questionVersionId])
+}
+
+model QuestionObjectiveMappingRecord {
+  mappingId          String   @id @default(uuid())
+  questionVersionId  String
+  objectiveId        String
+  objectiveVersionId String
+  mappingStrength    String   @default("primary")
+  mappingReason      String
+  createdAt          DateTime @default(now())
+
+  @@index([questionVersionId])
+  @@index([objectiveId])
+}
+
+model QuestionSourceRecordRecord {
+  sourceRecordId    String   @id @default(uuid())
+  questionId        String
+  questionVersionId String
+  sourceType        String
+  sourceRef         String
+  approvedSourceId  String?
+  importBatchId     String?
+  createdByActorId  String
+  createdAt         DateTime @default(now())
+  safeSummary       String   @db.Text
+
+  @@index([questionId])
+  @@index([questionVersionId])
+  @@index([sourceType])
+  @@index([approvedSourceId])
+}
+
+model QuestionCurriculumValidityRecord {
+  id                  String   @id @default(uuid())
+  questionVersionId   String
+  schoolId            String
+  curriculumVersionId String
+  objectiveIdsJson    Json?
+  valid               Boolean  @default(false)
+  reasonCodesJson     Json?
+  checkedAt           DateTime @default(now())
+
+  @@index([questionVersionId])
+  @@index([schoolId])
+  @@index([curriculumVersionId])
+}
+
+model QuestionUsageEligibilityRecord {
+  id                String   @id @default(uuid())
+  questionVersionId String
+  usageMode         String
+  eligible          Boolean  @default(false)
+  reasonCodesJson   Json?
+  checkedAt         DateTime @default(now())
+
+  @@index([questionVersionId])
+  @@index([questionVersionId, usageMode])
+  @@index([usageMode])
+}
+
+model QuestionApprovalRequestRecord {
+  approvalRequestId    String   @id @default(uuid())
+  schoolId             String
+  questionId           String
+  questionVersionId    String
+  requestedByActorId   String
+  requestedByRole      String
+  status               String   @default("pending")
+  requestReason        String
+  policyVersionRefsJson Json?
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+  closedAt             DateTime?
+
+  @@index([schoolId])
+  @@index([schoolId, status])
+  @@index([questionId])
+  @@index([questionVersionId])
+}
+
+model QuestionApprovalRecord {
+  approvalRecordId  String   @id @default(uuid())
+  schoolId          String
+  approvalRequestId String
+  questionId        String
+  questionVersionId String
+  decision          String
+  decidedByActorId  String
+  decidedByRole     String
+  decisionReason    String
+  reasonCodesJson   Json?
+  createdAt         DateTime @default(now())
+
+  @@index([schoolId])
+  @@index([approvalRequestId])
+  @@index([questionId])
+  @@index([questionVersionId])
+}
+
+model QuestionDuplicateCandidateRecord {
+  duplicateCandidateId       String   @id @default(uuid())
+  schoolId                   String
+  sourceQuestionVersionId    String
+  candidateQuestionVersionId String
+  contentHash                String
+  similarityReason           String
+  status                     String   @default("suspected")
+  createdAt                  DateTime @default(now())
+  resolvedAt                 DateTime?
+  resolvedByActorId          String?
+  resolutionReason           String?
+
+  @@index([schoolId])
+  @@index([sourceQuestionVersionId])
+  @@index([candidateQuestionVersionId])
+  @@index([contentHash])
+}
+
+model QuestionExposureHoldRecord {
+  exposureHoldId    String   @id @default(uuid())
+  schoolId          String
+  questionId        String
+  questionVersionId String
+  holdType          String
+  status            String   @default("active")
+  reasonCode        String
+  safeSummary       String
+  createdByActorId  String
+  createdAt         DateTime @default(now())
+  releasedByActorId String?
+  releasedAt        DateTime?
+  releaseReason     String?
+
+  @@index([schoolId])
+  @@index([questionId])
+  @@index([questionVersionId])
+  @@index([schoolId, status])
+}
+
+model QuestionIngestionBatchRecord {
+  ingestionBatchId   String   @id @default(uuid())
+  schoolId           String
+  sourceType         String
+  approvedSourceId   String?
+  importBatchRef     String?
+  status             String   @default("draft")
+  createdByActorId   String
+  createdByRole      String
+  candidateCount     Int      @default(0)
+  acceptedCount      Int      @default(0)
+  rejectedCount      Int      @default(0)
+  warningCount       Int      @default(0)
+  safeSummary        String
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+  completedAt        DateTime?
+
+  @@index([schoolId])
+  @@index([schoolId, status])
+  @@index([sourceType])
+  @@index([approvedSourceId])
+}
+
+model QuestionIngestionCandidateRecord {
+  candidateId               String   @id @default(uuid())
+  ingestionBatchId          String
+  schoolId                  String
+  status                    String   @default("draft")
+  candidateType             String
+  stemSafeText              String   @db.Text
+  questionType              String
+  subjectId                 String
+  topicId                   String
+  skillId                   String
+  curriculumVersionId       String
+  primaryObjectiveId        String
+  approvedSourceId          String?
+  sourceRef                 String
+  contentHash               String
+  warningsJson              Json?
+  safeMetadataJson          Json?
+  createdAt                 DateTime @default(now())
+  updatedAt                 DateTime @updatedAt
+  acceptedQuestionId        String?
+  acceptedQuestionVersionId String?
+  rejectedReasonCode        String?
+
+  @@index([ingestionBatchId])
+  @@index([schoolId])
+  @@index([schoolId, status])
+  @@index([contentHash])
 }
