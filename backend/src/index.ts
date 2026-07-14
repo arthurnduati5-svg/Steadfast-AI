@@ -399,6 +399,10 @@ app.use('/api/question-bank/result-delivery', schoolAuthMiddleware, requireVerif
 import resultReportCardRoutes from './routes/resultReportCard';
 app.use('/api/question-bank/result-report-cards', schoolAuthMiddleware, requireVerifiedSchoolContext, resultReportCardRoutes);
 
+// ─── Result Report Card Export Routes (Package 14) ──
+import resultReportCardExportRoutes from './routes/resultReportCardExport';
+app.use('/api/question-bank/result-report-card-export', schoolAuthMiddleware, requireVerifiedSchoolContext, resultReportCardExportRoutes);
+
 // ─── Phase 2: Learning Mode Runtime Routes ──────────────
 app.use('/api', schoolAuthMiddleware, requireVerifiedSchoolContext, learningModeRoutes);
 app.use('/api/copilot', schoolAuthMiddleware, requireVerifiedSchoolContext, learningProfileRoutes);

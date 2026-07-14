@@ -6823,3 +6823,326 @@ model ResultReportCardIdempotencyRecord {
   @@index([expiresAt])
   @@index([createdAt])
 }
+
+// ── Package 14: Controlled Report Card Export Adapter, Mock Export Jobs, Archive-Ready Manifests, Dry-Run Receipts, Suppression Rules, Retry Plans, and No-Live-Export Safety Gate ──
+
+model ResultReportCardExportJobRecord {
+  resultReportCardExportJobId           String    @id @default(uuid())
+  schoolId                             String
+  resultReportCardAssemblyId           String
+  resultReportCardAudienceProjectionId String
+  resultReportCardReviewId             String
+  resultReportCardExportIntentId       String
+  resultReportCardRenderManifestId     String
+  resultReleasePacketId                String
+  resultDeliveryReceiptId              String?
+  studentRef                           String
+  paperId                              String
+  paperVersionId                       String
+  deliverySessionId                    String
+  exportJobStatus                      String    @default("draft")
+  exportJobMode                        String    @default("mock_export_only")
+  exportJobPurpose                     String
+  safeExportJobSummary                 String    @db.Text
+  sourceRefsJson                       Json?
+  allowedChannelsJson                  Json?
+  blockedChannelsJson                  Json?
+  blockedReasonCodesJson               Json?
+  createdByActorId                     String
+  createdByRole                        String
+  createdAt                            DateTime  @default(now())
+  updatedAt                            DateTime  @updatedAt
+  validatedAt                          DateTime?
+  queuedAt                             DateTime?
+  completedAt                          DateTime?
+  blockedAt                            DateTime?
+  cancelledAt                          DateTime?
+  voidedAt                             DateTime?
+
+  @@index([schoolId], map: "rc_export_job_school")
+  @@index([resultReportCardAssemblyId], map: "rc_export_job_assembly")
+  @@index([resultReportCardAudienceProjectionId], map: "rc_export_job_proj")
+  @@index([resultReportCardReviewId], map: "rc_export_job_review")
+  @@index([resultReportCardExportIntentId], map: "rc_export_job_intent")
+  @@index([resultReportCardRenderManifestId], map: "rc_export_job_manifest")
+  @@index([studentRef], map: "rc_export_job_student")
+  @@index([exportJobStatus], map: "rc_export_job_status")
+  @@index([exportJobMode], map: "rc_export_job_mode")
+  @@index([createdAt], map: "rc_export_job_cat")
+  @@index([updatedAt], map: "rc_export_job_uat")
+}
+
+model ResultReportCardExportTargetRecord {
+  resultReportCardExportTargetId String   @id @default(uuid())
+  schoolId                      String
+  resultReportCardExportJobId   String
+  targetType                    String
+  targetStatus                  String   @default("draft")
+  targetMode                    String
+  audienceType                  String
+  safeTargetSummary             String   @db.Text
+  targetDescriptorJson          Json?
+  blockedReasonCodesJson        Json?
+  createdByActorId              String
+  createdByRole                 String
+  createdAt                     DateTime @default(now())
+  updatedAt                     DateTime @updatedAt
+  validatedAt                   DateTime?
+  blockedAt                     DateTime?
+  voidedAt                      DateTime?
+
+  @@index([schoolId], map: "rc_export_tgt_school")
+  @@index([resultReportCardExportJobId], map: "rc_export_tgt_job")
+  @@index([targetType], map: "rc_export_tgt_type")
+  @@index([targetStatus], map: "rc_export_tgt_status")
+  @@index([targetMode], map: "rc_export_tgt_mode")
+  @@index([audienceType], map: "rc_export_tgt_aud")
+  @@index([createdAt], map: "rc_export_tgt_cat")
+  @@index([updatedAt], map: "rc_export_tgt_uat")
+}
+
+model ResultReportCardExportEnvelopeRecord {
+  resultReportCardExportEnvelopeId         String    @id @default(uuid())
+  schoolId                                 String
+  resultReportCardExportJobId              String
+  resultReportCardExportTargetId           String
+  resultReportCardAudienceProjectionId     String
+  resultReportCardRenderManifestId         String
+  envelopeStatus                           String    @default("draft")
+  envelopeMode                             String    @default("mock_payload_only")
+  safeEnvelopeSummary                      String    @db.Text
+  safePayloadJson                          Json?
+  redactionRulesJson                       Json?
+  allowedFieldNamesJson                    Json?
+  blockedFieldNamesJson                    Json?
+  blockedReasonCodesJson                   Json?
+  createdByActorId                         String
+  createdByRole                            String
+  createdAt                                DateTime  @default(now())
+  updatedAt                                DateTime  @updatedAt
+  sealedAt                                 DateTime?
+  blockedAt                                DateTime?
+  voidedAt                                 DateTime?
+
+  @@index([schoolId], map: "rc_export_env_school")
+  @@index([resultReportCardExportJobId], map: "rc_export_env_job")
+  @@index([resultReportCardExportTargetId], map: "rc_export_env_tgt")
+  @@index([resultReportCardAudienceProjectionId], map: "rc_export_env_proj")
+  @@index([resultReportCardRenderManifestId], map: "rc_export_env_manifest")
+  @@index([envelopeStatus], map: "rc_export_env_status")
+  @@index([envelopeMode], map: "rc_export_env_mode")
+  @@index([createdAt], map: "rc_export_env_cat")
+  @@index([updatedAt], map: "rc_export_env_uat")
+}
+
+model ResultReportCardMockExportAttemptRecord {
+  resultReportCardMockExportAttemptId String    @id @default(uuid())
+  schoolId                            String
+  resultReportCardExportJobId         String
+  resultReportCardExportTargetId      String
+  resultReportCardExportEnvelopeId    String
+  attemptStatus                       String    @default("created")
+  attemptMode                         String    @default("dry_run_only")
+  mockProviderName                    String
+  targetType                          String
+  attemptNumber                       Int       @default(1)
+  safeAttemptSummary                  String    @db.Text
+  providerSimulationJson              Json?
+  blockedReasonCodesJson              Json?
+  createdByActorId                    String
+  createdByRole                       String
+  createdAt                           DateTime  @default(now())
+  updatedAt                           DateTime  @updatedAt
+  startedAt                           DateTime?
+  completedAt                         DateTime?
+  failedAt                            DateTime?
+  blockedAt                           DateTime?
+  voidedAt                            DateTime?
+
+  @@index([schoolId], map: "rc_export_attempt_school")
+  @@index([resultReportCardExportJobId], map: "rc_export_attempt_job")
+  @@index([resultReportCardExportTargetId], map: "rc_export_attempt_tgt")
+  @@index([resultReportCardExportEnvelopeId], map: "rc_export_attempt_env")
+  @@index([attemptStatus], map: "rc_export_attempt_status")
+  @@index([attemptMode], map: "rc_export_attempt_mode")
+  @@index([createdAt], map: "rc_export_attempt_cat")
+  @@index([updatedAt], map: "rc_export_attempt_uat")
+}
+
+model ResultReportCardExportReceiptRecord {
+  resultReportCardExportReceiptId       String   @id @default(uuid())
+  schoolId                              String
+  resultReportCardExportJobId           String
+  resultReportCardExportTargetId        String
+  resultReportCardExportEnvelopeId      String
+  resultReportCardMockExportAttemptId   String
+  receiptStatus                         String   @default("created")
+  receiptType                           String   @default("dry_run_preview")
+  safeReceiptSummary                    String   @db.Text
+  providerSimulationJson                Json?
+  blockedReasonCodesJson                Json?
+  createdByActorId                      String
+  createdByRole                         String
+  createdAt                             DateTime @default(now())
+  updatedAt                             DateTime @updatedAt
+  voidedAt                              DateTime?
+
+  @@index([schoolId], map: "rc_export_recpt_school")
+  @@index([resultReportCardExportJobId], map: "rc_export_recpt_job")
+  @@index([resultReportCardExportTargetId], map: "rc_export_recpt_tgt")
+  @@index([resultReportCardExportEnvelopeId], map: "rc_export_recpt_env")
+  @@index([resultReportCardMockExportAttemptId], map: "rc_export_recpt_attempt")
+  @@index([receiptStatus], map: "rc_export_recpt_status")
+  @@index([receiptType], map: "rc_export_recpt_type")
+  @@index([createdAt], map: "rc_export_recpt_cat")
+  @@index([updatedAt], map: "rc_export_recpt_uat")
+}
+
+model ResultReportCardExportSuppressionRecord {
+  resultReportCardExportSuppressionId String    @id @default(uuid())
+  schoolId                            String
+  resultReportCardExportJobId         String
+  resultReportCardExportTargetId      String?
+  resultReportCardExportEnvelopeId    String?
+  suppressionStatus                   String    @default("active")
+  suppressionReason                   String
+  suppressionScope                    String
+  safeSuppressionSummary              String    @db.Text
+  reasonCodesJson                     Json?
+  createdByActorId                    String
+  createdByRole                       String
+  createdAt                           DateTime  @default(now())
+  updatedAt                           DateTime  @updatedAt
+  liftedAt                            DateTime?
+  voidedAt                            DateTime?
+
+  @@index([schoolId], map: "rc_export_supp_school")
+  @@index([resultReportCardExportJobId], map: "rc_export_supp_job")
+  @@index([resultReportCardExportTargetId], map: "rc_export_supp_tgt")
+  @@index([resultReportCardExportEnvelopeId], map: "rc_export_supp_env")
+  @@index([suppressionStatus], map: "rc_export_supp_status")
+  @@index([suppressionReason], map: "rc_export_supp_reason")
+  @@index([suppressionScope], map: "rc_export_supp_scope")
+  @@index([createdAt], map: "rc_export_supp_cat")
+  @@index([updatedAt], map: "rc_export_supp_uat")
+}
+
+model ResultReportCardExportRetryPlanRecord {
+  resultReportCardExportRetryPlanId  String    @id @default(uuid())
+  schoolId                           String
+  resultReportCardExportJobId        String
+  resultReportCardMockExportAttemptId String
+  retryStatus                        String    @default("draft")
+  retryPolicy                        String    @default("linear_backoff")
+  nextMockRetryAt                    DateTime?
+  maxMockAttempts                    Int       @default(3)
+  attemptsUsed                       Int       @default(0)
+  safeRetrySummary                   String    @db.Text
+  blockedReasonCodesJson             Json?
+  createdByActorId                   String
+  createdByRole                      String
+  createdAt                          DateTime  @default(now())
+  updatedAt                          DateTime  @updatedAt
+  cancelledAt                        DateTime?
+  voidedAt                           DateTime?
+
+  @@index([schoolId], map: "rc_export_retry_school")
+  @@index([resultReportCardExportJobId], map: "rc_export_retry_job")
+  @@index([resultReportCardMockExportAttemptId], map: "rc_export_retry_attempt")
+  @@index([retryStatus], map: "rc_export_retry_status")
+  @@index([createdAt], map: "rc_export_retry_cat")
+  @@index([updatedAt], map: "rc_export_retry_uat")
+}
+
+model ResultReportCardArchiveManifestRecord {
+  resultReportCardArchiveManifestId String    @id @default(uuid())
+  schoolId                          String
+  resultReportCardExportJobId       String
+  resultReportCardExportEnvelopeId  String?
+  resultReportCardExportReceiptId   String?
+  manifestStatus                    String    @default("draft")
+  manifestMode                      String    @default("metadata_only")
+  safeArchiveSummary                String    @db.Text
+  archiveMetadataJson               Json?
+  retentionPolicyJson               Json?
+  allowedFieldNamesJson             Json?
+  blockedFieldNamesJson             Json?
+  blockedReasonCodesJson            Json?
+  createdByActorId                  String
+  createdByRole                     String
+  createdAt                         DateTime  @default(now())
+  updatedAt                         DateTime  @updatedAt
+  sealedAt                          DateTime?
+  blockedAt                         DateTime?
+  voidedAt                          DateTime?
+
+  @@index([schoolId], map: "rc_export_arch_school")
+  @@index([resultReportCardExportJobId], map: "rc_export_arch_job")
+  @@index([resultReportCardExportEnvelopeId], map: "rc_export_arch_env")
+  @@index([resultReportCardExportReceiptId], map: "rc_export_arch_recpt")
+  @@index([manifestStatus], map: "rc_export_arch_status")
+  @@index([manifestMode], map: "rc_export_arch_mode")
+  @@index([createdAt], map: "rc_export_arch_cat")
+  @@index([updatedAt], map: "rc_export_arch_uat")
+}
+
+model ResultReportCardExportAuditRecord {
+  resultReportCardExportAuditId         String   @id @default(uuid())
+  schoolId                              String
+  resultReportCardExportJobId           String?
+  resultReportCardExportTargetId        String?
+  resultReportCardExportEnvelopeId      String?
+  resultReportCardMockExportAttemptId   String?
+  resultReportCardExportReceiptId       String?
+  resultReportCardExportSuppressionId   String?
+  resultReportCardExportRetryPlanId     String?
+  resultReportCardArchiveManifestId     String?
+  actorId                               String
+  actorRole                             String
+  eventType                             String
+  decision                              String
+  safeSummary                           String   @db.Text
+  reasonCodesJson                       Json?
+  metadataJson                          Json?
+  requestId                             String?
+  correlationId                         String?
+  createdAt                             DateTime @default(now())
+
+  @@index([schoolId], map: "rc_export_audit_school")
+  @@index([resultReportCardExportJobId], map: "rc_export_audit_job")
+  @@index([resultReportCardExportTargetId], map: "rc_export_audit_tgt")
+  @@index([resultReportCardExportEnvelopeId], map: "rc_export_audit_env")
+  @@index([resultReportCardMockExportAttemptId], map: "rc_export_audit_attempt")
+  @@index([resultReportCardExportReceiptId], map: "rc_export_audit_recpt")
+  @@index([resultReportCardExportSuppressionId], map: "rc_export_audit_supp")
+  @@index([resultReportCardExportRetryPlanId], map: "rc_export_audit_retry")
+  @@index([resultReportCardArchiveManifestId], map: "rc_export_audit_arch")
+  @@index([actorId], map: "rc_export_audit_actor")
+  @@index([eventType], map: "rc_export_audit_event")
+  @@index([createdAt], map: "rc_export_audit_cat")
+  @@index([requestId], map: "rc_export_audit_req")
+  @@index([correlationId], map: "rc_export_audit_corr")
+}
+
+model ResultReportCardExportIdempotencyRecord {
+  resultReportCardExportIdempotencyId String   @id @default(uuid())
+  schoolId                            String
+  operation                           String
+  idempotencyKey                      String
+  requestHash                         String
+  status                              String   @default("in_progress")
+  resourceType                        String?
+  resourceId                          String?
+  safeResultSummary                   String?
+  createdAt                           DateTime @default(now())
+  updatedAt                           DateTime @updatedAt
+  expiresAt                           DateTime?
+
+  @@unique([schoolId, operation, idempotencyKey], map: "rc_export_idem_unique")
+  @@index([schoolId], map: "rc_export_idem_school")
+  @@index([operation], map: "rc_export_idem_op")
+  @@index([idempotencyKey], map: "rc_export_idem_key")
+  @@index([status], map: "rc_export_idem_status")
+  @@index([expiresAt], map: "rc_export_idem_expires")
+  @@index([createdAt], map: "rc_export_idem_cat")
+}
