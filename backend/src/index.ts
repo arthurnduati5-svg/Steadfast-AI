@@ -383,6 +383,10 @@ app.use('/api/question-bank/marking-invocation', schoolAuthMiddleware, requireVe
 import resultGovernanceRoutes from './routes/resultGovernance';
 app.use('/api/question-bank/result-governance', schoolAuthMiddleware, requireVerifiedSchoolContext, resultGovernanceRoutes);
 
+// ─── Result Learning Evidence Routes (Package 10) ─
+import resultLearningEvidenceRoutes from './routes/resultLearningEvidence';
+app.use('/api/question-bank/result-learning-evidence', schoolAuthMiddleware, requireVerifiedSchoolContext, resultLearningEvidenceRoutes);
+
 // ─── Phase 2: Learning Mode Runtime Routes ──────────────
 app.use('/api', schoolAuthMiddleware, requireVerifiedSchoolContext, learningModeRoutes);
 app.use('/api/copilot', schoolAuthMiddleware, requireVerifiedSchoolContext, learningProfileRoutes);

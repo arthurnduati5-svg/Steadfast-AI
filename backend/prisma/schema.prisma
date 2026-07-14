@@ -5627,3 +5627,254 @@ model ResultGovernanceIdempotencyRecord {
   @@index([expiresAt])
   @@index([createdAt])
 }
+
+model ResultLearningEvidenceBridgeRecord {
+  resultLearningEvidenceBridgeId String   @id @default(uuid())
+  schoolId                       String
+  resultFinalizationDecisionId   String
+  resultReleaseReadinessId       String
+  markingRunId                   String?
+  markingResultVersionId         String
+  studentRef                     String
+  paperId                        String?
+  paperVersionId                 String?
+  deliverySessionId              String?
+  bridgeStatus                   String   @default("draft")
+  bridgeMode                     String   @default("teacher_approved_result")
+  sourceRefsJson                 Json?
+  safeEvidenceSummary            String   @db.Text
+  createdByActorId               String
+  createdByRole                  String
+  createdAt                      DateTime @default(now())
+  updatedAt                      DateTime @updatedAt
+  completedAt                    DateTime?
+  blockedAt                      DateTime?
+  cancelledAt                    DateTime?
+
+  @@index([schoolId])
+  @@index([resultFinalizationDecisionId])
+  @@index([resultReleaseReadinessId])
+  @@index([markingRunId])
+  @@index([markingResultVersionId])
+  @@index([studentRef])
+  @@index([paperId])
+  @@index([paperVersionId])
+  @@index([deliverySessionId])
+  @@index([bridgeStatus])
+  @@index([createdAt])
+  @@index([updatedAt])
+}
+
+model ResultMasteryMutationPlanRecord {
+  resultMasteryMutationPlanId     String   @id @default(uuid())
+  schoolId                        String
+  resultLearningEvidenceBridgeId String
+  resultFinalizationDecisionId   String
+  markingResultVersionId         String
+  studentRef                     String
+  planStatus                     String   @default("draft")
+  planMode                       String   @default("objective_level_mastery")
+  objectiveImpactRefsJson        Json?
+  targetMasterySnapshotRefsJson  Json?
+  safePlanSummary                String   @db.Text
+  approvalRequired               Boolean  @default(true)
+  approvedByActorId              String?
+  approvedByRole                 String?
+  createdByActorId               String
+  createdByRole                  String
+  createdAt                      DateTime @default(now())
+  updatedAt                      DateTime @updatedAt
+  approvedAt                     DateTime?
+  blockedAt                      DateTime?
+  cancelledAt                    DateTime?
+
+  @@index([schoolId])
+  @@index([resultLearningEvidenceBridgeId])
+  @@index([resultFinalizationDecisionId])
+  @@index([markingResultVersionId])
+  @@index([studentRef])
+  @@index([planStatus])
+  @@index([planMode])
+  @@index([createdAt])
+  @@index([updatedAt])
+}
+
+model ResultMasteryMutationEventRecord {
+  resultMasteryMutationEventId String   @id @default(uuid())
+  schoolId                     String
+  resultMasteryMutationPlanId String
+  resultLearningEvidenceBridgeId String
+  studentRef                   String
+  targetSnapshotRef            String?
+  mutationStatus               String   @default("planned")
+  mutationType                 String   @default("objective_mastery_update")
+  beforeStateJson              Json?
+  afterStateJson               Json?
+  deltaJson                    Json?
+  safeMutationSummary          String   @db.Text
+  appliedByActorId             String?
+  appliedByRole                String?
+  createdAt                    DateTime @default(now())
+  appliedAt                    DateTime?
+  voidedAt                     DateTime?
+
+  @@index([schoolId])
+  @@index([resultMasteryMutationPlanId])
+  @@index([resultLearningEvidenceBridgeId])
+  @@index([studentRef])
+  @@index([targetSnapshotRef])
+  @@index([mutationStatus])
+  @@index([mutationType])
+  @@index([createdAt])
+  @@index([appliedAt])
+}
+
+model ResultObjectiveMasteryImpactRecord {
+  resultObjectiveMasteryImpactId String   @id @default(uuid())
+  schoolId                       String
+  resultLearningEvidenceBridgeId String
+  resultMasteryMutationPlanId    String
+  studentRef                     String
+  learningObjectiveId            String
+  questionVersionId              String?
+  markingResultVersionId         String
+  impactStatus                   String   @default("draft")
+  impactType                     String   @default("correct_evidence")
+  evidenceStrength               String   @default("moderate")
+  masteryDelta                   String   @default("no_change")
+  confidenceLevel                String   @default("moderate")
+  safeImpactSummary              String   @db.Text
+  sourceRefsJson                 Json?
+  createdAt                      DateTime @default(now())
+  updatedAt                      DateTime @updatedAt
+  voidedAt                       DateTime?
+
+  @@index([schoolId])
+  @@index([resultLearningEvidenceBridgeId])
+  @@index([resultMasteryMutationPlanId])
+  @@index([studentRef])
+  @@index([learningObjectiveId])
+  @@index([questionVersionId])
+  @@index([markingResultVersionId])
+  @@index([impactStatus])
+  @@index([impactType])
+  @@index([createdAt])
+  @@index([updatedAt])
+}
+
+model ResultRevisionSignalRecord {
+  resultRevisionSignalId        String   @id @default(uuid())
+  schoolId                      String
+  resultLearningEvidenceBridgeId String
+  resultMasteryMutationPlanId   String
+  studentRef                    String
+  learningObjectiveId           String
+  signalStatus                  String   @default("draft")
+  signalType                    String   @default("revise_objective")
+  priority                      Int      @default(0)
+  safeSignalSummary             String   @db.Text
+  recommendedActionRefsJson     Json?
+  sourceRefsJson                Json?
+  createdAt                     DateTime @default(now())
+  updatedAt                     DateTime @updatedAt
+  dispatchedAt                  DateTime?
+  blockedAt                     DateTime?
+  voidedAt                      DateTime?
+
+  @@index([schoolId])
+  @@index([resultLearningEvidenceBridgeId])
+  @@index([resultMasteryMutationPlanId])
+  @@index([studentRef])
+  @@index([learningObjectiveId])
+  @@index([signalStatus])
+  @@index([signalType])
+  @@index([priority])
+  @@index([createdAt])
+  @@index([updatedAt])
+}
+
+model ResultGrowthSignalRecord {
+  resultGrowthSignalId          String   @id @default(uuid())
+  schoolId                      String
+  resultLearningEvidenceBridgeId String
+  resultMasteryMutationPlanId   String
+  studentRef                    String
+  learningObjectiveId           String
+  signalStatus                  String   @default("draft")
+  signalType                    String   @default("evidence_only_no_action")
+  safeGrowthSummary             String   @db.Text
+  growthMetricRefsJson          Json?
+  sourceRefsJson                Json?
+  createdAt                     DateTime @default(now())
+  updatedAt                     DateTime @updatedAt
+  dispatchedAt                  DateTime?
+  blockedAt                     DateTime?
+  voidedAt                      DateTime?
+
+  @@index([schoolId])
+  @@index([resultLearningEvidenceBridgeId])
+  @@index([resultMasteryMutationPlanId])
+  @@index([studentRef])
+  @@index([learningObjectiveId])
+  @@index([signalStatus])
+  @@index([signalType])
+  @@index([createdAt])
+  @@index([updatedAt])
+}
+
+model ResultLearningEvidenceAuditRecord {
+  resultLearningEvidenceAuditId String   @id @default(uuid())
+  schoolId                      String
+  resultLearningEvidenceBridgeId String?
+  resultMasteryMutationPlanId   String?
+  resultMasteryMutationEventId  String?
+  resultObjectiveMasteryImpactId String?
+  resultRevisionSignalId        String?
+  resultGrowthSignalId          String?
+  actorId                       String
+  actorRole                     String
+  eventType                     String
+  decision                      String
+  safeSummary                   String   @db.Text
+  reasonCodesJson               Json?
+  metadataJson                  Json?
+  requestId                     String?
+  correlationId                 String?
+  createdAt                     DateTime @default(now())
+
+  @@index([schoolId])
+  @@index([resultLearningEvidenceBridgeId])
+  @@index([resultMasteryMutationPlanId])
+  @@index([resultMasteryMutationEventId])
+  @@index([resultObjectiveMasteryImpactId])
+  @@index([resultRevisionSignalId])
+  @@index([resultGrowthSignalId])
+  @@index([actorId])
+  @@index([eventType])
+  @@index([createdAt])
+  @@index([requestId])
+  @@index([correlationId])
+}
+
+model ResultLearningEvidenceIdempotencyRecord {
+  resultLearningEvidenceIdempotencyId String   @id @default(uuid())
+  schoolId                             String
+  operation                            String
+  idempotencyKey                       String
+  requestHash                          String
+  status                               String   @default("in_progress")
+  resourceType                         String?
+  resourceId                           String?
+  safeResultSummary                    String?
+  createdAt                            DateTime @default(now())
+  updatedAt                            DateTime @updatedAt
+  expiresAt                            DateTime?
+
+  @@unique([schoolId, operation, idempotencyKey])
+  @@index([schoolId])
+  @@index([operation])
+  @@index([idempotencyKey])
+  @@index([status])
+  @@index([expiresAt])
+  @@index([createdAt])
+}
