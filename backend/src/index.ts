@@ -403,6 +403,10 @@ app.use('/api/question-bank/result-report-cards', schoolAuthMiddleware, requireV
 import resultReportCardExportRoutes from './routes/resultReportCardExport';
 app.use('/api/question-bank/result-report-card-export', schoolAuthMiddleware, requireVerifiedSchoolContext, resultReportCardExportRoutes);
 
+// ─── Result Report Card Access Routes (Package 15) ──
+import resultReportCardAccessRoutes from './routes/resultReportCardAccess';
+app.use('/api/question-bank/result-report-card-access', schoolAuthMiddleware, requireVerifiedSchoolContext, resultReportCardAccessRoutes);
+
 // ─── Phase 2: Learning Mode Runtime Routes ──────────────
 app.use('/api', schoolAuthMiddleware, requireVerifiedSchoolContext, learningModeRoutes);
 app.use('/api/copilot', schoolAuthMiddleware, requireVerifiedSchoolContext, learningProfileRoutes);

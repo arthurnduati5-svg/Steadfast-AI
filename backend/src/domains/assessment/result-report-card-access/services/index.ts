@@ -1,0 +1,12 @@
+export { ResultReportCardAccessGrantService } from './resultReportCardAccessGrantService';
+export { ResultReportCardAccessRecipientService } from './resultReportCardAccessRecipientService';
+export { ResultReportCardPortalPreviewService } from './resultReportCardPortalPreviewService';
+export { ResultReportCardAccessTokenIntentService } from './resultReportCardAccessTokenIntentService';
+export { ResultReportCardAccessAcknowledgementService } from './resultReportCardAccessAcknowledgementService';
+export { ResultReportCardAccessRevocationService } from './resultReportCardAccessRevocationService';
+export { ResultReportCardAccessExpiryService } from './resultReportCardAccessExpiryService';
+export { ResultReportCardAccessTimelineService } from './resultReportCardAccessTimelineService';
+export { ResultReportCardAccessSummaryService } from './resultReportCardAccessSummaryService';
+export { ResultReportCardAccessSafetyService } from './resultReportCardAccessSafetyService';
+export { ResultReportCardAccessAuditBridge } from './resultReportCardAccessAuditBridge';
+export { ResultReportCardAccessIdempotencyService } from './resultReportCardAccessIdempotencyService';

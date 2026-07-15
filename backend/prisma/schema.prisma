@@ -7146,3 +7146,348 @@ model ResultReportCardExportIdempotencyRecord {
   @@index([expiresAt], map: "rc_export_idem_expires")
   @@index([createdAt], map: "rc_export_idem_cat")
 }
+
+// ── Package 15: Controlled Report Card Access Readiness, Mock Portal Preview, Recipient Access Grants, Acknowledgement Ledger, Revocation, Expiry, Audit Read Model, and No-Live-Portal Gate ──
+
+model ResultReportCardAccessGrantRecord {
+  resultReportCardAccessGrantId           String    @id @default(uuid())
+  schoolId                                String
+  resultReportCardAssemblyId              String
+  resultReportCardAudienceProjectionId    String
+  resultReportCardReviewId                String
+  resultReportCardExportJobId             String
+  resultReportCardExportTargetId          String
+  resultReportCardExportEnvelopeId        String
+  resultReportCardExportReceiptId         String?
+  resultReportCardArchiveManifestId       String?
+  resultReleasePacketId                   String
+  studentRef                              String
+  audienceType                            String
+  accessGrantStatus                       String    @default("draft")
+  accessGrantMode                         String    @default("mock_portal_preview_only")
+  safeAccessSummary                       String    @db.Text
+  sourceRefsJson                          Json?
+  allowedActionsJson                      Json?
+  blockedActionsJson                      Json?
+  blockedReasonCodesJson                  Json?
+  createdByActorId                        String
+  createdByRole                           String
+  createdAt                               DateTime  @default(now())
+  updatedAt                               DateTime  @updatedAt
+  validatedAt                             DateTime?
+  readyAt                                 DateTime?
+  suppressedAt                            DateTime?
+  revokedAt                               DateTime?
+  expiredAt                               DateTime?
+  voidedAt                                DateTime?
+
+  @@index([schoolId], map: "rc_acgrant_school")
+  @@index([resultReportCardAssemblyId], map: "rc_acgrant_assembly")
+  @@index([resultReportCardAudienceProjectionId], map: "rc_acgrant_proj")
+  @@index([resultReportCardReviewId], map: "rc_acgrant_review")
+  @@index([resultReportCardExportJobId], map: "rc_acgrant_job")
+  @@index([resultReportCardExportTargetId], map: "rc_acgrant_tgt")
+  @@index([resultReportCardExportEnvelopeId], map: "rc_acgrant_env")
+  @@index([resultReportCardExportReceiptId], map: "rc_acgrant_rcpt")
+  @@index([resultReportCardArchiveManifestId], map: "rc_acgrant_arch")
+  @@index([studentRef], map: "rc_acgrant_student")
+  @@index([audienceType], map: "rc_acgrant_aud")
+  @@index([accessGrantStatus], map: "rc_acgrant_status")
+  @@index([accessGrantMode], map: "rc_acgrant_mode")
+  @@index([createdAt], map: "rc_acgrant_cat")
+  @@index([updatedAt], map: "rc_acgrant_uat")
+}
+
+model ResultReportCardAccessRecipientRecord {
+  resultReportCardAccessRecipientId String   @id @default(uuid())
+  schoolId                          String
+  resultReportCardAccessGrantId     String
+  studentRef                        String
+  audienceType                      String
+  recipientRole                     String
+  recipientStatus                   String   @default("draft")
+  recipientMode                     String   @default("future_access_only")
+  safeRecipientSummary              String   @db.Text
+  recipientDescriptorJson           Json?
+  allowedFieldNamesJson             Json?
+  blockedFieldNamesJson             Json?
+  blockedReasonCodesJson            Json?
+  createdByActorId                  String
+  createdByRole                     String
+  createdAt                         DateTime @default(now())
+  updatedAt                         DateTime @updatedAt
+  validatedAt                       DateTime?
+  suppressedAt                      DateTime?
+  revokedAt                         DateTime?
+  voidedAt                          DateTime?
+
+  @@index([schoolId], map: "rca_recpt_school")
+  @@index([resultReportCardAccessGrantId], map: "rca_recpt_grant")
+  @@index([studentRef], map: "rca_recpt_student")
+  @@index([audienceType], map: "rca_recpt_aud")
+  @@index([recipientRole], map: "rca_recpt_role")
+  @@index([recipientStatus], map: "rca_recpt_status")
+  @@index([recipientMode], map: "rca_recpt_mode")
+  @@index([createdAt], map: "rca_recpt_cat")
+  @@index([updatedAt], map: "rca_recpt_uat")
+}
+
+model ResultReportCardPortalPreviewRecord {
+  resultReportCardPortalPreviewId   String    @id @default(uuid())
+  schoolId                          String
+  resultReportCardAccessGrantId     String
+  resultReportCardAccessRecipientId String
+  resultReportCardExportEnvelopeId  String
+  resultReportCardArchiveManifestId String?
+  previewStatus                     String    @default("draft")
+  previewMode                       String    @default("mock_portal_preview_only")
+  audienceType                      String
+  safePreviewSummary                String    @db.Text
+  safePreviewPayloadJson            Json?
+  redactionRulesJson                Json?
+  allowedFieldNamesJson             Json?
+  blockedFieldNamesJson             Json?
+  blockedReasonCodesJson            Json?
+  createdByActorId                  String
+  createdByRole                     String
+  createdAt                         DateTime  @default(now())
+  updatedAt                         DateTime  @updatedAt
+  sealedAt                          DateTime?
+  suppressedAt                      DateTime?
+  blockedAt                         DateTime?
+  voidedAt                          DateTime?
+
+  @@index([schoolId], map: "rca_preview_school")
+  @@index([resultReportCardAccessGrantId], map: "rca_preview_grant")
+  @@index([resultReportCardAccessRecipientId], map: "rca_preview_recip")
+  @@index([resultReportCardExportEnvelopeId], map: "rca_preview_env")
+  @@index([resultReportCardArchiveManifestId], map: "rca_preview_arch")
+  @@index([previewStatus], map: "rca_preview_status")
+  @@index([previewMode], map: "rca_preview_mode")
+  @@index([audienceType], map: "rca_preview_aud")
+  @@index([createdAt], map: "rca_preview_cat")
+  @@index([updatedAt], map: "rca_preview_uat")
+}
+
+model ResultReportCardAccessTokenIntentRecord {
+  resultReportCardAccessTokenIntentId String   @id @default(uuid())
+  schoolId                            String
+  resultReportCardAccessGrantId       String
+  resultReportCardAccessRecipientId   String
+  intentStatus                        String   @default("draft")
+  intentMode                          String   @default("no_token_created")
+  tokenPurpose                        String
+  safeTokenIntentSummary              String   @db.Text
+  tokenIntentMetadataJson             Json?
+  blockedReasonCodesJson              Json?
+  createdByActorId                    String
+  createdByRole                       String
+  createdAt                           DateTime @default(now())
+  updatedAt                           DateTime @updatedAt
+  validatedAt                         DateTime?
+  blockedAt                           DateTime?
+  voidedAt                            DateTime?
+
+  @@index([schoolId], map: "rca_token_school")
+  @@index([resultReportCardAccessGrantId], map: "rca_token_grant")
+  @@index([resultReportCardAccessRecipientId], map: "rca_token_recip")
+  @@index([intentStatus], map: "rca_token_status")
+  @@index([intentMode], map: "rca_token_mode")
+  @@index([tokenPurpose], map: "rca_token_purpose")
+  @@index([createdAt], map: "rca_token_cat")
+  @@index([updatedAt], map: "rca_token_uat")
+}
+
+model ResultReportCardAccessAcknowledgementRecord {
+  resultReportCardAccessAcknowledgementId String   @id @default(uuid())
+  schoolId                                String
+  resultReportCardAccessGrantId           String
+  resultReportCardAccessRecipientId       String
+  resultReportCardPortalPreviewId         String?
+  acknowledgementStatus                   String   @default("created")
+  acknowledgementType                     String   @default("dry_run_acknowledgement")
+  safeAcknowledgementSummary              String   @db.Text
+  acknowledgementMetadataJson             Json?
+  blockedReasonCodesJson                  Json?
+  createdByActorId                        String
+  createdByRole                           String
+  createdAt                               DateTime @default(now())
+  updatedAt                               DateTime @updatedAt
+  recordedAt                              DateTime?
+  voidedAt                                DateTime?
+
+  @@index([schoolId], map: "rca_ack_school")
+  @@index([resultReportCardAccessGrantId], map: "rca_ack_grant")
+  @@index([resultReportCardAccessRecipientId], map: "rca_ack_recip")
+  @@index([resultReportCardPortalPreviewId], map: "rca_ack_preview")
+  @@index([acknowledgementStatus], map: "rca_ack_status")
+  @@index([acknowledgementType], map: "rca_ack_type")
+  @@index([createdAt], map: "rca_ack_cat")
+  @@index([updatedAt], map: "rca_ack_uat")
+}
+
+model ResultReportCardAccessRevocationRecord {
+  resultReportCardAccessRevocationId String    @id @default(uuid())
+  schoolId                           String
+  resultReportCardAccessGrantId      String
+  resultReportCardAccessRecipientId  String?
+  revocationStatus                   String    @default("draft")
+  revocationScope                    String    @default("grant")
+  revocationReason                   String
+  safeRevocationSummary              String    @db.Text
+  reasonCodesJson                    Json?
+  createdByActorId                   String
+  createdByRole                      String
+  createdAt                          DateTime  @default(now())
+  updatedAt                          DateTime  @updatedAt
+  appliedAt                          DateTime?
+  voidedAt                           DateTime?
+
+  @@index([schoolId], map: "rca_rev_school")
+  @@index([resultReportCardAccessGrantId], map: "rca_rev_grant")
+  @@index([resultReportCardAccessRecipientId], map: "rca_rev_recip")
+  @@index([revocationStatus], map: "rca_rev_status")
+  @@index([revocationScope], map: "rca_rev_scope")
+  @@index([createdAt], map: "rca_rev_cat")
+  @@index([updatedAt], map: "rca_rev_uat")
+}
+
+model ResultReportCardAccessExpiryRecord {
+  resultReportCardAccessExpiryId String    @id @default(uuid())
+  schoolId                       String
+  resultReportCardAccessGrantId  String
+  resultReportCardAccessRecipientId String?
+  expiryStatus                   String    @default("draft")
+  expiryScope                    String    @default("grant")
+  expiresAt                      DateTime
+  safeExpirySummary              String    @db.Text
+  reasonCodesJson                Json?
+  createdByActorId               String
+  createdByRole                  String
+  createdAt                      DateTime  @default(now())
+  updatedAt                      DateTime  @updatedAt
+  appliedAt                      DateTime?
+  cancelledAt                    DateTime?
+  voidedAt                       DateTime?
+
+  @@index([schoolId], map: "rca_exp_school")
+  @@index([resultReportCardAccessGrantId], map: "rca_exp_grant")
+  @@index([resultReportCardAccessRecipientId], map: "rca_exp_recip")
+  @@index([expiryStatus], map: "rca_exp_status")
+  @@index([expiryScope], map: "rca_exp_scope")
+  @@index([expiresAt], map: "rca_exp_expires")
+  @@index([createdAt], map: "rca_exp_cat")
+  @@index([updatedAt], map: "rca_exp_uat")
+}
+
+model ResultReportCardAccessTimelineRecord {
+  resultReportCardAccessTimelineId String   @id @default(uuid())
+  schoolId                         String
+  resultReportCardAccessGrantId    String?
+  resultReportCardAccessRecipientId String?
+  timelineStatus                   String   @default("recorded")
+  eventType                        String
+  safeTimelineSummary              String   @db.Text
+  eventRefsJson                    Json?
+  metadataJson                     Json?
+  createdByActorId                 String
+  createdByRole                    String
+  createdAt                        DateTime @default(now())
+
+  @@index([schoolId], map: "rca_tl_school")
+  @@index([resultReportCardAccessGrantId], map: "rca_tl_grant")
+  @@index([resultReportCardAccessRecipientId], map: "rca_tl_recip")
+  @@index([timelineStatus], map: "rca_tl_status")
+  @@index([eventType], map: "rca_tl_event")
+  @@index([createdAt], map: "rca_tl_cat")
+}
+
+model ResultReportCardAccessSummaryRecord {
+  resultReportCardAccessSummaryId String   @id @default(uuid())
+  schoolId                        String
+  studentRef                      String?
+  resultReportCardAssemblyId      String?
+  resultReportCardExportJobId     String?
+  summaryStatus                   String   @default("active")
+  summaryScope                    String   @default("school")
+  safeSummary                     String   @db.Text
+  audienceCountsJson              Json?
+  statusCountsJson                Json?
+  blockedReasonCodesJson          Json?
+  createdAt                       DateTime @default(now())
+  updatedAt                       DateTime @updatedAt
+  refreshedAt                     DateTime?
+  voidedAt                        DateTime?
+
+  @@index([schoolId], map: "rca_sum_school")
+  @@index([studentRef], map: "rca_sum_student")
+  @@index([resultReportCardAssemblyId], map: "rca_sum_assembly")
+  @@index([resultReportCardExportJobId], map: "rca_sum_job")
+  @@index([summaryStatus], map: "rca_sum_status")
+  @@index([summaryScope], map: "rca_sum_scope")
+  @@index([createdAt], map: "rca_sum_cat")
+  @@index([updatedAt], map: "rca_sum_uat")
+}
+
+model ResultReportCardAccessAuditRecord {
+  resultReportCardAccessAuditId               String   @id @default(uuid())
+  schoolId                                    String
+  resultReportCardAccessGrantId               String?
+  resultReportCardAccessRecipientId           String?
+  resultReportCardPortalPreviewId             String?
+  resultReportCardAccessTokenIntentId         String?
+  resultReportCardAccessAcknowledgementId     String?
+  resultReportCardAccessRevocationId          String?
+  resultReportCardAccessExpiryId              String?
+  resultReportCardAccessTimelineId            String?
+  resultReportCardAccessSummaryId             String?
+  actorId                                     String
+  actorRole                                   String
+  eventType                                   String
+  decision                                    String
+  safeSummary                                 String   @db.Text
+  reasonCodesJson                             Json?
+  metadataJson                                Json?
+  requestId                                   String?
+  correlationId                               String?
+  createdAt                                   DateTime @default(now())
+
+  @@index([schoolId], map: "rca_audit_school")
+  @@index([resultReportCardAccessGrantId], map: "rca_audit_grant")
+  @@index([resultReportCardAccessRecipientId], map: "rca_audit_recip")
+  @@index([resultReportCardPortalPreviewId], map: "rca_audit_preview")
+  @@index([resultReportCardAccessTokenIntentId], map: "rca_audit_token")
+  @@index([resultReportCardAccessAcknowledgementId], map: "rca_audit_ack")
+  @@index([resultReportCardAccessRevocationId], map: "rca_audit_rev")
+  @@index([resultReportCardAccessExpiryId], map: "rca_audit_exp")
+  @@index([resultReportCardAccessTimelineId], map: "rca_audit_tl")
+  @@index([resultReportCardAccessSummaryId], map: "rca_audit_sum")
+  @@index([actorId], map: "rca_audit_actor")
+  @@index([eventType], map: "rca_audit_event")
+  @@index([createdAt], map: "rca_audit_cat")
+  @@index([requestId], map: "rca_audit_req")
+  @@index([correlationId], map: "rca_audit_corr")
+}
+
+model ResultReportCardAccessIdempotencyRecord {
+  resultReportCardAccessIdempotencyId String   @id @default(uuid())
+  schoolId                            String
+  operation                           String
+  idempotencyKey                      String
+  requestHash                         String
+  status                              String   @default("in_progress")
+  resourceType                        String?
+  resourceId                          String?
+  safeResultSummary                   String?
+  createdAt                           DateTime @default(now())
+  updatedAt                           DateTime @updatedAt
+  expiresAt                           DateTime?
+
+  @@unique([schoolId, operation, idempotencyKey], map: "rca_idem_unique")
+  @@index([schoolId], map: "rca_idem_school")
+  @@index([operation], map: "rca_idem_op")
+  @@index([idempotencyKey], map: "rca_idem_key")
+  @@index([status], map: "rca_idem_status")
+  @@index([expiresAt], map: "rca_idem_expires")
+  @@index([createdAt], map: "rca_idem_cat")
+}
