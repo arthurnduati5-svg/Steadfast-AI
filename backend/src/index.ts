@@ -427,6 +427,10 @@ app.use('/api/question-bank/recovery-outcome', schoolAuthMiddleware, requireVeri
 import recoveryOutcomeActionRoutes from './routes/recoveryOutcomeAction';
 app.use('/api/question-bank/recovery-outcome-action', schoolAuthMiddleware, requireVerifiedSchoolContext, recoveryOutcomeActionRoutes);
 
+// ─── Recovery Outcome Execution Simulation Routes (Package 21) ──
+import recoveryOutcomeExecutionSimulationRoutes from './routes/recoveryOutcomeExecutionSimulation';
+app.use('/api/question-bank/recovery-outcome-execution-simulation', schoolAuthMiddleware, requireVerifiedSchoolContext, recoveryOutcomeExecutionSimulationRoutes);
+
 // ─── Phase 2: Learning Mode Runtime Routes ──────────────
 app.use('/api', schoolAuthMiddleware, requireVerifiedSchoolContext, learningModeRoutes);
 app.use('/api/copilot', schoolAuthMiddleware, requireVerifiedSchoolContext, learningProfileRoutes);

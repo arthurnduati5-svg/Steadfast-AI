@@ -9354,3 +9354,437 @@ model RecoveryOutcomeActionIdempotencyRecord {
   @@index([expiresAt])
   @@index([createdAt])
 }
+
+// ─── Package 21: Recovery Outcome Execution Simulation ────────────────
+
+model RecoveryOutcomeExecutionSimulationReadinessRecord {
+  simulationReadinessId               String   @id @default(uuid())
+  schoolId                            String
+  studentRef                          String
+  resultRecoveryPlanId                String
+  recoveryOutcomeActionReadinessId    String
+  recoveryOutcomeActionBundleId       String?
+  readinessStatus                     String   @default("draft")
+  safeReadinessSummary                String   @db.Text
+  readinessChecksJson                 Json     @default("{}")
+  blockedReasonCodesJson              String[] @default([])
+  sourceRefsJson                      Json     @default("{}")
+  createdByActorId                    String
+  createdByRole                       String
+  createdAt                           DateTime @default(now())
+  updatedAt                           DateTime @updatedAt
+  reviewReadyAt                       DateTime?
+  approvedForFutureUseAt              DateTime?
+  suppressedAt                        DateTime?
+  blockedAt                           DateTime?
+  voidedAt                            DateTime?
+
+  @@index([schoolId], map: "p21_readiness_schoolId")
+  @@index([schoolId, studentRef], map: "p21_readiness_sid_sref")
+  @@index([schoolId, resultRecoveryPlanId], map: "p21_readiness_sid_plan")
+  @@index([readinessStatus], map: "p21_readiness_status")
+  @@index([createdAt], map: "p21_readiness_ca")
+}
+
+model RecoveryOutcomeExecutionSimulationPlanRecord {
+  simulationPlanId                    String   @id @default(uuid())
+  schoolId                            String
+  studentRef                          String
+  resultRecoveryPlanId                String
+  recoveryOutcomeActionBundleId       String?
+  recoveryContinuationActionDraftId   String?
+  recoveryIntensificationActionDraftId String?
+  recoveryPauseActionDraftId          String?
+  recoveryClosureActionDraftId        String?
+  planStatus                          String   @default("draft")
+  safePlanSummary                     String   @db.Text
+  simulationParametersJson            Json     @default("{}")
+  blockedReasonCodesJson              String[] @default([])
+  sourceRefsJson                      Json     @default("{}")
+  createdByActorId                    String
+  createdByRole                       String
+  createdAt                           DateTime @default(now())
+  updatedAt                           DateTime @updatedAt
+  simulationReadyAt                   DateTime?
+  reviewReadyAt                       DateTime?
+  approvedForFutureUseAt              DateTime?
+  suppressedAt                        DateTime?
+  blockedAt                           DateTime?
+  voidedAt                            DateTime?
+
+  @@index([schoolId], map: "p21_plan_schoolId")
+  @@index([schoolId, studentRef], map: "p21_plan_sid_sref")
+  @@index([schoolId, resultRecoveryPlanId], map: "p21_plan_sid_plan")
+  @@index([planStatus], map: "p21_plan_status")
+  @@index([createdAt], map: "p21_plan_ca")
+}
+
+model RecoveryOutcomeExecutionSimulationRunRecord {
+  simulationRunId                     String   @id @default(uuid())
+  schoolId                            String
+  studentRef                          String
+  resultRecoveryPlanId                String
+  recoveryOutcomeActionBundleId       String?
+  simulationPlanId                    String
+  runStatus                           String   @default("draft")
+  safeRunSummary                      String   @db.Text
+  runParametersJson                   Json     @default("{}")
+  blockedReasonCodesJson              String[] @default([])
+  sourceRefsJson                      Json     @default("{}")
+  createdByActorId                    String
+  createdByRole                       String
+  createdAt                           DateTime @default(now())
+  updatedAt                           DateTime @updatedAt
+  simulatingAt                        DateTime?
+  simulatedAt                         DateTime?
+  reviewReadyAt                       DateTime?
+  suppressedAt                        DateTime?
+  blockedAt                           DateTime?
+  voidedAt                            DateTime?
+
+  @@index([schoolId], map: "p21_run_schoolId")
+  @@index([schoolId, studentRef], map: "p21_run_sid_sref")
+  @@index([schoolId, resultRecoveryPlanId], map: "p21_run_sid_plan")
+  @@index([simulationPlanId], map: "p21_run_simplan")
+  @@index([runStatus], map: "p21_run_status")
+  @@index([createdAt], map: "p21_run_ca")
+}
+
+model RecoveryOutcomeExecutionSimulationStepRecord {
+  simulationStepId                    String   @id @default(uuid())
+  schoolId                            String
+  simulationRunId                     String
+  stepSequence                        Int
+  stepName                            String
+  stepStatus                          String   @default("pending")
+  safeStepSummary                     String   @db.Text
+  stepDetailsJson                     Json     @default("{}")
+  blockedReasonCodesJson              String[] @default([])
+  sourceRefsJson                      Json     @default("{}")
+  createdByActorId                    String
+  createdByRole                       String
+  createdAt                           DateTime @default(now())
+  updatedAt                           DateTime @updatedAt
+  simulatedAt                         DateTime?
+  blockedAt                           DateTime?
+  voidedAt                            DateTime?
+
+  @@index([schoolId], map: "p21_step_schoolId")
+  @@index([simulationRunId], map: "p21_step_run")
+  @@index([stepStatus], map: "p21_step_status")
+  @@index([createdAt], map: "p21_step_ca")
+}
+
+model RecoveryOutcomeExecutionEligibilityCheckRecord {
+  eligibilityCheckId                  String   @id @default(uuid())
+  schoolId                            String
+  studentRef                          String
+  resultRecoveryPlanId                String
+  recoveryOutcomeActionBundleId       String?
+  recoveryOutcomeActionReadinessId    String?
+  eligibilityStatus                   String   @default("draft")
+  safeEligibilitySummary              String   @db.Text
+  eligibilityChecksJson               Json     @default("{}")
+  blockedReasonCodesJson              String[] @default([])
+  sourceRefsJson                      Json     @default("{}")
+  createdByActorId                    String
+  createdByRole                       String
+  createdAt                           DateTime @default(now())
+  updatedAt                           DateTime @updatedAt
+  reviewReadyAt                       DateTime?
+  voidedAt                            DateTime?
+
+  @@index([schoolId], map: "p21_elig_schoolId")
+  @@index([schoolId, studentRef], map: "p21_elig_sid_sref")
+  @@index([schoolId, resultRecoveryPlanId], map: "p21_elig_sid_plan")
+  @@index([recoveryOutcomeActionBundleId], map: "p21_elig_bundle")
+  @@index([eligibilityStatus], map: "p21_elig_status")
+  @@index([createdAt], map: "p21_elig_ca")
+}
+
+model RecoveryOutcomeExecutionBlockedActionDiagnosticRecord {
+  blockedActionDiagnosticId           String   @id @default(uuid())
+  schoolId                            String
+  studentRef                          String
+  resultRecoveryPlanId                String
+  simulationRunId                     String?
+  recoveryOutcomeActionBundleId       String?
+  diagnosticStatus                    String   @default("draft")
+  safeDiagnosticSummary               String   @db.Text
+  blockedReasonCodesJson              String[] @default([])
+  diagnosticDetailsJson               Json     @default("{}")
+  sourceRefsJson                      Json     @default("{}")
+  createdByActorId                    String
+  createdByRole                       String
+  createdAt                           DateTime @default(now())
+  updatedAt                           DateTime @updatedAt
+  reviewReadyAt                       DateTime?
+  suppressedAt                        DateTime?
+  voidedAt                            DateTime?
+
+  @@index([schoolId], map: "p21_diag_schoolId")
+  @@index([schoolId, studentRef], map: "p21_diag_sid_sref")
+  @@index([schoolId, resultRecoveryPlanId], map: "p21_diag_sid_plan")
+  @@index([simulationRunId], map: "p21_diag_run")
+  @@index([diagnosticStatus], map: "p21_diag_status")
+  @@index([createdAt], map: "p21_diag_ca")
+}
+
+model RecoveryOutcomeExecutionFailureInjectionRecord {
+  failureInjectionId                  String   @id @default(uuid())
+  schoolId                            String
+  studentRef                          String
+  resultRecoveryPlanId                String
+  simulationPlanId                    String?
+  injectionType                       String
+  injectionStatus                     String   @default("draft")
+  safeInjectionSummary                String   @db.Text
+  injectionParametersJson             Json     @default("{}")
+  expectedFailureBehaviorJson         Json     @default("{}")
+  blockedReasonCodesJson              String[] @default([])
+  sourceRefsJson                      Json     @default("{}")
+  createdByActorId                    String
+  createdByRole                       String
+  createdAt                           DateTime @default(now())
+  updatedAt                           DateTime @updatedAt
+  reviewReadyAt                       DateTime?
+  approvedForFutureUseAt              DateTime?
+  suppressedAt                        DateTime?
+  blockedAt                           DateTime?
+  voidedAt                            DateTime?
+
+  @@index([schoolId], map: "p21_fail_schoolId")
+  @@index([schoolId, studentRef], map: "p21_fail_sid_sref")
+  @@index([schoolId, resultRecoveryPlanId], map: "p21_fail_sid_plan")
+  @@index([injectionType], map: "p21_fail_type")
+  @@index([injectionStatus], map: "p21_fail_status")
+  @@index([createdAt], map: "p21_fail_ca")
+}
+
+model RecoveryOutcomeExecutionSimulationResultRecord {
+  simulationResultId                  String   @id @default(uuid())
+  schoolId                            String
+  studentRef                          String
+  resultRecoveryPlanId                String
+  simulationRunId                     String
+  outcomeStatus                       String   @default("draft")
+  safeOutcomeSummary                  String   @db.Text
+  simulationOutcomeDetailsJson        Json     @default("{}")
+  blockedReasonCodesJson              String[] @default([])
+  sourceRefsJson                      Json     @default("{}")
+  createdByActorId                    String
+  createdByRole                       String
+  createdAt                           DateTime @default(now())
+  updatedAt                           DateTime @updatedAt
+  reviewReadyAt                       DateTime?
+  voidedAt                            DateTime?
+
+  @@index([schoolId], map: "p21_res_schoolId")
+  @@index([schoolId, studentRef], map: "p21_res_sid_sref")
+  @@index([schoolId, resultRecoveryPlanId], map: "p21_res_sid_plan")
+  @@index([simulationRunId], map: "p21_res_run")
+  @@index([outcomeStatus], map: "p21_res_status")
+  @@index([createdAt], map: "p21_res_ca")
+}
+
+model RecoveryOutcomeExecutionTeacherReviewRecord {
+  teacherSimulationReviewId           String   @id @default(uuid())
+  schoolId                            String
+  teacherRef                          String
+  studentRef                          String
+  resultRecoveryPlanId                String
+  simulationRunId                     String?
+  reviewStatus                        String   @default("draft")
+  safeTeacherReviewSummary            String   @db.Text
+  teacherReviewNotesJson              Json     @default("{}")
+  blockedReasonCodesJson              String[] @default([])
+  sourceRefsJson                      Json     @default("{}")
+  createdByActorId                    String
+  createdByRole                       String
+  createdAt                           DateTime @default(now())
+  updatedAt                           DateTime @updatedAt
+  reviewReadyAt                       DateTime?
+  approvedForFutureUseAt              DateTime?
+  suppressedAt                        DateTime?
+  blockedAt                           DateTime?
+  voidedAt                            DateTime?
+
+  @@index([schoolId], map: "p21_tcrev_schoolId")
+  @@index([teacherRef], map: "p21_tcrev_tref")
+  @@index([schoolId, studentRef], map: "p21_tcrev_sid_sref")
+  @@index([schoolId, resultRecoveryPlanId], map: "p21_tcrev_sid_plan")
+  @@index([simulationRunId], map: "p21_tcrev_run")
+  @@index([reviewStatus], map: "p21_tcrev_status")
+  @@index([createdAt], map: "p21_tcrev_ca")
+}
+
+model RecoveryOutcomeExecutionStudentPreviewDraftRecord {
+  studentPreviewDraftId               String   @id @default(uuid())
+  schoolId                            String
+  studentRef                          String
+  resultRecoveryPlanId                String
+  simulationRunId                     String?
+  draftStatus                         String   @default("draft")
+  safeStudentPreviewSummary           String   @db.Text
+  previewContentJson                  Json     @default("{}")
+  blockedReasonCodesJson              String[] @default([])
+  sourceRefsJson                      Json     @default("{}")
+  createdByActorId                    String
+  createdByRole                       String
+  createdAt                           DateTime @default(now())
+  updatedAt                           DateTime @updatedAt
+  reviewReadyAt                       DateTime?
+  approvedForFutureUseAt              DateTime?
+  suppressedAt                        DateTime?
+  blockedAt                           DateTime?
+  voidedAt                            DateTime?
+
+  @@index([schoolId], map: "p21_sprev_schoolId")
+  @@index([studentRef], map: "p21_sprev_sref")
+  @@index([schoolId, resultRecoveryPlanId], map: "p21_sprev_sid_plan")
+  @@index([simulationRunId], map: "p21_sprev_run")
+  @@index([draftStatus], map: "p21_sprev_status")
+  @@index([createdAt], map: "p21_sprev_ca")
+}
+
+model RecoveryOutcomeExecutionParentPreviewDraftRecord {
+  parentPreviewDraftId                String   @id @default(uuid())
+  schoolId                            String
+  studentRef                          String
+  resultRecoveryPlanId                String
+  simulationRunId                     String?
+  draftStatus                         String   @default("draft")
+  safeParentPreviewSummary            String   @db.Text
+  previewContentJson                  Json     @default("{}")
+  blockedReasonCodesJson              String[] @default([])
+  sourceRefsJson                      Json     @default("{}")
+  createdByActorId                    String
+  createdByRole                       String
+  createdAt                           DateTime @default(now())
+  updatedAt                           DateTime @updatedAt
+  reviewReadyAt                       DateTime?
+  approvedForFutureUseAt              DateTime?
+  suppressedAt                        DateTime?
+  blockedAt                           DateTime?
+  voidedAt                            DateTime?
+
+  @@index([schoolId], map: "p21_pprev_schoolId")
+  @@index([studentRef], map: "p21_pprev_sref")
+  @@index([schoolId, resultRecoveryPlanId], map: "p21_pprev_sid_plan")
+  @@index([simulationRunId], map: "p21_pprev_run")
+  @@index([draftStatus], map: "p21_pprev_status")
+  @@index([createdAt], map: "p21_pprev_ca")
+}
+
+model RecoveryOutcomeExecutionReadinessVerdictRecord {
+  readinessVerdictId                  String   @id @default(uuid())
+  schoolId                            String
+  studentRef                          String
+  resultRecoveryPlanId                String
+  simulationRunId                     String?
+  verdictStatus                       String   @default("draft")
+  safeVerdictSummary                  String   @db.Text
+  verdictDetailsJson                  Json     @default("{}")
+  blockedReasonCodesJson              String[] @default([])
+  sourceRefsJson                      Json     @default("{}")
+  createdByActorId                    String
+  createdByRole                       String
+  createdAt                           DateTime @default(now())
+  updatedAt                           DateTime @updatedAt
+  reviewReadyAt                       DateTime?
+  approvedForFutureUseAt              DateTime?
+  suppressedAt                        DateTime?
+  blockedAt                           DateTime?
+  voidedAt                            DateTime?
+
+  @@index([schoolId], map: "p21_vdict_schoolId")
+  @@index([schoolId, studentRef], map: "p21_vdict_sid_sref")
+  @@index([schoolId, resultRecoveryPlanId], map: "p21_vdict_sid_plan")
+  @@index([simulationRunId], map: "p21_vdict_run")
+  @@index([verdictStatus], map: "p21_vdict_status")
+  @@index([createdAt], map: "p21_vdict_ca")
+}
+
+model RecoveryOutcomeExecutionSimulationSummaryRecord {
+  simulationSummaryId                 String   @id @default(uuid())
+  schoolId                            String
+  studentRef                          String?
+  teacherRef                          String?
+  resultRecoveryPlanId                String?
+  summaryStatus                       String   @default("active")
+  safeSummary                         String   @db.Text
+  simulationCountsJson                Json     @default("{}")
+  topFindingsJson                     Json     @default("{}")
+  nextStepsJson                       Json     @default("{}")
+  blockedReasonCodesJson              String[] @default([])
+  sourceRefsJson                      Json     @default("{}")
+  createdByActorId                    String
+  createdByRole                       String
+  createdAt                           DateTime @default(now())
+  updatedAt                           DateTime @updatedAt
+  refreshedAt                         DateTime?
+  staleAt                             DateTime?
+  blockedAt                           DateTime?
+  voidedAt                            DateTime?
+
+  @@index([schoolId], map: "p21_summary_schoolId")
+  @@index([schoolId, studentRef], map: "p21_summary_sid_sref")
+  @@index([schoolId, teacherRef], map: "p21_summary_sid_tref")
+  @@index([schoolId, resultRecoveryPlanId], map: "p21_summary_sid_plan")
+  @@index([summaryStatus], map: "p21_summary_status")
+  @@index([createdAt], map: "p21_summary_ca")
+}
+
+model RecoveryOutcomeExecutionSimulationAuditRecord {
+  simulationAuditEventId              String   @id @default(uuid())
+  schoolId                            String
+  simulationReadinessId               String?
+  simulationPlanId                    String?
+  simulationRunId                     String?
+  eligibilityCheckId                  String?
+  blockedActionDiagnosticId           String?
+  failureInjectionId                  String?
+  simulationResultId                  String?
+  teacherSimulationReviewId           String?
+  studentPreviewDraftId               String?
+  parentPreviewDraftId                String?
+  readinessVerdictId                  String?
+  simulationSummaryId                 String?
+  actorId                             String
+  actorRole                           String
+  eventType                           String
+  decision                            String
+  safeSummary                         String   @db.Text
+  reasonCodesJson                     Json     @default("{}")
+  metadataJson                        Json     @default("{}")
+  requestId                           String?
+  correlationId                       String?
+  createdAt                           DateTime @default(now())
+
+  @@index([schoolId], map: "p21_audit_schoolId")
+  @@index([schoolId, eventType], map: "p21_audit_sid_evt")
+  @@index([createdAt], map: "p21_audit_ca")
+}
+
+model RecoveryOutcomeExecutionSimulationIdempotencyRecord {
+  simulationIdempotencyId             String   @id @default(uuid())
+  schoolId                            String
+  operation                           String
+  idempotencyKey                      String
+  requestHash                         String
+  status                              String   @default("in_progress")
+  resourceType                        String?
+  resourceId                          String?
+  safeResultSummary                   String?
+  createdAt                           DateTime @default(now())
+  updatedAt                           DateTime @updatedAt
+  expiresAt                           DateTime?
+
+  @@unique([schoolId, operation, idempotencyKey], map: "p21_idem_uid")
+  @@index([schoolId], map: "p21_idem_schoolId")
+  @@index([operation], map: "p21_idem_op")
+  @@index([idempotencyKey], map: "p21_idem_ik")
+  @@index([status], map: "p21_idem_status")
+  @@index([expiresAt], map: "p21_idem_exp")
+  @@index([createdAt], map: "p21_idem_ca")
+}
