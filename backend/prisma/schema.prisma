@@ -8954,3 +8954,403 @@ model RecoveryOutcomeIdempotencyRecord {
   @@index([expiresAt])
   @@index([createdAt])
 }
+
+// ─── Package 20: Recovery Outcome Action Preparation ────────────────
+
+model RecoveryOutcomeActionReadinessRecord {
+  actionReadinessId                  String   @id @default(uuid())
+  schoolId                           String
+  studentRef                         String
+  resultRecoveryPlanId               String
+  recoveryOutcomeDecisionReadinessId String
+  recoveryOutcomeDecisionSummaryId   String?
+  readinessStatus                    String   @default("draft")
+  safeReadinessSummary               String   @db.Text
+  readinessChecksJson                Json     @default("{}")
+  blockedReasonCodesJson             String[] @default([])
+  sourceRefsJson                     Json     @default("{}")
+  createdByActorId                   String
+  createdByRole                      String
+  createdAt                          DateTime @default(now())
+  updatedAt                          DateTime @updatedAt
+  reviewReadyAt                      DateTime?
+  approvedForFutureUseAt             DateTime?
+  suppressedAt                       DateTime?
+  blockedAt                          DateTime?
+  voidedAt                           DateTime?
+
+  @@index([schoolId])
+  @@index([schoolId, studentRef])
+  @@index([schoolId, resultRecoveryPlanId])
+  @@index([readinessStatus])
+  @@index([createdAt])
+}
+
+model RecoveryOutcomeActionBundleRecord {
+  actionBundleId                    String   @id @default(uuid())
+  schoolId                          String
+  studentRef                        String
+  resultRecoveryPlanId              String
+  recoveryOutcomeDecisionSummaryId  String?
+  bundleStatus                      String   @default("draft")
+  safeBundleSummary                 String   @db.Text
+  readinessRefsJson                 Json     @default("{}")
+  draftRefsJson                     Json     @default("{}")
+  bundleType                        String
+  blockedReasonCodesJson            String[] @default([])
+  sourceRefsJson                    Json     @default("{}")
+  createdByActorId                  String
+  createdByRole                     String
+  createdAt                         DateTime @default(now())
+  updatedAt                         DateTime @updatedAt
+  reviewReadyAt                     DateTime?
+  approvedForFutureUseAt            DateTime?
+  suppressedAt                      DateTime?
+  blockedAt                         DateTime?
+  voidedAt                          DateTime?
+
+  @@index([schoolId])
+  @@index([schoolId, studentRef])
+  @@index([schoolId, resultRecoveryPlanId])
+  @@index([bundleStatus])
+  @@index([bundleType])
+  @@index([createdAt])
+}
+
+model RecoveryContinuationActionDraftRecord {
+  continuationActionDraftId            String   @id @default(uuid())
+  schoolId                             String
+  studentRef                           String
+  resultRecoveryPlanId                 String
+  recoveryContinuationDecisionDraftId  String
+  recoveryOutcomeDecisionSummaryId     String?
+  draftStatus                          String   @default("draft")
+  safeActionSummary                    String   @db.Text
+  actionDetailsJson                    Json     @default("{}")
+  blockedReasonCodesJson               String[] @default([])
+  sourceRefsJson                       Json     @default("{}")
+  createdByActorId                     String
+  createdByRole                        String
+  createdAt                            DateTime @default(now())
+  updatedAt                            DateTime @updatedAt
+  reviewReadyAt                        DateTime?
+  approvedForFutureUseAt               DateTime?
+  suppressedAt                         DateTime?
+  blockedAt                            DateTime?
+  voidedAt                             DateTime?
+
+  @@index([schoolId])
+  @@index([schoolId, studentRef])
+  @@index([schoolId, resultRecoveryPlanId])
+  @@index([draftStatus])
+  @@index([createdAt])
+}
+
+model RecoveryIntensificationActionDraftRecord {
+  intensificationActionDraftId            String   @id @default(uuid())
+  schoolId                                String
+  studentRef                              String
+  resultRecoveryPlanId                    String
+  recoveryIntensificationDecisionDraftId  String
+  recoveryOutcomeDecisionSummaryId        String?
+  draftStatus                             String   @default("draft")
+  safeActionSummary                       String   @db.Text
+  intensificationDetailsJson              Json     @default("{}")
+  blockedReasonCodesJson                  String[] @default([])
+  sourceRefsJson                          Json     @default("{}")
+  createdByActorId                        String
+  createdByRole                           String
+  createdAt                               DateTime @default(now())
+  updatedAt                               DateTime @updatedAt
+  reviewReadyAt                           DateTime?
+  approvedForFutureUseAt                  DateTime?
+  suppressedAt                            DateTime?
+  blockedAt                               DateTime?
+  voidedAt                                DateTime?
+
+  @@index([schoolId])
+  @@index([schoolId, studentRef])
+  @@index([schoolId, resultRecoveryPlanId])
+  @@index([draftStatus])
+  @@index([createdAt])
+}
+
+model RecoveryPauseActionDraftRecord {
+  pauseActionDraftId              String   @id @default(uuid())
+  schoolId                        String
+  studentRef                      String
+  resultRecoveryPlanId            String
+  recoveryPauseDecisionDraftId    String
+  recoveryOutcomeDecisionSummaryId String?
+  draftStatus                     String   @default("draft")
+  safeActionSummary               String   @db.Text
+  pauseDetailsJson                Json     @default("{}")
+  blockedReasonCodesJson          String[] @default([])
+  sourceRefsJson                  Json     @default("{}")
+  createdByActorId                String
+  createdByRole                   String
+  createdAt                       DateTime @default(now())
+  updatedAt                       DateTime @updatedAt
+  reviewReadyAt                   DateTime?
+  approvedForFutureUseAt          DateTime?
+  suppressedAt                    DateTime?
+  blockedAt                       DateTime?
+  voidedAt                        DateTime?
+
+  @@index([schoolId])
+  @@index([schoolId, studentRef])
+  @@index([schoolId, resultRecoveryPlanId])
+  @@index([draftStatus])
+  @@index([createdAt])
+}
+
+model RecoveryClosureActionDraftRecord {
+  closureActionDraftId             String   @id @default(uuid())
+  schoolId                         String
+  studentRef                       String
+  resultRecoveryPlanId             String
+  recoveryClosureDecisionDraftId   String
+  recoveryOutcomeDecisionSummaryId String?
+  draftStatus                      String   @default("draft")
+  safeActionSummary                String   @db.Text
+  closureDetailsJson               Json     @default("{}")
+  closureType                      String   @default("graduation")
+  blockedReasonCodesJson           String[] @default([])
+  sourceRefsJson                   Json     @default("{}")
+  createdByActorId                 String
+  createdByRole                    String
+  createdAt                        DateTime @default(now())
+  updatedAt                        DateTime @updatedAt
+  reviewReadyAt                    DateTime?
+  approvedForFutureUseAt           DateTime?
+  suppressedAt                     DateTime?
+  blockedAt                        DateTime?
+  voidedAt                         DateTime?
+
+  @@index([schoolId])
+  @@index([schoolId, studentRef])
+  @@index([schoolId, resultRecoveryPlanId])
+  @@index([draftStatus])
+  @@index([closureType])
+  @@index([createdAt])
+}
+
+model RecoveryOutcomeApprovalGateRecord {
+  approvalGateId                   String   @id @default(uuid())
+  schoolId                         String
+  studentRef                       String
+  resultRecoveryPlanId             String
+  recoveryOutcomeDecisionSummaryId String?
+  gateStatus                       String   @default("pending")
+  safeGateSummary                  String   @db.Text
+  requiredApprovalsJson            Json     @default("{}")
+  approvalResultsJson              Json     @default("{}")
+  blockedReasonCodesJson           String[] @default([])
+  sourceRefsJson                   Json     @default("{}")
+  createdByActorId                 String
+  createdByRole                    String
+  createdAt                        DateTime @default(now())
+  updatedAt                        DateTime @updatedAt
+  satisfiedAt                      DateTime?
+  blockedAt                        DateTime?
+  voidedAt                         DateTime?
+
+  @@index([schoolId])
+  @@index([schoolId, studentRef])
+  @@index([schoolId, resultRecoveryPlanId])
+  @@index([gateStatus])
+  @@index([createdAt])
+}
+
+model RecoveryOutcomeMockActivationQueueRecord {
+  mockActivationQueueItemId String   @id @default(uuid())
+  schoolId                  String
+  studentRef                String
+  resultRecoveryPlanId      String
+  actionBundleId            String?
+  queueStatus               String   @default("draft")
+  safeQueueSummary          String   @db.Text
+  actionRefsJson            Json     @default("{}")
+  mockParametersJson        Json     @default("{}")
+  blockedReasonCodesJson    String[] @default([])
+  sourceRefsJson            Json     @default("{}")
+  createdByActorId          String
+  createdByRole             String
+  createdAt                 DateTime @default(now())
+  updatedAt                 DateTime @updatedAt
+  dryRunReadyAt             DateTime?
+  suppressedAt              DateTime?
+  blockedAt                 DateTime?
+  voidedAt                  DateTime?
+
+  @@index([schoolId])
+  @@index([schoolId, studentRef])
+  @@index([schoolId, resultRecoveryPlanId])
+  @@index([queueStatus])
+  @@index([createdAt])
+}
+
+model RecoveryOutcomeDryRunReceiptRecord {
+  dryRunReceiptId              String   @id @default(uuid())
+  schoolId                     String
+  mockActivationQueueItemId    String
+  studentRef                   String
+  resultRecoveryPlanId         String
+  receiptResult                String
+  safeReceiptSummary           String   @db.Text
+  simulationDetailsJson        Json     @default("{}")
+  blockedReasonCodesJson       String[] @default([])
+  sourceRefsJson               Json     @default("{}")
+  createdByActorId             String
+  createdByRole                String
+  createdAt                    DateTime @default(now())
+  updatedAt                    DateTime @updatedAt
+  voidedAt                     DateTime?
+
+  @@index([schoolId])
+  @@index([mockActivationQueueItemId])
+  @@index([schoolId, studentRef])
+  @@index([schoolId, resultRecoveryPlanId])
+  @@index([receiptResult])
+  @@index([createdAt])
+}
+
+model RecoveryOutcomeRollbackPlanRecord {
+  rollbackPlanId       String   @id @default(uuid())
+  schoolId             String
+  studentRef           String
+  resultRecoveryPlanId String
+  actionBundleId       String?
+  rollbackStatus       String   @default("draft")
+  safeRollbackSummary  String   @db.Text
+  rollbackStepsJson    Json     @default("{}")
+  rollbackTriggersJson Json     @default("{}")
+  blockedReasonCodesJson String[] @default([])
+  sourceRefsJson       Json     @default("{}")
+  createdByActorId     String
+  createdByRole        String
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+  reviewReadyAt        DateTime?
+  approvedForFutureUseAt DateTime?
+  suppressedAt         DateTime?
+  blockedAt            DateTime?
+  voidedAt             DateTime?
+
+  @@index([schoolId])
+  @@index([schoolId, studentRef])
+  @@index([schoolId, resultRecoveryPlanId])
+  @@index([rollbackStatus])
+  @@index([createdAt])
+}
+
+model RecoveryOutcomeSuppressionRuleRecord {
+  suppressionRuleId    String   @id @default(uuid())
+  schoolId             String
+  studentRef           String
+  resultRecoveryPlanId String
+  ruleStatus           String   @default("active")
+  safeRuleSummary      String   @db.Text
+  ruleConditionsJson   Json     @default("{}")
+  ruleScopeJson        Json     @default("{}")
+  blockedReasonCodesJson String[] @default([])
+  sourceRefsJson       Json     @default("{}")
+  createdByActorId     String
+  createdByRole        String
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+  activatedForFutureUseAt DateTime?
+  suppressedAt         DateTime?
+  blockedAt            DateTime?
+  voidedAt             DateTime?
+
+  @@index([schoolId])
+  @@index([schoolId, studentRef])
+  @@index([schoolId, resultRecoveryPlanId])
+  @@index([ruleStatus])
+  @@index([createdAt])
+}
+
+model RecoveryOutcomeActionSummaryRecord {
+  actionSummaryId      String   @id @default(uuid())
+  schoolId             String
+  studentRef           String?
+  teacherRef           String?
+  resultRecoveryPlanId String?
+  summaryStatus        String   @default("active")
+  safeSummary          String   @db.Text
+  actionCountsJson     Json     @default("{}")
+  topActionsJson       Json     @default("{}")
+  nextStepsJson        Json     @default("{}")
+  blockedReasonCodesJson String[] @default([])
+  sourceRefsJson       Json     @default("{}")
+  createdByActorId     String
+  createdByRole        String
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+  refreshedAt          DateTime?
+  staleAt              DateTime?
+  blockedAt            DateTime?
+  voidedAt             DateTime?
+
+  @@index([schoolId])
+  @@index([schoolId, studentRef])
+  @@index([schoolId, teacherRef])
+  @@index([schoolId, resultRecoveryPlanId])
+  @@index([summaryStatus])
+  @@index([createdAt])
+}
+
+model RecoveryOutcomeActionAuditRecord {
+  auditEventId                    String   @id @default(uuid())
+  schoolId                        String
+  actionReadinessId               String?
+  actionBundleId                  String?
+  continuationActionDraftId       String?
+  intensificationActionDraftId    String?
+  pauseActionDraftId              String?
+  closureActionDraftId            String?
+  approvalGateId                  String?
+  mockActivationQueueItemId       String?
+  dryRunReceiptId                 String?
+  rollbackPlanId                  String?
+  suppressionRuleId               String?
+  actionSummaryId                 String?
+  actorId                         String
+  actorRole                       String
+  eventType                       String
+  decision                        String
+  safeSummary                     String   @db.Text
+  reasonCodesJson                 Json     @default("{}")
+  metadataJson                    Json     @default("{}")
+  requestId                       String?
+  correlationId                   String?
+  createdAt                       DateTime @default(now())
+
+  @@index([schoolId])
+  @@index([schoolId, eventType])
+  @@index([createdAt])
+}
+
+model RecoveryOutcomeActionIdempotencyRecord {
+  actionIdempotencyId String   @id @default(uuid())
+  schoolId            String
+  operation           String
+  idempotencyKey      String
+  requestHash         String
+  status              String   @default("in_progress")
+  resourceType        String?
+  resourceId          String?
+  safeResultSummary   String?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+  expiresAt           DateTime?
+
+  @@unique([schoolId, operation, idempotencyKey])
+  @@index([schoolId])
+  @@index([operation])
+  @@index([idempotencyKey])
+  @@index([status])
+  @@index([expiresAt])
+  @@index([createdAt])
+}
