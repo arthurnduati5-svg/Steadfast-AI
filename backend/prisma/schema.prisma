@@ -7491,3 +7491,338 @@ model ResultReportCardAccessIdempotencyRecord {
   @@index([expiresAt], map: "rca_idem_expires")
   @@index([createdAt], map: "rca_idem_cat")
 }
+
+model ResultFollowUpCaseRecord {
+  resultFollowUpCaseId                  String    @id @default(uuid())
+  schoolId                              String
+  studentRef                            String
+  resultFinalizationDecisionId          String?
+  resultReleaseReadinessId              String?
+  resultReleasePacketId                 String?
+  resultReportCardAssemblyId            String?
+  resultReportCardAudienceProjectionId  String?
+  resultReportCardAccessGrantId         String?
+  resultReportCardAccessSummaryId       String?
+  caseStatus                            String    @default("draft")
+  caseType                              String    @default("academic_support")
+  casePriority                          String    @default("medium")
+  caseMode                              String    @default("mock_action_only")
+  safeCaseSummary                       String
+  sourceRefsJson                        Json      @default("[]")
+  triggerReasonsJson                    Json      @default("[]")
+  allowedActionsJson                    Json      @default("[]")
+  blockedActionsJson                    Json      @default("[]")
+  blockedReasonCodesJson                Json      @default("[]")
+  createdByActorId                      String
+  createdByRole                         String
+  createdAt                             DateTime  @default(now())
+  updatedAt                             DateTime  @updatedAt
+  openedAt                              DateTime?
+  triagedAt                             DateTime?
+  plannedAt                             DateTime?
+  reviewedAt                            DateTime?
+  closedAt                              DateTime?
+  blockedAt                             DateTime?
+  voidedAt                              DateTime?
+
+  @@index([schoolId], map: "rfu_case_school")
+  @@index([schoolId, studentRef], map: "rfu_case_school_student")
+  @@index([caseStatus], map: "rfu_case_status")
+  @@index([caseType], map: "rfu_case_type")
+  @@index([casePriority], map: "rfu_case_priority")
+  @@index([createdByActorId], map: "rfu_case_actor")
+  @@index([createdAt], map: "rfu_case_cat")
+}
+
+model ResultFollowUpSignalRecord {
+  resultFollowUpSignalId    String    @id @default(uuid())
+  schoolId                  String
+  resultFollowUpCaseId      String
+  studentRef                String
+  signalStatus              String    @default("active")
+  signalType                String    @default("weak_objective_pattern")
+  signalSeverity            String    @default("low")
+  signalSource              String
+  safeSignalSummary         String
+  evidenceRefsJson          Json      @default("[]")
+  reasonCodesJson           Json      @default("[]")
+  blockedReasonCodesJson    Json      @default("[]")
+  createdByActorId          String
+  createdByRole             String
+  createdAt                 DateTime  @default(now())
+  updatedAt                 DateTime  @updatedAt
+  suppressedAt              DateTime?
+  voidedAt                  DateTime?
+
+  @@index([schoolId], map: "rfu_sig_school")
+  @@index([resultFollowUpCaseId], map: "rfu_sig_case")
+  @@index([schoolId, studentRef], map: "rfu_sig_student")
+  @@index([signalStatus], map: "rfu_sig_status")
+  @@index([signalType], map: "rfu_sig_type")
+  @@index([signalSeverity], map: "rfu_sig_severity")
+  @@index([createdAt], map: "rfu_sig_cat")
+}
+
+model ResultFollowUpActionPlanRecord {
+  resultFollowUpActionPlanId    String    @id @default(uuid())
+  schoolId                      String
+  resultFollowUpCaseId          String
+  studentRef                    String
+  planStatus                    String    @default("draft")
+  planMode                      String    @default("mock_plan_only")
+  safePlanSummary               String
+  recommendedActionsJson        Json      @default("[]")
+  teacherReviewNotesJson        Json      @default("[]")
+  parentSafeGuidanceRefsJson    Json      @default("[]")
+  studentReflectionRefsJson     Json      @default("[]")
+  reviewWindowRefsJson          Json      @default("[]")
+  blockedReasonCodesJson        Json      @default("[]")
+  createdByActorId              String
+  createdByRole                 String
+  createdAt                     DateTime  @default(now())
+  updatedAt                     DateTime  @updatedAt
+  draftedAt                     DateTime?
+  approvedForFutureUseAt        DateTime?
+  suppressedAt                  DateTime?
+  voidedAt                      DateTime?
+
+  @@index([schoolId], map: "rfu_plan_school")
+  @@index([resultFollowUpCaseId], map: "rfu_plan_case")
+  @@index([schoolId, studentRef], map: "rfu_plan_student")
+  @@index([planStatus], map: "rfu_plan_status")
+  @@index([createdAt], map: "rfu_plan_cat")
+}
+
+model TeacherFollowUpQueueItemRecord {
+  teacherFollowUpQueueItemId    String    @id @default(uuid())
+  schoolId                      String
+  resultFollowUpCaseId          String
+  resultFollowUpActionPlanId    String?
+  studentRef                    String
+  teacherRef                    String
+  queueStatus                   String    @default("draft")
+  queueMode                     String    @default("mock_queue_only")
+  queuePriority                 String    @default("medium")
+  safeQueueSummary              String
+  suggestedNextActionsJson      Json      @default("[]")
+  blockedReasonCodesJson        Json      @default("[]")
+  createdByActorId              String
+  createdByRole                 String
+  createdAt                     DateTime  @default(now())
+  updatedAt                     DateTime  @updatedAt
+  queuedAt                      DateTime?
+  acknowledgedAt                DateTime?
+  completedAt                   DateTime?
+  suppressedAt                  DateTime?
+  voidedAt                      DateTime?
+
+  @@index([schoolId], map: "rfu_q_school")
+  @@index([resultFollowUpCaseId], map: "rfu_q_case")
+  @@index([resultFollowUpActionPlanId], map: "rfu_q_plan")
+  @@index([schoolId, studentRef], map: "rfu_q_student")
+  @@index([schoolId, teacherRef], map: "rfu_q_teacher")
+  @@index([queueStatus], map: "rfu_q_status")
+  @@index([queuePriority], map: "rfu_q_priority")
+  @@index([createdAt], map: "rfu_q_cat")
+}
+
+model ParentGuidanceDraftRecord {
+  parentGuidanceDraftId     String    @id @default(uuid())
+  schoolId                  String
+  resultFollowUpCaseId      String
+  resultFollowUpActionPlanId String?
+  studentRef                String
+  audienceType              String    @default("parent")
+  draftStatus               String    @default("draft")
+  draftMode                 String    @default("mock_draft_only")
+  safeGuidanceSummary       String
+  safeGuidanceBodyJson      Json      @default("{}")
+  allowedFieldNamesJson     Json      @default("[]")
+  blockedFieldNamesJson     Json      @default("[]")
+  blockedReasonCodesJson    Json      @default("[]")
+  createdByActorId          String
+  createdByRole             String
+  createdAt                 DateTime  @default(now())
+  updatedAt                 DateTime  @updatedAt
+  reviewedAt                DateTime?
+  approvedForFutureUseAt    DateTime?
+  suppressedAt              DateTime?
+  voidedAt                  DateTime?
+
+  @@index([schoolId], map: "rfu_pg_school")
+  @@index([resultFollowUpCaseId], map: "rfu_pg_case")
+  @@index([resultFollowUpActionPlanId], map: "rfu_pg_plan")
+  @@index([schoolId, studentRef], map: "rfu_pg_student")
+  @@index([draftStatus], map: "rfu_pg_status")
+  @@index([createdAt], map: "rfu_pg_cat")
+}
+
+model StudentReflectionTaskDraftRecord {
+  studentReflectionTaskDraftId    String    @id @default(uuid())
+  schoolId                        String
+  resultFollowUpCaseId            String
+  resultFollowUpActionPlanId      String?
+  studentRef                      String
+  draftStatus                     String    @default("draft")
+  draftMode                       String    @default("mock_draft_only")
+  safeReflectionPrompt            String
+  reflectionObjectiveRefsJson     Json      @default("[]")
+  scaffoldStepsJson               Json      @default("[]")
+  blockedReasonCodesJson          Json      @default("[]")
+  createdByActorId                String
+  createdByRole                   String
+  createdAt                       DateTime  @default(now())
+  updatedAt                       DateTime  @updatedAt
+  reviewedAt                      DateTime?
+  approvedForFutureUseAt          DateTime?
+  suppressedAt                    DateTime?
+  voidedAt                        DateTime?
+
+  @@index([schoolId], map: "rfu_sr_school")
+  @@index([resultFollowUpCaseId], map: "rfu_sr_case")
+  @@index([resultFollowUpActionPlanId], map: "rfu_sr_plan")
+  @@index([schoolId, studentRef], map: "rfu_sr_student")
+  @@index([draftStatus], map: "rfu_sr_status")
+  @@index([createdAt], map: "rfu_sr_cat")
+}
+
+model FollowUpReviewWindowRecord {
+  followUpReviewWindowId    String    @id @default(uuid())
+  schoolId                  String
+  resultFollowUpCaseId      String
+  studentRef                String
+  windowStatus              String    @default("draft")
+  windowMode                String    @default("metadata_only")
+  reviewWindowStartAt       DateTime?
+  reviewWindowEndAt         DateTime?
+  safeWindowSummary         String
+  reviewCriteriaJson        Json      @default("[]")
+  blockedReasonCodesJson    Json      @default("[]")
+  createdByActorId          String
+  createdByRole             String
+  createdAt                 DateTime  @default(now())
+  updatedAt                 DateTime  @updatedAt
+  scheduledMockAt           DateTime?
+  completedMockAt           DateTime?
+  cancelledAt               DateTime?
+  voidedAt                  DateTime?
+
+  @@index([schoolId], map: "rfu_rw_school")
+  @@index([resultFollowUpCaseId], map: "rfu_rw_case")
+  @@index([schoolId, studentRef], map: "rfu_rw_student")
+  @@index([windowStatus], map: "rfu_rw_status")
+  @@index([createdAt], map: "rfu_rw_cat")
+}
+
+model FollowUpEscalationPlanRecord {
+  followUpEscalationPlanId    String    @id @default(uuid())
+  schoolId                    String
+  resultFollowUpCaseId        String
+  studentRef                  String
+  escalationStatus            String    @default("draft")
+  escalationMode              String    @default("metadata_only")
+  escalationLevel             String    @default("low")
+  safeEscalationSummary       String
+  reviewerRoleTargetsJson     Json      @default("[]")
+  allowedDisclosureJson       Json      @default("[]")
+  blockedDisclosureJson       Json      @default("[]")
+  blockedReasonCodesJson      Json      @default("[]")
+  createdByActorId            String
+  createdByRole               String
+  createdAt                   DateTime  @default(now())
+  updatedAt                   DateTime  @updatedAt
+  reviewedAt                  DateTime?
+  approvedForFutureUseAt      DateTime?
+  suppressedAt                DateTime?
+  voidedAt                    DateTime?
+
+  @@index([schoolId], map: "rfu_ep_school")
+  @@index([resultFollowUpCaseId], map: "rfu_ep_case")
+  @@index([schoolId, studentRef], map: "rfu_ep_student")
+  @@index([escalationStatus], map: "rfu_ep_status")
+  @@index([escalationLevel], map: "rfu_ep_level")
+  @@index([createdAt], map: "rfu_ep_cat")
+}
+
+model FollowUpSummaryRecord {
+  followUpSummaryId     String    @id @default(uuid())
+  schoolId              String
+  studentRef            String?
+  summaryScope          String    @default("school")
+  summaryStatus         String    @default("active")
+  safeSummary           String
+  caseCountsJson        Json      @default("{}")
+  priorityCountsJson    Json      @default("{}")
+  statusCountsJson      Json      @default("{}")
+  blockedReasonCodesJson Json     @default("[]")
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+  refreshedAt           DateTime?
+  voidedAt              DateTime?
+
+  @@index([schoolId], map: "rfu_sum_school")
+  @@index([schoolId, studentRef], map: "rfu_sum_student")
+  @@index([summaryScope], map: "rfu_sum_scope")
+  @@index([summaryStatus], map: "rfu_sum_status")
+  @@index([createdAt], map: "rfu_sum_cat")
+}
+
+model FollowUpAuditRecord {
+  followUpAuditId                 String    @id @default(uuid())
+  schoolId                        String
+  resultFollowUpCaseId            String?
+  resultFollowUpSignalId          String?
+  resultFollowUpActionPlanId      String?
+  teacherFollowUpQueueItemId      String?
+  parentGuidanceDraftId           String?
+  studentReflectionTaskDraftId    String?
+  followUpReviewWindowId          String?
+  followUpEscalationPlanId        String?
+  followUpSummaryId               String?
+  actorId                         String
+  actorRole                       String
+  eventType                       String
+  decision                        String
+  safeSummary                     String
+  reasonCodesJson                 Json      @default("[]")
+  metadataJson                    Json      @default("{}")
+  requestId                       String?
+  correlationId                   String?
+  createdAt                       DateTime  @default(now())
+
+  @@index([schoolId], map: "rfu_audit_school")
+  @@index([resultFollowUpCaseId], map: "rfu_audit_case")
+  @@index([resultFollowUpSignalId], map: "rfu_audit_signal")
+  @@index([resultFollowUpActionPlanId], map: "rfu_audit_plan")
+  @@index([teacherFollowUpQueueItemId], map: "rfu_audit_queue")
+  @@index([parentGuidanceDraftId], map: "rfu_audit_pg")
+  @@index([studentReflectionTaskDraftId], map: "rfu_audit_sr")
+  @@index([followUpReviewWindowId], map: "rfu_audit_rw")
+  @@index([followUpEscalationPlanId], map: "rfu_audit_ep")
+  @@index([followUpSummaryId], map: "rfu_audit_sum")
+  @@index([eventType], map: "rfu_audit_evt")
+  @@index([createdAt], map: "rfu_audit_cat")
+}
+
+model FollowUpIdempotencyRecord {
+  followUpIdempotencyId String    @id @default(uuid())
+  schoolId              String
+  operation             String
+  idempotencyKey        String
+  requestHash           String
+  status                String    @default("in_progress")
+  resourceType          String?
+  resourceId            String?
+  safeResultSummary     String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+  expiresAt             DateTime?
+
+  @@unique([schoolId, operation, idempotencyKey], map: "rfu_idem_unique")
+  @@index([schoolId], map: "rfu_idem_school")
+  @@index([operation], map: "rfu_idem_op")
+  @@index([idempotencyKey], map: "rfu_idem_key")
+  @@index([status], map: "rfu_idem_status")
+  @@index([expiresAt], map: "rfu_idem_expires")
+  @@index([createdAt], map: "rfu_idem_cat")
+}
