@@ -1,0 +1,32 @@
+export interface RecoveryExecutionAuthorizationSummary {
+  authorizationSummaryId: string;
+  schoolId: string;
+  studentRef?: string;
+  resultRecoveryPlanId?: string;
+  summaryStatus: string;
+  safeSummary: string;
+  authorizationOverviewJson: Record<string, any>;
+  readinessSummaryJson: Record<string, any>;
+  requestSummaryJson: Record<string, any>;
+  eligibilitySummaryJson: Record<string, any>;
+  authorityMatrixSummaryJson: Record<string, any>;
+  approvalChainSummaryJson: Record<string, any>;
+  riskAttestationSummaryJson: Record<string, any>;
+  consentBoundarySummaryJson: Record<string, any>;
+  vetoSummaryJson: Record<string, any>;
+  preflightSummaryJson: Record<string, any>;
+  dryRunSummaryJson: Record<string, any>;
+  preLiveDecisionPacketSummaryJson: Record<string, any>;
+  mockAuthorizationReceiptSummaryJson: Record<string, any>;
+  blockedReasonCodesJson: string[];
+  sourceRefsJson: Record<string, any>;
+  createdByActorId: string;
+  createdByRole: string;
+  createdAt: string;
+  updatedAt: string;
+  refreshedAt?: string;
+  staleAt?: string;
+  reviewReadyAt?: string;
+  blockedAt?: string;
+  voidedAt?: string;
+}
