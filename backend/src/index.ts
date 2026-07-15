@@ -419,6 +419,10 @@ app.use('/api/question-bank/result-recovery', schoolAuthMiddleware, requireVerif
 import recoveryProgressRoutes from './routes/recoveryProgress';
 app.use('/api/question-bank/recovery-progress', schoolAuthMiddleware, requireVerifiedSchoolContext, recoveryProgressRoutes);
 
+// ─── Recovery Outcome Decision Gate Routes (Package 19) ──
+import recoveryOutcomeRoutes from './routes/recoveryOutcome';
+app.use('/api/question-bank/recovery-outcome', schoolAuthMiddleware, requireVerifiedSchoolContext, recoveryOutcomeRoutes);
+
 // ─── Phase 2: Learning Mode Runtime Routes ──────────────
 app.use('/api', schoolAuthMiddleware, requireVerifiedSchoolContext, learningModeRoutes);
 app.use('/api/copilot', schoolAuthMiddleware, requireVerifiedSchoolContext, learningProfileRoutes);
