@@ -8211,3 +8211,360 @@ model ResultRecoveryIdempotencyRecord {
   @@index([expiresAt], map: "rrc_idem_expires")
   @@index([createdAt], map: "rrc_idem_cat")
 }
+
+// ─── Package 18: Controlled Recovery Progress Observation v1 ──
+
+model RecoveryProgressObservationRecord {
+  recoveryProgressObservationId String   @id @default(uuid())
+  schoolId                      String
+  studentRef                    String
+  resultRecoveryPlanId          String
+  resultRecoveryObjectiveId     String?
+  resultRecoveryStepId          String?
+  resultRecoveryCheckpointId    String?
+  resultFollowUpCaseId          String?
+  recoveryProgressSummaryId     String?
+  observationStatus             String   @default("draft")
+  observationMode               String
+  observationType               String
+  observationConfidence         String
+  safeObservationSummary        String   @db.Text
+  sourceRefsJson                Json     @default("{}")
+  observedSignalsJson           Json     @default("{}")
+  allowedUseJson                Json     @default("{}")
+  blockedUseJson                Json     @default("{}")
+  blockedReasonCodesJson        String[] @default([])
+  createdByActorId              String
+  createdByRole                 String
+  createdAt                     DateTime @default(now())
+  updatedAt                     DateTime @updatedAt
+  recordedAt                    DateTime?
+  reviewReadyAt                 DateTime?
+  approvedForFutureUseAt        DateTime?
+  suppressedAt                  DateTime?
+  blockedAt                     DateTime?
+  voidedAt                      DateTime?
+
+  @@index([schoolId])
+  @@index([schoolId, studentRef])
+  @@index([schoolId, resultRecoveryPlanId])
+  @@index([resultRecoveryCheckpointId])
+  @@index([observationStatus])
+  @@index([observationType])
+  @@index([createdAt])
+}
+
+model RecoveryCheckpointEvaluationRecord {
+  recoveryCheckpointEvaluationId String   @id @default(uuid())
+  schoolId                       String
+  studentRef                     String
+  resultRecoveryPlanId           String
+  resultRecoveryCheckpointId     String
+  recoveryProgressObservationId  String?
+  evaluationStatus               String   @default("draft")
+  evaluationMode                 String
+  evaluationResult               String
+  safeEvaluationSummary          String   @db.Text
+  criteriaRefsJson               Json     @default("{}")
+  criteriaResultsJson            Json     @default("{}")
+  evidenceRefsJson               Json     @default("{}")
+  recommendedNextStateJson       Json     @default("{}")
+  blockedReasonCodesJson         String[] @default([])
+  createdByActorId               String
+  createdByRole                  String
+  createdAt                      DateTime @default(now())
+  updatedAt                      DateTime @updatedAt
+  evaluatedAt                    DateTime?
+  reviewReadyAt                  DateTime?
+  approvedForFutureUseAt         DateTime?
+  suppressedAt                   DateTime?
+  blockedAt                      DateTime?
+  voidedAt                       DateTime?
+
+  @@index([schoolId])
+  @@index([schoolId, studentRef])
+  @@index([schoolId, resultRecoveryPlanId])
+  @@index([resultRecoveryCheckpointId])
+  @@index([recoveryProgressObservationId])
+  @@index([evaluationStatus])
+  @@index([evaluationResult])
+  @@index([createdAt])
+}
+
+model RecoveryOutcomeEvidenceRecord {
+  recoveryOutcomeEvidenceId String   @id @default(uuid())
+  schoolId                  String
+  studentRef                String
+  resultRecoveryPlanId      String
+  resultRecoveryObjectiveId String?
+  recoveryProgressObservationId String?
+  recoveryCheckpointEvaluationId String?
+  evidenceStatus            String   @default("draft")
+  evidenceType              String
+  safeEvidenceSummary       String   @db.Text
+  sourceEvidenceRefsJson    Json     @default("{}")
+  learningObjectiveRefsJson Json     @default("{}")
+  questionRefsJson          Json     @default("{}")
+  resourceRefsJson          Json     @default("{}")
+  allowedAudienceJson       Json     @default("{}")
+  blockedReasonCodesJson    String[] @default([])
+  createdByActorId          String
+  createdByRole             String
+  createdAt                 DateTime @default(now())
+  updatedAt                 DateTime @updatedAt
+  reviewReadyAt             DateTime?
+  approvedForFutureUseAt    DateTime?
+  suppressedAt              DateTime?
+  voidedAt                  DateTime?
+
+  @@index([schoolId])
+  @@index([schoolId, studentRef])
+  @@index([schoolId, resultRecoveryPlanId])
+  @@index([resultRecoveryObjectiveId])
+  @@index([recoveryProgressObservationId])
+  @@index([recoveryCheckpointEvaluationId])
+  @@index([evidenceStatus])
+  @@index([createdAt])
+}
+
+model RecoveryPlanAdjustmentDraftRecord {
+  recoveryPlanAdjustmentDraftId String   @id @default(uuid())
+  schoolId                      String
+  studentRef                    String
+  resultRecoveryPlanId          String
+  recoveryCheckpointEvaluationId String?
+  recoveryProgressObservationId String?
+  adjustmentStatus              String   @default("draft")
+  adjustmentType                String
+  safeAdjustmentSummary         String   @db.Text
+  proposedChangesJson           Json     @default("{}")
+  reasonCodesJson               Json     @default("{}")
+  teacherReviewNotesJson        Json     @default("{}")
+  blockedReasonCodesJson        String[] @default([])
+  createdByActorId              String
+  createdByRole                 String
+  createdAt                     DateTime @default(now())
+  updatedAt                     DateTime @updatedAt
+  reviewReadyAt                 DateTime?
+  approvedForFutureUseAt        DateTime?
+  suppressedAt                  DateTime?
+  blockedAt                     DateTime?
+  voidedAt                      DateTime?
+
+  @@index([schoolId])
+  @@index([schoolId, studentRef])
+  @@index([schoolId, resultRecoveryPlanId])
+  @@index([recoveryCheckpointEvaluationId])
+  @@index([recoveryProgressObservationId])
+  @@index([adjustmentStatus])
+  @@index([createdAt])
+}
+
+model RecoveryTeacherReviewDecisionRecord {
+  recoveryTeacherReviewDecisionId String   @id @default(uuid())
+  schoolId                        String
+  studentRef                      String
+  teacherRef                      String
+  resultRecoveryPlanId            String
+  recoveryPlanAdjustmentDraftId   String?
+  recoveryCheckpointEvaluationId  String?
+  recoveryEvidenceRollupId        String?
+  decisionStatus                  String   @default("draft")
+  decisionType                    String
+  safeDecisionSummary             String   @db.Text
+  decisionReasonCodesJson         Json     @default("{}")
+  approvedFutureUseRefsJson       Json     @default("{}")
+  blockedReasonCodesJson          String[] @default([])
+  createdByActorId                String
+  createdByRole                   String
+  createdAt                       DateTime @default(now())
+  updatedAt                       DateTime @updatedAt
+  reviewedAt                      DateTime?
+  approvedForFutureUseAt          DateTime?
+  suppressedAt                    DateTime?
+  blockedAt                       DateTime?
+  voidedAt                        DateTime?
+
+  @@index([schoolId])
+  @@index([schoolId, studentRef])
+  @@index([schoolId, teacherRef])
+  @@index([schoolId, resultRecoveryPlanId])
+  @@index([recoveryPlanAdjustmentDraftId])
+  @@index([recoveryCheckpointEvaluationId])
+  @@index([decisionStatus])
+  @@index([createdAt])
+}
+
+model RecoveryStudentProgressReflectionDraftRecord {
+  recoveryStudentProgressReflectionDraftId String   @id @default(uuid())
+  schoolId                                  String
+  studentRef                                String
+  resultRecoveryPlanId                      String
+  recoveryProgressObservationId             String?
+  recoveryCheckpointEvaluationId            String?
+  draftStatus                               String   @default("draft")
+  safeReflectionSummary                     String   @db.Text
+  studentReflectionPromptJson               Json     @default("{}")
+  scaffoldStepsJson                         Json     @default("{}")
+  blockedFieldNamesJson                     String[] @default([])
+  blockedReasonCodesJson                    String[] @default([])
+  createdByActorId                          String
+  createdByRole                             String
+  createdAt                                 DateTime @default(now())
+  updatedAt                                 DateTime @updatedAt
+  reviewReadyAt                             DateTime?
+  approvedForFutureUseAt                    DateTime?
+  suppressedAt                              DateTime?
+  blockedAt                                 DateTime?
+  voidedAt                                  DateTime?
+
+  @@index([schoolId])
+  @@index([schoolId, studentRef])
+  @@index([schoolId, resultRecoveryPlanId])
+  @@index([recoveryProgressObservationId])
+  @@index([recoveryCheckpointEvaluationId])
+  @@index([draftStatus])
+  @@index([createdAt])
+}
+
+model RecoveryParentProgressNoteDraftRecord {
+  recoveryParentProgressNoteDraftId String   @id @default(uuid())
+  schoolId                          String
+  studentRef                        String
+  resultRecoveryPlanId              String
+  recoveryProgressObservationId     String?
+  recoveryCheckpointEvaluationId    String?
+  audienceType                      String
+  draftStatus                       String   @default("draft")
+  safeProgressSummary               String   @db.Text
+  parentProgressBodyJson            Json     @default("{}")
+  allowedFieldNamesJson             String[] @default([])
+  blockedFieldNamesJson             String[] @default([])
+  blockedReasonCodesJson            String[] @default([])
+  createdByActorId                  String
+  createdByRole                     String
+  createdAt                         DateTime @default(now())
+  updatedAt                         DateTime @updatedAt
+  reviewReadyAt                     DateTime?
+  approvedForFutureUseAt            DateTime?
+  suppressedAt                      DateTime?
+  blockedAt                         DateTime?
+  voidedAt                          DateTime?
+
+  @@index([schoolId])
+  @@index([schoolId, studentRef])
+  @@index([schoolId, resultRecoveryPlanId])
+  @@index([recoveryProgressObservationId])
+  @@index([recoveryCheckpointEvaluationId])
+  @@index([draftStatus])
+  @@index([createdAt])
+}
+
+model RecoveryEvidenceRollupRecord {
+  recoveryEvidenceRollupId String   @id @default(uuid())
+  schoolId                 String
+  studentRef               String
+  resultRecoveryPlanId     String
+  rollupStatus             String   @default("draft")
+  rollupScope              String
+  safeRollupSummary        String   @db.Text
+  observationCountsJson    Json     @default("{}")
+  evaluationCountsJson     Json     @default("{}")
+  evidenceCountsJson       Json     @default("{}")
+  adjustmentCountsJson     Json     @default("{}")
+  sourceRefsJson           Json     @default("{}")
+  blockedReasonCodesJson   String[] @default([])
+  createdByActorId         String
+  createdByRole            String
+  createdAt                DateTime @default(now())
+  updatedAt                DateTime @updatedAt
+  refreshedAt              DateTime?
+  suppressedAt             DateTime?
+  blockedAt                DateTime?
+  voidedAt                 DateTime?
+
+  @@index([schoolId])
+  @@index([schoolId, studentRef])
+  @@index([schoolId, resultRecoveryPlanId])
+  @@index([rollupScope])
+  @@index([createdAt])
+}
+
+model RecoveryProgressSummaryRecord {
+  recoveryProgressSummaryId         String   @id @default(uuid())
+  schoolId                          String
+  studentRef                        String?
+  teacherRef                        String?
+  resultRecoveryPlanId              String?
+  summaryScope                      String
+  summaryStatus                     String   @default("active")
+  safeSummary                       String   @db.Text
+  progressStateJson                 Json     @default("{}")
+  observationCountsJson             Json     @default("{}")
+  checkpointEvaluationCountsJson    Json     @default("{}")
+  rollupRefsJson                    Json     @default("{}")
+  blockedReasonCodesJson            String[] @default([])
+  createdAt                         DateTime @default(now())
+  updatedAt                         DateTime @updatedAt
+  refreshedAt                       DateTime?
+  voidedAt                          DateTime?
+
+  @@index([schoolId])
+  @@index([schoolId, studentRef])
+  @@index([schoolId, teacherRef])
+  @@index([schoolId, resultRecoveryPlanId])
+  @@index([summaryScope])
+  @@index([summaryStatus])
+  @@index([createdAt])
+}
+
+model RecoveryProgressAuditRecord {
+  recoveryProgressAuditId              String   @id @default(uuid())
+  schoolId                             String
+  recoveryProgressObservationId        String?
+  recoveryCheckpointEvaluationId       String?
+  recoveryOutcomeEvidenceId            String?
+  recoveryPlanAdjustmentDraftId        String?
+  recoveryTeacherReviewDecisionId      String?
+  recoveryStudentProgressReflectionDraftId String?
+  recoveryParentProgressNoteDraftId    String?
+  recoveryEvidenceRollupId             String?
+  recoveryProgressSummaryId            String?
+  actorId                              String
+  actorRole                            String
+  eventType                            String
+  decision                             String
+  safeSummary                          String   @db.Text
+  reasonCodesJson                      Json     @default("{}")
+  metadataJson                         Json     @default("{}")
+  requestId                            String?
+  correlationId                        String?
+  createdAt                            DateTime @default(now())
+
+  @@index([schoolId])
+  @@index([schoolId, eventType])
+  @@index([createdAt])
+}
+
+model RecoveryProgressIdempotencyRecord {
+  recoveryProgressIdempotencyId String   @id @default(uuid())
+  schoolId                      String
+  operation                     String
+  idempotencyKey                String
+  requestHash                   String
+  status                        String   @default("in_progress")
+  resourceType                  String?
+  resourceId                    String?
+  safeResultSummary             String?
+  createdAt                     DateTime @default(now())
+  updatedAt                     DateTime @updatedAt
+  expiresAt                     DateTime?
+
+  @@unique([schoolId, operation, idempotencyKey])
+  @@index([schoolId])
+  @@index([operation])
+  @@index([idempotencyKey])
+  @@index([status])
+  @@index([expiresAt])
+  @@index([createdAt])
+}

@@ -1,8 +1,11 @@
 export {
   ASSESSMENT_POLICY_FAMILIES,
+} from './contracts/assessmentPolicyContracts';
+
+export {
   PROJECTION_ROLES,
   FORBIDDEN_FIELDS,
-} from './contracts/assessmentPolicyContracts';
+} from './contracts/assessmentProjectionContracts';
 
 export type {
   AssessmentPolicyFamily,
