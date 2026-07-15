@@ -112,15 +112,15 @@ router.get('/simulation-readiness/:id', async (req: Request, res: Response) => {
 });
 
 router.post('/simulation-readiness/:id/review-ready', async (req: Request, res: Response) => {
-  sendResponse(res, await readinessService.markSimulationReadinessReviewReady(buildContext(req), req.params.id));
+  sendResponse(res, await readinessService.markSimulationReadinessReviewReady(buildContext(req), extractSchoolId(req), req.params.id));
 });
 
 router.post('/simulation-readiness/:id/approve-future-use', async (req: Request, res: Response) => {
-  sendResponse(res, await readinessService.approveSimulationReadinessForFutureUse(buildContext(req), req.params.id));
+  sendResponse(res, await readinessService.approveSimulationReadinessForFutureUse(buildContext(req), extractSchoolId(req), req.params.id));
 });
 
 router.post('/simulation-readiness/:id/suppress', async (req: Request, res: Response) => {
-  sendResponse(res, await readinessService.suppressSimulationReadiness(buildContext(req), req.params.id));
+  sendResponse(res, await readinessService.suppressSimulationReadiness(buildContext(req), extractSchoolId(req), req.params.id));
 });
 
 router.post('/simulation-readiness/:id/block', async (req: Request, res: Response) => {
@@ -128,7 +128,7 @@ router.post('/simulation-readiness/:id/block', async (req: Request, res: Respons
 });
 
 router.post('/simulation-readiness/:id/void', async (req: Request, res: Response) => {
-  sendResponse(res, await readinessService.voidSimulationReadiness(buildContext(req), req.params.id));
+  sendResponse(res, await readinessService.voidSimulationReadiness(buildContext(req), extractSchoolId(req), req.params.id));
 });
 
 // ─── Simulation Plans ───────────────────────────────────────────────
@@ -150,27 +150,27 @@ router.get('/simulation-plans/:id', async (req: Request, res: Response) => {
 });
 
 router.post('/simulation-plans/:id/simulation-ready', async (req: Request, res: Response) => {
-  sendResponse(res, await planService.markSimulationPlanReady(buildContext(req), req.params.id));
+  sendResponse(res, await planService.markSimulationPlanReady(buildContext(req), extractSchoolId(req), req.params.id));
 });
 
 router.post('/simulation-plans/:id/review-ready', async (req: Request, res: Response) => {
-  sendResponse(res, await planService.markSimulationPlanReviewReady(buildContext(req), req.params.id));
+  sendResponse(res, await planService.markSimulationPlanReviewReady(buildContext(req), extractSchoolId(req), req.params.id));
 });
 
 router.post('/simulation-plans/:id/approve-future-use', async (req: Request, res: Response) => {
-  sendResponse(res, await planService.approveSimulationPlanForFutureUse(buildContext(req), req.params.id));
+  sendResponse(res, await planService.approveSimulationPlanForFutureUse(buildContext(req), extractSchoolId(req), req.params.id));
 });
 
 router.post('/simulation-plans/:id/suppress', async (req: Request, res: Response) => {
-  sendResponse(res, await planService.suppressSimulationPlan(buildContext(req), req.params.id));
+  sendResponse(res, await planService.suppressSimulationPlan(buildContext(req), extractSchoolId(req), req.params.id));
 });
 
 router.post('/simulation-plans/:id/block', async (req: Request, res: Response) => {
-  sendResponse(res, await planService.blockSimulationPlan(buildContext(req), req.params.id));
+  sendResponse(res, await planService.blockSimulationPlan(buildContext(req), extractSchoolId(req), req.params.id));
 });
 
 router.post('/simulation-plans/:id/void', async (req: Request, res: Response) => {
-  sendResponse(res, await planService.voidSimulationPlan(buildContext(req), req.params.id));
+  sendResponse(res, await planService.voidSimulationPlan(buildContext(req), extractSchoolId(req), req.params.id));
 });
 
 // ─── Simulation Runs ────────────────────────────────────────────────
@@ -193,27 +193,27 @@ router.get('/simulation-runs/:id', async (req: Request, res: Response) => {
 });
 
 router.post('/simulation-runs/:id/simulating', async (req: Request, res: Response) => {
-  sendResponse(res, await runService.markSimulationRunSimulating(buildContext(req), req.params.id));
+  sendResponse(res, await runService.markSimulationRunSimulating(buildContext(req), extractSchoolId(req), req.params.id));
 });
 
 router.post('/simulation-runs/:id/simulated', async (req: Request, res: Response) => {
-  sendResponse(res, await runService.markSimulationRunSimulated(buildContext(req), req.params.id));
+  sendResponse(res, await runService.markSimulationRunSimulated(buildContext(req), extractSchoolId(req), req.params.id));
 });
 
 router.post('/simulation-runs/:id/review-ready', async (req: Request, res: Response) => {
-  sendResponse(res, await runService.markSimulationRunReviewReady(buildContext(req), req.params.id));
+  sendResponse(res, await runService.markSimulationRunReviewReady(buildContext(req), extractSchoolId(req), req.params.id));
 });
 
 router.post('/simulation-runs/:id/suppress', async (req: Request, res: Response) => {
-  sendResponse(res, await runService.suppressSimulationRun(buildContext(req), req.params.id));
+  sendResponse(res, await runService.suppressSimulationRun(buildContext(req), extractSchoolId(req), req.params.id));
 });
 
 router.post('/simulation-runs/:id/block', async (req: Request, res: Response) => {
-  sendResponse(res, await runService.blockSimulationRun(buildContext(req), req.params.id));
+  sendResponse(res, await runService.blockSimulationRun(buildContext(req), extractSchoolId(req), req.params.id));
 });
 
 router.post('/simulation-runs/:id/void', async (req: Request, res: Response) => {
-  sendResponse(res, await runService.voidSimulationRun(buildContext(req), req.params.id));
+  sendResponse(res, await runService.voidSimulationRun(buildContext(req), extractSchoolId(req), req.params.id));
 });
 
 // ─── Simulation Steps ───────────────────────────────────────────────
@@ -224,7 +224,7 @@ router.post('/simulation-steps', async (req: Request, res: Response) => {
 router.get('/simulation-steps', async (req: Request, res: Response) => {
   const schoolId = extractSchoolId(req);
   const { simulationRunId, status } = req.query;
-  if (simulationRunId) { sendResponse(res, await stepService.listStepsForSimulationRun(schoolId, simulationRunId as string)); return; }
+  if (simulationRunId) { sendResponse(res, await stepService.listStepsForSimulationRun(simulationRunId as string)); return; }
   if (status) { sendResponse(res, await stepService.listStepsByStatus(schoolId, status as string)); return; }
   sendResponse(res, { success: false, status: 'error', message: 'simulationRunId query parameter required' });
 });
@@ -234,15 +234,15 @@ router.get('/simulation-steps/:id', async (req: Request, res: Response) => {
 });
 
 router.post('/simulation-steps/:id/simulated', async (req: Request, res: Response) => {
-  sendResponse(res, await stepService.markStepSimulated(buildContext(req), req.params.id));
+  sendResponse(res, await stepService.markStepSimulated(buildContext(req), extractSchoolId(req), req.params.id));
 });
 
 router.post('/simulation-steps/:id/blocked', async (req: Request, res: Response) => {
-  sendResponse(res, await stepService.markStepBlocked(buildContext(req), req.params.id));
+  sendResponse(res, await stepService.markStepBlocked(buildContext(req), extractSchoolId(req), req.params.id));
 });
 
 router.post('/simulation-steps/:id/void', async (req: Request, res: Response) => {
-  sendResponse(res, await stepService.voidStep(buildContext(req), req.params.id));
+  sendResponse(res, await stepService.voidStep(buildContext(req), extractSchoolId(req), req.params.id));
 });
 
 // ─── Eligibility Checks ─────────────────────────────────────────────
@@ -264,11 +264,11 @@ router.get('/eligibility-checks/:id', async (req: Request, res: Response) => {
 });
 
 router.post('/eligibility-checks/:id/review-ready', async (req: Request, res: Response) => {
-  sendResponse(res, await eligibilityService.markEligibilityCheckReviewReady(buildContext(req), req.params.id));
+  sendResponse(res, await eligibilityService.markEligibilityCheckReviewReady(buildContext(req), extractSchoolId(req), req.params.id));
 });
 
 router.post('/eligibility-checks/:id/void', async (req: Request, res: Response) => {
-  sendResponse(res, await eligibilityService.voidEligibilityCheck(buildContext(req), req.params.id));
+  sendResponse(res, await eligibilityService.voidEligibilityCheck(buildContext(req), extractSchoolId(req), req.params.id));
 });
 
 // ─── Blocked Action Diagnostics ─────────────────────────────────────
@@ -279,7 +279,7 @@ router.post('/blocked-action-diagnostics', async (req: Request, res: Response) =
 router.get('/blocked-action-diagnostics', async (req: Request, res: Response) => {
   const schoolId = extractSchoolId(req);
   const { simulationRunId, planId, reason } = req.query;
-  if (simulationRunId) { sendResponse(res, await diagnosticService.listDiagnosticsForSimulationRun(schoolId, simulationRunId as string)); return; }
+  if (simulationRunId) { sendResponse(res, await diagnosticService.listDiagnosticsForSimulationRun(simulationRunId as string)); return; }
   if (planId) { sendResponse(res, await diagnosticService.listDiagnosticsForPlan(schoolId, planId as string)); return; }
   if (reason) { sendResponse(res, await diagnosticService.listDiagnosticsByReason(schoolId, reason as string)); return; }
   sendResponse(res, { success: false, status: 'error', message: 'simulationRunId or planId query parameter required' });
@@ -290,15 +290,15 @@ router.get('/blocked-action-diagnostics/:id', async (req: Request, res: Response
 });
 
 router.post('/blocked-action-diagnostics/:id/review-ready', async (req: Request, res: Response) => {
-  sendResponse(res, await diagnosticService.markDiagnosticReviewReady(buildContext(req), req.params.id));
+  sendResponse(res, await diagnosticService.markDiagnosticReviewReady(buildContext(req), extractSchoolId(req), req.params.id));
 });
 
 router.post('/blocked-action-diagnostics/:id/suppress', async (req: Request, res: Response) => {
-  sendResponse(res, await diagnosticService.suppressDiagnostic(buildContext(req), req.params.id));
+  sendResponse(res, await diagnosticService.suppressDiagnostic(buildContext(req), extractSchoolId(req), req.params.id));
 });
 
 router.post('/blocked-action-diagnostics/:id/void', async (req: Request, res: Response) => {
-  sendResponse(res, await diagnosticService.voidDiagnostic(buildContext(req), req.params.id));
+  sendResponse(res, await diagnosticService.voidDiagnostic(buildContext(req), extractSchoolId(req), req.params.id));
 });
 
 // ─── Failure Injections ─────────────────────────────────────────────
@@ -319,23 +319,23 @@ router.get('/failure-injections/:id', async (req: Request, res: Response) => {
 });
 
 router.post('/failure-injections/:id/review-ready', async (req: Request, res: Response) => {
-  sendResponse(res, await failureService.markFailureInjectionReviewReady(buildContext(req), req.params.id));
+  sendResponse(res, await failureService.markFailureInjectionReviewReady(buildContext(req), extractSchoolId(req), req.params.id));
 });
 
 router.post('/failure-injections/:id/approve-future-use', async (req: Request, res: Response) => {
-  sendResponse(res, await failureService.approveFailureInjectionForFutureUse(buildContext(req), req.params.id));
+  sendResponse(res, await failureService.approveFailureInjectionForFutureUse(buildContext(req), extractSchoolId(req), req.params.id));
 });
 
 router.post('/failure-injections/:id/suppress', async (req: Request, res: Response) => {
-  sendResponse(res, await failureService.suppressFailureInjection(buildContext(req), req.params.id));
+  sendResponse(res, await failureService.suppressFailureInjection(buildContext(req), extractSchoolId(req), req.params.id));
 });
 
 router.post('/failure-injections/:id/block', async (req: Request, res: Response) => {
-  sendResponse(res, await failureService.blockFailureInjection(buildContext(req), req.params.id));
+  sendResponse(res, await failureService.blockFailureInjection(buildContext(req), extractSchoolId(req), req.params.id));
 });
 
 router.post('/failure-injections/:id/void', async (req: Request, res: Response) => {
-  sendResponse(res, await failureService.voidFailureInjection(buildContext(req), req.params.id));
+  sendResponse(res, await failureService.voidFailureInjection(buildContext(req), extractSchoolId(req), req.params.id));
 });
 
 // ─── Simulation Results ─────────────────────────────────────────────
@@ -346,7 +346,7 @@ router.post('/simulation-results', async (req: Request, res: Response) => {
 router.get('/simulation-results', async (req: Request, res: Response) => {
   const schoolId = extractSchoolId(req);
   const { simulationRunId, planId, outcome } = req.query;
-  if (simulationRunId) { sendResponse(res, await resultService.listResultsForSimulationRun(schoolId, simulationRunId as string)); return; }
+  if (simulationRunId) { sendResponse(res, await resultService.listResultsForSimulationRun(simulationRunId as string)); return; }
   if (planId) { sendResponse(res, await resultService.listResultsForPlan(schoolId, planId as string)); return; }
   if (outcome) { sendResponse(res, await resultService.listResultsByOutcome(schoolId, outcome as string)); return; }
   sendResponse(res, { success: false, status: 'error', message: 'simulationRunId query parameter required' });
@@ -357,11 +357,11 @@ router.get('/simulation-results/:id', async (req: Request, res: Response) => {
 });
 
 router.post('/simulation-results/:id/review-ready', async (req: Request, res: Response) => {
-  sendResponse(res, await resultService.markSimulationResultReviewReady(buildContext(req), req.params.id));
+  sendResponse(res, await resultService.markSimulationResultReviewReady(buildContext(req), extractSchoolId(req), req.params.id));
 });
 
 router.post('/simulation-results/:id/void', async (req: Request, res: Response) => {
-  sendResponse(res, await resultService.voidSimulationResult(buildContext(req), req.params.id));
+  sendResponse(res, await resultService.voidSimulationResult(buildContext(req), extractSchoolId(req), req.params.id));
 });
 
 // ─── Teacher Simulation Reviews ─────────────────────────────────────
@@ -373,7 +373,7 @@ router.get('/teacher-simulation-reviews', async (req: Request, res: Response) =>
   const schoolId = extractSchoolId(req);
   const { planId, simulationRunId, teacherRef } = req.query;
   if (planId) { sendResponse(res, await teacherReviewService.listTeacherSimulationReviewsForPlan(schoolId, planId as string)); return; }
-  if (simulationRunId) { sendResponse(res, await teacherReviewService.listTeacherSimulationReviewsForSimulationRun(schoolId, simulationRunId as string)); return; }
+  if (simulationRunId) { sendResponse(res, await teacherReviewService.listTeacherSimulationReviewsForSimulationRun(simulationRunId as string)); return; }
   if (teacherRef) { sendResponse(res, await teacherReviewService.listTeacherSimulationReviewsByTeacher(schoolId, teacherRef as string)); return; }
   sendResponse(res, await teacherReviewService.listTeacherSimulationReviewsForPlan(schoolId, ''));
 });
@@ -383,23 +383,23 @@ router.get('/teacher-simulation-reviews/:id', async (req: Request, res: Response
 });
 
 router.post('/teacher-simulation-reviews/:id/review-ready', async (req: Request, res: Response) => {
-  sendResponse(res, await teacherReviewService.markTeacherSimulationReviewReady(buildContext(req), req.params.id));
+  sendResponse(res, await teacherReviewService.markTeacherSimulationReviewReady(buildContext(req), extractSchoolId(req), req.params.id));
 });
 
 router.post('/teacher-simulation-reviews/:id/approve-future-use', async (req: Request, res: Response) => {
-  sendResponse(res, await teacherReviewService.approveTeacherSimulationReviewForFutureUse(buildContext(req), req.params.id));
+  sendResponse(res, await teacherReviewService.approveTeacherSimulationReviewForFutureUse(buildContext(req), extractSchoolId(req), req.params.id));
 });
 
 router.post('/teacher-simulation-reviews/:id/suppress', async (req: Request, res: Response) => {
-  sendResponse(res, await teacherReviewService.suppressTeacherSimulationReview(buildContext(req), req.params.id));
+  sendResponse(res, await teacherReviewService.suppressTeacherSimulationReview(buildContext(req), extractSchoolId(req), req.params.id));
 });
 
 router.post('/teacher-simulation-reviews/:id/block', async (req: Request, res: Response) => {
-  sendResponse(res, await teacherReviewService.blockTeacherSimulationReview(buildContext(req), req.params.id));
+  sendResponse(res, await teacherReviewService.blockTeacherSimulationReview(buildContext(req), extractSchoolId(req), req.params.id));
 });
 
 router.post('/teacher-simulation-reviews/:id/void', async (req: Request, res: Response) => {
-  sendResponse(res, await teacherReviewService.voidTeacherSimulationReview(buildContext(req), req.params.id));
+  sendResponse(res, await teacherReviewService.voidTeacherSimulationReview(buildContext(req), extractSchoolId(req), req.params.id));
 });
 
 // ─── Student Preview Drafts ─────────────────────────────────────────
@@ -420,23 +420,23 @@ router.get('/student-preview-drafts/:id', async (req: Request, res: Response) =>
 });
 
 router.post('/student-preview-drafts/:id/review-ready', async (req: Request, res: Response) => {
-  sendResponse(res, await previewService.markStudentPreviewDraftReviewReady(buildContext(req), req.params.id));
+  sendResponse(res, await previewService.markStudentPreviewDraftReviewReady(buildContext(req), extractSchoolId(req), req.params.id));
 });
 
 router.post('/student-preview-drafts/:id/approve-future-use', async (req: Request, res: Response) => {
-  sendResponse(res, await previewService.approveStudentPreviewDraftForFutureUse(buildContext(req), req.params.id));
+  sendResponse(res, await previewService.approveStudentPreviewDraftForFutureUse(buildContext(req), extractSchoolId(req), req.params.id));
 });
 
 router.post('/student-preview-drafts/:id/suppress', async (req: Request, res: Response) => {
-  sendResponse(res, await previewService.suppressStudentPreviewDraft(buildContext(req), req.params.id));
+  sendResponse(res, await previewService.suppressStudentPreviewDraft(buildContext(req), extractSchoolId(req), req.params.id));
 });
 
 router.post('/student-preview-drafts/:id/block', async (req: Request, res: Response) => {
-  sendResponse(res, await previewService.blockStudentPreviewDraft(buildContext(req), req.params.id));
+  sendResponse(res, await previewService.blockStudentPreviewDraft(buildContext(req), extractSchoolId(req), req.params.id));
 });
 
 router.post('/student-preview-drafts/:id/void', async (req: Request, res: Response) => {
-  sendResponse(res, await previewService.voidStudentPreviewDraft(buildContext(req), req.params.id));
+  sendResponse(res, await previewService.voidStudentPreviewDraft(buildContext(req), extractSchoolId(req), req.params.id));
 });
 
 // ─── Parent Preview Drafts ──────────────────────────────────────────
@@ -457,23 +457,23 @@ router.get('/parent-preview-drafts/:id', async (req: Request, res: Response) => 
 });
 
 router.post('/parent-preview-drafts/:id/review-ready', async (req: Request, res: Response) => {
-  sendResponse(res, await previewService.markParentPreviewDraftReviewReady(buildContext(req), req.params.id));
+  sendResponse(res, await previewService.markParentPreviewDraftReviewReady(buildContext(req), extractSchoolId(req), req.params.id));
 });
 
 router.post('/parent-preview-drafts/:id/approve-future-use', async (req: Request, res: Response) => {
-  sendResponse(res, await previewService.approveParentPreviewDraftForFutureUse(buildContext(req), req.params.id));
+  sendResponse(res, await previewService.approveParentPreviewDraftForFutureUse(buildContext(req), extractSchoolId(req), req.params.id));
 });
 
 router.post('/parent-preview-drafts/:id/suppress', async (req: Request, res: Response) => {
-  sendResponse(res, await previewService.suppressParentPreviewDraft(buildContext(req), req.params.id));
+  sendResponse(res, await previewService.suppressParentPreviewDraft(buildContext(req), extractSchoolId(req), req.params.id));
 });
 
 router.post('/parent-preview-drafts/:id/block', async (req: Request, res: Response) => {
-  sendResponse(res, await previewService.blockParentPreviewDraft(buildContext(req), req.params.id));
+  sendResponse(res, await previewService.blockParentPreviewDraft(buildContext(req), extractSchoolId(req), req.params.id));
 });
 
 router.post('/parent-preview-drafts/:id/void', async (req: Request, res: Response) => {
-  sendResponse(res, await previewService.voidParentPreviewDraft(buildContext(req), req.params.id));
+  sendResponse(res, await previewService.voidParentPreviewDraft(buildContext(req), extractSchoolId(req), req.params.id));
 });
 
 // ─── Readiness Verdicts ─────────────────────────────────────────────
@@ -485,7 +485,7 @@ router.get('/readiness-verdicts', async (req: Request, res: Response) => {
   const schoolId = extractSchoolId(req);
   const { planId, simulationRunId, status } = req.query;
   if (planId) { sendResponse(res, await verdictService.listReadinessVerdictsForPlan(schoolId, planId as string)); return; }
-  if (simulationRunId) { sendResponse(res, await verdictService.listReadinessVerdictsForSimulationRun(schoolId, simulationRunId as string)); return; }
+  if (simulationRunId) { sendResponse(res, await verdictService.listReadinessVerdictsForSimulationRun(simulationRunId as string)); return; }
   if (status) { sendResponse(res, await verdictService.listReadinessVerdictsByStatus(schoolId, status as string)); return; }
   sendResponse(res, await verdictService.listReadinessVerdictsForPlan(schoolId, ''));
 });
@@ -495,23 +495,23 @@ router.get('/readiness-verdicts/:id', async (req: Request, res: Response) => {
 });
 
 router.post('/readiness-verdicts/:id/review-ready', async (req: Request, res: Response) => {
-  sendResponse(res, await verdictService.markReadinessVerdictReviewReady(buildContext(req), req.params.id));
+  sendResponse(res, await verdictService.markReadinessVerdictReviewReady(buildContext(req), extractSchoolId(req), req.params.id));
 });
 
 router.post('/readiness-verdicts/:id/approve-future-use', async (req: Request, res: Response) => {
-  sendResponse(res, await verdictService.approveReadinessVerdictForFutureUse(buildContext(req), req.params.id));
+  sendResponse(res, await verdictService.approveReadinessVerdictForFutureUse(buildContext(req), extractSchoolId(req), req.params.id));
 });
 
 router.post('/readiness-verdicts/:id/suppress', async (req: Request, res: Response) => {
-  sendResponse(res, await verdictService.suppressReadinessVerdict(buildContext(req), req.params.id));
+  sendResponse(res, await verdictService.suppressReadinessVerdict(buildContext(req), extractSchoolId(req), req.params.id));
 });
 
 router.post('/readiness-verdicts/:id/block', async (req: Request, res: Response) => {
-  sendResponse(res, await verdictService.blockReadinessVerdict(buildContext(req), req.params.id));
+  sendResponse(res, await verdictService.blockReadinessVerdict(buildContext(req), extractSchoolId(req), req.params.id));
 });
 
 router.post('/readiness-verdicts/:id/void', async (req: Request, res: Response) => {
-  sendResponse(res, await verdictService.voidReadinessVerdict(buildContext(req), req.params.id));
+  sendResponse(res, await verdictService.voidReadinessVerdict(buildContext(req), extractSchoolId(req), req.params.id));
 });
 
 // ─── Summaries ──────────────────────────────────────────────────────
@@ -536,15 +536,15 @@ router.post('/summaries/:id/refresh', async (req: Request, res: Response) => {
 });
 
 router.post('/summaries/:id/stale', async (req: Request, res: Response) => {
-  sendResponse(res, await summaryService.markSimulationSummaryStale(buildContext(req), req.params.id));
+  sendResponse(res, await summaryService.markSimulationSummaryStale(buildContext(req), extractSchoolId(req), req.params.id));
 });
 
 router.post('/summaries/:id/block', async (req: Request, res: Response) => {
-  sendResponse(res, await summaryService.blockSimulationSummary(buildContext(req), req.params.id));
+  sendResponse(res, await summaryService.blockSimulationSummary(buildContext(req), extractSchoolId(req), req.params.id));
 });
 
 router.post('/summaries/:id/void', async (req: Request, res: Response) => {
-  sendResponse(res, await summaryService.voidSimulationSummary(buildContext(req), req.params.id));
+  sendResponse(res, await summaryService.voidSimulationSummary(buildContext(req), extractSchoolId(req), req.params.id));
 });
 
 export default router;
