@@ -431,6 +431,10 @@ app.use('/api/question-bank/recovery-outcome-action', schoolAuthMiddleware, requ
 import recoveryOutcomeExecutionSimulationRoutes from './routes/recoveryOutcomeExecutionSimulation';
 app.use('/api/question-bank/recovery-outcome-execution-simulation', schoolAuthMiddleware, requireVerifiedSchoolContext, recoveryOutcomeExecutionSimulationRoutes);
 
+// ─── Recovery Lifecycle Closure Routes (Package 22) ──
+import recoveryLifecycleClosureRoutes from './routes/recoveryLifecycleClosure';
+app.use('/api/question-bank/recovery-lifecycle-closure', schoolAuthMiddleware, requireVerifiedSchoolContext, recoveryLifecycleClosureRoutes);
+
 // ─── Phase 2: Learning Mode Runtime Routes ──────────────
 app.use('/api', schoolAuthMiddleware, requireVerifiedSchoolContext, learningModeRoutes);
 app.use('/api/copilot', schoolAuthMiddleware, requireVerifiedSchoolContext, learningProfileRoutes);
