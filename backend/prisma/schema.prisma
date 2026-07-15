@@ -7826,3 +7826,388 @@ model FollowUpIdempotencyRecord {
   @@index([expiresAt], map: "rfu_idem_expires")
   @@index([createdAt], map: "rfu_idem_cat")
 }
+
+// ─── Package 17: Result Recovery Planner Models ──────────────────────────
+
+model ResultRecoveryPlanRecord {
+  resultRecoveryPlanId             String    @id @default(uuid())
+  schoolId                         String
+  studentRef                       String
+  resultFollowUpCaseId             String?
+  resultFollowUpActionPlanId       String?
+  resultFollowUpSummaryId          String?
+  resultReportCardAssemblyId       String?
+  resultReportCardAudienceProjectionId String?
+  resultReportCardAccessGrantId    String?
+  resultLearningEvidenceSnapshotId String?
+  planStatus                       String    @default("draft")
+  planMode                         String    @default("mock_plan_only")
+  planPriority                     String    @default("medium")
+  safePlanSummary                  String
+  sourceRefsJson                   Json      @default("[]")
+  objectiveRefsJson                Json      @default("[]")
+  recommendedSequenceJson          Json      @default("[]")
+  allowedActionsJson               Json      @default("[]")
+  blockedActionsJson               Json      @default("[]")
+  blockedReasonCodesJson           Json      @default("[]")
+  createdByActorId                 String
+  createdByRole                    String
+  createdAt                        DateTime  @default(now())
+  updatedAt                        DateTime  @updatedAt
+  draftedAt                        DateTime?
+  reviewReadyAt                    DateTime?
+  approvedForFutureUseAt           DateTime?
+  suppressedAt                     DateTime?
+  blockedAt                        DateTime?
+  voidedAt                         DateTime?
+
+  @@index([schoolId], map: "rrc_plan_school")
+  @@index([schoolId, studentRef], map: "rrc_plan_student")
+  @@index([planStatus], map: "rrc_plan_status")
+  @@index([planMode], map: "rrc_plan_mode")
+  @@index([planPriority], map: "rrc_plan_priority")
+  @@index([resultFollowUpCaseId], map: "rrc_plan_fu_case")
+  @@index([resultFollowUpActionPlanId], map: "rrc_plan_fu_action")
+  @@index([resultFollowUpSummaryId], map: "rrc_plan_fu_summary")
+  @@index([createdAt], map: "rrc_plan_cat")
+}
+
+model ResultRecoveryObjectiveRecord {
+  resultRecoveryObjectiveId String    @id @default(uuid())
+  schoolId                  String
+  resultRecoveryPlanId      String
+  studentRef                String
+  objectiveStatus           String    @default("draft")
+  objectiveType             String    @default("concept_repair")
+  objectivePriority         String    @default("medium")
+  learningObjectiveRef      String?
+  skillRef                  String?
+  topicRef                  String?
+  safeObjectiveSummary      String
+  evidenceRefsJson          Json      @default("[]")
+  successCriteriaJson       Json      @default("[]")
+  blockedReasonCodesJson    Json      @default("[]")
+  createdByActorId          String
+  createdByRole             String
+  createdAt                 DateTime  @default(now())
+  updatedAt                 DateTime  @updatedAt
+  readyAt                   DateTime?
+  completedMockAt           DateTime?
+  suppressedAt              DateTime?
+  voidedAt                  DateTime?
+
+  @@index([schoolId], map: "rrc_obj_school")
+  @@index([resultRecoveryPlanId], map: "rrc_obj_plan")
+  @@index([schoolId, studentRef], map: "rrc_obj_student")
+  @@index([objectiveStatus], map: "rrc_obj_status")
+  @@index([objectiveType], map: "rrc_obj_type")
+  @@index([createdAt], map: "rrc_obj_cat")
+}
+
+model ResultRecoveryStepRecord {
+  resultRecoveryStepId      String    @id @default(uuid())
+  schoolId                  String
+  resultRecoveryPlanId      String
+  resultRecoveryObjectiveId String?
+  studentRef                String
+  stepStatus                String    @default("draft")
+  stepType                  String    @default("review_concept")
+  stepOrder                 Int       @default(0)
+  stepMode                  String    @default("metadata_only")
+  safeStepSummary           String
+  stepInstructionsJson      Json      @default("[]")
+  teacherNotesJson          Json      @default("[]")
+  studentSafeNotesJson      Json      @default("[]")
+  blockedReasonCodesJson    Json      @default("[]")
+  createdByActorId          String
+  createdByRole             String
+  createdAt                 DateTime  @default(now())
+  updatedAt                 DateTime  @updatedAt
+  reviewReadyAt             DateTime?
+  approvedForFutureUseAt    DateTime?
+  completedMockAt           DateTime?
+  suppressedAt              DateTime?
+  voidedAt                  DateTime?
+
+  @@index([schoolId], map: "rrc_step_school")
+  @@index([resultRecoveryPlanId], map: "rrc_step_plan")
+  @@index([resultRecoveryObjectiveId], map: "rrc_step_obj")
+  @@index([schoolId, studentRef], map: "rrc_step_student")
+  @@index([stepStatus], map: "rrc_step_status")
+  @@index([stepType], map: "rrc_step_type")
+  @@index([stepOrder], map: "rrc_step_order")
+  @@index([createdAt], map: "rrc_step_cat")
+}
+
+model ResultRecoveryPracticeDraftRecord {
+  resultRecoveryPracticeDraftId String    @id @default(uuid())
+  schoolId                      String
+  resultRecoveryPlanId          String
+  resultRecoveryObjectiveId     String?
+  resultRecoveryStepId          String?
+  studentRef                    String
+  draftStatus                   String    @default("draft")
+  draftMode                     String    @default("existing_question_refs_only")
+  practiceType                  String    @default("existing_question_refs_only")
+  safePracticeSummary           String
+  questionRefsJson              Json      @default("[]")
+  objectiveRefsJson             Json      @default("[]")
+  difficultyHintsJson           Json      @default("[]")
+  selectionReasonCodesJson      Json      @default("[]")
+  blockedReasonCodesJson        Json      @default("[]")
+  createdByActorId              String
+  createdByRole                 String
+  createdAt                     DateTime  @default(now())
+  updatedAt                     DateTime  @updatedAt
+  reviewReadyAt                 DateTime?
+  approvedForFutureUseAt        DateTime?
+  suppressedAt                  DateTime?
+  voidedAt                      DateTime?
+
+  @@index([schoolId], map: "rrc_pd_school")
+  @@index([resultRecoveryPlanId], map: "rrc_pd_plan")
+  @@index([resultRecoveryObjectiveId], map: "rrc_pd_obj")
+  @@index([resultRecoveryStepId], map: "rrc_pd_step")
+  @@index([schoolId, studentRef], map: "rrc_pd_student")
+  @@index([draftStatus], map: "rrc_pd_status")
+  @@index([practiceType], map: "rrc_pd_type")
+  @@index([createdAt], map: "rrc_pd_cat")
+}
+
+model ResultRecoveryResourceRecommendationRecord {
+  resultRecoveryResourceRecommendationId String    @id @default(uuid())
+  schoolId                               String
+  resultRecoveryPlanId                   String
+  resultRecoveryObjectiveId              String?
+  studentRef                             String
+  recommendationStatus                   String    @default("draft")
+  recommendationMode                     String    @default("metadata_only")
+  resourceType                           String    @default("metadata_only")
+  safeResourceSummary                    String
+  resourceRefsJson                       Json      @default("[]")
+  selectionReasonCodesJson               Json      @default("[]")
+  allowedAudienceJson                    Json      @default("[]")
+  blockedReasonCodesJson                 Json      @default("[]")
+  createdByActorId                       String
+  createdByRole                          String
+  createdAt                              DateTime  @default(now())
+  updatedAt                              DateTime  @updatedAt
+  reviewReadyAt                          DateTime?
+  approvedForFutureUseAt                 DateTime?
+  suppressedAt                           DateTime?
+  voidedAt                               DateTime?
+
+  @@index([schoolId], map: "rrc_rr_school")
+  @@index([resultRecoveryPlanId], map: "rrc_rr_plan")
+  @@index([resultRecoveryObjectiveId], map: "rrc_rr_obj")
+  @@index([schoolId, studentRef], map: "rrc_rr_student")
+  @@index([recommendationStatus], map: "rrc_rr_status")
+  @@index([resourceType], map: "rrc_rr_type")
+  @@index([createdAt], map: "rrc_rr_cat")
+}
+
+model ResultRecoveryTeacherReviewPacketRecord {
+  resultRecoveryTeacherReviewPacketId String    @id @default(uuid())
+  schoolId                            String
+  resultRecoveryPlanId                String
+  studentRef                          String
+  teacherRef                          String
+  packetStatus                        String    @default("draft")
+  packetMode                          String    @default("metadata_only")
+  safePacketSummary                   String
+  caseRefsJson                        Json      @default("[]")
+  objectiveRefsJson                   Json      @default("[]")
+  stepRefsJson                        Json      @default("[]")
+  practiceDraftRefsJson               Json      @default("[]")
+  resourceRecommendationRefsJson      Json      @default("[]")
+  reviewQuestionsJson                 Json      @default("[]")
+  blockedReasonCodesJson              Json      @default("[]")
+  createdByActorId                    String
+  createdByRole                       String
+  createdAt                           DateTime  @default(now())
+  updatedAt                           DateTime  @updatedAt
+  reviewReadyAt                       DateTime?
+  acknowledgedMockAt                  DateTime?
+  approvedForFutureUseAt              DateTime?
+  suppressedAt                        DateTime?
+  voidedAt                            DateTime?
+
+  @@index([schoolId], map: "rrc_trp_school")
+  @@index([resultRecoveryPlanId], map: "rrc_trp_plan")
+  @@index([schoolId, studentRef], map: "rrc_trp_student")
+  @@index([teacherRef], map: "rrc_trp_teacher")
+  @@index([packetStatus], map: "rrc_trp_status")
+  @@index([createdAt], map: "rrc_trp_cat")
+}
+
+model ResultRecoveryStudentSupportDraftRecord {
+  resultRecoveryStudentSupportDraftId String    @id @default(uuid())
+  schoolId                            String
+  resultRecoveryPlanId                String
+  studentRef                          String
+  draftStatus                         String    @default("draft")
+  draftMode                           String    @default("metadata_only")
+  safeSupportSummary                  String
+  studentSupportBodyJson              Json      @default("{}")
+  reflectionPromptRefsJson            Json      @default("[]")
+  practiceDraftRefsJson               Json      @default("[]")
+  blockedFieldNamesJson               Json      @default("[]")
+  blockedReasonCodesJson              Json      @default("[]")
+  createdByActorId                    String
+  createdByRole                       String
+  createdAt                           DateTime  @default(now())
+  updatedAt                           DateTime  @updatedAt
+  reviewReadyAt                       DateTime?
+  approvedForFutureUseAt              DateTime?
+  suppressedAt                        DateTime?
+  voidedAt                            DateTime?
+
+  @@index([schoolId], map: "rrc_ssd_school")
+  @@index([resultRecoveryPlanId], map: "rrc_ssd_plan")
+  @@index([schoolId, studentRef], map: "rrc_ssd_student")
+  @@index([draftStatus], map: "rrc_ssd_status")
+  @@index([createdAt], map: "rrc_ssd_cat")
+}
+
+model ResultRecoveryParentSupportNoteDraftRecord {
+  resultRecoveryParentSupportNoteDraftId String    @id @default(uuid())
+  schoolId                                String
+  resultRecoveryPlanId                    String
+  studentRef                              String
+  audienceType                            String    @default("parent")
+  draftStatus                             String    @default("draft")
+  draftMode                               String    @default("metadata_only")
+  safeSupportSummary                      String
+  parentSupportBodyJson                   Json      @default("{}")
+  allowedFieldNamesJson                   Json      @default("[]")
+  blockedFieldNamesJson                   Json      @default("[]")
+  blockedReasonCodesJson                  Json      @default("[]")
+  createdByActorId                        String
+  createdByRole                           String
+  createdAt                               DateTime  @default(now())
+  updatedAt                               DateTime  @updatedAt
+  reviewReadyAt                           DateTime?
+  approvedForFutureUseAt                  DateTime?
+  suppressedAt                            DateTime?
+  voidedAt                                DateTime?
+
+  @@index([schoolId], map: "rrc_psnd_school")
+  @@index([resultRecoveryPlanId], map: "rrc_psnd_plan")
+  @@index([schoolId, studentRef], map: "rrc_psnd_student")
+  @@index([audienceType], map: "rrc_psnd_audience")
+  @@index([draftStatus], map: "rrc_psnd_status")
+  @@index([createdAt], map: "rrc_psnd_cat")
+}
+
+model ResultRecoveryCheckpointRecord {
+  resultRecoveryCheckpointId String    @id @default(uuid())
+  schoolId                   String
+  resultRecoveryPlanId       String
+  studentRef                 String
+  checkpointStatus           String    @default("draft")
+  checkpointMode             String    @default("metadata_only")
+  checkpointType             String    @default("teacher_review")
+  safeCheckpointSummary      String
+  checkpointCriteriaJson     Json      @default("[]")
+  scheduledMockAt            DateTime?
+  completedMockAt            DateTime?
+  cancelledAt                DateTime?
+  blockedReasonCodesJson     Json      @default("[]")
+  createdByActorId           String
+  createdByRole              String
+  createdAt                  DateTime  @default(now())
+  updatedAt                  DateTime  @updatedAt
+  voidedAt                   DateTime?
+
+  @@index([schoolId], map: "rrc_chk_school")
+  @@index([resultRecoveryPlanId], map: "rrc_chk_plan")
+  @@index([schoolId, studentRef], map: "rrc_chk_student")
+  @@index([checkpointStatus], map: "rrc_chk_status")
+  @@index([checkpointType], map: "rrc_chk_type")
+  @@index([createdAt], map: "rrc_chk_cat")
+}
+
+model ResultRecoverySummaryRecord {
+  resultRecoverySummaryId String    @id @default(uuid())
+  schoolId                String
+  studentRef              String?
+  summaryScope            String    @default("school")
+  summaryStatus           String    @default("active")
+  safeSummary             String
+  planCountsJson          Json      @default("{}")
+  objectiveCountsJson     Json      @default("{}")
+  checkpointCountsJson    Json      @default("{}")
+  blockedReasonCodesJson  Json      @default("[]")
+  createdAt               DateTime  @default(now())
+  updatedAt               DateTime  @updatedAt
+  refreshedAt             DateTime?
+  voidedAt                DateTime?
+
+  @@index([schoolId], map: "rrc_sum_school")
+  @@index([schoolId, studentRef], map: "rrc_sum_student")
+  @@index([summaryScope], map: "rrc_sum_scope")
+  @@index([summaryStatus], map: "rrc_sum_status")
+  @@index([createdAt], map: "rrc_sum_cat")
+}
+
+model ResultRecoveryAuditRecord {
+  resultRecoveryAuditId                     String    @id @default(uuid())
+  schoolId                                  String
+  resultRecoveryPlanId                      String?
+  resultRecoveryObjectiveId                 String?
+  resultRecoveryStepId                      String?
+  resultRecoveryPracticeDraftId             String?
+  resultRecoveryResourceRecommendationId    String?
+  resultRecoveryTeacherReviewPacketId       String?
+  resultRecoveryStudentSupportDraftId       String?
+  resultRecoveryParentSupportNoteDraftId    String?
+  resultRecoveryCheckpointId                String?
+  resultRecoverySummaryId                   String?
+  actorId                                   String
+  actorRole                                 String
+  eventType                                 String
+  decision                                  String
+  safeSummary                               String
+  reasonCodesJson                           Json      @default("[]")
+  metadataJson                              Json      @default("{}")
+  requestId                                 String?
+  correlationId                             String?
+  createdAt                                 DateTime  @default(now())
+
+  @@index([schoolId], map: "rrc_audit_school")
+  @@index([resultRecoveryPlanId], map: "rrc_audit_plan")
+  @@index([resultRecoveryObjectiveId], map: "rrc_audit_obj")
+  @@index([resultRecoveryStepId], map: "rrc_audit_step")
+  @@index([resultRecoveryPracticeDraftId], map: "rrc_audit_pd")
+  @@index([resultRecoveryResourceRecommendationId], map: "rrc_audit_rr")
+  @@index([resultRecoveryTeacherReviewPacketId], map: "rrc_audit_trp")
+  @@index([resultRecoveryStudentSupportDraftId], map: "rrc_audit_ssd")
+  @@index([resultRecoveryParentSupportNoteDraftId], map: "rrc_audit_psnd")
+  @@index([resultRecoveryCheckpointId], map: "rrc_audit_chk")
+  @@index([resultRecoverySummaryId], map: "rrc_audit_sum")
+  @@index([eventType], map: "rrc_audit_evt")
+  @@index([createdAt], map: "rrc_audit_cat")
+}
+
+model ResultRecoveryIdempotencyRecord {
+  resultRecoveryIdempotencyId String    @id @default(uuid())
+  schoolId                    String
+  operation                   String
+  idempotencyKey              String
+  requestHash                 String
+  status                      String    @default("in_progress")
+  resourceType                String?
+  resourceId                  String?
+  safeResultSummary           String?
+  createdAt                   DateTime  @default(now())
+  updatedAt                   DateTime  @updatedAt
+  expiresAt                   DateTime?
+
+  @@unique([schoolId, operation, idempotencyKey], map: "rrc_idem_unique")
+  @@index([schoolId], map: "rrc_idem_school")
+  @@index([operation], map: "rrc_idem_op")
+  @@index([idempotencyKey], map: "rrc_idem_key")
+  @@index([status], map: "rrc_idem_status")
+  @@index([expiresAt], map: "rrc_idem_expires")
+  @@index([createdAt], map: "rrc_idem_cat")
+}

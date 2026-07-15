@@ -411,6 +411,10 @@ app.use('/api/question-bank/result-report-card-access', schoolAuthMiddleware, re
 import resultFollowUpRoutes from './routes/resultFollowUp';
 app.use('/api/question-bank/result-follow-up', schoolAuthMiddleware, requireVerifiedSchoolContext, resultFollowUpRoutes);
 
+// ─── Result Recovery Planner Routes (Package 17) ──
+import resultRecoveryRoutes from './routes/resultRecovery';
+app.use('/api/question-bank/result-recovery', schoolAuthMiddleware, requireVerifiedSchoolContext, resultRecoveryRoutes);
+
 // ─── Phase 2: Learning Mode Runtime Routes ──────────────
 app.use('/api', schoolAuthMiddleware, requireVerifiedSchoolContext, learningModeRoutes);
 app.use('/api/copilot', schoolAuthMiddleware, requireVerifiedSchoolContext, learningProfileRoutes);
