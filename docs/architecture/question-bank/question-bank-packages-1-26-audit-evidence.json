@@ -187,7 +187,7 @@
       "dimensionScores": {"A": 2, "B": 2, "C": 2, "D": 2, "E": 2, "F": 2, "G": 2, "H": 2, "I": 2, "J": 2, "K": 2, "L": 2},
       "primaryStatus": "COMPLETE",
       "confidence": "HIGH",
-      "evidence": ["backend/src/domains/assessment/result-learning-evidence/services/resultMasteryMutationPlanService.ts", "backend/src/domains/assessment/result-learning-evidence/services/resultLearningEvidenceBridgeService.ts", "backend/src/domains/assessment/result-learning-evidence/repositories/prismaResultLearningEvidenceRepositories.ts"],
+      "evidence": ["backend/src/domains/assessment/result-learning-evidence/services/masteryMutationPlanService.ts", "backend/src/domains/assessment/result-learning-evidence/services/resultEvidenceBridgeService.ts", "backend/src/domains/assessment/result-learning-evidence/repositories/prismaResultLearningEvidenceRepositories.ts"],
       "gaps": ["Routes use in-memory repos"]
     },
     {
@@ -391,7 +391,7 @@
       "dimensionScores": {"A": 2, "B": 2, "C": 2, "D": 2, "E": 2, "F": 2, "G": 2, "H": 2, "I": 2, "J": 2, "K": 2, "L": 2},
       "primaryStatus": "COMPLETE",
       "confidence": "HIGH",
-      "evidence": ["backend/src/domains/assessment/recovery-lifecycle-closure/services/recoveryLifecycleClosureReadinessService.ts", "backend/src/domains/assessment/recovery-lifecycle-closure/services/recoveryPostSimulationHandoffService.ts", "backend/src/domains/assessment/recovery-lifecycle-closure/repositories/prismaRecoveryLifecycleClosureRepositories.ts"],
+      "evidence": ["backend/src/domains/assessment/recovery-lifecycle-closure/services/recoveryLifecycleClosureReadinessService.ts", "backend/src/domains/assessment/recovery-lifecycle-closure/services/recoveryPostSimulationHandoffPacketService.ts", "backend/src/domains/assessment/recovery-lifecycle-closure/repositories/prismaRecoveryLifecycleClosureRepositories.ts"],
       "gaps": ["DI uses concrete class instead of interface", "Routes use in-memory repos"]
     },
     {
