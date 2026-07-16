@@ -12,7 +12,7 @@ Package 24 is a board, not a lever. It does not execute any live action.
 |-------|--------|
 | Branch | main |
 | HEAD before Package 24 | 78ebd36 (Pkg 23 sentinel seal) |
-| HEAD after Package 24 | To be determined after commit |
+| HEAD after Package 24 | 7fde9ac (Pkg 24 final fix — safeResultSummary field) |
 | Package 23 closure proof | Verified - commit 78ebd36 seals sentinel |
 | Package 23 closure repair needed | Yes - sentinel missing, repaired in 78ebd36 |
 | Package 23 authorization-preview reuse | By reference only (field name references) |
