@@ -10636,3 +10636,508 @@ model RecoveryExecutionAuthorizationIdempotencyRecord {
   @@index([expiresAt], map: "p23_idem_exp")
   @@index([createdAt], map: "p23_idem_ca")
 }
+
+model RecoveryExecutionReadinessBoardSnapshotRecord {
+  boardSnapshotId            String   @id @default(uuid())
+  schoolId                   String
+  studentRef                 String?
+  teacherRef                 String?
+  adminRef                   String?
+  departmentHeadRef          String?
+  resultRecoveryPlanId       String?
+  resultRecoveryFollowUpId   String?
+  recoveryProgressObservationId              String?
+  recoveryOutcomeDecisionSummaryId           String?
+  recoveryOutcomeActionBundleId              String?
+  recoveryOutcomeExecutionSimulationRunId    String?
+  recoveryOutcomeExecutionSimulationSummaryId String?
+  recoveryLifecycleClosureReadinessId        String?
+  recoveryFinalLifecycleSummaryId            String?
+  recoveryExecutionAuthorizationPreviewReadinessId  String?
+  recoveryExecutionAuthorizationSummaryId    String?
+  boardStatus                  String   @default("draft")
+  boardPriority                String   @default("normal")
+  riskLevel                    String   @default("low")
+  blockerStatus                String   @default("none")
+  snapshotSummary              String   @db.Text
+  snapshotDetailsJson          Json     @default("{}")
+  laneKeysJson                 Json     @default("[]")
+  cardCountsJson               Json     @default("{}")
+  riskSignalsJson              Json     @default("[]")
+  blockedReasonCodesJson       String[] @default([])
+  sourceRefsJson               Json     @default("{}")
+  createdByActorId             String
+  createdByRole                String
+  createdAt                    DateTime @default(now())
+  updatedAt                    DateTime @updatedAt
+  voidedAt                     DateTime?
+
+  @@index([schoolId], map: "p24_bsnap_sid")
+  @@index([schoolId, studentRef], map: "p24_bsnap_sid_stu")
+  @@index([schoolId, teacherRef], map: "p24_bsnap_sid_tch")
+  @@index([schoolId, adminRef], map: "p24_bsnap_sid_adm")
+  @@index([resultRecoveryPlanId], map: "p24_bsnap_plan")
+  @@index([resultRecoveryFollowUpId], map: "p24_bsnap_fup")
+  @@index([boardStatus], map: "p24_bsnap_status")
+  @@index([boardPriority], map: "p24_bsnap_pri")
+  @@index([riskLevel], map: "p24_bsnap_risk")
+  @@index([blockerStatus], map: "p24_bsnap_blk")
+  @@index([recoveryExecutionAuthorizationPreviewReadinessId], map: "p24_bsnap_auth")
+  @@index([createdAt], map: "p24_bsnap_ca")
+}
+
+model RecoveryExecutionReadinessBoardLaneRecord {
+  boardLaneId                String   @id @default(uuid())
+  boardSnapshotId            String
+  schoolId                   String
+  studentRef                 String?
+  teacherRef                 String?
+  adminRef                   String?
+  resultRecoveryPlanId       String?
+  laneKey                    String
+  laneStatus                 String   @default("draft")
+  lanePriority               String   @default("normal")
+  laneSummary                String   @db.Text
+  laneDetailsJson            Json     @default("{}")
+  cardKeysJson               Json     @default("[]")
+  cardCount                  Int      @default(0)
+  blockedReasonCodesJson     String[] @default([])
+  sourceRefsJson             Json     @default("{}")
+  createdByActorId           String
+  createdByRole              String
+  createdAt                  DateTime @default(now())
+  updatedAt                  DateTime @updatedAt
+  voidedAt                   DateTime?
+
+  @@index([boardSnapshotId], map: "p24_blane_snap")
+  @@index([schoolId], map: "p24_blane_sid")
+  @@index([schoolId, laneKey], map: "p24_blane_sid_key")
+  @@index([laneKey], map: "p24_blane_key")
+  @@index([laneStatus], map: "p24_blane_status")
+  @@index([resultRecoveryPlanId], map: "p24_blane_plan")
+  @@index([createdAt], map: "p24_blane_ca")
+}
+
+model RecoveryExecutionReadinessBoardCardRecord {
+  boardCardId                String   @id @default(uuid())
+  boardSnapshotId            String
+  boardLaneId                String?
+  schoolId                   String
+  studentRef                 String?
+  teacherRef                 String?
+  adminRef                   String?
+  resultRecoveryPlanId       String?
+  laneKey                    String
+  cardKey                    String
+  cardStatus                 String   @default("draft")
+  cardPriority               String   @default("normal")
+  riskLevel                  String   @default("low")
+  cardSummary                String   @db.Text
+  cardDetailsJson            Json     @default("{}")
+  blockedReasonCodesJson     String[] @default([])
+  sourceRefsJson             Json     @default("{}")
+  createdByActorId           String
+  createdByRole              String
+  createdAt                  DateTime @default(now())
+  updatedAt                  DateTime @updatedAt
+  voidedAt                   DateTime?
+
+  @@index([boardSnapshotId], map: "p24_bcard_snap")
+  @@index([boardLaneId], map: "p24_bcard_lane")
+  @@index([schoolId], map: "p24_bcard_sid")
+  @@index([schoolId, studentRef], map: "p24_bcard_sid_stu")
+  @@index([resultRecoveryPlanId], map: "p24_bcard_plan")
+  @@index([laneKey], map: "p24_bcard_key")
+  @@index([cardStatus], map: "p24_bcard_status")
+  @@index([cardPriority], map: "p24_bcard_pri")
+  @@index([riskLevel], map: "p24_bcard_risk")
+  @@index([createdAt], map: "p24_bcard_ca")
+}
+
+model RecoveryExecutionReadinessBoardFilterPresetRecord {
+  boardFilterPresetId        String   @id @default(uuid())
+  schoolId                   String
+  actorId                    String?
+  actorRole                  String?
+  presetName                 String
+  presetStatus               String   @default("draft")
+  filterCriteriaJson         Json     @default("{}")
+  laneFiltersJson            Json     @default("{}")
+  statusFiltersJson          Json     @default("{}")
+  riskFiltersJson            Json     @default("{}")
+  priorityFiltersJson        Json     @default("{}")
+  sourceRefsJson             Json     @default("{}")
+  blockedReasonCodesJson     String[] @default([])
+  createdByActorId           String
+  createdByRole              String
+  createdAt                  DateTime @default(now())
+  updatedAt                  DateTime @updatedAt
+
+  @@index([schoolId], map: "p24_bfilt_sid")
+  @@index([schoolId, actorId], map: "p24_bfilt_sid_act")
+  @@index([schoolId, actorRole], map: "p24_bfilt_sid_role")
+  @@index([presetStatus], map: "p24_bfilt_status")
+  @@index([createdAt], map: "p24_bfilt_ca")
+}
+
+model RecoveryExecutionReadinessBoardRiskSignalRecord {
+  boardRiskSignalId          String   @id @default(uuid())
+  boardSnapshotId            String?
+  schoolId                   String
+  studentRef                 String?
+  teacherRef                 String?
+  adminRef                   String?
+  resultRecoveryPlanId       String?
+  laneKey                    String?
+  cardKey                    String?
+  riskLevel                  String   @default("low")
+  riskStatus                 String   @default("draft")
+  riskCategory               String
+  riskSummary                String   @db.Text
+  riskDetailsJson            Json     @default("{}")
+  mitigationsJson            Json     @default("{}")
+  blockedReasonCodesJson     String[] @default([])
+  sourceRefsJson             Json     @default("{}")
+  createdByActorId           String
+  createdByRole              String
+  createdAt                  DateTime @default(now())
+  updatedAt                  DateTime @updatedAt
+  voidedAt                   DateTime?
+
+  @@index([boardSnapshotId], map: "p24_brsk_snap")
+  @@index([schoolId], map: "p24_brsk_sid")
+  @@index([schoolId, studentRef], map: "p24_brsk_sid_stu")
+  @@index([resultRecoveryPlanId], map: "p24_brsk_plan")
+  @@index([riskLevel], map: "p24_brsk_level")
+  @@index([riskStatus], map: "p24_brsk_status")
+  @@index([riskCategory], map: "p24_brsk_cat")
+  @@index([createdAt], map: "p24_brsk_ca")
+}
+
+model RecoveryExecutionReadinessBoardBlockerRecord {
+  boardBlockerId             String   @id @default(uuid())
+  boardSnapshotId            String?
+  schoolId                   String
+  studentRef                 String?
+  teacherRef                 String?
+  adminRef                   String?
+  resultRecoveryPlanId       String?
+  laneKey                    String?
+  cardKey                    String?
+  blockerStatus              String   @default("open")
+  blockerPriority            String   @default("normal")
+  blockerCategory            String
+  blockerSummary             String   @db.Text
+  blockerDetailsJson         Json     @default("{}")
+  resolutionNotesJson        Json     @default("{}")
+  blockedReasonCodesJson     String[] @default([])
+  sourceRefsJson             Json     @default("{}")
+  createdByActorId           String
+  createdByRole              String
+  createdAt                  DateTime @default(now())
+  updatedAt                  DateTime @updatedAt
+  resolvedAt                 DateTime?
+  voidedAt                   DateTime?
+
+  @@index([boardSnapshotId], map: "p24_bblk_snap")
+  @@index([schoolId], map: "p24_bblk_sid")
+  @@index([schoolId, studentRef], map: "p24_bblk_sid_stu")
+  @@index([resultRecoveryPlanId], map: "p24_bblk_plan")
+  @@index([blockerStatus], map: "p24_bblk_status")
+  @@index([blockerPriority], map: "p24_bblk_pri")
+  @@index([blockerCategory], map: "p24_bblk_cat")
+  @@index([createdAt], map: "p24_bblk_ca")
+}
+
+model RecoveryExecutionReadinessBoardGovernanceNoteRecord {
+  boardGovernanceNoteId      String   @id @default(uuid())
+  boardSnapshotId            String?
+  schoolId                   String
+  studentRef                 String?
+  teacherRef                 String?
+  adminRef                   String?
+  resultRecoveryPlanId       String?
+  laneKey                    String?
+  cardKey                    String?
+  noteStatus                 String   @default("draft")
+  noteCategory               String
+  noteSummary                String   @db.Text
+  noteDetailsJson            Json     @default("{}")
+  blockedReasonCodesJson     String[] @default([])
+  sourceRefsJson             Json     @default("{}")
+  createdByActorId           String
+  createdByRole              String
+  createdAt                  DateTime @default(now())
+  updatedAt                  DateTime @updatedAt
+  voidedAt                   DateTime?
+
+  @@index([boardSnapshotId], map: "p24_bgov_snap")
+  @@index([schoolId], map: "p24_bgov_sid")
+  @@index([schoolId, studentRef], map: "p24_bgov_sid_stu")
+  @@index([resultRecoveryPlanId], map: "p24_bgov_plan")
+  @@index([noteStatus], map: "p24_bgov_status")
+  @@index([noteCategory], map: "p24_bgov_cat")
+  @@index([createdByActorId], map: "p24_bgov_actor")
+  @@index([createdAt], map: "p24_bgov_ca")
+}
+
+model RecoveryExecutionReadinessBoardRoleProjectionRecord {
+  boardRoleProjectionId      String   @id @default(uuid())
+  boardSnapshotId            String?
+  schoolId                   String
+  targetRole                 String
+  actorId                    String?
+  actorRef                   String?
+  projectionStatus           String   @default("draft")
+  projectionSummary          String   @db.Text
+  projectionDetailsJson      Json     @default("{}")
+  visibleLaneKeysJson        Json     @default("[]")
+  visibleCardKeysJson        Json     @default("[]")
+  blockedReasonCodesJson     String[] @default([])
+  sourceRefsJson             Json     @default("{}")
+  createdByActorId           String
+  createdByRole              String
+  createdAt                  DateTime @default(now())
+  updatedAt                  DateTime @updatedAt
+  voidedAt                   DateTime?
+
+  @@index([boardSnapshotId], map: "p24_bproj_snap")
+  @@index([schoolId], map: "p24_bproj_sid")
+  @@index([targetRole], map: "p24_bproj_role")
+  @@index([schoolId, targetRole], map: "p24_bproj_sid_role")
+  @@index([actorRef], map: "p24_bproj_actor")
+  @@index([projectionStatus], map: "p24_bproj_status")
+  @@index([createdAt], map: "p24_bproj_ca")
+}
+
+model RecoveryExecutionReadinessBoardTeacherQueueRecord {
+  boardTeacherQueueId        String   @id @default(uuid())
+  boardSnapshotId            String?
+  schoolId                   String
+  teacherRef                 String
+  queueStatus                String   @default("draft")
+  queueSummary               String   @db.Text
+  queueItemsJson             Json     @default("{}")
+  laneBreakdownJson          Json     @default("{}")
+  pendingCardsJson           Json     @default("[]")
+  reviewReadyCardsJson       Json     @default("[]")
+  riskFlaggedCardsJson       Json     @default("[]")
+  blockerCardsJson           Json     @default("[]")
+  blockedReasonCodesJson     String[] @default([])
+  sourceRefsJson             Json     @default("{}")
+  createdByActorId           String
+  createdByRole              String
+  createdAt                  DateTime @default(now())
+  updatedAt                  DateTime @updatedAt
+  voidedAt                   DateTime?
+
+  @@index([boardSnapshotId], map: "p24_btchq_snap")
+  @@index([schoolId], map: "p24_btchq_sid")
+  @@index([schoolId, teacherRef], map: "p24_btchq_sid_tch")
+  @@index([queueStatus], map: "p24_btchq_status")
+  @@index([createdAt], map: "p24_btchq_ca")
+}
+
+model RecoveryExecutionReadinessBoardAdminQueueRecord {
+  boardAdminQueueId          String   @id @default(uuid())
+  boardSnapshotId            String?
+  schoolId                   String
+  adminRef                   String
+  queueStatus                String   @default("draft")
+  queueSummary               String   @db.Text
+  queueItemsJson             Json     @default("{}")
+  laneBreakdownJson          Json     @default("{}")
+  pendingCardsJson           Json     @default("[]")
+  reviewReadyCardsJson       Json     @default("[]")
+  riskFlaggedCardsJson       Json     @default("[]")
+  blockerCardsJson           Json     @default("[]")
+  governanceNotesJson        Json     @default("{}")
+  blockedReasonCodesJson     String[] @default([])
+  sourceRefsJson             Json     @default("{}")
+  createdByActorId           String
+  createdByRole              String
+  createdAt                  DateTime @default(now())
+  updatedAt                  DateTime @updatedAt
+  voidedAt                   DateTime?
+
+  @@index([boardSnapshotId], map: "p24_badmq_snap")
+  @@index([schoolId], map: "p24_badmq_sid")
+  @@index([schoolId, adminRef], map: "p24_badmq_sid_adm")
+  @@index([queueStatus], map: "p24_badmq_status")
+  @@index([createdAt], map: "p24_badmq_ca")
+}
+
+model RecoveryExecutionReadinessBoardStudentSafeStatusDraftRecord {
+  boardStudentSafeDraftId    String   @id @default(uuid())
+  boardSnapshotId            String?
+  schoolId                   String
+  studentRef                 String
+  resultRecoveryPlanId       String?
+  draftStatus                String   @default("draft")
+  safeStatusSummary          String   @db.Text
+  statusDetailsJson          Json     @default("{}")
+  visibleLaneSummaryJson     Json     @default("{}")
+  blockedReasonCodesJson     String[] @default([])
+  sourceRefsJson             Json     @default("{}")
+  createdByActorId           String
+  createdByRole              String
+  createdAt                  DateTime @default(now())
+  updatedAt                  DateTime @updatedAt
+  voidedAt                   DateTime?
+
+  @@index([boardSnapshotId], map: "p24_bssd_snap")
+  @@index([schoolId], map: "p24_bssd_sid")
+  @@index([schoolId, studentRef], map: "p24_bssd_sid_stu")
+  @@index([resultRecoveryPlanId], map: "p24_bssd_plan")
+  @@index([draftStatus], map: "p24_bssd_status")
+  @@index([createdAt], map: "p24_bssd_ca")
+}
+
+model RecoveryExecutionReadinessBoardParentSafeStatusDraftRecord {
+  boardParentSafeDraftId     String   @id @default(uuid())
+  boardSnapshotId            String?
+  schoolId                   String
+  studentRef                 String
+  parentRef                  String?
+  resultRecoveryPlanId       String?
+  draftStatus                String   @default("draft")
+  safeStatusSummary          String   @db.Text
+  statusDetailsJson          Json     @default("{}")
+  visibleLaneSummaryJson     Json     @default("{}")
+  blockedReasonCodesJson     String[] @default([])
+  sourceRefsJson             Json     @default("{}")
+  createdByActorId           String
+  createdByRole              String
+  createdAt                  DateTime @default(now())
+  updatedAt                  DateTime @updatedAt
+  voidedAt                   DateTime?
+
+  @@index([boardSnapshotId], map: "p24_bpsd_snap")
+  @@index([schoolId], map: "p24_bpsd_sid")
+  @@index([schoolId, studentRef], map: "p24_bpsd_sid_stu")
+  @@index([resultRecoveryPlanId], map: "p24_bpsd_plan")
+  @@index([draftStatus], map: "p24_bpsd_status")
+  @@index([createdAt], map: "p24_bpsd_ca")
+}
+
+model RecoveryExecutionReadinessBoardRefreshJobRecord {
+  boardRefreshJobId          String   @id @default(uuid())
+  boardSnapshotId            String?
+  schoolId                   String
+  resultRecoveryPlanId       String?
+  jobStatus                  String   @default("pending")
+  jobType                    String
+  jobSummary                 String   @db.Text
+  refreshResultsJson         Json     @default("{}")
+  snapshotsRefreshed         Int      @default(0)
+  lanesRefreshed             Int      @default(0)
+  cardsRefreshed             Int      @default(0)
+  blockersRefreshed          Int      @default(0)
+  errorDetailsJson           Json     @default("{}")
+  blockedReasonCodesJson     String[] @default([])
+  sourceRefsJson             Json     @default("{}")
+  createdByActorId           String
+  createdByRole              String
+  createdAt                  DateTime @default(now())
+  updatedAt                  DateTime @updatedAt
+  completedAt                DateTime?
+  voidedAt                   DateTime?
+
+  @@index([boardSnapshotId], map: "p24_brfr_snap")
+  @@index([schoolId], map: "p24_brfr_sid")
+  @@index([resultRecoveryPlanId], map: "p24_brfr_plan")
+  @@index([jobStatus], map: "p24_brfr_status")
+  @@index([jobType], map: "p24_brfr_type")
+  @@index([createdAt], map: "p24_brfr_ca")
+}
+
+model RecoveryExecutionReadinessBoardSummaryRecord {
+  boardSummaryId             String   @id @default(uuid())
+  boardSnapshotId            String?
+  schoolId                   String
+  studentRef                 String?
+  teacherRef                 String?
+  adminRef                   String?
+  resultRecoveryPlanId       String?
+  summaryStatus              String   @default("draft")
+  safeSummary                String   @db.Text
+  overviewJson               Json     @default("{}")
+  laneStatusSummaryJson      Json     @default("{}")
+  cardCountSummaryJson       Json     @default("{}")
+  riskSummaryJson            Json     @default("{}")
+  blockerSummaryJson         Json     @default("{}")
+  governanceNotesSummaryJson Json     @default("{}")
+  queueSummaryJson           Json     @default("{}")
+  blockedReasonCodesJson     String[] @default([])
+  sourceRefsJson             Json     @default("{}")
+  createdByActorId           String
+  createdByRole              String
+  createdAt                  DateTime @default(now())
+  updatedAt                  DateTime @updatedAt
+  voidedAt                   DateTime?
+
+  @@index([boardSnapshotId], map: "p24_bsum_snap")
+  @@index([schoolId], map: "p24_bsum_sid")
+  @@index([schoolId, studentRef], map: "p24_bsum_sid_stu")
+  @@index([schoolId, teacherRef], map: "p24_bsum_sid_tch")
+  @@index([resultRecoveryPlanId], map: "p24_bsum_plan")
+  @@index([summaryStatus], map: "p24_bsum_status")
+  @@index([createdAt], map: "p24_bsum_ca")
+}
+
+model RecoveryExecutionReadinessBoardAuditRecord {
+  boardAuditEventId          String   @id @default(uuid())
+  schoolId                   String
+  boardSnapshotId            String?
+  boardLaneId                String?
+  boardCardId                String?
+  boardFilterPresetId        String?
+  boardRiskSignalId          String?
+  boardBlockerId             String?
+  boardGovernanceNoteId      String?
+  boardRoleProjectionId      String?
+  boardTeacherQueueId        String?
+  boardAdminQueueId          String?
+  boardStudentSafeDraftId    String?
+  boardParentSafeDraftId     String?
+  boardRefreshJobId          String?
+  boardSummaryId             String?
+  action                     String
+  actorId                    String
+  actorRole                  String
+  safeAuditSummary           String   @db.Text
+  auditDetailsJson           Json     @default("{}")
+  sourceRefsJson             Json     @default("{}")
+  createdAt                  DateTime @default(now())
+
+  @@index([schoolId], map: "p24_baud_sid")
+  @@index([boardSnapshotId], map: "p24_baud_snap")
+  @@index([boardLaneId], map: "p24_baud_lane")
+  @@index([boardCardId], map: "p24_baud_card")
+  @@index([action], map: "p24_baud_action")
+  @@index([actorId], map: "p24_baud_actor")
+  @@index([createdAt], map: "p24_baud_ca")
+}
+
+model RecoveryExecutionReadinessBoardIdempotencyRecord {
+  boardIdempotencyId         String   @id @default(uuid())
+  schoolId                   String
+  operation                  String
+  idempotencyKey             String
+  requestHash                String
+  status                     String   @default("in_progress")
+  resourceType               String?
+  resourceId                 String?
+  safeResultSummary          String?
+  createdAt                  DateTime @default(now())
+  updatedAt                  DateTime @updatedAt
+  expiresAt                  DateTime?
+
+  @@unique([schoolId, operation, idempotencyKey], map: "p24_idem_uid")
+  @@index([schoolId], map: "p24_idem_schoolId")
+  @@index([operation], map: "p24_idem_op")
+  @@index([idempotencyKey], map: "p24_idem_ik")
+  @@index([status], map: "p24_idem_status")
+  @@index([expiresAt], map: "p24_idem_exp")
+  @@index([createdAt], map: "p24_idem_ca")
+}

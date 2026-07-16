@@ -1,0 +1,62 @@
+export interface RecoveryExecutionReadinessBoardSnapshot {
+  boardSnapshotId: string;
+  schoolId: string;
+  studentRef?: string;
+  teacherRef?: string;
+  adminRef?: string;
+  departmentHeadRef?: string;
+  resultRecoveryPlanId?: string;
+  resultRecoveryFollowUpId?: string;
+  recoveryProgressObservationId?: string;
+  recoveryOutcomeDecisionSummaryId?: string;
+  recoveryOutcomeActionBundleId?: string;
+  recoveryOutcomeExecutionSimulationRunId?: string;
+  recoveryOutcomeExecutionSimulationSummaryId?: string;
+  recoveryLifecycleClosureReadinessId?: string;
+  recoveryFinalLifecycleSummaryId?: string;
+  recoveryExecutionAuthorizationPreviewReadinessId?: string;
+  recoveryExecutionAuthorizationSummaryId?: string;
+  boardStatus: string;
+  boardPriority: string;
+  riskLevel: string;
+  blockerStatus: string;
+  snapshotSummary: string;
+  snapshotDetailsJson?: Record<string, any>;
+  laneKeysJson?: string[];
+  cardCountsJson?: Record<string, number>;
+  riskSignalsJson?: any[];
+  blockedReasonCodesJson?: string[];
+  sourceRefsJson?: Record<string, any>;
+  createdByActorId: string;
+  createdByRole: string;
+  createdAt: string;
+  updatedAt: string;
+  voidedAt?: string;
+}
+
+export interface CreateBoardSnapshotRequest {
+  schoolId: string;
+  studentRef?: string;
+  teacherRef?: string;
+  adminRef?: string;
+  departmentHeadRef?: string;
+  resultRecoveryPlanId?: string;
+  resultRecoveryFollowUpId?: string;
+  recoveryProgressObservationId?: string;
+  recoveryOutcomeDecisionSummaryId?: string;
+  recoveryOutcomeActionBundleId?: string;
+  recoveryOutcomeExecutionSimulationRunId?: string;
+  recoveryOutcomeExecutionSimulationSummaryId?: string;
+  recoveryLifecycleClosureReadinessId?: string;
+  recoveryFinalLifecycleSummaryId?: string;
+  recoveryExecutionAuthorizationPreviewReadinessId?: string;
+  recoveryExecutionAuthorizationSummaryId?: string;
+  boardStatus?: string;
+  boardPriority?: string;
+  riskLevel?: string;
+  blockerStatus?: string;
+  snapshotSummary: string;
+  snapshotDetailsJson?: Record<string, any>;
+  laneKeysJson?: string[];
+  sourceRefsJson?: Record<string, any>;
+}

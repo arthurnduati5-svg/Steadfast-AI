@@ -439,6 +439,10 @@ app.use('/api/question-bank/recovery-lifecycle-closure', schoolAuthMiddleware, r
 import recoveryExecutionAuthorizationPreviewRoutes from './routes/recoveryExecutionAuthorizationPreview';
 app.use('/api/question-bank/recovery-execution-authorization-preview', schoolAuthMiddleware, requireVerifiedSchoolContext, recoveryExecutionAuthorizationPreviewRoutes);
 
+// ─── Recovery Execution Readiness Board Routes (Package 24) ──
+import recoveryExecutionReadinessBoardRoutes from './routes/recoveryExecutionReadinessBoard';
+app.use('/api/question-bank/recovery-execution-readiness-board', schoolAuthMiddleware, requireVerifiedSchoolContext, recoveryExecutionReadinessBoardRoutes);
+
 // ─── Phase 2: Learning Mode Runtime Routes ──────────────
 app.use('/api', schoolAuthMiddleware, requireVerifiedSchoolContext, learningModeRoutes);
 app.use('/api/copilot', schoolAuthMiddleware, requireVerifiedSchoolContext, learningProfileRoutes);
