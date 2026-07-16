@@ -11141,3 +11141,370 @@ model RecoveryExecutionReadinessBoardIdempotencyRecord {
   @@index([expiresAt], map: "p24_idem_exp")
   @@index([createdAt], map: "p24_idem_ca")
 }
+
+model RecoveryCaseTriageReadinessRecord {
+  triageReadinessId             String   @id @default(uuid())
+  schoolId                      String
+  studentRef                    String
+  resultRecoveryPlanId          String
+  boardSnapshotId               String
+  boardCardId                   String
+  triageStatus                  String   @default("draft")
+  safeReadinessSummary          String   @db.Text
+  readinessChecksJson           Json     @default("{}")
+  blockedReasonCodesJson        String[] @default([])
+  sourceRefsJson                Json     @default("{}")
+  createdByActorId              String
+  createdByRole                 String
+  createdAt                     DateTime @default(now())
+  updatedAt                     DateTime @updatedAt
+  voidedAt                      DateTime?
+
+  @@index([schoolId], map: "p25_trdy_sid")
+  @@index([schoolId, studentRef], map: "p25_trdy_sid_stu")
+  @@index([schoolId, resultRecoveryPlanId], map: "p25_trdy_sid_plan")
+  @@index([boardSnapshotId], map: "p25_trdy_snap")
+  @@index([boardCardId], map: "p25_trdy_card")
+  @@index([triageStatus], map: "p25_trdy_status")
+  @@index([createdAt], map: "p25_trdy_ca")
+}
+
+model RecoveryCasePriorityAssessmentRecord {
+  priorityAssessmentId          String   @id @default(uuid())
+  schoolId                      String
+  studentRef                    String
+  resultRecoveryPlanId          String
+  boardSnapshotId               String
+  boardCardId                   String
+  assessmentVersion             String   @default("v1")
+  assessmentStatus              String   @default("draft")
+  priorityScore                 Int?
+  priorityBand                  String?
+  riskRank                      String   @default("low")
+  oldestUnresolvedEvidenceAt    DateTime?
+  scoringPolicyVersion          String   @default("RECOVERY_CASE_TRIAGE_PRIORITY_V1")
+  safePrioritySummary           String   @db.Text
+  blockedReasonCodesJson        String[] @default([])
+  sourceRefsJson                Json     @default("{}")
+  createdByActorId              String
+  createdByRole                 String
+  createdAt                     DateTime @default(now())
+  updatedAt                     DateTime @updatedAt
+  voidedAt                      DateTime?
+
+  @@index([schoolId], map: "p25_pas_sid")
+  @@index([schoolId, studentRef], map: "p25_pas_sid_stu")
+  @@index([schoolId, resultRecoveryPlanId], map: "p25_pas_sid_plan")
+  @@index([boardSnapshotId], map: "p25_pas_snap")
+  @@index([boardCardId], map: "p25_pas_card")
+  @@index([assessmentStatus], map: "p25_pas_status")
+  @@index([priorityBand], map: "p25_pas_band")
+  @@index([riskRank], map: "p25_pas_risk")
+  @@index([createdAt], map: "p25_pas_ca")
+}
+
+model RecoveryCasePriorityFactorRecord {
+  priorityFactorId             String   @id @default(uuid())
+  schoolId                     String
+  priorityAssessmentId         String
+  factorCode                   String
+  factorWeight                 Int      @default(0)
+  factorValueJson              Json     @default("{}")
+  appliedPoints                Int      @default(0)
+  safeFactorExplanation        String   @db.Text
+  sourceRef                    String?
+  createdAt                    DateTime @default(now())
+
+  @@index([schoolId], map: "p25_pfac_sid")
+  @@index([priorityAssessmentId], map: "p25_pfac_pas")
+  @@index([factorCode], map: "p25_pfac_code")
+  @@index([createdAt], map: "p25_pfac_ca")
+}
+
+model RecoveryCaseFairnessCheckRecord {
+  fairnessCheckId              String   @id @default(uuid())
+  schoolId                     String
+  priorityAssessmentId         String?
+  queueSnapshotId              String?
+  fairnessStatus               String   @default("draft")
+  policyVersion                String   @default("RECOVERY_CASE_TRIAGE_PRIORITY_V1")
+  checkedFactorCodesJson       Json     @default("[]")
+  prohibitedFactorMatchesJson  Json     @default("[]")
+  safeFairnessSummary          String   @db.Text
+  blockedReasonCodesJson       String[] @default([])
+  createdByActorId             String
+  createdByRole                String
+  createdAt                    DateTime @default(now())
+
+  @@index([schoolId], map: "p25_fair_sid")
+  @@index([priorityAssessmentId], map: "p25_fair_pas")
+  @@index([queueSnapshotId], map: "p25_fair_qsnap")
+  @@index([fairnessStatus], map: "p25_fair_status")
+  @@index([createdAt], map: "p25_fair_ca")
+}
+
+model RecoveryCaseCapacitySnapshotRecord {
+  capacitySnapshotId           String   @id @default(uuid())
+  schoolId                     String
+  audienceRole                 String
+  reviewerRef                  String?
+  teamRef                      String?
+  capacityLimit                Int      @default(0)
+  currentLoad                  Int      @default(0)
+  availableSlots              Int      @default(0)
+  capacityStatus               String   @default("draft")
+  windowStart                  DateTime?
+  windowEnd                    DateTime?
+  safeCapacitySummary          String   @db.Text
+  sourceRefsJson               Json     @default("{}")
+  createdByActorId             String
+  createdByRole                String
+  createdAt                    DateTime @default(now())
+  updatedAt                    DateTime @updatedAt
+
+  @@index([schoolId], map: "p25_cap_sid")
+  @@index([schoolId, audienceRole], map: "p25_cap_sid_role")
+  @@index([reviewerRef], map: "p25_cap_reviewer")
+  @@index([teamRef], map: "p25_cap_team")
+  @@index([capacityStatus], map: "p25_cap_status")
+  @@index([createdAt], map: "p25_cap_ca")
+}
+
+model RecoveryCaseTriageQueueSnapshotRecord {
+  queueSnapshotId              String   @id @default(uuid())
+  schoolId                     String
+  audienceRole                 String
+  queueStatus                  String   @default("draft")
+  orderingPolicyVersion        String   @default("RECOVERY_CASE_TRIAGE_PRIORITY_V1")
+  capacitySnapshotId           String?
+  candidateCount               Int      @default(0)
+  rankedCount                  Int      @default(0)
+  blockedCount                 Int      @default(0)
+  duplicateSuppressedCount     Int      @default(0)
+  capacityExceeded             Boolean  @default(false)
+  generatedAt                  DateTime?
+  safeQueueSummary             String   @db.Text
+  sourceRefsJson               Json     @default("{}")
+  createdByActorId             String
+  createdByRole                String
+  createdAt                    DateTime @default(now())
+  updatedAt                    DateTime @updatedAt
+  voidedAt                     DateTime?
+
+  @@index([schoolId], map: "p25_qsnap_sid")
+  @@index([schoolId, audienceRole], map: "p25_qsnap_sid_role")
+  @@index([queueStatus], map: "p25_qsnap_status")
+  @@index([capacitySnapshotId], map: "p25_qsnap_cap")
+  @@index([createdAt], map: "p25_qsnap_ca")
+}
+
+model RecoveryCaseTriageQueueItemRecord {
+  queueItemId                  String   @id @default(uuid())
+  schoolId                     String
+  queueSnapshotId              String
+  priorityAssessmentId         String?
+  boardCardId                  String
+  resultRecoveryPlanId         String
+  studentRef                   String
+  rank                         Int      @default(0)
+  priorityScore                Int      @default(0)
+  priorityBand                 String   @default("deferred")
+  triageDecision               String   @default("queued")
+  queueItemStatus              String   @default("queued")
+  safeItemSummary              String   @db.Text
+  blockedReasonCodesJson       String[] @default([])
+  sourceRefsJson               Json     @default("{}")
+  createdAt                    DateTime @default(now())
+  updatedAt                    DateTime @updatedAt
+  voidedAt                     DateTime?
+
+  @@index([schoolId], map: "p25_qitem_sid")
+  @@index([queueSnapshotId], map: "p25_qitem_qsnap")
+  @@index([priorityAssessmentId], map: "p25_qitem_pas")
+  @@index([boardCardId], map: "p25_qitem_card")
+  @@index([studentRef], map: "p25_qitem_stu")
+  @@index([resultRecoveryPlanId], map: "p25_qitem_plan")
+  @@index([rank], map: "p25_qitem_rank")
+  @@index([priorityBand], map: "p25_qitem_band")
+  @@index([triageDecision], map: "p25_qitem_dec")
+  @@index([queueItemStatus], map: "p25_qitem_status")
+  @@index([createdAt], map: "p25_qitem_ca")
+}
+
+model RecoveryCaseWorkloadAllocationDraftRecord {
+  allocationDraftId            String   @id @default(uuid())
+  schoolId                     String
+  queueItemId                  String
+  proposedReviewerRef          String
+  proposedReviewerRole         String
+  allocationStatus             String   @default("draft")
+  capacitySnapshotId           String?
+  safeAllocationSummary        String   @db.Text
+  allocationReasonsJson        Json     @default("{}")
+  blockedReasonCodesJson       String[] @default([])
+  createdByActorId             String
+  createdByRole                String
+  createdAt                    DateTime @default(now())
+  updatedAt                    DateTime @updatedAt
+  voidedAt                     DateTime?
+
+  @@index([schoolId], map: "p25_ald_sid")
+  @@index([queueItemId], map: "p25_ald_qitem")
+  @@index([proposedReviewerRef], map: "p25_ald_reviewer")
+  @@index([proposedReviewerRole], map: "p25_ald_role")
+  @@index([allocationStatus], map: "p25_ald_status")
+  @@index([capacitySnapshotId], map: "p25_ald_cap")
+  @@index([createdAt], map: "p25_ald_ca")
+}
+
+model RecoveryCaseEscalationDraftRecord {
+  escalationDraftId            String   @id @default(uuid())
+  schoolId                     String
+  queueItemId                  String
+  escalationLevel              String
+  proposedTargetRole           String
+  escalationStatus             String   @default("draft")
+  safeEscalationSummary        String   @db.Text
+  reasonCodesJson              Json     @default("{}")
+  blockedReasonCodesJson       String[] @default([])
+  createdByActorId             String
+  createdByRole                String
+  createdAt                    DateTime @default(now())
+  updatedAt                    DateTime @updatedAt
+  voidedAt                     DateTime?
+
+  @@index([schoolId], map: "p25_escd_sid")
+  @@index([queueItemId], map: "p25_escd_qitem")
+  @@index([escalationLevel], map: "p25_escd_level")
+  @@index([proposedTargetRole], map: "p25_escd_trole")
+  @@index([escalationStatus], map: "p25_escd_status")
+  @@index([createdAt], map: "p25_escd_ca")
+}
+
+model RecoveryCaseReviewWindowDraftRecord {
+  reviewWindowDraftId          String   @id @default(uuid())
+  schoolId                     String
+  queueItemId                  String
+  proposedReviewerRef          String?
+  windowStart                  DateTime?
+  windowEnd                    DateTime?
+  windowStatus                 String   @default("draft")
+  safeWindowSummary            String   @db.Text
+  blockedReasonCodesJson       String[] @default([])
+  createdByActorId             String
+  createdByRole                String
+  createdAt                    DateTime @default(now())
+  updatedAt                    DateTime @updatedAt
+  voidedAt                     DateTime?
+
+  @@index([schoolId], map: "p25_rwnd_sid")
+  @@index([queueItemId], map: "p25_rwnd_qitem")
+  @@index([proposedReviewerRef], map: "p25_rwnd_reviewer")
+  @@index([windowStatus], map: "p25_rwnd_status")
+  @@index([createdAt], map: "p25_rwnd_ca")
+}
+
+model RecoveryCaseQueueExplanationRecord {
+  queueExplanationId           String   @id @default(uuid())
+  schoolId                     String
+  queueItemId                  String
+  priorityAssessmentId         String
+  safeExplanation              String   @db.Text
+  factorBreakdownJson          Json     @default("{}")
+  tieBreakExplanationJson      Json     @default("{}")
+  policyVersion                String   @default("RECOVERY_CASE_TRIAGE_PRIORITY_V1")
+  createdAt                    DateTime @default(now())
+
+  @@index([schoolId], map: "p25_qexp_sid")
+  @@index([queueItemId], map: "p25_qexp_qitem")
+  @@index([priorityAssessmentId], map: "p25_qexp_pas")
+  @@index([createdAt], map: "p25_qexp_ca")
+}
+
+model RecoveryCaseDuplicateSuppressionRecord {
+  duplicateSuppressionId       String   @id @default(uuid())
+  schoolId                     String
+  canonicalBoardCardId         String
+  duplicateBoardCardId         String
+  resultRecoveryPlanId         String
+  suppressionStatus            String   @default("draft")
+  safeSuppressionSummary       String   @db.Text
+  matchingKeysJson             Json     @default("{}")
+  createdByActorId             String
+  createdByRole                String
+  createdAt                    DateTime @default(now())
+  voidedAt                     DateTime?
+
+  @@index([schoolId], map: "p25_dsup_sid")
+  @@index([canonicalBoardCardId], map: "p25_dsup_canon")
+  @@index([duplicateBoardCardId], map: "p25_dsup_dup")
+  @@index([resultRecoveryPlanId], map: "p25_dsup_plan")
+  @@index([suppressionStatus], map: "p25_dsup_status")
+  @@index([createdAt], map: "p25_dsup_ca")
+}
+
+model RecoveryCaseTriageSummaryRecord {
+  triageSummaryId              String   @id @default(uuid())
+  schoolId                     String
+  studentRef                   String?
+  resultRecoveryPlanId         String?
+  queueSnapshotId              String?
+  summaryStatus                String   @default("draft")
+  safeSummary                  String   @db.Text
+  priorityBandCountsJson       Json     @default("{}")
+  riskCountsJson               Json     @default("{}")
+  blockerCountsJson            Json     @default("{}")
+  capacitySummaryJson          Json     @default("{}")
+  sourceRefsJson               Json     @default("{}")
+  createdByActorId             String
+  createdByRole                String
+  createdAt                    DateTime @default(now())
+  updatedAt                    DateTime @updatedAt
+  voidedAt                     DateTime?
+
+  @@index([schoolId], map: "p25_tsum_sid")
+  @@index([schoolId, studentRef], map: "p25_tsum_sid_stu")
+  @@index([schoolId, resultRecoveryPlanId], map: "p25_tsum_sid_plan")
+  @@index([queueSnapshotId], map: "p25_tsum_qsnap")
+  @@index([summaryStatus], map: "p25_tsum_status")
+  @@index([createdAt], map: "p25_tsum_ca")
+}
+
+model RecoveryCaseTriageAuditRecord {
+  triageAuditEventId           String   @id @default(uuid())
+  schoolId                     String
+  entityType                   String
+  entityId                     String
+  action                       String
+  actorId                      String
+  actorRole                    String
+  correlationId                String?
+  safeMetadataJson             Json     @default("{}")
+  createdAt                    DateTime @default(now())
+
+  @@index([schoolId], map: "p25_taud_sid")
+  @@index([schoolId, entityType], map: "p25_taud_sid_et")
+  @@index([entityId], map: "p25_taud_eid")
+  @@index([action], map: "p25_taud_action")
+  @@index([actorId], map: "p25_taud_actor")
+  @@index([createdAt], map: "p25_taud_ca")
+}
+
+model RecoveryCaseTriageIdempotencyRecord {
+  triageIdempotencyId          String   @id @default(uuid())
+  schoolId                     String
+  idempotencyKey               String
+  operation                    String
+  requestHash                  String
+  responseRef                  String?
+  status                       String   @default("in_progress")
+  createdAt                    DateTime @default(now())
+  completedAt                  DateTime?
+
+  @@unique([schoolId, idempotencyKey, operation], map: "p25_tidem_uid")
+  @@index([schoolId], map: "p25_tidem_sid")
+  @@index([idempotencyKey], map: "p25_tidem_ik")
+  @@index([operation], map: "p25_tidem_op")
+  @@index([status], map: "p25_tidem_status")
+  @@index([createdAt], map: "p25_tidem_ca")
+}

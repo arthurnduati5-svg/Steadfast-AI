@@ -443,6 +443,10 @@ app.use('/api/question-bank/recovery-execution-authorization-preview', schoolAut
 import recoveryExecutionReadinessBoardRoutes from './routes/recoveryExecutionReadinessBoard';
 app.use('/api/question-bank/recovery-execution-readiness-board', schoolAuthMiddleware, requireVerifiedSchoolContext, recoveryExecutionReadinessBoardRoutes);
 
+// ─── Recovery Case Triage Routes (Package 25) ──
+import recoveryCaseTriageRoutes from './routes/recoveryCaseTriage';
+app.use('/api/question-bank/recovery-case-triage', schoolAuthMiddleware, requireVerifiedSchoolContext, recoveryCaseTriageRoutes);
+
 // ─── Phase 2: Learning Mode Runtime Routes ──────────────
 app.use('/api', schoolAuthMiddleware, requireVerifiedSchoolContext, learningModeRoutes);
 app.use('/api/copilot', schoolAuthMiddleware, requireVerifiedSchoolContext, learningProfileRoutes);
