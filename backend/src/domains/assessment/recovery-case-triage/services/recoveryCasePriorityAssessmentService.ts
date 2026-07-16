@@ -132,7 +132,7 @@ export class RecoveryCasePriorityAssessmentService {
         correlationId: ctx.correlationId,
       } as any);
 
-      await this.idempotency.completeIdempotencyEntry(ctx.schoolId, ctx.idempotencyKey, `scored:${assessmentId}`);
+      await this.idempotency.completeIdempotencyEntry(ctx.schoolId, 'scorePriorityAssessment', ctx.idempotencyKey, `scored:${assessmentId}`);
 
       return { success: true, data: updated, status: 'scored', correlationId: ctx.correlationId };
     } catch (err: any) {
