@@ -1147,7 +1147,7 @@ export class PrismaRecoveryExecutionReadinessBoardIdempotencyRepository implemen
   async complete(id: string, resultSummary?: string): Promise<any> {
     return this.prisma.recoveryExecutionReadinessBoardIdempotencyRecord.update({
       where: { boardIdempotencyId: id },
-      data: { status: 'completed', ...(resultSummary ? { resultSummary } : {}) } as any,
+      data: { status: 'completed', ...(resultSummary ? { safeResultSummary: resultSummary } : {}) } as any,
     });
   }
 }
