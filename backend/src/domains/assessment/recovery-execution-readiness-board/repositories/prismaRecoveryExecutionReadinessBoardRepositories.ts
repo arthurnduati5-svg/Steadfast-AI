@@ -1119,7 +1119,7 @@ export class PrismaRecoveryExecutionReadinessBoardAuditRepository implements Rec
   }
 
   async listBySnapshotId(snapshotId: string): Promise<any[]> {
-    return this.prisma.recoveryExecutionReadinessBoardAuditRecord.findMany({ where: { snapshotId } });
+    return this.prisma.recoveryExecutionReadinessBoardAuditRecord.findMany({       where: { boardSnapshotId: snapshotId } });
   }
 }
 
@@ -1139,14 +1139,14 @@ export class PrismaRecoveryExecutionReadinessBoardIdempotencyRepository implemen
 
   async update(id: string, data: Partial<any>): Promise<any> {
     return this.prisma.recoveryExecutionReadinessBoardIdempotencyRecord.update({
-      where: { idempotencyId: id },
+      where: { boardIdempotencyId: id },
       data: data as any,
     });
   }
 
   async complete(id: string, resultSummary?: string): Promise<any> {
     return this.prisma.recoveryExecutionReadinessBoardIdempotencyRecord.update({
-      where: { idempotencyId: id },
+      where: { boardIdempotencyId: id },
       data: { status: 'completed', ...(resultSummary ? { resultSummary } : {}) } as any,
     });
   }
