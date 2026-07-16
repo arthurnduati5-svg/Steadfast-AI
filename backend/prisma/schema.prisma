@@ -11508,3 +11508,373 @@ model RecoveryCaseTriageIdempotencyRecord {
   @@index([status], map: "p25_tidem_status")
   @@index([createdAt], map: "p25_tidem_ca")
 }
+
+// ══════════════════════════════════════════════════════════════════════
+// Package 26: Recovery Case Adjudication and Review Governance Models
+// ══════════════════════════════════════════════════════════════════════
+
+model RecoveryCaseAdjudicationReadinessRecord {
+  adjudicationReadinessId       String   @id @default(uuid())
+  schoolId                      String
+  studentRef                    String
+  resultRecoveryPlanId          String
+  queueItemId                   String
+  priorityAssessmentId          String?
+  fairnessCheckId               String?
+  triageReadinessId             String?
+  readinessStatus               String   @default("draft")
+  safeReadinessSummary          String   @db.Text
+  blockedReasonCodesJson        String[] @default([])
+  sourceRefsJson                Json     @default("{}")
+  createdByActorId              String
+  createdByRole                 String
+  createdAt                     DateTime @default(now())
+  updatedAt                     DateTime @updatedAt
+  voidedAt                      DateTime?
+
+  @@index([schoolId], map: "p26_ard_sid")
+  @@index([schoolId, studentRef], map: "p26_ard_sid_stu")
+  @@index([schoolId, resultRecoveryPlanId], map: "p26_ard_sid_plan")
+  @@index([queueItemId], map: "p26_ard_qitem")
+  @@index([priorityAssessmentId], map: "p26_ard_pas")
+  @@index([readinessStatus], map: "p26_ard_status")
+  @@index([createdAt], map: "p26_ard_ca")
+}
+
+model RecoveryCaseReviewSessionRecord {
+  reviewSessionId              String   @id @default(uuid())
+  schoolId                     String
+  queueItemId                  String
+  adjudicationReadinessId      String?
+  reviewerActorId              String
+  reviewerRole                 String
+  sessionStatus                String   @default("draft")
+  safeSessionSummary           String   @db.Text
+  blockedReasonCodesJson       String[] @default([])
+  sourceRefsJson               Json     @default("{}")
+  createdByActorId             String
+  createdByRole                String
+  createdAt                    DateTime @default(now())
+  updatedAt                    DateTime @updatedAt
+  voidedAt                     DateTime?
+
+  @@index([schoolId], map: "p26_rsess_sid")
+  @@index([schoolId, queueItemId], map: "p26_rsess_sid_qitem")
+  @@index([reviewerActorId], map: "p26_rsess_reviewer")
+  @@index([sessionStatus], map: "p26_rsess_status")
+  @@index([createdAt], map: "p26_rsess_ca")
+}
+
+model RecoveryCaseReviewEvidenceBundleRecord {
+  evidenceBundleId             String   @id @default(uuid())
+  schoolId                     String
+  queueItemId                  String
+  priorityAssessmentId         String?
+  boardSnapshotId              String?
+  boardCardId                  String?
+  sourceRefsJson               Json     @default("{}")
+  safeEvidenceItemsJson        Json     @default("[]")
+  sourceUpdatedAtJson          Json     @default("{}")
+  evidenceDigest               String   @default("")
+  digestAlgorithm              String   @default("SHA-256")
+  bundleStatus                 String   @default("draft")
+  safeBundleSummary            String   @db.Text
+  blockedReasonCodesJson       String[] @default([])
+  createdAt                    DateTime @default(now())
+  updatedAt                    DateTime @updatedAt
+  voidedAt                     DateTime?
+
+  @@index([schoolId], map: "p26_eb_sid")
+  @@index([schoolId, queueItemId], map: "p26_eb_sid_qitem")
+  @@index([bundleStatus], map: "p26_eb_status")
+  @@index([createdAt], map: "p26_eb_ca")
+}
+
+model RecoveryCaseReviewChecklistRecord {
+  reviewChecklistId            String   @id @default(uuid())
+  schoolId                     String
+  queueItemId                  String
+  evidenceBundleId             String?
+  conflictDeclarationId        String?
+  checklistOutcome             String   @default("pending")
+  checklistResultsJson         Json     @default("{}")
+  safeChecklistSummary         String   @db.Text
+  blockedReasonCodesJson       String[] @default([])
+  createdByActorId             String
+  createdByRole                String
+  createdAt                    DateTime @default(now())
+  updatedAt                    DateTime @updatedAt
+  voidedAt                     DateTime?
+
+  @@index([schoolId], map: "p26_cl_sid")
+  @@index([schoolId, queueItemId], map: "p26_cl_sid_qitem")
+  @@index([checklistOutcome], map: "p26_cl_outcome")
+  @@index([createdAt], map: "p26_cl_ca")
+}
+
+model RecoveryCaseConflictOfInterestDeclarationRecord {
+  conflictDeclarationId        String   @id @default(uuid())
+  schoolId                     String
+  queueItemId                  String
+  reviewerActorId              String
+  reviewerRole                 String
+  conflictType                 String   @default("none_declared")
+  conflictStatus               String   @default("draft")
+  safeDeclarationSummary       String   @db.Text
+  blockedReasonCodesJson       String[] @default([])
+  createdByActorId             String
+  createdByRole                String
+  createdAt                    DateTime @default(now())
+  updatedAt                    DateTime @updatedAt
+  voidedAt                     DateTime?
+
+  @@index([schoolId], map: "p26_coi_sid")
+  @@index([schoolId, queueItemId], map: "p26_coi_sid_qitem")
+  @@index([reviewerActorId], map: "p26_coi_reviewer")
+  @@index([conflictStatus], map: "p26_coi_status")
+  @@index([createdAt], map: "p26_coi_ca")
+}
+
+model RecoveryCaseReviewerDecisionDraftRecord {
+  reviewerDecisionId           String   @id @default(uuid())
+  schoolId                     String
+  queueItemId                  String
+  reviewSessionId              String?
+  reviewerActorId              String
+  reviewerRole                 String
+  reviewerPosition             String   @default("primary")
+  decisionCode                 String   @default("no_change")
+  currentPriorityScore         Int?
+  currentPriorityBand          String?
+  recommendedPriorityBand     String?
+  safeDecisionSummary          String   @db.Text
+  reasonCodesJson              Json     @default("{}")
+  evidenceBundleId             String?
+  checklistId                  String?
+  conflictDeclarationId        String?
+  sourceRefsJson               Json     @default("{}")
+  decisionStatus               String   @default("draft")
+  createdAt                    DateTime @default(now())
+  updatedAt                    DateTime @updatedAt
+  voidedAt                     DateTime?
+
+  @@index([schoolId], map: "p26_rd_sid")
+  @@index([schoolId, queueItemId], map: "p26_rd_sid_qitem")
+  @@index([reviewSessionId], map: "p26_rd_session")
+  @@index([reviewerActorId], map: "p26_rd_reviewer")
+  @@index([decisionCode], map: "p26_rd_code")
+  @@index([decisionStatus], map: "p26_rd_status")
+  @@index([createdAt], map: "p26_rd_ca")
+}
+
+model RecoveryCasePriorityOverrideRequestRecord {
+  priorityOverrideRequestId    String   @id @default(uuid())
+  schoolId                     String
+  queueItemId                  String
+  priorityAssessmentId         String
+  currentPriorityScore         Int?
+  currentPriorityBand          String?
+  requestedPriorityBand        String
+  safeOverrideRationale        String   @db.Text
+  reasonCodesJson              Json     @default("{}")
+  supportingDecisionIdsJson    Json     @default("[]")
+  supportingEvidenceBundleIdsJson Json  @default("[]")
+  overrideStatus               String   @default("draft")
+  blockedReasonCodesJson       String[] @default([])
+  createdByActorId             String
+  createdByRole                String
+  createdAt                    DateTime @default(now())
+  updatedAt                    DateTime @updatedAt
+  voidedAt                     DateTime?
+
+  @@index([schoolId], map: "p26_po_sid")
+  @@index([schoolId, queueItemId], map: "p26_po_sid_qitem")
+  @@index([priorityAssessmentId], map: "p26_po_pas")
+  @@index([overrideStatus], map: "p26_po_status")
+  @@index([createdAt], map: "p26_po_ca")
+}
+
+model RecoveryCaseSecondReviewRequestRecord {
+  secondReviewRequestId        String   @id @default(uuid())
+  schoolId                     String
+  queueItemId                  String
+  primaryDecisionId            String
+  requestedReviewerRole        String
+  requestReasonCodesJson       Json     @default("{}")
+  safeRequestSummary           String   @db.Text
+  requestStatus                String   @default("draft")
+  createdByActorId             String
+  createdByRole                String
+  createdAt                    DateTime @default(now())
+  updatedAt                    DateTime @updatedAt
+  voidedAt                     DateTime?
+
+  @@index([schoolId], map: "p26_sr_sid")
+  @@index([schoolId, queueItemId], map: "p26_sr_sid_qitem")
+  @@index([primaryDecisionId], map: "p26_sr_pdec")
+  @@index([requestStatus], map: "p26_sr_status")
+  @@index([createdAt], map: "p26_sr_ca")
+}
+
+model RecoveryCaseReviewerConsensusRecord {
+  consensusId                  String   @id @default(uuid())
+  schoolId                     String
+  queueItemId                  String
+  primaryDecisionId            String?
+  secondaryDecisionId          String?
+  resultRecoveryPlanId         String?
+  consensusStatus              String   @default("pending")
+  safeConsensusSummary         String   @db.Text
+  blockedReasonCodesJson       String[] @default([])
+  createdByActorId             String
+  createdByRole                String
+  createdAt                    DateTime @default(now())
+  updatedAt                    DateTime @updatedAt
+  voidedAt                     DateTime?
+
+  @@index([schoolId], map: "p26_cs_sid")
+  @@index([schoolId, queueItemId], map: "p26_cs_sid_qitem")
+  @@index([consensusStatus], map: "p26_cs_status")
+  @@index([createdAt], map: "p26_cs_ca")
+}
+
+model RecoveryCaseDisagreementResolutionDraftRecord {
+  disagreementResolutionDraftId String   @id @default(uuid())
+  schoolId                      String
+  queueItemId                   String
+  consensusId                   String?
+  primaryDecisionId             String?
+  secondaryDecisionId           String?
+  safeDisagreementSummary       String   @db.Text
+  reasonCodeComparisonJson      Json     @default("{}")
+  evidenceGapsJson              Json     @default("[]")
+  proposedGovernanceRole        String?
+  proposedResolutionOptionsJson Json     @default("[]")
+  draftStatus                   String   @default("draft")
+  blockedReasonCodesJson        String[] @default([])
+  createdByActorId              String
+  createdByRole                 String
+  createdAt                     DateTime @default(now())
+  updatedAt                     DateTime @updatedAt
+  voidedAt                      DateTime?
+
+  @@index([schoolId], map: "p26_dr_sid")
+  @@index([schoolId, queueItemId], map: "p26_dr_sid_qitem")
+  @@index([consensusId], map: "p26_dr_cs")
+  @@index([draftStatus], map: "p26_dr_status")
+  @@index([createdAt], map: "p26_dr_ca")
+}
+
+model RecoveryCaseQueueDispositionRecord {
+  queueDispositionId           String   @id @default(uuid())
+  schoolId                     String
+  queueItemId                  String
+  consensusId                  String?
+  disagreementResolutionDraftId String?
+  priorityOverrideRequestId    String?
+  dispositionCode              String   @default("retain_in_queue")
+  dispositionStatus            String   @default("draft")
+  safeDispositionSummary       String   @db.Text
+  reasonCodesJson              Json     @default("{}")
+  sourceRefsJson               Json     @default("{}")
+  createdByActorId             String
+  createdByRole                String
+  createdAt                    DateTime @default(now())
+  updatedAt                    DateTime @updatedAt
+  voidedAt                     DateTime?
+
+  @@index([schoolId], map: "p26_qd_sid")
+  @@index([schoolId, queueItemId], map: "p26_qd_sid_qitem")
+  @@index([dispositionCode], map: "p26_qd_code")
+  @@index([dispositionStatus], map: "p26_qd_status")
+  @@index([createdAt], map: "p26_qd_ca")
+}
+
+model RecoveryCaseQualitySampleRecord {
+  qualitySampleId              String   @id @default(uuid())
+  schoolId                     String
+  queueItemId                  String
+  priorityBand                 String
+  selected                     Boolean  @default(false)
+  bucket                       Int      @default(0)
+  sampleBasisPoints            Int      @default(0)
+  policyVersion                String   @default("RECOVERY_CASE_ADJUDICATION_QUALITY_V1")
+  sampleStatus                 String   @default("draft")
+  createdByActorId             String
+  createdByRole                String
+  createdAt                    DateTime @default(now())
+  voidedAt                     DateTime?
+
+  @@index([schoolId], map: "p26_qs_sid")
+  @@index([schoolId, queueItemId], map: "p26_qs_sid_qitem")
+  @@index([selected], map: "p26_qs_sel")
+  @@index([priorityBand], map: "p26_qs_band")
+  @@index([policyVersion], map: "p26_qs_pv")
+  @@index([createdAt], map: "p26_qs_ca")
+}
+
+model RecoveryCaseAdjudicationSummaryRecord {
+  adjudicationSummaryId        String   @id @default(uuid())
+  schoolId                     String
+  studentRef                   String?
+  resultRecoveryPlanId         String?
+  queueItemId                  String?
+  summaryStatus                String   @default("draft")
+  safeSummary                  String   @db.Text
+  adjudicationCountsJson       Json     @default("{}")
+  consensusCountsJson          Json     @default("{}")
+  disagreementCountsJson       Json     @default("{}")
+  dispositionCountsJson        Json     @default("{}")
+  sourceRefsJson               Json     @default("{}")
+  createdByActorId             String
+  createdByRole                String
+  createdAt                    DateTime @default(now())
+  updatedAt                    DateTime @updatedAt
+  voidedAt                     DateTime?
+
+  @@index([schoolId], map: "p26_as_sid")
+  @@index([schoolId, studentRef], map: "p26_as_sid_stu")
+  @@index([schoolId, resultRecoveryPlanId], map: "p26_as_sid_plan")
+  @@index([queueItemId], map: "p26_as_qitem")
+  @@index([summaryStatus], map: "p26_as_status")
+  @@index([createdAt], map: "p26_as_ca")
+}
+
+model RecoveryCaseAdjudicationAuditRecord {
+  adjudicationAuditEventId     String   @id @default(uuid())
+  schoolId                     String
+  entityType                   String
+  entityId                     String
+  action                       String
+  actorId                      String
+  actorRole                    String
+  correlationId                String?
+  safeMetadataJson             Json     @default("{}")
+  createdAt                    DateTime @default(now())
+
+  @@index([schoolId], map: "p26_aaud_sid")
+  @@index([schoolId, entityType], map: "p26_aaud_sid_et")
+  @@index([entityId], map: "p26_aaud_eid")
+  @@index([action], map: "p26_aaud_action")
+  @@index([actorId], map: "p26_aaud_actor")
+  @@index([createdAt], map: "p26_aaud_ca")
+}
+
+model RecoveryCaseAdjudicationIdempotencyRecord {
+  adjudicationIdempotencyId    String   @id @default(uuid())
+  schoolId                     String
+  idempotencyKey               String
+  operation                    String
+  requestHash                  String
+  responseRef                  String?
+  status                       String   @default("in_progress")
+  createdAt                    DateTime @default(now())
+  completedAt                  DateTime?
+
+  @@unique([schoolId, idempotencyKey, operation], map: "p26_aidem_uid")
+  @@index([schoolId], map: "p26_aidem_sid")
+  @@index([idempotencyKey], map: "p26_aidem_ik")
+  @@index([operation], map: "p26_aidem_op")
+  @@index([status], map: "p26_aidem_status")
+  @@index([createdAt], map: "p26_aidem_ca")
+}

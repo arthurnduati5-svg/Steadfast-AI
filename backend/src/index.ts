@@ -447,6 +447,10 @@ app.use('/api/question-bank/recovery-execution-readiness-board', schoolAuthMiddl
 import recoveryCaseTriageRoutes from './routes/recoveryCaseTriage';
 app.use('/api/question-bank/recovery-case-triage', schoolAuthMiddleware, requireVerifiedSchoolContext, recoveryCaseTriageRoutes);
 
+// ─── Recovery Case Adjudication Routes (Package 26) ──
+import recoveryCaseAdjudicationRoutes from './routes/recoveryCaseAdjudication';
+app.use('/api/question-bank/recovery-case-adjudication', schoolAuthMiddleware, requireVerifiedSchoolContext, recoveryCaseAdjudicationRoutes);
+
 // ─── Phase 2: Learning Mode Runtime Routes ──────────────
 app.use('/api', schoolAuthMiddleware, requireVerifiedSchoolContext, learningModeRoutes);
 app.use('/api/copilot', schoolAuthMiddleware, requireVerifiedSchoolContext, learningProfileRoutes);
