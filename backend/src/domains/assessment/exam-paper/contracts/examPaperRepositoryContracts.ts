@@ -9,7 +9,7 @@ import { ExamPaperAssemblyRun } from '../services/examPaperAssemblyService';
 import { ExamPaperDeliveryBridge, ExamPaperDeliveryBridgeStatus } from './examPaperDeliveryBridgeContracts';
 
 export interface ExamPaperRepository {
-  create(data: Omit<ExamPaper, 'createdAt' | 'updatedAt'>): Promise<ExamPaper>;
+  create(data: Omit<ExamPaper, 'paperId' | 'createdAt' | 'updatedAt'>): Promise<ExamPaper>;
   getById(paperId: string): Promise<ExamPaper | null>;
   listBySchool(schoolId: string): Promise<ExamPaper[]>;
   updateStatus(paperId: string, status: ExamPaperStatus, currentVersionId?: string): Promise<ExamPaper>;
@@ -39,7 +39,7 @@ export interface ExamPaperQuestionRepository {
 }
 
 export interface ExamVariantRepository {
-  create(data: Omit<ExamVariant, 'createdAt' | 'updatedAt'>): Promise<ExamVariant>;
+  create(data: Omit<ExamVariant, 'variantId' | 'variantCode' | 'createdAt' | 'updatedAt'>): Promise<ExamVariant>;
   getById(variantId: string): Promise<ExamVariant | null>;
   listByPaperVersionId(paperVersionId: string): Promise<ExamVariant[]>;
   updateStatus(variantId: string, status: ExamVariantStatus): Promise<ExamVariant>;
@@ -53,7 +53,7 @@ export interface ExamVariantQuestionRepository {
 }
 
 export interface ExamAccessPolicyRepository {
-  create(data: Omit<ExamAccessPolicy, 'createdAt' | 'updatedAt'>): Promise<ExamAccessPolicy>;
+  create(data: Omit<ExamAccessPolicy, 'accessPolicyId' | 'createdAt' | 'updatedAt'>): Promise<ExamAccessPolicy>;
   getById(accessPolicyId: string): Promise<ExamAccessPolicy | null>;
   getByPaperVersionId(paperVersionId: string): Promise<ExamAccessPolicy | null>;
   listBySchool(schoolId: string): Promise<ExamAccessPolicy[]>;
@@ -62,7 +62,7 @@ export interface ExamAccessPolicyRepository {
 }
 
 export interface ExamPaperApprovalRepository {
-  create(data: Omit<ExamPaperApproval, 'createdAt'>): Promise<ExamPaperApproval>;
+  create(data: Omit<ExamPaperApproval, 'paperApprovalId' | 'createdAt'>): Promise<ExamPaperApproval>;
   listByPaperVersionId(paperVersionId: string): Promise<ExamPaperApproval[]>;
   listByPaperId(paperId: string): Promise<ExamPaperApproval[]>;
 }
@@ -75,7 +75,7 @@ export interface ExamPaperAssemblyRunRepository {
 }
 
 export interface ExamPaperDeliveryBridgeRepository {
-  create(data: Omit<ExamPaperDeliveryBridge, 'createdAt'>): Promise<ExamPaperDeliveryBridge>;
+  create(data: Omit<ExamPaperDeliveryBridge, 'deliveryBridgeId' | 'createdAt'>): Promise<ExamPaperDeliveryBridge>;
   getById(deliveryBridgeId: string): Promise<ExamPaperDeliveryBridge | null>;
   getByPaperVersionId(paperVersionId: string): Promise<ExamPaperDeliveryBridge | null>;
   listBySchool(schoolId: string): Promise<ExamPaperDeliveryBridge[]>;

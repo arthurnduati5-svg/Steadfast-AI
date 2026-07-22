@@ -24,10 +24,11 @@ import { ExamPaperAssemblyRun } from '../services/examPaperAssemblyService';
 export class InMemoryExamPaperRepository implements ExamPaperRepository {
   private store = new Map<string, ExamPaper>();
 
-  async create(data: Omit<ExamPaper, 'createdAt' | 'updatedAt'>): Promise<ExamPaper> {
+  async create(data: Omit<ExamPaper, 'paperId' | 'createdAt' | 'updatedAt'>): Promise<ExamPaper> {
     const now = new Date().toISOString();
-    const record: ExamPaper = { ...data, createdAt: now, updatedAt: now };
-    this.store.set(data.paperId, record);
+    const paperId = randomUUID();
+    const record: ExamPaper = { paperId, ...data, createdAt: now, updatedAt: now };
+    this.store.set(paperId, record);
     return record;
   }
 
@@ -138,10 +139,11 @@ export class InMemoryExamPaperQuestionRepository implements ExamPaperQuestionRep
 export class InMemoryExamVariantRepository implements ExamVariantRepository {
   private store = new Map<string, ExamVariant>();
 
-  async create(data: Omit<ExamVariant, 'createdAt' | 'updatedAt'>): Promise<ExamVariant> {
+  async create(data: Omit<ExamVariant, 'variantId' | 'variantCode' | 'createdAt' | 'updatedAt'>): Promise<ExamVariant> {
     const now = new Date().toISOString();
-    const record: ExamVariant = { ...data, createdAt: now, updatedAt: now };
-    this.store.set(data.variantId, record);
+    const variantId = randomUUID();
+    const record: ExamVariant = { variantId, variantCode: `V-${variantId.substring(0, 8)}`, ...data, createdAt: now, updatedAt: now };
+    this.store.set(variantId, record);
     return record;
   }
 
@@ -191,10 +193,11 @@ export class InMemoryExamVariantQuestionRepository implements ExamVariantQuestio
 export class InMemoryExamAccessPolicyRepository implements ExamAccessPolicyRepository {
   private store = new Map<string, ExamAccessPolicy>();
 
-  async create(data: Omit<ExamAccessPolicy, 'createdAt' | 'updatedAt'>): Promise<ExamAccessPolicy> {
+  async create(data: Omit<ExamAccessPolicy, 'accessPolicyId' | 'createdAt' | 'updatedAt'>): Promise<ExamAccessPolicy> {
     const now = new Date().toISOString();
-    const record: ExamAccessPolicy = { ...data, createdAt: now, updatedAt: now };
-    this.store.set(data.accessPolicyId, record);
+    const accessPolicyId = randomUUID();
+    const record: ExamAccessPolicy = { accessPolicyId, ...data, createdAt: now, updatedAt: now };
+    this.store.set(accessPolicyId, record);
     return record;
   }
 
@@ -230,9 +233,10 @@ export class InMemoryExamAccessPolicyRepository implements ExamAccessPolicyRepos
 export class InMemoryExamPaperApprovalRepository implements ExamPaperApprovalRepository {
   private store = new Map<string, ExamPaperApproval>();
 
-  async create(data: Omit<ExamPaperApproval, 'createdAt'>): Promise<ExamPaperApproval> {
-    const record: ExamPaperApproval = { ...data, createdAt: new Date().toISOString() };
-    this.store.set(data.paperApprovalId, record);
+  async create(data: Omit<ExamPaperApproval, 'paperApprovalId' | 'createdAt'>): Promise<ExamPaperApproval> {
+    const paperApprovalId = randomUUID();
+    const record: ExamPaperApproval = { paperApprovalId, ...data, createdAt: new Date().toISOString() };
+    this.store.set(paperApprovalId, record);
     return record;
   }
 
@@ -274,9 +278,10 @@ export class InMemoryExamPaperAssemblyRunRepository implements ExamPaperAssembly
 export class InMemoryExamPaperDeliveryBridgeRepository implements ExamPaperDeliveryBridgeRepository {
   private store = new Map<string, ExamPaperDeliveryBridge>();
 
-  async create(data: Omit<ExamPaperDeliveryBridge, 'createdAt'>): Promise<ExamPaperDeliveryBridge> {
-    const record: ExamPaperDeliveryBridge = { ...data, createdAt: new Date().toISOString() };
-    this.store.set(data.deliveryBridgeId, record);
+  async create(data: Omit<ExamPaperDeliveryBridge, 'deliveryBridgeId' | 'createdAt'>): Promise<ExamPaperDeliveryBridge> {
+    const deliveryBridgeId = randomUUID();
+    const record: ExamPaperDeliveryBridge = { deliveryBridgeId, ...data, createdAt: new Date().toISOString() };
+    this.store.set(deliveryBridgeId, record);
     return record;
   }
 

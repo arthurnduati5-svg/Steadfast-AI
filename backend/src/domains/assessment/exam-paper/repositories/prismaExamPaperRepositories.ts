@@ -1,4 +1,5 @@
 import { PrismaClient, Prisma } from '@prisma/client';
+import { randomUUID } from 'crypto';
 import { ExamPaper, ExamPaperStatus } from '../contracts/examPaperContracts';
 import { ExamPaperVersion, ExamPaperVersionStatus } from '../contracts/examPaperVersionContracts';
 import { ExamPaperSection } from '../contracts/examPaperSectionContracts';
@@ -32,8 +33,9 @@ function mapDateRequired(d: Date): string {
 export class PrismaExamPaperRepository implements ExamPaperRepository {
   constructor(private prisma: PrismaClient) {}
 
-  async create(data: Omit<ExamPaper, 'createdAt' | 'updatedAt'>): Promise<ExamPaper> {
-    const record = await this.prisma.examPaperRecord.create({ data: { ...data, createdAt: new Date(), updatedAt: new Date() } });
+  async create(data: Omit<ExamPaper, 'paperId' | 'createdAt' | 'updatedAt'>): Promise<ExamPaper> {
+    const paperId = randomUUID();
+    const record = await this.prisma.examPaperRecord.create({ data: { paperId, ...data, createdAt: new Date(), updatedAt: new Date() } });
     return this.mapRecord(record);
   }
 
@@ -158,8 +160,10 @@ export class PrismaExamPaperQuestionRepository implements ExamPaperQuestionRepos
 export class PrismaExamVariantRepository implements ExamVariantRepository {
   constructor(private prisma: PrismaClient) {}
 
-  async create(data: Omit<ExamVariant, 'createdAt' | 'updatedAt'>): Promise<ExamVariant> {
-    const record = await this.prisma.examVariantRecord.create({ data: { ...data, createdAt: new Date(), updatedAt: new Date() } });
+  async create(data: Omit<ExamVariant, 'variantId' | 'variantCode' | 'createdAt' | 'updatedAt'>): Promise<ExamVariant> {
+    const variantId = randomUUID();
+    const variantCode = `V-${variantId.substring(0, 8)}`;
+    const record = await this.prisma.examVariantRecord.create({ data: { variantId, variantCode, ...data, createdAt: new Date(), updatedAt: new Date() } });
     return this.mapRecord(record);
   }
 
@@ -214,8 +218,9 @@ export class PrismaExamVariantQuestionRepository implements ExamVariantQuestionR
 export class PrismaExamAccessPolicyRepository implements ExamAccessPolicyRepository {
   constructor(private prisma: PrismaClient) {}
 
-  async create(data: Omit<ExamAccessPolicy, 'createdAt' | 'updatedAt'>): Promise<ExamAccessPolicy> {
-    const dbData: Record<string, unknown> = { ...data, createdAt: new Date(), updatedAt: new Date() };
+  async create(data: Omit<ExamAccessPolicy, 'accessPolicyId' | 'createdAt' | 'updatedAt'>): Promise<ExamAccessPolicy> {
+    const accessPolicyId = randomUUID();
+    const dbData: Record<string, unknown> = { accessPolicyId, ...data, createdAt: new Date(), updatedAt: new Date() };
     if (dbData.classScopeRefsJson === null) dbData.classScopeRefsJson = Prisma.DbNull;
     const record = await this.prisma.examAccessPolicyRecord.create({ data: dbData as any });
     return this.mapRecord(record);
@@ -254,8 +259,9 @@ export class PrismaExamAccessPolicyRepository implements ExamAccessPolicyReposit
 export class PrismaExamPaperApprovalRepository implements ExamPaperApprovalRepository {
   constructor(private prisma: PrismaClient) {}
 
-  async create(data: Omit<ExamPaperApproval, 'createdAt'>): Promise<ExamPaperApproval> {
-    const record = await this.prisma.examPaperApprovalRecord.create({ data: { ...data, createdAt: new Date() } });
+  async create(data: Omit<ExamPaperApproval, 'paperApprovalId' | 'createdAt'>): Promise<ExamPaperApproval> {
+    const paperApprovalId = randomUUID();
+    const record = await this.prisma.examPaperApprovalRecord.create({ data: { paperApprovalId, ...data, createdAt: new Date() } });
     return this.mapRecord(record);
   }
 
@@ -307,8 +313,9 @@ export class PrismaExamPaperAssemblyRunRepository implements ExamPaperAssemblyRu
 export class PrismaExamPaperDeliveryBridgeRepository implements ExamPaperDeliveryBridgeRepository {
   constructor(private prisma: PrismaClient) {}
 
-  async create(data: Omit<ExamPaperDeliveryBridge, 'createdAt'>): Promise<ExamPaperDeliveryBridge> {
-    const record = await this.prisma.examPaperDeliveryBridgeRecord.create({ data: { ...data, createdAt: new Date() } });
+  async create(data: Omit<ExamPaperDeliveryBridge, 'deliveryBridgeId' | 'createdAt'>): Promise<ExamPaperDeliveryBridge> {
+    const deliveryBridgeId = randomUUID();
+    const record = await this.prisma.examPaperDeliveryBridgeRecord.create({ data: { deliveryBridgeId, ...data, createdAt: new Date() } });
     return this.mapRecord(record);
   }
 

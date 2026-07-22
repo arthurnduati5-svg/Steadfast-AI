@@ -9,7 +9,6 @@ import { ExamPaperDeliveryBridgeService } from '../domains/assessment/exam-paper
 import { ExamPaperProjectionSafetyService } from '../domains/assessment/exam-paper/services/examPaperProjectionSafetyService';
 import { ExamPaperCommandContext, ExamPaperPolicyDecision } from '../domains/assessment/exam-paper/contracts/examPaperContracts';
 import type { QuestionBankPackage6Repositories } from '../domains/assessment/runtime/questionBankRuntimeComposition';
-import { randomUUID } from 'crypto';
 
 export function createExamPaperRouter(deps: QuestionBankPackage6Repositories): Router {
   const router = Router();
@@ -101,9 +100,7 @@ router.post('/', safeHandler(async (req: Request, res: Response) => {
   if (!ctx.schoolId) throw new Error('SCHOOL_CONTEXT_REQUIRED: School context required');
   const { title, subjectId, curriculumVersionId, gradeBand, examType, safeSummary } = req.body || {};
   if (!title || !subjectId) throw new Error('VALIDATION_FAILED: title and subjectId are required');
-  const paperId = randomUUID();
   const paper = await deps.paperRepository.create({
-    paperId,
     schoolId: ctx.schoolId,
     status: 'draft',
     title,
@@ -122,10 +119,10 @@ router.post('/', safeHandler(async (req: Request, res: Response) => {
     archivedAt: null,
   });
   res.status(201).json(createSafeResponseEnvelope(req, {
-    resourceId: paperId,
+    resourceId: paper.paperId,
     status: paper.status,
     safeMessage: 'Exam paper shell created',
-    data: { paperId, title, subjectId, status: paper.status },
+    data: { paperId: paper.paperId, title, subjectId, status: paper.status },
     nextAllowedActions: ['assemble', 'add_versions'],
   }));
 }));
@@ -277,12 +274,9 @@ router.post('/exam-paper-versions/:paperVersionId/variants', safeHandler(async (
   if (!version) throw new Error('NOT_FOUND: Paper version not found');
   if (ctx.schoolId && version.schoolId !== ctx.schoolId) throw new Error('FORBIDDEN: School scope violation');
   const { variantStrategy, safeSummary } = req.body || {};
-  const variantId = randomUUID();
   const variant = await deps.variantRepository.create({
-    variantId,
     schoolId: ctx.schoolId,
     paperVersionId,
-    variantCode: `V-${variantId.substring(0, 8)}`,
     status: 'draft',
     variantStrategy: variantStrategy || 'same_questions_reordered',
     questionCount: 0,
@@ -293,10 +287,10 @@ router.post('/exam-paper-versions/:paperVersionId/variants', safeHandler(async (
     approvedAt: null,
   });
   res.status(201).json(createSafeResponseEnvelope(req, {
-    resourceId: variantId,
+    resourceId: variant.variantId,
     status: variant.status,
     safeMessage: 'Variant plan created',
-    data: { variantId, paperVersionId, variantStrategy: variant.variantStrategy },
+    data: { variantId: variant.variantId, paperVersionId, variantStrategy: variant.variantStrategy },
     nextAllowedActions: ['approve_variant', 'generate_variant_questions'],
   }));
 }));
@@ -319,9 +313,7 @@ router.post('/exam-paper-versions/:paperVersionId/access-policy', safeHandler(as
   const version = await deps.versionRepository.getById(paperVersionId);
   if (!version) throw new Error('NOT_FOUND: Paper version not found');
   if (ctx.schoolId && version.schoolId !== ctx.schoolId) throw new Error('FORBIDDEN: School scope violation');
-  const policyId = randomUUID();
   const policy = await deps.accessPolicyRepository.create({
-    accessPolicyId: policyId,
     schoolId: ctx.schoolId,
     paperId: version.paperId,
     paperVersionId,
@@ -338,10 +330,10 @@ router.post('/exam-paper-versions/:paperVersionId/access-policy', safeHandler(as
     createdByActorId: ctx.actorId,
   });
   res.status(201).json(createSafeResponseEnvelope(req, {
-    resourceId: policyId,
+    resourceId: policy.accessPolicyId,
     status: policy.status,
     safeMessage: 'Access policy created (metadata only, no live delivery)',
-    data: { accessPolicyId: policyId, paperVersionId, availabilityMode: policy.availabilityMode },
+    data: { accessPolicyId: policy.accessPolicyId, paperVersionId, availabilityMode: policy.availabilityMode },
     nextAllowedActions: ['configure_access', 'mark_delivery_ready'],
   }));
 }));
@@ -364,10 +356,8 @@ router.post('/exam-paper-versions/:paperVersionId/approve', safeHandler(async (r
   const version = await deps.versionRepository.getById(paperVersionId);
   if (!version) throw new Error('NOT_FOUND: Paper version not found');
   if (ctx.schoolId && version.schoolId !== ctx.schoolId) throw new Error('FORBIDDEN: School scope violation');
-  const approvalId = randomUUID();
   const decision = req.body?.decision || 'approve_for_delivery_bridge';
   const approval = await deps.approvalRepository.create({
-    paperApprovalId: approvalId,
     schoolId: ctx.schoolId,
     paperId: version.paperId,
     paperVersionId,
@@ -378,10 +368,10 @@ router.post('/exam-paper-versions/:paperVersionId/approve', safeHandler(async (r
     decidedByRole: ctx.actorRole,
   });
   res.status(200).json(createSafeResponseEnvelope(req, {
-    resourceId: approvalId,
+    resourceId: approval.paperApprovalId,
     status: 'approved',
     safeMessage: 'Paper version approved for delivery bridge (not live delivery)',
-    data: { paperApprovalId: approvalId, paperVersionId, decision },
+    data: { paperApprovalId: approval.paperApprovalId, paperVersionId, decision },
     nextAllowedActions: ['create_delivery_bridge', 'mark_delivery_ready'],
   }));
 }));
@@ -394,9 +384,7 @@ router.post('/exam-paper-versions/:paperVersionId/delivery-bridge', safeHandler(
   const version = await deps.versionRepository.getById(paperVersionId);
   if (!version) throw new Error('NOT_FOUND: Paper version not found');
   if (ctx.schoolId && version.schoolId !== ctx.schoolId) throw new Error('FORBIDDEN: School scope violation');
-  const bridgeId = randomUUID();
   const bridge = await deps.deliveryBridgeRepository.create({
-    deliveryBridgeId: bridgeId,
     schoolId: ctx.schoolId,
     paperId: version.paperId,
     paperVersionId,
@@ -409,10 +397,10 @@ router.post('/exam-paper-versions/:paperVersionId/delivery-bridge', safeHandler(
     validatedAt: null,
   });
   res.status(201).json(createSafeResponseEnvelope(req, {
-    resourceId: bridgeId,
+    resourceId: bridge.deliveryBridgeId,
     status: bridge.status,
     safeMessage: 'Delivery bridge contract created (no live sessions, no release)',
-    data: { deliveryBridgeId: bridgeId, paperVersionId },
+    data: { deliveryBridgeId: bridge.deliveryBridgeId, paperVersionId },
     nextAllowedActions: ['validate_bridge', 'mark_delivery_ready'],
   }));
 }));
