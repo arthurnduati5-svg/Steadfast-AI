@@ -8,13 +8,15 @@ c8f8f2d fix(qbank): finalize runtime composition + persistence truth for package
 7a64a13 docs(qbank): runtime composition + persistence truth accountability record (original — contained premature sentinel)
 d595ed3 docs(qbank): correct and finalize runtime truth accountability (this document)
 b8f20cd fix(qbank): remove route-owned domain identity from examPaper.ts, update accountability doc
+3b131b9 docs(qbank): fix commit hash placeholder in accountability record
+7e69c3e fix(qbank): add missing phase3 study plan smoke test (replaces fake-pass assertions)
 ```
 
 ## Repository
 - Branch: main
 - Root: C:/Users/HP/Steadfast-AI
 - Starting HEAD (of this verification): 7a64a13
-- Final HEAD: b6b493c
+- Final HEAD: 7e69c3e
 
 ## Scope
 Finalize runtime-composition infrastructure and persistence-truth enforcement for assessment packages 5 (marking), 6 (exam-paper), 8 (marking-invocation), 22 (recovery-lifecycle-closure), 24 (recovery-execution-readiness-board), and 26 (recovery-case-adjudication).
