@@ -282,7 +282,7 @@ router.post('/exam-paper-versions/:paperVersionId/variants', safeHandler(async (
     variantId,
     schoolId: ctx.schoolId,
     paperVersionId,
-    variantCode: `V${Date.now()}`,
+    variantCode: `V-${variantId.substring(0, 8)}`,
     status: 'draft',
     variantStrategy: variantStrategy || 'same_questions_reordered',
     questionCount: 0,
