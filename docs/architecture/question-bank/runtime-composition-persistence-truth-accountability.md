@@ -7,7 +7,7 @@ bf8eab9 fix(qbank): remove Date.now() variantCode, replace dynamic import with s
 c8f8f2d fix(qbank): finalize runtime composition + persistence truth for packages 5/6/8/22/24/26
 7a64a13 docs(qbank): runtime composition + persistence truth accountability record (original — contained premature sentinel)
 d595ed3 docs(qbank): correct and finalize runtime truth accountability (this document)
-[TO_BE_FILLED] fix(qbank): remove route-owned domain identity from examPaper.ts, repair fake-pass tests
+b8f20cd fix(qbank): remove route-owned domain identity from examPaper.ts, update accountability doc
 ```
 
 ## Repository
