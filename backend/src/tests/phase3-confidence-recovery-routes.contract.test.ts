@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import fs from 'fs';
+import { checkBackendSrcFileExists } from '../test-utils/repositoryPaths';
 
 describe('Phase3ConfidenceRecoveryRoutes Contract', () => {
   it('exports default router', async () => {
@@ -8,6 +8,6 @@ describe('Phase3ConfidenceRecoveryRoutes Contract', () => {
   });
 
   it('route file exists at expected path', () => {
-    expect(fs.existsSync('backend/src/routes/phase3ConfidenceRecoveryRoutes.ts')).toBe(true);
+    expect(checkBackendSrcFileExists('routes/phase3ConfidenceRecoveryRoutes.ts')).toBe(true);
   });
 });

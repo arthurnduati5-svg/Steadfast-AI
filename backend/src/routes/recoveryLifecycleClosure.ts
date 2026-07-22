@@ -13,27 +13,27 @@ import {
   RecoveryLifecycleClosureAuditBridge,
   RecoveryLifecycleClosureIdempotencyService,
 } from '../domains/assessment/recovery-lifecycle-closure/services';
-import { InMemoryRecoveryLifecycleClosureRepositories } from '../domains/assessment/recovery-lifecycle-closure/repositories/inMemoryRecoveryLifecycleClosureRepositories';
+import type { IRecoveryLifecycleClosureRepositories } from '../domains/assessment/recovery-lifecycle-closure/contracts/recoveryLifecycleClosureRepositoryContracts';
 import { RecoveryLifecycleClosurePolicyEnforcer, RECOVERY_LIFECYCLE_CLOSURE_POLICIES } from '../domains/assessment/recovery-lifecycle-closure/policies/recoveryLifecycleClosurePolicyDefinitions';
 import { RecoveryLifecycleClosureCommandContext } from '../domains/assessment/recovery-lifecycle-closure/contracts/recoveryLifecycleClosureContracts';
 
-const router = Router();
+export function createRecoveryLifecycleClosureRouter(repos: IRecoveryLifecycleClosureRepositories): Router {
+  const router = Router();
 
-const repos = new InMemoryRecoveryLifecycleClosureRepositories();
-const policyEnforcer = new RecoveryLifecycleClosurePolicyEnforcer();
-const safety = new RecoveryLifecycleClosureSafetyService(policyEnforcer);
-const audit = new RecoveryLifecycleClosureAuditBridge(repos);
-const idempotency = new RecoveryLifecycleClosureIdempotencyService(repos);
+  const policyEnforcer = new RecoveryLifecycleClosurePolicyEnforcer();
+  const safety = new RecoveryLifecycleClosureSafetyService(policyEnforcer);
+  const audit = new RecoveryLifecycleClosureAuditBridge(repos);
+  const idempotency = new RecoveryLifecycleClosureIdempotencyService(repos);
 
-const readinessService = new RecoveryLifecycleClosureReadinessService(repos, policyEnforcer, safety, audit, idempotency);
-const handoffPacketService = new RecoveryPostSimulationHandoffPacketService(repos, policyEnforcer, safety, audit, idempotency);
-const nextCycleService = new RecoveryNextCycleRecommendationService(repos, policyEnforcer, safety, audit, idempotency);
-const deferredTicketService = new RecoveryDeferredIntegrationTicketService(repos, policyEnforcer, safety, audit, idempotency);
-const unresolvedRiskService = new RecoveryUnresolvedRiskRegisterService(repos, policyEnforcer, safety, audit, idempotency);
-const reviewPacketService = new RecoveryClosureReviewPacketService(repos, policyEnforcer, safety, audit, idempotency);
-const stakeholderDraftService = new RecoveryStakeholderClosureDraftService(repos, policyEnforcer, safety, audit, idempotency);
-const archiveManifestService = new RecoveryArchiveManifestService(repos, policyEnforcer, safety, audit, idempotency);
-const finalSummaryService = new RecoveryFinalLifecycleSummaryService(repos, policyEnforcer, safety, audit, idempotency);
+  const readinessService = new RecoveryLifecycleClosureReadinessService(repos, policyEnforcer, safety, audit, idempotency);
+  const handoffPacketService = new RecoveryPostSimulationHandoffPacketService(repos, policyEnforcer, safety, audit, idempotency);
+  const nextCycleService = new RecoveryNextCycleRecommendationService(repos, policyEnforcer, safety, audit, idempotency);
+  const deferredTicketService = new RecoveryDeferredIntegrationTicketService(repos, policyEnforcer, safety, audit, idempotency);
+  const unresolvedRiskService = new RecoveryUnresolvedRiskRegisterService(repos, policyEnforcer, safety, audit, idempotency);
+  const reviewPacketService = new RecoveryClosureReviewPacketService(repos, policyEnforcer, safety, audit, idempotency);
+  const stakeholderDraftService = new RecoveryStakeholderClosureDraftService(repos, policyEnforcer, safety, audit, idempotency);
+  const archiveManifestService = new RecoveryArchiveManifestService(repos, policyEnforcer, safety, audit, idempotency);
+  const finalSummaryService = new RecoveryFinalLifecycleSummaryService(repos, policyEnforcer, safety, audit, idempotency);
 
 function buildContext(req: Request): RecoveryLifecycleClosureCommandContext {
   return {
@@ -588,4 +588,5 @@ router.post('/final-lifecycle-summaries/:id/void', async (req: Request, res: Res
   sendResponse(res, await finalSummaryService.voidFinalLifecycleSummary(buildContext(req), req.params.id));
 });
 
-export default router;
+  return router;
+}

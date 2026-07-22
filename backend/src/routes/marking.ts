@@ -8,16 +8,22 @@ import { StudentChallengeService } from '../domains/assessment/marking/services/
 import { MarkingProjectionSafetyService } from '../domains/assessment/marking/services/markingProjectionSafetyService';
 import { SubmittedAnswerSnapshot, MarkingRun } from '../domains/assessment/marking/contracts/markingContracts';
 import { MarkingInputSnapshot } from '../domains/assessment/marking/contracts/markingResultContracts';
+import type { MarkingRunRepository, MarkingResultVersionRepository, MarkingBreakdownItemRepository } from '../domains/assessment/marking/contracts/markingRepositoryContracts';
 
-const router = Router();
+export function createMarkingRouter(
+  markingRunRepo: MarkingRunRepository,
+  markingResultRepo: MarkingResultVersionRepository,
+  markingBreakdownItemRepo: MarkingBreakdownItemRepository,
+): Router {
+  const router = Router();
 
-const markingRunService = new MarkingRunService();
-const deterministicMarkerService = new DeterministicMarkerService();
-const teacherReviewQueueService = new TeacherReviewQueueService();
-const teacherOverrideService = new TeacherOverrideService();
-const moderationService = new ModerationService();
-const studentChallengeService = new StudentChallengeService();
-const projectionSafetyService = new MarkingProjectionSafetyService();
+  const deterministicMarkerService = new DeterministicMarkerService();
+  const teacherReviewQueueService = new TeacherReviewQueueService();
+  const markingRunService = new MarkingRunService(markingRunRepo, markingResultRepo, deterministicMarkerService, teacherReviewQueueService);
+  const teacherOverrideService = new TeacherOverrideService();
+  const moderationService = new ModerationService();
+  const studentChallengeService = new StudentChallengeService();
+  const projectionSafetyService = new MarkingProjectionSafetyService();
 
 interface SafeResponseEnvelope {
   ok: boolean;
@@ -132,9 +138,7 @@ router.get('/runs/:markingRunId/results', safeHandler(async (req: Request, res: 
 // GET /api/question-bank/marking/results/:markingResultVersionId
 router.get('/results/:markingResultVersionId', safeHandler(async (req: Request, res: Response) => {
   const { role } = extractActorContext(req);
-  const { MarkingResultVersionRepository } = require('../domains/assessment/marking/repositories/inMemoryMarkingRepositories');
-  const repo = new MarkingResultVersionRepository();
-  const result = await repo.findById(req.params.markingResultVersionId);
+  const result = await markingResultRepo.findById(req.params.markingResultVersionId);
   if (!result) throw new Error('NOT_FOUND: Marking result not found');
   const projection = role === 'student' ? projectionSafetyService.toStudentMarkingProjection(result) : role === 'parent' ? projectionSafetyService.toParentMarkingProjection(result) : projectionSafetyService.toTeacherMarkingProjection(result);
   res.json(createSafeResponseEnvelope(req, { resourceId: result.markingResultVersionId, status: result.status, data: projection }));
@@ -142,9 +146,7 @@ router.get('/results/:markingResultVersionId', safeHandler(async (req: Request, 
 
 // GET /api/question-bank/marking/results/:markingResultVersionId/breakdown
 router.get('/results/:markingResultVersionId/breakdown', safeHandler(async (req: Request, res: Response) => {
-  const { MarkingBreakdownItemRepository } = require('../domains/assessment/marking/repositories/inMemoryMarkingRepositories');
-  const repo = new MarkingBreakdownItemRepository();
-  const breakdowns = await repo.findByMarkingResultVersionId(req.params.markingResultVersionId);
+  const breakdowns = await markingBreakdownItemRepo.findByMarkingResultVersionId(req.params.markingResultVersionId);
   res.json(createSafeResponseEnvelope(req, { data: breakdowns }));
 }));
 
@@ -250,4 +252,5 @@ router.post('/challenges/:studentMarkChallengeId/resolve', safeHandler(async (re
   res.json(createSafeResponseEnvelope(req, { resourceId: challenge.studentMarkChallengeId, status: challenge.status, data: challenge }));
 }));
 
-export default router;
+  return router;
+}

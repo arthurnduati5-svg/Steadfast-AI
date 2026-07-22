@@ -1,9 +1,10 @@
 import { describe, it, expect, beforeAll } from 'vitest';
 import fs from 'fs';
 import path from 'path';
+import { getRepositoryRoot } from '../test-utils/repositoryPaths';
 
 describe('Task 032 - No False Pass Contract', () => {
-  const task032TestDir = path.resolve(process.cwd(), 'backend/src/tests');
+  const task032TestDir = path.join(getRepositoryRoot(), 'backend', 'src', 'tests');
   const task032TestFiles: string[] = [];
 
   const selfName = 'task-032-no-false-pass.contract.test.ts';

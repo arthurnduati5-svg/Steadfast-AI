@@ -1,6 +1,6 @@
 import { RecoveryExecutionReadinessBoardCommandContext, RecoveryExecutionReadinessBoardSafeEnvelope } from '../contracts';
 import { RecoveryExecutionReadinessBoardRefreshJob, CreateRefreshJobRequest } from '../contracts/recoveryExecutionReadinessBoardRefreshContracts';
-import { InMemoryRecoveryExecutionReadinessBoardRefreshJobRepository } from '../repositories/inMemoryRecoveryExecutionReadinessBoardRepositories';
+import type { RecoveryExecutionReadinessBoardRefreshJobRepository } from '../contracts/recoveryExecutionReadinessBoardRepositoryContracts';
 import { RECOVERY_EXECUTION_READINESS_BOARD_POLICIES } from '../policies/recoveryExecutionReadinessBoardPolicyDefinitions';
 
 function checkPolicy(policyName: string, actorRole: string): { allowed: boolean; reason: string } {
@@ -20,10 +20,10 @@ function errorEnvelope<T = never>(message: string, context?: RecoveryExecutionRe
 }
 
 export class RecoveryExecutionReadinessBoardRefreshService {
-  private repo: InMemoryRecoveryExecutionReadinessBoardRefreshJobRepository;
+  private repo: RecoveryExecutionReadinessBoardRefreshJobRepository;
 
-  constructor() {
-    this.repo = new InMemoryRecoveryExecutionReadinessBoardRefreshJobRepository();
+  constructor(repo: RecoveryExecutionReadinessBoardRefreshJobRepository) {
+    this.repo = repo;
   }
 
   async createRefreshJob(

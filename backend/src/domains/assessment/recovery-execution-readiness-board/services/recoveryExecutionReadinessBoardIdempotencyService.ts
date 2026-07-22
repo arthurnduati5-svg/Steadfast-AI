@@ -1,11 +1,11 @@
 import { RecoveryExecutionReadinessBoardCommandContext, RecoveryExecutionReadinessBoardSafeEnvelope } from '../contracts';
-import { InMemoryRecoveryExecutionReadinessBoardIdempotencyRepository } from '../repositories/inMemoryRecoveryExecutionReadinessBoardRepositories';
+import type { RecoveryExecutionReadinessBoardIdempotencyRepository } from '../contracts/recoveryExecutionReadinessBoardRepositoryContracts';
 
 export class RecoveryExecutionReadinessBoardIdempotencyService {
-  private idempotencyRepo: InMemoryRecoveryExecutionReadinessBoardIdempotencyRepository;
+  private idempotencyRepo: RecoveryExecutionReadinessBoardIdempotencyRepository;
 
-  constructor() {
-    this.idempotencyRepo = new InMemoryRecoveryExecutionReadinessBoardIdempotencyRepository();
+  constructor(idempotencyRepo: RecoveryExecutionReadinessBoardIdempotencyRepository) {
+    this.idempotencyRepo = idempotencyRepo;
   }
 
   async checkIdempotency(context: RecoveryExecutionReadinessBoardCommandContext): Promise<RecoveryExecutionReadinessBoardSafeEnvelope<any | null>> {

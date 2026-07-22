@@ -84,13 +84,14 @@ describe('Package 22 - Routes and No-Duplication', () => {
     const indexContent = fs.readFileSync(
       path.resolve(__dirname, '../../../../../src/index.ts'), 'utf-8');
     expect(indexContent).toContain('recovery-lifecycle-closure');
-    expect(indexContent).toContain('recoveryLifecycleClosureRoutes');
+    expect(indexContent).toContain('createRecoveryLifecycleClosureRouter');
   });
 
-  it('route file uses InMemory repos (safe default)', () => {
+  it('route file receives repos via factory injection (no direct InMemory import)', () => {
     const content = fs.readFileSync(
       path.resolve(__dirname, '../../../../routes/recoveryLifecycleClosure.ts'), 'utf-8');
-    expect(content).toContain('InMemoryRecoveryLifecycleClosureRepositories');
+    expect(content).toContain('repos: IRecoveryLifecycleClosureRepositories');
+    expect(content).not.toContain('InMemoryRecoveryLifecycleClosureRepositories');
   });
 
   it('no Package 21 simulation duplication in routes', () => {

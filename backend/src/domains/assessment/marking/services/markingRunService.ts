@@ -1,7 +1,6 @@
 import { MarkingRun, MarkingResultVersion, SubmittedAnswerSnapshot, MarkingRunStatus, MarkingResultStatus } from '../contracts/markingContracts';
 import { MarkingInputSnapshot } from '../contracts/markingResultContracts';
 import { MarkingRunRepository, MarkingResultVersionRepository } from '../contracts/markingRepositoryContracts';
-import { InMemoryMarkingRunRepository, InMemoryMarkingResultVersionRepository } from '../repositories/inMemoryMarkingRepositories';
 import { DeterministicMarkerService } from './deterministicMarkerService';
 import { TeacherReviewQueueService } from './teacherReviewQueueService';
 import { MARKING_POLICY_DEFAULTS } from '../policies/markingPolicyDefinitions';
@@ -38,10 +37,10 @@ const ALLOWED_CREATOR_ROLES = ['teacher', 'lead_teacher', 'admin', 'system_job']
 
 export class MarkingRunService {
   constructor(
-    private runRepo: MarkingRunRepository = new InMemoryMarkingRunRepository(),
-    private resultRepo: MarkingResultVersionRepository = new InMemoryMarkingResultVersionRepository(),
-    private markerService: DeterministicMarkerService = new DeterministicMarkerService(),
-    private reviewQueueService: TeacherReviewQueueService = new TeacherReviewQueueService(),
+    private runRepo: MarkingRunRepository,
+    private resultRepo: MarkingResultVersionRepository,
+    private markerService: DeterministicMarkerService,
+    private reviewQueueService: TeacherReviewQueueService,
   ) {}
 
   async createMarkingRun(params: CreateMarkingRunParams): Promise<MarkingRun> {

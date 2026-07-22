@@ -1,9 +1,10 @@
 import { describe, it, expect, beforeAll } from 'vitest';
 import fs from 'fs';
 import path from 'path';
+import { getRepositoryRoot } from '../test-utils/repositoryPaths';
 
 describe('Task 032 - Task 031 Staging Smoke Continuity Contract', () => {
-  const backendSrc = path.resolve(process.cwd(), 'backend/src');
+  const backendSrc = path.join(getRepositoryRoot(), 'backend', 'src');
   const task032Files: string[] = [];
 
   beforeAll(() => {

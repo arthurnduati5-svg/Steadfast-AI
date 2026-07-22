@@ -1,11 +1,15 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import { execSync } from 'child_process';
+import { execFileSync } from 'child_process';
 import {
   Task040Task036Proof,
   TASK040_REQUIRED_TASK036_COMMIT_PREFIXES,
   createTask040SafeTimestamp,
 } from '../contracts/task040BackendFreezeContracts';
+
+const SERVICE_DIR = __dirname;
+const REPO_ROOT = path.resolve(SERVICE_DIR, '..', '..', '..');
+const GIT_TIMEOUT_MS = 5000;
 
 export interface SyntheticLoaderProof {
   proof: Task040Task036Proof;
@@ -62,57 +66,88 @@ export function createSyntheticLoaderProof(overrides?: Partial<Task040Task036Pro
   return { proof, commitExists: proof.dependencyProof.commitExists, reportsExist: proof.dependencyProof.handoffExists };
 }
 
-function gitCommitExists(hash: string): boolean {
+export interface Task036ProofReader {
+  load(): Task040Task036Proof;
+}
+
+class DeterministicProofReader implements Task036ProofReader {
+  constructor(private proof: Task040Task036Proof) {}
+  load(): Task040Task036Proof {
+    return this.proof;
+  }
+}
+
+export function createDeterministicProofReader(proof: Task040Task036Proof): Task036ProofReader {
+  return new DeterministicProofReader(proof);
+}
+
+function safeGitCatFile(hash: string): string {
   try {
-    const output = execSync(`git cat-file -t ${hash} 2>/dev/null || echo "missing"`, {
+    const output = execFileSync('git', ['cat-file', '-t', hash], {
       encoding: 'utf-8',
       stdio: ['pipe', 'pipe', 'pipe'],
-      cwd: process.cwd(),
+      cwd: REPO_ROOT,
+      timeout: GIT_TIMEOUT_MS,
     });
-    return output.trim() === 'commit';
+    return output.trim();
   } catch {
-    return false;
+    return 'missing';
   }
 }
 
-function fileExists(filePath: string): boolean {
+function safeGitLog(format: string, hash: string): string {
   try {
-    return fs.existsSync(path.resolve(process.cwd(), filePath));
+    const output = execFileSync('git', ['log', '--oneline', '-1', `--format=${format}`, hash], {
+      encoding: 'utf-8',
+      stdio: ['pipe', 'pipe', 'pipe'],
+      cwd: REPO_ROOT,
+      timeout: GIT_TIMEOUT_MS,
+    });
+    return output.trim();
+  } catch {
+    return '';
+  }
+}
+
+function safeResolveRepoPath(relativePath: string): string {
+  return path.resolve(REPO_ROOT, relativePath);
+}
+
+function safeFileExists(relativePath: string): boolean {
+  try {
+    return fs.existsSync(safeResolveRepoPath(relativePath));
   } catch {
     return false;
   }
 }
 
-export function loadTask036Proof(): Task040Task036Proof {
+export class ProductionProofReader implements Task036ProofReader {
+  load(): Task040Task036Proof {
+    return loadTask036ProofInternal();
+  }
+}
+
+function loadTask036ProofInternal(): Task040Task036Proof {
   const commitPrefixes = TASK040_REQUIRED_TASK036_COMMIT_PREFIXES as readonly string[];
   const commitHash = commitPrefixes[0];
 
   let fullHash = commitHash;
-  const commitOk = gitCommitExists(fullHash);
+  const catFileResult = safeGitCatFile(fullHash);
+  const commitOk = catFileResult === 'commit';
   if (!commitOk) {
-    try {
-      const output = execSync(`git log --oneline -1 --format="%H" ${commitHash} 2>/dev/null || true`, {
-        encoding: 'utf-8', stdio: ['pipe', 'pipe', 'pipe'], cwd: process.cwd(),
-      });
-      const trimmed = output.trim();
-      if (trimmed) fullHash = trimmed;
-    } catch { }
+    const resolved = safeGitLog('%H', commitHash);
+    if (resolved) fullHash = resolved;
   }
 
   const handoffPath = 'docs/ops/task-036/TASK_036_HANDOFF.md';
   const reportPath = 'docs/ops/task-036/TASK_036_LIVE_SCHOOL_LAUNCH_REPORT.md';
   const jsonReportPath = 'docs/ops/task-036/task-036-live-school-launch-report.json';
 
-  const handoffExists = fileExists(handoffPath);
-  const reportExists = fileExists(reportPath);
-  const jsonReportExists = fileExists(jsonReportPath);
+  const handoffExists = safeFileExists(handoffPath);
+  const reportExists = safeFileExists(reportPath);
+  const jsonReportExists = safeFileExists(jsonReportPath);
 
-  let commitMessage = '';
-  try {
-    commitMessage = execSync(`git log --format="%s" -1 ${fullHash} 2>/dev/null || true`, {
-      encoding: 'utf-8', stdio: ['pipe', 'pipe', 'pipe'], cwd: process.cwd(),
-    }).trim();
-  } catch { }
+  const commitMessage = safeGitLog('%s', fullHash);
 
   const finalHash = fullHash || commitHash;
 
@@ -165,4 +200,12 @@ export function loadTask036Proof(): Task040Task036Proof {
   };
 
   return proof;
+}
+
+export function loadTask036Proof(): Task040Task036Proof {
+  return loadTask036ProofInternal();
+}
+
+export function loadTask036ProofWithReader(reader: Task036ProofReader): Task040Task036Proof {
+  return reader.load();
 }

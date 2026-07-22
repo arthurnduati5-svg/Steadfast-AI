@@ -126,22 +126,25 @@ describe('Package 6 - Access, Approval, and Bridge', () => {
   });
 
   it('No finalization occurs', async () => {
-    const mod = await import('../services/examPaperAssemblyService');
-    const service = new mod.ExamPaperAssemblyService();
+    const [mod, persistMod] = await Promise.all([import('../services/examPaperAssemblyService'), import('../services/inMemoryExamPaperAssemblyPersistence')]);
+    const persistence = new persistMod.InMemoryExamPaperAssemblyPersistence();
+    const service = new mod.ExamPaperAssemblyService(persistence);
     const methods = Object.getOwnPropertyNames(Object.getPrototypeOf(service));
     expect(methods.some((m) => m.includes('Finalize') || m.includes('finalize'))).toBe(false);
   });
 
   it('No parent release occurs', async () => {
-    const mod = await import('../services/examPaperAssemblyService');
-    const service = new mod.ExamPaperAssemblyService();
+    const [mod, persistMod] = await Promise.all([import('../services/examPaperAssemblyService'), import('../services/inMemoryExamPaperAssemblyPersistence')]);
+    const persistence = new persistMod.InMemoryExamPaperAssemblyPersistence();
+    const service = new mod.ExamPaperAssemblyService(persistence);
     const methods = Object.getOwnPropertyNames(Object.getPrototypeOf(service));
     expect(methods.some((m) => m.includes('Parent') || m.includes('parent') || m.includes('Release') || m.includes('release'))).toBe(false);
   });
 
   it('No mastery mutation occurs', async () => {
-    const mod = await import('../services/examPaperAssemblyService');
-    const service = new mod.ExamPaperAssemblyService();
+    const [mod, persistMod] = await Promise.all([import('../services/examPaperAssemblyService'), import('../services/inMemoryExamPaperAssemblyPersistence')]);
+    const persistence = new persistMod.InMemoryExamPaperAssemblyPersistence();
+    const service = new mod.ExamPaperAssemblyService(persistence);
     const methods = Object.getOwnPropertyNames(Object.getPrototypeOf(service));
     expect(methods.some((m) => m.includes('Mastery') || m.includes('mastery'))).toBe(false);
   });

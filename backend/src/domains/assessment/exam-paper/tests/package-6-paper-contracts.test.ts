@@ -72,24 +72,27 @@ describe('Package 6 - Paper Contracts', () => {
   });
 
   it('Missing schoolId blocks mutation in assembly service', async () => {
-    const mod = await import('../services/examPaperAssemblyService');
-    const service = new mod.ExamPaperAssemblyService();
+    const [mod, persistMod] = await Promise.all([import('../services/examPaperAssemblyService'), import('../services/inMemoryExamPaperAssemblyPersistence')]);
+    const persistence = new persistMod.InMemoryExamPaperAssemblyPersistence();
+    const service = new mod.ExamPaperAssemblyService(persistence);
     const decision = service.validateCommandContext({ schoolId: '', actorId: 'a1', actorRole: 'teacher', correlationId: 'c1', idempotencyKey: 'k1' });
     expect(decision.allowed).toBe(false);
     expect(decision.reasonCode).toBe('SCHOOL_CONTEXT_REQUIRED');
   });
 
   it('Student actors cannot assemble papers', async () => {
-    const mod = await import('../services/examPaperAssemblyService');
-    const service = new mod.ExamPaperAssemblyService();
+    const [mod, persistMod] = await Promise.all([import('../services/examPaperAssemblyService'), import('../services/inMemoryExamPaperAssemblyPersistence')]);
+    const persistence = new persistMod.InMemoryExamPaperAssemblyPersistence();
+    const service = new mod.ExamPaperAssemblyService(persistence);
     const decision = service.validateCommandContext({ schoolId: 's1', actorId: 'a1', actorRole: 'student', correlationId: 'c1', idempotencyKey: 'k1' });
     expect(decision.allowed).toBe(false);
     expect(decision.reasonCode).toBe('ROLE_NOT_ALLOWED');
   });
 
   it('Parent actors cannot assemble papers', async () => {
-    const mod = await import('../services/examPaperAssemblyService');
-    const service = new mod.ExamPaperAssemblyService();
+    const [mod, persistMod] = await Promise.all([import('../services/examPaperAssemblyService'), import('../services/inMemoryExamPaperAssemblyPersistence')]);
+    const persistence = new persistMod.InMemoryExamPaperAssemblyPersistence();
+    const service = new mod.ExamPaperAssemblyService(persistence);
     const decision = service.validateCommandContext({ schoolId: 's1', actorId: 'a1', actorRole: 'parent', correlationId: 'c1', idempotencyKey: 'k1' });
     expect(decision.allowed).toBe(false);
   });

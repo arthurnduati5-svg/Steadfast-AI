@@ -1,8 +1,8 @@
-import { InMemoryRecoveryLifecycleClosureRepositories } from '../repositories/inMemoryRecoveryLifecycleClosureRepositories';
+import { IRecoveryLifecycleClosureRepositories } from '../contracts/recoveryLifecycleClosureRepositoryContracts';
 import { v4 as uuid } from 'uuid';
 
 export class RecoveryLifecycleClosureAuditBridge {
-  constructor(private repos: InMemoryRecoveryLifecycleClosureRepositories) {}
+  constructor(private repos: IRecoveryLifecycleClosureRepositories) {}
 
   async recordAuditEvent(params: {
     schoolId: string;

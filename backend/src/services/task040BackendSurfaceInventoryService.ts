@@ -29,7 +29,7 @@ const KNOWN_ROUTE_MOUNTS: Array<{ prefix: string; file: string; taskOwner: strin
 ];
 
 function detectRouteFilesInDir(): string[] {
-  const dir = path.resolve(process.cwd(), 'backend/src/routes');
+  const dir = path.resolve(__dirname, '..', 'routes');
   try {
     return fs.readdirSync(dir).filter(f => f.endsWith('.ts') && !f.endsWith('.test.ts'));
   } catch {

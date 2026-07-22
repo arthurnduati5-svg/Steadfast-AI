@@ -13,7 +13,7 @@ describe('Package 8 Route Contracts', () => {
     const indexPath = path.resolve(__dirname, '../../../../index.ts');
     const content = fs.readFileSync(indexPath, 'utf-8');
     expect(content).toContain('marking-invocation');
-    expect(content).toContain('markingInvocationRoutes');
+    expect(content).toContain('createMarkingInvocationRouter');
   });
 
   it('mount uses schoolAuthMiddleware', () => {

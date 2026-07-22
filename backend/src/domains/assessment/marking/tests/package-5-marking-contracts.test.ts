@@ -1,13 +1,21 @@
 import { describe, it, expect } from 'vitest';
 import { MarkingRunService, CreateMarkingRunParams } from '../services/markingRunService';
 import { DeterministicMarkerService } from '../services/deterministicMarkerService';
+import { TeacherReviewQueueService } from '../services/teacherReviewQueueService';
 import { InMemoryMarkingRunRepository, InMemoryMarkingResultVersionRepository } from '../repositories/inMemoryMarkingRepositories';
 import { SubmittedAnswerSnapshot } from '../contracts/markingContracts';
 import { MarkingInputSnapshot } from '../contracts/markingResultContracts';
 
 describe('Package 5 - Marking Contracts', () => {
+  function makeService(): MarkingRunService {
+    const marker = new DeterministicMarkerService();
+    const runRepo = new InMemoryMarkingRunRepository();
+    const resultRepo = new InMemoryMarkingResultVersionRepository();
+    return new MarkingRunService(runRepo, resultRepo, marker, new TeacherReviewQueueService());
+  }
+
   it('createMarkingRun requires schoolId', async () => {
-    const service = new MarkingRunService();
+    const service = makeService();
     const params: CreateMarkingRunParams = {
       schoolId: '',
       sourceType: 'mock_snapshot',
@@ -20,7 +28,7 @@ describe('Package 5 - Marking Contracts', () => {
   });
 
   it('createMarkingRun requires teacher/lead_teacher/admin/system_job actor', async () => {
-    const service = new MarkingRunService();
+    const service = makeService();
     const params: CreateMarkingRunParams = {
       schoolId: 'school-1',
       sourceType: 'mock_snapshot',
@@ -33,7 +41,7 @@ describe('Package 5 - Marking Contracts', () => {
   });
 
   it('student/parent cannot create marking runs', async () => {
-    const service = new MarkingRunService();
+    const service = makeService();
     for (const role of ['student', 'parent']) {
       const params: CreateMarkingRunParams = {
         schoolId: 'school-1',
@@ -48,7 +56,7 @@ describe('Package 5 - Marking Contracts', () => {
   });
 
   it('teacher can create marking runs', async () => {
-    const service = new MarkingRunService();
+    const service = makeService();
     const params: CreateMarkingRunParams = {
       schoolId: 'school-1',
       sourceType: 'mock_snapshot',
@@ -64,7 +72,7 @@ describe('Package 5 - Marking Contracts', () => {
   });
 
   it('system_job can create marking runs for mock_snapshot source', async () => {
-    const service = new MarkingRunService();
+    const service = makeService();
     const params: CreateMarkingRunParams = {
       schoolId: 'school-1',
       sourceType: 'mock_snapshot',
@@ -78,9 +86,11 @@ describe('Package 5 - Marking Contracts', () => {
   });
 
   it('marking run does not create attempts', async () => {
+    const marker = new DeterministicMarkerService();
+    const reviewQueue = new TeacherReviewQueueService();
     const runRepo = new InMemoryMarkingRunRepository();
     const resultRepo = new InMemoryMarkingResultVersionRepository();
-    const service = new MarkingRunService(runRepo, resultRepo);
+    const service = new MarkingRunService(runRepo, resultRepo, marker, reviewQueue);
     const run = await service.createMarkingRun({
       schoolId: 'school-1', sourceType: 'mock_snapshot', sourceRef: 't1',
       createdByActorId: 't1', createdByRole: 'teacher', safeSummary: '',
@@ -98,7 +108,7 @@ describe('Package 5 - Marking Contracts', () => {
   });
 
   it('marking run does not mutate mastery', async () => {
-    const service = new MarkingRunService();
+    const service = makeService();
     const run = await service.createMarkingRun({
       schoolId: 'school-1', sourceType: 'mock_snapshot', sourceRef: 't1',
       createdByActorId: 't1', createdByRole: 'teacher', safeSummary: '',
@@ -127,8 +137,7 @@ describe('Package 5 - Marking Contracts', () => {
   });
 
   it('missing policy fails closed', async () => {
-    const runRepo = new InMemoryMarkingRunRepository();
-    const service = new MarkingRunService(runRepo);
+    const service = makeService();
     const params: CreateMarkingRunParams = {
       schoolId: 'school-1', sourceType: 'mock_snapshot', sourceRef: 't1',
       createdByActorId: 't1', createdByRole: 'teacher', safeSummary: '',

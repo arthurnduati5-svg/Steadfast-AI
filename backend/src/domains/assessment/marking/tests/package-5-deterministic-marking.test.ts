@@ -1,12 +1,17 @@
 import { describe, it, expect } from 'vitest';
 import { DeterministicMarkerService } from '../services/deterministicMarkerService';
+import { TeacherReviewQueueService } from '../services/teacherReviewQueueService';
 import { MarkingRunService } from '../services/markingRunService';
 import { SubmittedAnswerSnapshot } from '../contracts/markingContracts';
 import { MarkingInputSnapshot } from '../contracts/markingResultContracts';
+import { InMemoryMarkingRunRepository, InMemoryMarkingResultVersionRepository } from '../repositories/inMemoryMarkingRepositories';
 
 describe('Package 5 - Deterministic Marking', () => {
   const marker = new DeterministicMarkerService();
-  const service = new MarkingRunService();
+  const reviewQueue = new TeacherReviewQueueService();
+  const runRepo = new InMemoryMarkingRunRepository();
+  const resultRepo = new InMemoryMarkingResultVersionRepository();
+  const service = new MarkingRunService(runRepo, resultRepo, marker, reviewQueue);
 
   function makeSnapshot(overrides: Partial<SubmittedAnswerSnapshot>): SubmittedAnswerSnapshot {
     return {

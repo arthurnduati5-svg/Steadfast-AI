@@ -1,9 +1,9 @@
-import { InMemoryRecoveryLifecycleClosureRepositories } from '../repositories/inMemoryRecoveryLifecycleClosureRepositories';
+import { IRecoveryLifecycleClosureRepositories } from '../contracts/recoveryLifecycleClosureRepositoryContracts';
 import { RecoveryLifecycleClosureSafeEnvelope } from '../contracts/recoveryLifecycleClosureContracts';
 import { v4 as uuid } from 'uuid';
 
 export class RecoveryLifecycleClosureIdempotencyService {
-  constructor(private repos: InMemoryRecoveryLifecycleClosureRepositories) {}
+  constructor(private repos: IRecoveryLifecycleClosureRepositories) {}
 
   async checkIdempotency(
     schoolId: string,

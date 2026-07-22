@@ -23,6 +23,7 @@ import {
   RecoveryLifecycleClosureAuditRecord,
   IClosureIdempotencyRepository,
   RecoveryLifecycleClosureIdempotencyRecord,
+  IRecoveryLifecycleClosureRepositories,
 } from '../contracts/recoveryLifecycleClosureRepositoryContracts';
 import { v4 as uuid } from 'uuid';
 
@@ -881,7 +882,7 @@ export class InMemoryClosureIdempotencyRepository implements IClosureIdempotency
   }
 }
 
-export class InMemoryRecoveryLifecycleClosureRepositories {
+export class InMemoryRecoveryLifecycleClosureRepositories implements IRecoveryLifecycleClosureRepositories {
   closureReadiness: InMemoryClosureReadinessRepository;
   handoffPacket: InMemoryHandoffPacketRepository;
   nextCycleRecommendationDraft: InMemoryNextCycleRecommendationDraftRepository;

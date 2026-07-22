@@ -104,13 +104,14 @@ describe('Package 26 - Routes and No Duplication', () => {
     });
 
     it('uses schoolAuthMiddleware', () => {
-      const line = indexContent.split('\n').find(l => l.includes('recovery-case-adjudication'));
+      const line = indexContent.split('\n').find(l => l.includes('recovery-case-adjudication') && l.includes('app.use'));
       expect(line).toBeTruthy();
       expect(line!).toContain('schoolAuthMiddleware');
     });
 
     it('uses requireVerifiedSchoolContext', () => {
-      const line = indexContent.split('\n').find(l => l.includes('recovery-case-adjudication'));
+      const line = indexContent.split('\n').find(l => l.includes('recovery-case-adjudication') && l.includes('app.use'));
+      expect(line).toBeTruthy();
       expect(line!).toContain('requireVerifiedSchoolContext');
     });
   });

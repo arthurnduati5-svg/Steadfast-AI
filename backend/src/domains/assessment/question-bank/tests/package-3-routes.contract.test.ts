@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { readFileSync, existsSync } from 'fs';
+import { readFileSync, existsSync, readdirSync } from 'fs';
 import { resolve } from 'path';
 
 const QUESTION_BANK_ROUTE_PATH = resolve(__dirname, '../../../../routes/questionBank.ts');
@@ -135,20 +135,35 @@ describe('Package 3 - No Duplication', () => {
     expect(schema.includes('model ContentItemRecord')).toBe(true);
   });
 
-  it('does not create ExamPaper, ExamBlueprint, MarkingResult, OCR, ParentSummary, Finalization, or StudentAttempt models', () => {
+  it('Later-package models are not owned by Package 3', () => {
+    const pkg3SourceDir = resolve(__dirname, '../repositories');
+    const pkg3Sources = readdirSync(pkg3SourceDir).filter(f => f.endsWith('.ts'));
+    const pkg3Code = pkg3Sources.map(f => readFileSync(resolve(pkg3SourceDir, f), 'utf-8')).join('\n');
+    const laterModels = ['ExamPaperRecord'];
+    for (const m of laterModels) {
+      expect(pkg3Code).not.toContain(m);
+    }
+  });
+
+  it('Later-package models have exactly one definition (no duplication)', () => {
     const schemaPath = resolve(__dirname, '../../../../../prisma/schema.prisma');
     const schema = readFileSync(schemaPath, 'utf-8');
-    const forbidden = [
-      'ExamPaperRecord',
-      'ExamBlueprintRecord',
-      'MarkingResultRecord',
-      'OCRRecord',
-      'ParentSummaryRecord',
-      'FinalizationRecord',
-      'StudentQuestionAttemptRecord',
-    ];
-    for (const f of forbidden) {
-      expect(schema.includes(`model ${f}`)).toBe(false);
+    const laterModels: string[] = ['ExamPaperRecord'];
+    for (const m of laterModels) {
+      const regex = new RegExp(`^model\\s+${m}\\s*{`, 'gm');
+      const matches = schema.match(regex);
+      expect(matches).not.toBeNull();
+      expect(matches!.length).toBe(1);
+    }
+  });
+
+  it('Package 5 and 8 models are not referenced by Package 3', () => {
+    const pkg3SourceDir = resolve(__dirname, '../repositories');
+    const pkg3Sources = readdirSync(pkg3SourceDir).filter(f => f.endsWith('.ts'));
+    const pkg3Code = pkg3Sources.map(f => readFileSync(resolve(pkg3SourceDir, f), 'utf-8')).join('\n');
+    const laterRefs = ['MarkingResult', 'MarkingBatch', 'MarkingInvocation', 'OCR', 'ParentSummary', 'Finalization', 'StudentAttempt', 'StudentQuestionAttempt'];
+    for (const m of laterRefs) {
+      expect(pkg3Code).not.toContain(m);
     }
   });
 });

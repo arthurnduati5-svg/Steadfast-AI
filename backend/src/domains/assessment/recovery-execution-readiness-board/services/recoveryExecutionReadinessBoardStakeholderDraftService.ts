@@ -1,6 +1,6 @@
 import { RecoveryExecutionReadinessBoardCommandContext, RecoveryExecutionReadinessBoardSafeEnvelope } from '../contracts';
 import { RecoveryExecutionReadinessBoardStudentSafeStatusDraft, RecoveryExecutionReadinessBoardParentSafeStatusDraft, CreateStudentSafeStatusDraftRequest, CreateParentSafeStatusDraftRequest } from '../contracts/recoveryExecutionReadinessBoardStakeholderDraftContracts';
-import { InMemoryRecoveryExecutionReadinessBoardStudentSafeStatusDraftRepository, InMemoryRecoveryExecutionReadinessBoardParentSafeStatusDraftRepository } from '../repositories/inMemoryRecoveryExecutionReadinessBoardRepositories';
+import type { RecoveryExecutionReadinessBoardStudentSafeStatusDraftRepository, RecoveryExecutionReadinessBoardParentSafeStatusDraftRepository } from '../contracts/recoveryExecutionReadinessBoardRepositoryContracts';
 import { RECOVERY_EXECUTION_READINESS_BOARD_POLICIES } from '../policies/recoveryExecutionReadinessBoardPolicyDefinitions';
 
 function checkPolicy(policyName: string, actorRole: string): { allowed: boolean; reason: string } {
@@ -20,12 +20,15 @@ function errorEnvelope<T = never>(message: string, context?: RecoveryExecutionRe
 }
 
 export class RecoveryExecutionReadinessBoardStakeholderDraftService {
-  private studentRepo: InMemoryRecoveryExecutionReadinessBoardStudentSafeStatusDraftRepository;
-  private parentRepo: InMemoryRecoveryExecutionReadinessBoardParentSafeStatusDraftRepository;
+  private studentRepo: RecoveryExecutionReadinessBoardStudentSafeStatusDraftRepository;
+  private parentRepo: RecoveryExecutionReadinessBoardParentSafeStatusDraftRepository;
 
-  constructor() {
-    this.studentRepo = new InMemoryRecoveryExecutionReadinessBoardStudentSafeStatusDraftRepository();
-    this.parentRepo = new InMemoryRecoveryExecutionReadinessBoardParentSafeStatusDraftRepository();
+  constructor(
+    studentRepo: RecoveryExecutionReadinessBoardStudentSafeStatusDraftRepository,
+    parentRepo: RecoveryExecutionReadinessBoardParentSafeStatusDraftRepository,
+  ) {
+    this.studentRepo = studentRepo;
+    this.parentRepo = parentRepo;
   }
 
   async createStudentSafeStatusDraft(

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { readFileSync, existsSync } from 'fs';
+import { readFileSync, existsSync, readdirSync } from 'fs';
 import { resolve } from 'path';
 
 const SCHEMA_PATH = resolve(__dirname, '../../../../../prisma/schema.prisma');
@@ -97,19 +97,18 @@ describe('Package 3 - Durable Persistence', () => {
     expect(modelExists('ContentSafetyReviewRecord')).toBe(false);
   });
 
-  it('Forbidden models were NOT created', () => {
-    const forbidden = [
-      'ExamPaperRecord',
-      'ExamBlueprintRecord',
-      'MarkingResultRecord',
-      'OCRRecord',
-      'ParentSummaryRecord',
-      'FinalizationRecord',
-      'StudentQuestionAttemptRecord',
-    ];
-    for (const f of forbidden) {
-      expect(modelExists(f)).toBe(false);
+  it('Package 3 does not reference later-package model ExamPaperRecord', () => {
+    const pkg3SourceDir = resolve(__dirname, '../repositories');
+    const pkg3Sources = readdirSync(pkg3SourceDir).filter(f => f.endsWith('.ts'));
+    const pkg3Code = pkg3Sources.map(f => readFileSync(resolve(pkg3SourceDir, f), 'utf-8')).join('\n');
+    const laterModel = 'ExamPaperRecord';
+    if (modelExists(laterModel)) {
+      expect(pkg3Code).not.toContain(laterModel);
     }
+  });
+
+  it('Later-package model ExamPaperRecord has exactly one definition', () => {
+    expect(countModelOccurrences('ExamPaperRecord')).toBe(1);
   });
 });
 

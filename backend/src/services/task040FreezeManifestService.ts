@@ -4,7 +4,7 @@ import {
   createTask040SafeTimestamp,
 } from '../contracts/task040BackendFreezeContracts';
 import { task040Repository } from '../repositories/task040BackendFreezeRepository';
-import { loadTask036Proof } from './task040Task036ProofLoaderService';
+import { loadTask036Proof, Task036ProofReader, loadTask036ProofWithReader, ProductionProofReader } from './task040Task036ProofLoaderService';
 import { getAcceptedTaskLedger } from './task040AcceptedTaskLedgerService';
 import { getBackendSurfaceManifest } from './task040BackendSurfaceInventoryService';
 import { getContractInventory } from './task040ContractInventoryService';
@@ -21,8 +21,10 @@ import { getRegressionCheck } from './task040RegressionCheckService';
 import { getSafetyScanResults } from './task040SafetyScanService';
 import { getChangeControlPolicy } from './task040ChangeControlPolicyService';
 
-export function buildFreezeManifest(): Task040FreezeManifest {
-  const task036Proof = loadTask036Proof();
+export function buildFreezeManifest(proofReader?: Task036ProofReader): Task040FreezeManifest {
+  const task036Proof = proofReader
+    ? loadTask036ProofWithReader(proofReader)
+    : loadTask036Proof();
   const ledger = getAcceptedTaskLedger();
   const surfaceManifest = getBackendSurfaceManifest();
   const contractInv = getContractInventory();

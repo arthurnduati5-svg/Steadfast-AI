@@ -259,3 +259,19 @@ export interface RecoveryLifecycleClosureIdempotencyRecord {
 
 export type ClosureAuditRecordResponse = RecoveryLifecycleClosureSafeEnvelope<RecoveryLifecycleClosureAuditRecord>;
 export type ClosureAuditRecordListResponse = RecoveryLifecycleClosureSafeEnvelope<RecoveryLifecycleClosureAuditRecord[]>;
+
+export interface IRecoveryLifecycleClosureRepositories {
+  closureReadiness: IClosureReadinessRepository;
+  handoffPacket: IHandoffPacketRepository;
+  nextCycleRecommendationDraft: INextCycleRecommendationRepository;
+  deferredIntegrationTicket: IDeferredIntegrationTicketRepository;
+  unresolvedRiskRegister: IUnresolvedRiskRegisterRepository;
+  teacherClosureReviewPacket: ITeacherClosureReviewPacketRepository;
+  adminGovernanceReviewPacket: IAdminGovernanceReviewPacketRepository;
+  studentClosureReflectionDraft: IStudentClosureReflectionDraftRepository;
+  parentClosureGuidanceDraft: IParentClosureGuidanceDraftRepository;
+  archiveManifest: IArchiveManifestRepository;
+  finalLifecycleSummary: IFinalLifecycleSummaryRepository;
+  closureAudit: IClosureAuditRepository;
+  closureIdempotency: IClosureIdempotencyRepository;
+}

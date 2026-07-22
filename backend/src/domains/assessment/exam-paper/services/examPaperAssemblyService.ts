@@ -1,6 +1,7 @@
 import { randomUUID } from 'crypto';
 import { ExamPaperCommandContext, ExamPaperPolicyDecision } from '../contracts/examPaperContracts';
 import { ExamPaperVersionStatus } from '../contracts/examPaperVersionContracts';
+import { ExamPaperAssemblyPersistence } from '../contracts/examPaperAssemblyPersistenceContracts';
 
 export type ExamPaperAssemblyStatus = 'started' | 'completed' | 'partial' | 'blocked' | 'failed' | 'cancelled';
 
@@ -81,6 +82,10 @@ function extractRoleScope(role: string): { allowed: boolean; reasonCode: string 
 }
 
 export class ExamPaperAssemblyService {
+  constructor(
+    private persistence: ExamPaperAssemblyPersistence,
+  ) {}
+
   public validateCommandContext(ctx: ExamPaperCommandContext): ExamPaperPolicyDecision {
     if (!ctx.schoolId) {
       return { allowed: false, reasonCode: 'SCHOOL_CONTEXT_REQUIRED', safeMessage: 'School ID is required', blockedOperation: 'assemblePaperFromDraft' };
@@ -114,10 +119,6 @@ export class ExamPaperAssemblyService {
       };
     }
 
-    const paperId = randomUUID();
-    const paperVersionId = randomUUID();
-    const assemblyRunId = randomUUID();
-
     const sections = new Map<string, { order: number; marks: number; count: number; title: string }>();
     let totalMarks = 0;
     const warnings: string[] = [];
@@ -139,17 +140,52 @@ export class ExamPaperAssemblyService {
     const sectionCount = sections.size;
     const questionCount = input.draftQuestions.length;
 
-    return {
-      paperId,
-      paperVersionId,
-      assemblyRunId,
-      status: questionCount > 0 ? 'completed' : 'partial',
-      questionCount,
-      sectionCount,
+    const persistInput = {
+      schoolId: ctx.schoolId,
+      sourceDraftSetId: input.sourceDraftSetId,
+      sourceDraftId: input.sourceDraftId,
+      blueprintId: input.blueprintId,
+      blueprintVersionId: input.blueprintVersionId,
+      title: input.title,
+      subjectId: input.subjectId,
+      curriculumVersionId: input.curriculumVersionId,
+      gradeBand: input.gradeBand,
+      examType: input.examType,
+      instructionsSafeText: input.instructionsSafeText,
+      durationMinutes: input.durationMinutes,
+      securityClass: input.securityClass,
+      assemblyStrategy: 'from_selected_draft',
+      createdByActorId: ctx.actorId,
+      createdByRole: ctx.actorRole,
+      correlationId: ctx.correlationId,
+      idempotencyKey: ctx.idempotencyKey,
+      inputQuestionCount: input.draftQuestions.length,
+      assembledQuestionCount: questionCount,
       totalMarks,
-      warnings,
+      warningCount: warnings.length,
+      blockedCount: 0,
       safeSummary: `Assembled paper from draft ${input.sourceDraftId}: ${questionCount} questions across ${sectionCount} sections, ${totalMarks} total marks`,
+      sections: Array.from(sections.entries()).map(([key, sec]) => ({
+        sectionKey: key,
+        title: sec.title,
+        order: sec.order,
+        marksAllocated: sec.marks,
+        questionCount: sec.count,
+      })),
+      questions: input.draftQuestions.map((q) => ({
+        draftQuestionId: q.draftQuestionId,
+        questionId: q.questionId,
+        questionVersionId: q.questionVersionId,
+        position: q.position,
+        sectionKey: q.sectionKey,
+        marksAllocated: q.marksAllocated,
+        selectionReason: q.selectionReason,
+        safeTeacherSummary: q.safeTeacherSummary,
+      })),
     };
+
+    const persisted = await this.persistence.persistAssemblyGraph(persistInput);
+    return { ...persisted, status: persisted.status as ExamPaperAssemblyStatus };
   }
 
   public async createAssemblyRun(

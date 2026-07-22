@@ -1,19 +1,28 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeEach } from 'vitest';
 import fs from 'fs';
 import path from 'path';
 import { ExamPaperAssemblyService, ExamPaperAssemblyInput } from '../services/examPaperAssemblyService';
 import { ExamPaperVersionService } from '../services/examPaperVersionService';
 import { ExamPaperSectionLayoutService } from '../services/examPaperSectionLayoutService';
 import { ExamPaperCommandContext } from '../contracts/examPaperContracts';
+import { InMemoryExamPaperAssemblyPersistence } from '../services/inMemoryExamPaperAssemblyPersistence';
 
+let callCount = 0;
 function makeTeacherContext(): ExamPaperCommandContext {
-  return { schoolId: 's1', actorId: 'a1', actorRole: 'teacher', correlationId: 'c1', idempotencyKey: 'k1' };
+  callCount++;
+  return { schoolId: 's1', actorId: 'a1', actorRole: 'teacher', correlationId: 'c1', idempotencyKey: `k${callCount}` };
 }
 
 describe('Package 6 - Paper Assembly', () => {
-  const assemblyService = new ExamPaperAssemblyService();
+  let assemblyPersistence: InMemoryExamPaperAssemblyPersistence;
+  let assemblyService: ExamPaperAssemblyService;
   const versionService = new ExamPaperVersionService();
   const layoutService = new ExamPaperSectionLayoutService();
+
+  beforeEach(() => {
+    assemblyPersistence = new InMemoryExamPaperAssemblyPersistence();
+    assemblyService = new ExamPaperAssemblyService(assemblyPersistence);
+  });
 
   const sampleDraftQuestions: ExamPaperAssemblyInput['draftQuestions'] = [
     { draftQuestionId: 'dq1', questionId: 'q1', questionVersionId: 'qv1', position: 1, sectionKey: 'section_a', marksAllocated: 5, selectionReason: 'Covers objective 1', safeTeacherSummary: 'Good question' },

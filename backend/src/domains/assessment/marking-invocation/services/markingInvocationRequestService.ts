@@ -1,6 +1,5 @@
 import { MarkingInvocationRequest, MarkingInvocationCommandContext } from '../contracts/markingInvocationContracts';
 import { MarkingInvocationRequestRepository } from '../contracts/markingInvocationRepositoryContracts';
-import { InMemoryMarkingInvocationRequestRepository } from '../repositories/inMemoryMarkingInvocationRepositories';
 import { MARKING_INVOCATION_POLICY_DEFAULTS, ALLOWED_INVOCATION_MUTATION_ROLES, BLOCKED_INVOCATION_MUTATION_ROLES } from '../policies/markingInvocationPolicyDefinitions';
 
 export interface CreateInvocationRequestParams {
@@ -18,7 +17,7 @@ export interface CreateInvocationRequestParams {
 
 export class MarkingInvocationRequestService {
   constructor(
-    private requestRepo: MarkingInvocationRequestRepository = new InMemoryMarkingInvocationRequestRepository(),
+    private requestRepo: MarkingInvocationRequestRepository,
   ) {}
 
   async createInvocationRequest(params: CreateInvocationRequestParams): Promise<MarkingInvocationRequest> {

@@ -24,6 +24,7 @@ import {
   RecoveryLifecycleClosureAuditRecord,
   IClosureIdempotencyRepository,
   RecoveryLifecycleClosureIdempotencyRecord,
+  IRecoveryLifecycleClosureRepositories,
 } from '../contracts/recoveryLifecycleClosureRepositoryContracts';
 
 function toDateString(val: unknown): string | undefined {
@@ -1188,7 +1189,7 @@ export class PrismaClosureIdempotencyRepository implements IClosureIdempotencyRe
   }
 }
 
-export class PrismaRecoveryLifecycleClosureRepositories {
+export class PrismaRecoveryLifecycleClosureRepositories implements IRecoveryLifecycleClosureRepositories {
   constructor(private prisma: PrismaClient) {}
 
   closureReadiness = new PrismaClosureReadinessRepository(this.prisma);

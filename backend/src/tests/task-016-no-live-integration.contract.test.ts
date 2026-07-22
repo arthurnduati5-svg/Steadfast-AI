@@ -27,24 +27,30 @@ const TASK_016_FILES = [
 describe('Task 016: No-Live-Integration', () => {
   for (const filePath of TASK_016_FILES) {
     const fullPath = path.resolve(REPO_ROOT, filePath);
-    if (!fs.existsSync(fullPath)) { continue; }
-    const content = fs.readFileSync(fullPath, 'utf-8');
+
+    it(`${filePath} exists for no-live-integration scan`, () => {
+      expect(fs.existsSync(fullPath)).toBe(true);
+    });
 
     it(`${filePath} does not import openai`, () => {
+      const content = fs.readFileSync(fullPath, 'utf-8');
       expect(content).not.toMatch(/from ['"]openai['"]/);
       expect(content).not.toMatch(/require\(['"]openai['"]\)/);
     });
 
     it(`${filePath} does not import genkit`, () => {
+      const content = fs.readFileSync(fullPath, 'utf-8');
       expect(content).not.toMatch(/from ['"]genkit['"]/);
       expect(content).not.toMatch(/from ['"]@genkit-ai/);
     });
 
     it(`${filePath} does not contain OPENAI_API_KEY`, () => {
+      const content = fs.readFileSync(fullPath, 'utf-8');
       expect(content).not.toContain('OPENAI_API_KEY');
     });
 
     it(`${filePath} does not use fetch/axios/http.request`, () => {
+      const content = fs.readFileSync(fullPath, 'utf-8');
       const lines = content.split('\n');
       const httpCalls = lines.filter(l =>
         l.includes('fetch(') ||
@@ -56,6 +62,7 @@ describe('Task 016: No-Live-Integration', () => {
     });
 
     it(`${filePath} does not reference live school connector`, () => {
+      const content = fs.readFileSync(fullPath, 'utf-8');
       const lines = content.split('\n');
       const refs = lines.filter(l =>
         l.match(/schoolConnector\(/) ||
@@ -68,11 +75,13 @@ describe('Task 016: No-Live-Integration', () => {
     });
 
     it(`${filePath} does not store answerKey as a value (only as constant name)`, () => {
+      const content = fs.readFileSync(fullPath, 'utf-8');
       const answerKeyAssignments = content.match(/answerKey\s*=\s*['"]/);
       expect(answerKeyAssignments).toBeNull();
     });
 
     it(`${filePath} does not store transcripts`, () => {
+      const content = fs.readFileSync(fullPath, 'utf-8');
       const transcriptStorage = content.match(/transcript\s*[:=]\s*['"]/);
       expect(transcriptStorage).toBeNull();
     });

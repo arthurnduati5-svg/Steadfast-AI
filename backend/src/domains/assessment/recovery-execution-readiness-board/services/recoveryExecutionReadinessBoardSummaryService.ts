@@ -1,6 +1,6 @@
 import { RecoveryExecutionReadinessBoardCommandContext, RecoveryExecutionReadinessBoardSafeEnvelope } from '../contracts';
 import { RecoveryExecutionReadinessBoardSummary, CreateBoardSummaryRequest } from '../contracts/recoveryExecutionReadinessBoardSummaryContracts';
-import { InMemoryRecoveryExecutionReadinessBoardSummaryRepository } from '../repositories/inMemoryRecoveryExecutionReadinessBoardRepositories';
+import type { RecoveryExecutionReadinessBoardSummaryRepository } from '../contracts/recoveryExecutionReadinessBoardRepositoryContracts';
 import { RECOVERY_EXECUTION_READINESS_BOARD_POLICIES } from '../policies/recoveryExecutionReadinessBoardPolicyDefinitions';
 
 function checkPolicy(policyName: string, actorRole: string): { allowed: boolean; reason: string } {
@@ -20,10 +20,10 @@ function errorEnvelope<T = never>(message: string, context?: RecoveryExecutionRe
 }
 
 export class RecoveryExecutionReadinessBoardSummaryService {
-  private repo: InMemoryRecoveryExecutionReadinessBoardSummaryRepository;
+  private repo: RecoveryExecutionReadinessBoardSummaryRepository;
 
-  constructor() {
-    this.repo = new InMemoryRecoveryExecutionReadinessBoardSummaryRepository();
+  constructor(repo: RecoveryExecutionReadinessBoardSummaryRepository) {
+    this.repo = repo;
   }
 
   async createBoardSummary(

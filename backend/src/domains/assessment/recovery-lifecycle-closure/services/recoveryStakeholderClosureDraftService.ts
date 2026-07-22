@@ -8,7 +8,7 @@ import {
   RecoveryLifecycleClosureCommandContext,
   RecoveryLifecycleClosureSafeEnvelope,
 } from '../contracts/recoveryLifecycleClosureContracts';
-import { InMemoryRecoveryLifecycleClosureRepositories } from '../repositories/inMemoryRecoveryLifecycleClosureRepositories';
+import { IRecoveryLifecycleClosureRepositories } from '../contracts/recoveryLifecycleClosureRepositoryContracts';
 import { RecoveryLifecycleClosurePolicyEnforcer } from '../policies/recoveryLifecycleClosurePolicyDefinitions';
 import { RecoveryLifecycleClosureSafetyService } from './recoveryLifecycleClosureSafetyService';
 import { RecoveryLifecycleClosureAuditBridge } from './recoveryLifecycleClosureAuditBridge';
@@ -17,7 +17,7 @@ import { v4 as uuid } from 'uuid';
 
 export class RecoveryStakeholderClosureDraftService {
   constructor(
-    private repos: InMemoryRecoveryLifecycleClosureRepositories,
+    private repos: IRecoveryLifecycleClosureRepositories,
     private policyEnforcer: RecoveryLifecycleClosurePolicyEnforcer,
     private safety: RecoveryLifecycleClosureSafetyService,
     private audit: RecoveryLifecycleClosureAuditBridge,

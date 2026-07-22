@@ -1,11 +1,11 @@
 import { RecoveryExecutionReadinessBoardCommandContext, RecoveryExecutionReadinessBoardSafeEnvelope } from '../contracts';
-import { InMemoryRecoveryExecutionReadinessBoardAuditRepository } from '../repositories/inMemoryRecoveryExecutionReadinessBoardRepositories';
+import type { RecoveryExecutionReadinessBoardAuditRepository } from '../contracts/recoveryExecutionReadinessBoardRepositoryContracts';
 
 export class RecoveryExecutionReadinessBoardAuditBridge {
-  private auditRepo: InMemoryRecoveryExecutionReadinessBoardAuditRepository;
+  private auditRepo: RecoveryExecutionReadinessBoardAuditRepository;
 
-  constructor() {
-    this.auditRepo = new InMemoryRecoveryExecutionReadinessBoardAuditRepository();
+  constructor(auditRepo: RecoveryExecutionReadinessBoardAuditRepository) {
+    this.auditRepo = auditRepo;
   }
 
   async recordAuditEvent(

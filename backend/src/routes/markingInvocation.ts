@@ -9,30 +9,28 @@ import { TeacherReviewDispatchService } from '../domains/assessment/marking-invo
 import { MarkingInvocationProjectionSafetyService } from '../domains/assessment/marking-invocation/services/markingInvocationProjectionSafetyService';
 import { MarkingInvocationAuditBridge } from '../domains/assessment/marking-invocation/services/markingInvocationAuditBridge';
 import { MarkingInvocationIdempotencyService } from '../domains/assessment/marking-invocation/services/markingInvocationIdempotencyService';
-import { InMemoryMarkingInvocationRequestRepository } from '../domains/assessment/marking-invocation/repositories/inMemoryMarkingInvocationRepositories';
-import { InMemorySubmittedSnapshotIntakeRepository } from '../domains/assessment/marking-invocation/repositories/inMemoryMarkingInvocationRepositories';
-import { InMemoryMarkingBatchRepository } from '../domains/assessment/marking-invocation/repositories/inMemoryMarkingInvocationRepositories';
-import { InMemoryMarkingBatchItemRepository } from '../domains/assessment/marking-invocation/repositories/inMemoryMarkingInvocationRepositories';
-import { InMemoryMarkingResultLinkRepository } from '../domains/assessment/marking-invocation/repositories/inMemoryMarkingInvocationRepositories';
+import type { MarkingInvocationRequestRepository } from '../domains/assessment/marking-invocation/contracts/markingInvocationRepositoryContracts';
+import type { SubmittedSnapshotIntakeRepository, MarkingBatchRepository, MarkingBatchItemRepository, MarkingResultLinkRepository } from '../domains/assessment/marking-invocation/contracts/markingInvocationRepositoryContracts';
 
-const router = Router();
+export function createMarkingInvocationRouter(
+  invocationRequestRepo: MarkingInvocationRequestRepository,
+  snapshotIntakeRepo: SubmittedSnapshotIntakeRepository,
+  batchRepo: MarkingBatchRepository,
+  batchItemRepo: MarkingBatchItemRepository,
+  resultLinkRepo: MarkingResultLinkRepository,
+): Router {
+  const router = Router();
 
-const invocationRequestRepo = new InMemoryMarkingInvocationRequestRepository();
-const snapshotIntakeRepo = new InMemorySubmittedSnapshotIntakeRepository();
-const batchRepo = new InMemoryMarkingBatchRepository();
-const batchItemRepo = new InMemoryMarkingBatchItemRepository();
-const resultLinkRepo = new InMemoryMarkingResultLinkRepository();
-
-const requestService = new MarkingInvocationRequestService(invocationRequestRepo);
-const intakeService = new SubmittedSnapshotIntakeService(snapshotIntakeRepo);
-const readinessCheckService = new MarkingReadinessCheckService();
-const batchPlannerService = new MarkingBatchPlannerService(batchRepo, batchItemRepo);
-const deterministicMarkingService = new DeterministicMarkingInvocationService(batchRepo, batchItemRepo, resultLinkRepo);
-const resultVersionBridgeService = new MarkingResultVersionBridgeService(resultLinkRepo);
-const teacherReviewDispatchService = new TeacherReviewDispatchService(batchItemRepo);
-const projectionSafetyService = new MarkingInvocationProjectionSafetyService();
-const auditBridge = new MarkingInvocationAuditBridge();
-const idempotencyService = new MarkingInvocationIdempotencyService();
+  const requestService = new MarkingInvocationRequestService(invocationRequestRepo);
+  const intakeService = new SubmittedSnapshotIntakeService(snapshotIntakeRepo);
+  const readinessCheckService = new MarkingReadinessCheckService();
+  const batchPlannerService = new MarkingBatchPlannerService(batchRepo, batchItemRepo);
+  const deterministicMarkingService = new DeterministicMarkingInvocationService(batchRepo, batchItemRepo, resultLinkRepo);
+  const resultVersionBridgeService = new MarkingResultVersionBridgeService(resultLinkRepo);
+  const teacherReviewDispatchService = new TeacherReviewDispatchService(batchItemRepo);
+  const projectionSafetyService = new MarkingInvocationProjectionSafetyService();
+  const auditBridge = new MarkingInvocationAuditBridge();
+  const idempotencyService = new MarkingInvocationIdempotencyService();
 
 interface SafeResponseEnvelope {
   ok: boolean;
@@ -341,4 +339,5 @@ router.get('/requests/:markingInvocationRequestId/projection/student-safe', safe
   res.json(createSafeResponseEnvelope(req, { data: projections }));
 }));
 
-export default router;
+  return router;
+}

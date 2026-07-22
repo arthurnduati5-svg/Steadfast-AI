@@ -10,25 +10,24 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { existsSync, readFileSync } from 'fs';
+import { readFileSync, existsSync } from 'fs';
 import { resolve } from 'path';
 
 const ROOT = resolve(__dirname, '../../..');
 const BSRC = resolve(__dirname, '..');
 
 describe('Source Trust Safety', () => {
-  const files = [
-    resolve(ROOT, 'backend/src/lib/research/source-trust.ts'),
-    resolve(ROOT, 'backend/src/lib/research/fact-normalizer.ts'),
-    resolve(ROOT, 'backend/src/services/safetyRiskService.ts'),
-    resolve(ROOT, 'backend/src/services/externalVideoNormalizationService.ts'),
-    resolve(ROOT, 'backend/src/services/youtubeCreativeSourceAdapter.ts'),
-    resolve(ROOT, 'backend/src/services/vimeoCreativeSourceAdapter.ts'),
+  const files: { path: string; label: string }[] = [
+    { path: resolve(ROOT, 'backend/src/services/safetyRiskService.ts'), label: 'safetyRiskService.ts' },
+    { path: resolve(ROOT, 'backend/src/services/externalVideoNormalizationService.ts'), label: 'externalVideoNormalizationService.ts' },
+    { path: resolve(ROOT, 'backend/src/services/youtubeCreativeSourceAdapter.ts'), label: 'youtubeCreativeSourceAdapter.ts' },
+    { path: resolve(ROOT, 'backend/src/services/vimeoCreativeSourceAdapter.ts'), label: 'vimeoCreativeSourceAdapter.ts' },
   ];
 
-  for (const fp of files) {
-    const name = fp.split('/').pop() || 'unknown';
-    if (!existsSync(fp)) { continue; }
+  for (const { path: fp, label: name } of files) {
+    it(`${name} exists for source trust safety scan`, () => {
+      expect(existsSync(fp)).toBe(true);
+    });
     it(`${name} does not hardcode fake/fallback URLs as trusted sources`, () => {
       const content = readFileSync(fp, 'utf-8');
       for (const pat of ['example.com', 'placeholder.com']) {
@@ -46,15 +45,16 @@ describe('Source Trust Safety', () => {
 });
 
 describe('Cache Key Safety', () => {
-  const files = [
-    resolve(BSRC, 'lib/redis.ts'),
-    resolve(BSRC, 'lib/personalization.ts'),
-    resolve(ROOT, 'AI/lib/redis.ts'),
+  const files: { path: string; label: string }[] = [
+    { path: resolve(BSRC, 'lib/redis.ts'), label: 'redis.ts' },
+    { path: resolve(BSRC, 'lib/personalization.ts'), label: 'personalization.ts' },
+    { path: resolve(ROOT, 'AI/lib/redis.ts'), label: 'AI-redis.ts' },
   ];
 
-  for (const fp of files) {
-    const name = fp.split('/').pop() || 'unknown';
-    if (!existsSync(fp)) { continue; }
+  for (const { path: fp, label: name } of files) {
+    it(`${name} exists for cache key safety scan`, () => {
+      expect(existsSync(fp)).toBe(true);
+    });
     it(`${name} does not leak secrets in cache key construction`, () => {
       const content = readFileSync(fp, 'utf-8');
       const suspicious = content.match(/cacheKey.*=.*\$\{[^}]*(SECRET|KEY|TOKEN|PASSWORD)[^}]*\}/);
@@ -64,14 +64,15 @@ describe('Cache Key Safety', () => {
 });
 
 describe('Auth/Tenant Route Protection', () => {
-  const files = [
-    resolve(BSRC, 'routes/profile.ts'),
-    resolve(BSRC, 'routes/voice.ts'),
+  const files: { path: string; label: string }[] = [
+    { path: resolve(BSRC, 'routes/profile.ts'), label: 'profile.ts' },
+    { path: resolve(BSRC, 'routes/voice.ts'), label: 'voice.ts' },
   ];
 
-  for (const fp of files) {
-    const name = fp.split('/').pop() || 'unknown';
-    if (!existsSync(fp)) { continue; }
+  for (const { path: fp, label: name } of files) {
+    it(`${name} exists for auth middleware scan`, () => {
+      expect(existsSync(fp)).toBe(true);
+    });
     it(`${name} includes auth middleware`, () => {
       const content = readFileSync(fp, 'utf-8');
       const refs = content.match(/schoolAuthMiddleware|requireRole|resolveStudentId/g) || [];

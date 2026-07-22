@@ -3,6 +3,8 @@ import path from 'path';
 import { execSync } from 'child_process';
 import type { Task032Task031DependencyProof } from '../contracts/task032ControlledCanaryActivationContracts';
 
+const REPO_ROOT = path.resolve(__dirname, '../../..');
+
 export async function loadTask031ProofForTask032(): Promise<Task032Task031DependencyProof> {
   const proof: Task032Task031DependencyProof = {
     ok: false,
@@ -36,7 +38,7 @@ export async function loadTask031ProofForTask032(): Promise<Task032Task031Depend
   };
 
   try {
-    const result = execSync('git log --oneline --all | findstr "bfcf5af"', { encoding: 'utf8', cwd: process.cwd() });
+    const result = execSync('git log --oneline --all | findstr "bfcf5af"', { encoding: 'utf8', cwd: REPO_ROOT });
     proof.commitFound = result.includes('bfcf5af');
   } catch {
     proof.blockingIssues.push('commit_bfcf5af_not_found');
@@ -46,8 +48,8 @@ export async function loadTask031ProofForTask032(): Promise<Task032Task031Depend
     proof.blockingIssues.push('commit_bfcf5af_not_found');
   }
 
-  const reportPath = path.resolve(process.cwd(), 'reports/task-031-staging-smoke-canary-readiness-v1.json');
-  const opsReportPath = path.resolve(process.cwd(), 'docs/ops/task-031/task-031-staging-smoke-canary-readiness-report.json');
+  const reportPath = path.resolve(REPO_ROOT, 'reports/task-031-staging-smoke-canary-readiness-v1.json');
+  const opsReportPath = path.resolve(REPO_ROOT, 'docs/ops/task-031/task-031-staging-smoke-canary-readiness-report.json');
 
   if (fs.existsSync(reportPath)) {
     proof.task031ReportFound = true;
