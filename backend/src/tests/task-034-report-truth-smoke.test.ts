@@ -390,9 +390,8 @@ describe('task034 report truth smoke', () => {
       commandsRun: [], filesCreated: [], filesModified: [],
       filesStaged: [], filesIntentionallyNotStaged: [],
       remainingBlockers: [], generatedAt: 'ts',
-      task034Started: true,
     };
-    const result = validateTask034ReportTruth(base);
+    const result = validateTask034ReportTruth({ ...base, task034Started: true });
     expect(result.ok).toBe(false);
     expect(result.reasonCodes).toContain('task034Started_not_false');
   });

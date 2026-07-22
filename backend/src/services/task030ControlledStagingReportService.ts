@@ -1,5 +1,4 @@
 import type { Task030ControlledStagingReport } from '../contracts/task030ControlledStagingRehearsalContracts';
-import { TASK030_SAFE_TO_NEXT_TASK_STATUSES } from '../contracts/task030ControlledStagingRehearsalContracts';
 import { validateTask030ReportInput } from '../lib/task030ControlledStagingRehearsalValidation';
 import { task030ControlledStagingRehearsalRepository } from '../repositories/task030ControlledStagingRehearsalRepository';
 import { loadTask029ProofForTask030 } from './task030Task029ProofLoaderService';
@@ -223,8 +222,12 @@ export async function generateTask030ControlledStagingReport(
     noTask031ToTask040ScanPassed: true,
     noFalsePassScanRun: true,
     noFalsePassScanPassed: true,
-    ...TASK030_SAFE_TO_NEXT_TASK_STATUSES,
     safeToStartTask031,
+    safeToStartTask032: false,
+    safeToStartTask033: false,
+    safeToStartTask034: false,
+    safeToStartTask035: false,
+    safeToStartTask040: false,
     verdict,
     commandsRun: [],
     filesCreated: [],

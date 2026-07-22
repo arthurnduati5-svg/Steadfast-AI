@@ -363,21 +363,39 @@ app.use('/api/question-bank', schoolAuthMiddleware, questionBankRoutes);
 import examBlueprintRoutes from './routes/examBlueprint';
 app.use('/api/question-bank', schoolAuthMiddleware, examBlueprintRoutes);
 
-// ─── Marking Routes (Package 5) ──────────────────────
-import markingRoutes from './routes/marking';
-app.use('/api/question-bank/marking', schoolAuthMiddleware, requireVerifiedSchoolContext, markingRoutes);
+// ─── Question Bank Runtime Composition (Packages 5-26) ──
+import { createQuestionBankComposition } from './domains/assessment/runtime/questionBankRuntimeComposition';
+import { createMarkingRouter } from './routes/marking';
+import { createExamPaperRouter } from './routes/examPaper';
+import { createMarkingInvocationRouter } from './routes/markingInvocation';
+import { createRecoveryLifecycleClosureRouter } from './routes/recoveryLifecycleClosure';
+import { createRecoveryExecutionReadinessBoardRouter } from './routes/recoveryExecutionReadinessBoard';
+import { createRecoveryCaseAdjudicationRouter } from './routes/recoveryCaseAdjudication';
 
-// ─── Exam Paper Routes (Package 6) ──────────────────
-import examPaperRoutes from './routes/examPaper';
-app.use('/api/question-bank/exam-papers', schoolAuthMiddleware, requireVerifiedSchoolContext, examPaperRoutes);
+const _qbComp = createQuestionBankComposition();
+const _qbRepos = _qbComp.build();
 
-// ─── Exam Delivery Routes (Package 7) ─────────────
+// Package 5: Marking
+const composedMarkingRouter = createMarkingRouter(_qbRepos.package5.markingRunRepository, _qbRepos.package5.markingResultVersionRepository, _qbRepos.package5.markingBreakdownItemRepository);
+app.use('/api/question-bank/marking', schoolAuthMiddleware, requireVerifiedSchoolContext, composedMarkingRouter);
+
+// Package 6: Exam Paper Assembly
+const composedExamPaperRouter = createExamPaperRouter(_qbRepos.package6);
+app.use('/api/question-bank/exam-papers', schoolAuthMiddleware, requireVerifiedSchoolContext, composedExamPaperRouter);
+
+// Package 7: Exam Delivery
 import examDeliveryRoutes from './routes/examDelivery';
 app.use('/api/question-bank/exam-delivery', schoolAuthMiddleware, requireVerifiedSchoolContext, examDeliveryRoutes);
 
-// ─── Marking Invocation Routes (Package 8) ──────
-import markingInvocationRoutes from './routes/markingInvocation';
-app.use('/api/question-bank/marking-invocation', schoolAuthMiddleware, requireVerifiedSchoolContext, markingInvocationRoutes);
+// Package 8: Marking Invocation
+const composedMarkingInvocationRouter = createMarkingInvocationRouter(
+  _qbRepos.package8.markingInvocationRequestRepository,
+  _qbRepos.package8.submittedSnapshotIntakeRepository,
+  _qbRepos.package8.markingBatchRepository,
+  _qbRepos.package8.markingBatchItemRepository,
+  _qbRepos.package8.markingResultLinkRepository,
+);
+app.use('/api/question-bank/marking-invocation', schoolAuthMiddleware, requireVerifiedSchoolContext, composedMarkingInvocationRouter);
 
 // ─── Result Governance Routes (Package 9) ────
 import resultGovernanceRoutes from './routes/resultGovernance';
@@ -432,24 +450,57 @@ import recoveryOutcomeExecutionSimulationRoutes from './routes/recoveryOutcomeEx
 app.use('/api/question-bank/recovery-outcome-execution-simulation', schoolAuthMiddleware, requireVerifiedSchoolContext, recoveryOutcomeExecutionSimulationRoutes);
 
 // ─── Recovery Lifecycle Closure Routes (Package 22) ──
-import recoveryLifecycleClosureRoutes from './routes/recoveryLifecycleClosure';
-app.use('/api/question-bank/recovery-lifecycle-closure', schoolAuthMiddleware, requireVerifiedSchoolContext, recoveryLifecycleClosureRoutes);
+const composedRecoveryLifecycleClosureRouter = createRecoveryLifecycleClosureRouter(_qbRepos.package22.closureRepositories);
+app.use('/api/question-bank/recovery-lifecycle-closure', schoolAuthMiddleware, requireVerifiedSchoolContext, composedRecoveryLifecycleClosureRouter);
 
 // ─── Recovery Execution Authorization Preview Routes (Package 23) ──
 import recoveryExecutionAuthorizationPreviewRoutes from './routes/recoveryExecutionAuthorizationPreview';
 app.use('/api/question-bank/recovery-execution-authorization-preview', schoolAuthMiddleware, requireVerifiedSchoolContext, recoveryExecutionAuthorizationPreviewRoutes);
 
 // ─── Recovery Execution Readiness Board Routes (Package 24) ──
-import recoveryExecutionReadinessBoardRoutes from './routes/recoveryExecutionReadinessBoard';
-app.use('/api/question-bank/recovery-execution-readiness-board', schoolAuthMiddleware, requireVerifiedSchoolContext, recoveryExecutionReadinessBoardRoutes);
+const composedRecoveryExecutionReadinessBoardRouter = createRecoveryExecutionReadinessBoardRouter(
+  _qbRepos.package24.snapshotRepository,
+  _qbRepos.package24.laneRepository,
+  _qbRepos.package24.cardRepository,
+  _qbRepos.package24.blockerRepository,
+  _qbRepos.package24.riskSignalRepository,
+  _qbRepos.package24.filterPresetRepository,
+  _qbRepos.package24.governanceNoteRepository,
+  _qbRepos.package24.roleProjectionRepository,
+  _qbRepos.package24.teacherQueueRepository,
+  _qbRepos.package24.adminQueueRepository,
+  _qbRepos.package24.studentSafeStatusDraftRepository,
+  _qbRepos.package24.parentSafeStatusDraftRepository,
+  _qbRepos.package24.refreshJobRepository,
+  _qbRepos.package24.summaryRepository,
+  _qbRepos.package24.auditRepository,
+  _qbRepos.package24.idempotencyRepository,
+);
+app.use('/api/question-bank/recovery-execution-readiness-board', schoolAuthMiddleware, requireVerifiedSchoolContext, composedRecoveryExecutionReadinessBoardRouter);
 
 // ─── Recovery Case Triage Routes (Package 25) ──
 import recoveryCaseTriageRoutes from './routes/recoveryCaseTriage';
 app.use('/api/question-bank/recovery-case-triage', schoolAuthMiddleware, requireVerifiedSchoolContext, recoveryCaseTriageRoutes);
 
 // ─── Recovery Case Adjudication Routes (Package 26) ──
-import recoveryCaseAdjudicationRoutes from './routes/recoveryCaseAdjudication';
-app.use('/api/question-bank/recovery-case-adjudication', schoolAuthMiddleware, requireVerifiedSchoolContext, recoveryCaseAdjudicationRoutes);
+const composedRecoveryCaseAdjudicationRouter = createRecoveryCaseAdjudicationRouter(
+  _qbRepos.package26.adjudicationReadinessRepository,
+  _qbRepos.package26.reviewSessionRepository,
+  _qbRepos.package26.evidenceBundleRepository,
+  _qbRepos.package26.reviewChecklistRepository,
+  _qbRepos.package26.conflictDeclarationRepository,
+  _qbRepos.package26.reviewerDecisionRepository,
+  _qbRepos.package26.priorityOverrideRepository,
+  _qbRepos.package26.secondReviewRepository,
+  _qbRepos.package26.consensusRepository,
+  _qbRepos.package26.disagreementRepository,
+  _qbRepos.package26.queueDispositionRepository,
+  _qbRepos.package26.qualitySampleRepository,
+  _qbRepos.package26.adjudicationSummaryRepository,
+  _qbRepos.package26.adjudicationAuditRepository,
+  _qbRepos.package26.adjudicationIdempotencyRepository,
+);
+app.use('/api/question-bank/recovery-case-adjudication', schoolAuthMiddleware, requireVerifiedSchoolContext, composedRecoveryCaseAdjudicationRouter);
 
 // ─── Phase 2: Learning Mode Runtime Routes ──────────────
 app.use('/api', schoolAuthMiddleware, requireVerifiedSchoolContext, learningModeRoutes);

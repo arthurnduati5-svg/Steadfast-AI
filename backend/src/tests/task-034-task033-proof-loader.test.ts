@@ -31,7 +31,6 @@ describe('Task034 Task033 Proof Loader', () => {
       noLiveNotificationScanPassed: true,
       noFrontendUiScanPassed: true,
       noTask034ToTask040ScanPassed: true,
-      noFalsePassScanPassed: true,
     };
   }
 
