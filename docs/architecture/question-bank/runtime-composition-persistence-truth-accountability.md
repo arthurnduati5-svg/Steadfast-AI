@@ -6,14 +6,14 @@ d8f843b fix(task-040): remove synthetic success from Package 6 routes, fix skipp
 bf8eab9 fix(qbank): remove Date.now() variantCode, replace dynamic import with static import
 c8f8f2d fix(qbank): finalize runtime composition + persistence truth for packages 5/6/8/22/24/26
 7a64a13 docs(qbank): runtime composition + persistence truth accountability record (original — contained premature sentinel)
-<post-repair-commit> docs(qbank): correct and finalize runtime truth accountability (this document)
+d595ed3 docs(qbank): correct and finalize runtime truth accountability (this document)
 ```
 
 ## Repository
 - Branch: main
 - Root: C:/Users/HP/Steadfast-AI
 - Starting HEAD (of this verification): 7a64a13
-- Final HEAD: <filled-after-commit>
+- Final HEAD: d595ed3
 
 ## Scope
 Finalize runtime-composition infrastructure and persistence-truth enforcement for assessment packages 5 (marking), 6 (exam-paper), 8 (marking-invocation), 22 (recovery-lifecycle-closure), 24 (recovery-execution-readiness-board), and 26 (recovery-case-adjudication).
