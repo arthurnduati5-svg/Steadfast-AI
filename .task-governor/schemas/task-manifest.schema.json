@@ -1,0 +1,79 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Task Manifest",
+  "type": "object",
+  "required": ["schemaVersion", "taskId", "title", "description", "scope", "todos", "gates", "commitPolicy", "acceptance"],
+  "properties": {
+    "schemaVersion": { "type": "integer", "minimum": 1, "maximum": 1 },
+    "taskId": { "type": "string" },
+    "title": { "type": "string" },
+    "description": { "type": "string" },
+    "repository": {
+      "type": "object",
+      "properties": {
+        "root": { "type": "string" },
+        "historicalReferenceHead": { "type": "string" },
+        "baselineMode": { "type": "string" }
+      }
+    },
+    "scope": {
+      "type": "object",
+      "properties": {
+        "allowedPaths": { "type": "array", "items": { "type": "string" } },
+        "protectedPaths": { "type": "array", "items": { "type": "string" } },
+        "generatedPaths": { "type": "array", "items": { "type": "string" } },
+        "accountabilityDocument": { "type": "string" }
+      }
+    },
+    "todos": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "title": { "type": "string" },
+          "description": { "type": "string" },
+          "dependsOn": { "type": "array", "items": { "type": "string" } },
+          "requiredGateIds": { "type": "array", "items": { "type": "string" } }
+        }
+      }
+    },
+    "gates": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "title": { "type": "string" },
+          "type": { "type": "string" },
+          "phases": { "type": "array", "items": { "type": "string" } },
+          "required": { "type": "boolean" },
+          "cwd": { "type": "string" },
+          "executable": { "type": "string" },
+          "args": { "type": "array", "items": { "type": "string" } },
+          "timeoutMs": { "type": "integer" }
+        }
+      }
+    },
+    "testInventories": { "type": "array" },
+    "scans": { "type": "array" },
+    "commitPolicy": {
+      "type": "object",
+      "properties": {
+        "implementationMessagePattern": { "type": "string" },
+        "accountabilityMessagePattern": { "type": "string" },
+        "forbidAmend": { "type": "boolean" },
+        "forbidPush": { "type": "boolean" },
+        "accountabilityCommitDocsOnly": { "type": "boolean" }
+      }
+    },
+    "acceptance": {
+      "type": "object",
+      "properties": {
+        "sentinel": { "type": "string" },
+        "requiredState": { "type": "string" },
+        "requiredGateIds": { "type": "array", "items": { "type": "string" } }
+      }
+    }
+  }
+}
