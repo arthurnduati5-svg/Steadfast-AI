@@ -89,6 +89,13 @@ export const SCAN_PATTERNS = {
     { id: 'Math.random identity', regex: /Math\.random\s*\(\s*\).*(?:id|key|code)/i, reason: 'Math.random() based identity' },
     { id: 'local counter', regex: /let\s+\w*(?:counter|seq|index)\s*=\s*0/i, reason: 'Local counter identity' },
   ],
+  optionalPersistence: [
+    { id: 'no await repository', regex: /(?:\.save|\.update|\.delete|\.create|\.persist)\s*\([^)]*\)(?!\s*\n\s*await)/, reason: 'Persistence call without await' },
+    { id: 'missing try-catch persist', regex: /await\s+\w+\.\s*(?:save|update|delete|create|persist)\s*\(/, reason: 'Persistence call should have try-catch' },
+  ],
+  idempotency: [
+    { id: 'missing idempotency', regex: /async\s+function\s+\w*[Pp]rocess|async\s+\w*\s*=>\s*{/, reason: 'Async operation may need idempotency key' },
+  ],
   shellAndPath: [
     { id: 'execSync shell', regex: /execSync\s*\(/, reason: 'execSync shell command' },
     { id: 'stderr redirect', regex: /2>\s*\/dev\/null/, reason: 'Shell stderr redirect' },
@@ -102,12 +109,40 @@ export const SCAN_PATTERNS = {
     { id: 'ts-nocheck', regex: /@ts-nocheck/, reason: 'TypeScript no check suppression' },
     { id: 'eslint-disable', regex: /\beslint-disable\b/, reason: 'ESLint disable directive' },
   ],
+  manualSentinel: [
+    { id: 'accepted sentinel', regex: /STEADFAST_QBANK_RUNTIME_COMPOSITION_PERSISTENCE_TRUTH_ACCEPTED_READY/, reason: 'Handwritten acceptance sentinel in code' },
+    { id: 'governor sentinel printed', regex: /GOVERNOR_FINALIZE_ACCEPTED/, reason: 'Handwritten governor accepted sentinel' },
+  ],
 };
 
-export function runAllScans(allowedPaths) {
+const SCAN_ALIASES = {
+  'route-local-repository-scan': 'routeLocalRepository',
+  'route-owned-identity-scan': 'routeOwnedIdentity',
+  'optional-persistence-scan': 'optionalPersistence',
+  'idempotency-scan': 'idempotency',
+  'shell-path-scan': 'shellAndPath',
+  'type-suppression-scan': 'typeSuppression',
+  'school-scope-behavior': null,
+  'manual-sentinel-scan': 'manualSentinel',
+};
+
+export function runAllScans(allowedPaths, manifest) {
   const allResults = {};
-  for (const [name, patterns] of Object.entries(SCAN_PATTERNS)) {
-    allResults[name] = scanForPatterns(allowedPaths, patterns);
+  if (manifest && manifest.scans) {
+    for (const scanDef of manifest.scans) {
+      const patternKey = SCAN_ALIASES[scanDef.id] || scanDef.id;
+      if (patternKey === null) continue;
+      const patterns = SCAN_PATTERNS[patternKey];
+      if (patterns) {
+        allResults[scanDef.id] = scanForPatterns(allowedPaths, patterns);
+      } else {
+        allResults[scanDef.id] = [{ error: `No executable scan configuration for: ${scanDef.id}` }];
+      }
+    }
+  } else {
+    for (const [name, patterns] of Object.entries(SCAN_PATTERNS)) {
+      allResults[name] = scanForPatterns(allowedPaths, patterns);
+    }
   }
   return allResults;
 }

@@ -88,6 +88,11 @@ export function validateManifest(manifest) {
           }
         }
       }
+
+      const isAcceptancePhase = /pre-commit|post-commit|accountability|final/i.test(todo.title || '');
+      if (isAcceptancePhase && (!todo.requiredGateIds || todo.requiredGateIds.length === 0)) {
+        errors.push(`Todo ${todo.id} is an acceptance-phase todo (${todo.title}) but has no requiredGateIds. Acceptance-phase todos must enforce real gates.`);
+      }
     }
 
     const visited = new Set();

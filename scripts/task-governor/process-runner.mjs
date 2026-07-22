@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process';
-import { writeFileSync, mkdirSync, existsSync } from 'node:fs';
+import { writeFileSync, mkdirSync, existsSync, accessSync, readFileSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { getRepositoryRoot } from './repository-root.mjs';
 import { getGovernorRuntimeDir } from './repository-root.mjs';
@@ -25,16 +25,15 @@ function redactSecrets(text) {
   return result;
 }
 
-function ensureDir(filePath) {
-  const dir = dirname(filePath);
-  if (!existsSync(dir)) {
-    mkdirSync(dir, { recursive: true });
+function ensureDir(dirPath) {
+  if (!existsSync(dirPath)) {
+    mkdirSync(dirPath, { recursive: true });
   }
 }
 
 export function runCommand(opts) {
   const {
-    executable,
+    executable: rawExec,
     args = [],
     cwd,
     timeoutMs = 120000,
@@ -46,11 +45,33 @@ export function runCommand(opts) {
   const resolvedCwd = cwd ? resolve(repoRoot, cwd) : repoRoot;
   const startTime = Date.now();
 
+  let executable = rawExec;
+  let execArgs = args;
+  if (process.platform === 'win32') {
+    const cmdExtensions = ['.cmd', '.bat', '.ps1', '.exe'];
+    const hasExt = cmdExtensions.some(ext => executable.toLowerCase().endsWith(ext));
+    if (!hasExt) {
+      try {
+        accessSync(executable + '.cmd');
+        executable = executable + '.cmd';
+      } catch {
+        try {
+          accessSync(executable + '.exe');
+          executable = executable + '.exe';
+        } catch {
+          const comspec = process.env.COMSPEC || 'cmd.exe';
+          executable = comspec;
+          execArgs = ['/d', '/s', '/c', rawExec + ' ' + args.map(a => a.includes(' ') ? '"' + a + '"' : a).join(' ')];
+        }
+      }
+    }
+  }
+
   const stdoutParts = [];
   const stderrParts = [];
 
   return new Promise((resolvePromise) => {
-    const child = spawn(executable, args, {
+    const child = spawn(executable, execArgs, {
       cwd: resolvedCwd,
       shell: false,
       stdio: ['ignore', 'pipe', 'pipe'],
@@ -141,11 +162,26 @@ export async function runAndRecord(opts) {
   };
 }
 
-export function checkOutputForFailures(stdout, stderr, warningPatterns) {
-  const combined = `${stdout}\n${stderr}`;
+export function readLogContent(logPath) {
+  if (!logPath || !existsSync(logPath)) return '';
+  try {
+    return readFileSync(logPath, 'utf-8');
+  } catch {
+    return '';
+  }
+}
+
+export function checkOutputForFailures(stdout, stderr, warningPatterns, stdoutPath, stderrPath) {
+  let actualStdout = stdout;
+  let actualStderr = stderr;
+  if (!stdout && stdoutPath) actualStdout = readLogContent(stdoutPath);
+  if (!stderr && stderrPath) actualStderr = readLogContent(stderrPath);
+  const combined = `${actualStdout}\n${actualStderr}`;
+  if (!combined.trim()) return [];
   const findings = [];
   for (const pattern of warningPatterns) {
-    const re = new RegExp(pattern.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi');
+    const escaped = pattern.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const re = new RegExp(escaped, 'gi');
     let match;
     while ((match = re.exec(combined)) !== null) {
       findings.push({ pattern, match: match[0], index: match.index });

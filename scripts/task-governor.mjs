@@ -3,12 +3,12 @@
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { getRepositoryRoot, getGovernorRuntimeDir, getGitDir } from './task-governor/repository-root.mjs';
-import { loadManifest } from './task-governor/manifest-loader.mjs';
+import { loadManifest, computeManifestHash } from './task-governor/manifest-loader.mjs';
 import { validateManifest } from './task-governor/manifest-validator.mjs';
 import { loadState, updateState, saveState, getDefaultState } from './task-governor/state-store.mjs';
 import { STATES, EXIT_CODES } from './task-governor/constants.mjs';
 import { runGate, verifyPostCommit, finalizeTask } from './task-governor/gate-runner.mjs';
-import { verifyChain, getRecords, getLastRecord } from './task-governor/evidence-ledger.mjs';
+import { verifyChain, getRecords, getLastRecord, addRecord } from './task-governor/evidence-ledger.mjs';
 import { captureBaseline, getCurrentHead, getStatus, checkWorkspace } from './task-governor/workspace-guard.mjs';
 import { prepareCommit, recordImplementationCommit, recordAccountabilityCommit } from './task-governor/commit-guard.mjs';
 import { formatStatus, formatStatusJson, formatExplain } from './task-governor/output-format.mjs';
@@ -26,6 +26,7 @@ async function main() {
     console.log('  doctor                          Verify governor installation');
     console.log('  validate <task-id>               Validate task manifest');
     console.log('  bootstrap <task-id>              Bootstrap a task (capture baseline)');
+    console.log('  rebootstrap <task-id> [--reason]  Audited rebootstrap: archive old evidence, start fresh');
     console.log('  status <task-id>                 Show task status');
     console.log('  status <task-id> --json          Show task status as JSON');
     console.log('  resume <task-id>                 Show next required action');
@@ -50,6 +51,8 @@ async function main() {
         return await cmdValidate(args[1]);
       case 'bootstrap':
         return await cmdBootstrap(args[1]);
+      case 'rebootstrap':
+        return await cmdRebootstrap(args[1], args.slice(2));
       case 'status':
         if (args[2] === '--json') {
           return await cmdStatus(args[1], true);
@@ -187,6 +190,85 @@ async function cmdBootstrap(taskId) {
   return 0;
 }
 
+async function cmdRebootstrap(taskId, extraArgs) {
+  if (!taskId) {
+    console.error('Usage: node scripts/task-governor.mjs rebootstrap <task-id> [--reason "..."]');
+    return 1;
+  }
+
+  const reasonIndex = extraArgs.indexOf('--reason');
+  const reason = reasonIndex >= 0 && extraArgs[reasonIndex + 1] ? extraArgs[reasonIndex + 1] : 'Governor repair invoked provisional evidence rebootstrap';
+
+  const manifest = loadManifest(taskId);
+  validateManifest(manifest);
+  const previousState = loadState(taskId);
+  const previousManifestHash = computeManifestHash(manifest);
+  const runtimeDir = getGovernorRuntimeDir(taskId);
+  const prevHead = getCurrentHead();
+  const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+
+  let archiveLocation = null;
+  if (existsSync(runtimeDir)) {
+    const gitDir = getGitDir();
+    archiveLocation = resolve(gitDir, `task-governor-archive/${taskId}-${timestamp}`);
+    const archiveDir = dirname(archiveLocation);
+    if (!existsSync(archiveDir)) mkdirSync(archiveDir, { recursive: true });
+
+    try {
+      const { execSync } = await import('node:child_process');
+      execSync(`copy "${runtimeDir}" "${archiveLocation}" /E /I /Y`, { shell: true, cwd: getRepositoryRoot() });
+    } catch {
+      try {
+        const src = runtimeDir + '\\*';
+        const { execSync } = await import('node:child_process');
+        execSync(`xcopy "${src}" "${archiveLocation}" /E /I /Y`, { shell: true, cwd: getRepositoryRoot() });
+      } catch (e2) {
+        archiveLocation = null;
+      }
+    }
+  }
+
+  const state = getDefaultState(taskId);
+  state.currentHead = prevHead;
+  state.manifestHash = previousManifestHash;
+
+  const baseline = captureBaseline(manifest.scope);
+  const baselinePath = `${runtimeDir}/baseline-workspace.json`;
+  const baseDir = dirname(baselinePath);
+  if (!existsSync(baseDir)) mkdirSync(baseDir, { recursive: true });
+  writeFileSync(baselinePath, JSON.stringify(baseline, null, 2), 'utf-8');
+
+  const rebootstrapRecord = {
+    taskId,
+    reason,
+    previousManifestHash: previousManifestHash,
+    newManifestHash: previousManifestHash,
+    previousState: previousState.currentState || 'UNKNOWN',
+    previousHead: prevHead,
+    timestamp: new Date().toISOString(),
+    archiveLocation: archiveLocation || 'none',
+    previousTodoCompletion: previousState.todoCompletion || {},
+    previousGateCompletion: previousState.gateCompletion || {},
+  };
+
+  const rebootstrapPath = `${runtimeDir}/rebootstrap-record.json`;
+  if (!existsSync(dirname(rebootstrapPath))) mkdirSync(dirname(rebootstrapPath), { recursive: true });
+  writeFileSync(rebootstrapPath, JSON.stringify(rebootstrapRecord, null, 2), 'utf-8');
+
+  state.baselineCaptured = true;
+  state.currentState = STATES.IMPLEMENTING;
+  saveState(state);
+
+  console.log(`Task "${taskId}" rebootstrapped.`);
+  console.log(`State: ${state.currentState}`);
+  console.log(`Starting HEAD: ${state.currentHead}`);
+  console.log(`Reason: ${reason}`);
+  console.log(`Previous evidence archived to: ${archiveLocation || 'N/A'}`);
+  console.log(`Rebootstrap record saved to: ${rebootstrapPath}`);
+
+  return 0;
+}
+
 async function cmdStatus(taskId, json) {
   if (!taskId) {
     console.error('Usage: node scripts/task-governor.mjs status <task-id> [--json]');
@@ -233,12 +315,67 @@ async function cmdResume(taskId) {
     console.error(`WARNING: ${e.message}`);
   }
 
-  console.log(formatStatus(taskId, state, manifest, manifest.gates || [], manifest.todos || []));
+  if (state.currentState === STATES.ACCEPTED_READY) {
+    console.log(`NEXT_REQUIRED_ACTION=Task is already accepted`);
+    console.log('NEXT_ALLOWED_COMMAND=none');
+    return 0;
+  }
+  if (state.currentState === STATES.BLOCKED) {
+    console.log('NEXT_REQUIRED_ACTION=Resolve external blocker and rebootstrap');
+    console.log('NEXT_ALLOWED_COMMAND=node scripts/task-governor.mjs rebootstrap <task-id> --reason "Blocker resolved"');
+    return EXIT_CODES.EXTERNAL_BLOCKER;
+  }
 
-  if (state.currentState === STATES.ACCEPTED_READY) return 0;
-  if (state.currentState === STATES.BLOCKED) return EXIT_CODES.EXTERNAL_BLOCKER;
+  if (state.currentState === STATES.ERROR_REPAIR) {
+    if (state.lastFailedGateId) {
+      const gateDef = manifest.gates.find(g => g.id === state.lastFailedGateId);
+      const lastRecord = getLastRecord(taskId);
+      let failureDetail = '';
+      if (lastRecord && lastRecord.exitCode != null) {
+        failureDetail = ` (exit code: ${lastRecord.exitCode})`;
+      }
+      console.log('NEXT_REQUIRED_ACTION=Repair the failure recorded by ' + state.lastFailedGateId + failureDetail + ', then rerun that gate');
+      console.log('NEXT_ALLOWED_COMMAND=node scripts/task-governor.mjs run-gate ' + taskId + ' ' + state.lastFailedGateId);
+    } else {
+      console.log('NEXT_REQUIRED_ACTION=Run a gate to begin verification');
+      console.log('NEXT_ALLOWED_COMMAND=node scripts/task-governor.mjs run-gate ' + taskId + ' <gate-id>');
+    }
+    return EXIT_CODES.ERROR_REPAIR_LOCKED;
+  }
 
-  return state.currentState === STATES.ERROR_REPAIR ? EXIT_CODES.ERROR_REPAIR_LOCKED : 0;
+  const todos = manifest.todos || [];
+  const gates = manifest.gates || [];
+
+  const nextIncompleteTodo = todos.find(t => !state.todoCompletion[t.id]);
+  if (!nextIncompleteTodo) {
+    console.log('NEXT_REQUIRED_ACTION=All todos complete. Run finalize.');
+    console.log('NEXT_ALLOWED_COMMAND=node scripts/task-governor.mjs finalize ' + taskId);
+    return 0;
+  }
+
+  if (nextIncompleteTodo.dependsOn && nextIncompleteTodo.dependsOn.length > 0) {
+    for (const dep of nextIncompleteTodo.dependsOn) {
+      if (!state.todoCompletion[dep]) {
+        const depTodo = todos.find(t => t.id === dep);
+        console.log('NEXT_REQUIRED_ACTION=Complete dependency todo ' + dep + ' first');
+        console.log('NEXT_ALLOWED_COMMAND=node scripts/task-governor.mjs resume ' + taskId);
+        return 0;
+      }
+    }
+  }
+
+  const requiredGates = nextIncompleteTodo.requiredGateIds || [];
+  const firstIncompleteGateId = requiredGates.find(gid => !state.gateCompletion[gid]);
+
+  if (firstIncompleteGateId) {
+    console.log('NEXT_REQUIRED_ACTION=Run gate ' + firstIncompleteGateId);
+    console.log('NEXT_ALLOWED_COMMAND=node scripts/task-governor.mjs run-gate ' + taskId + ' ' + firstIncompleteGateId);
+    return 0;
+  }
+
+  console.log('NEXT_REQUIRED_ACTION=Verify todo ' + nextIncompleteTodo.id);
+  console.log('NEXT_ALLOWED_COMMAND=node scripts/task-governor.mjs verify-todo ' + taskId + ' ' + nextIncompleteTodo.id);
+  return 0;
 }
 
 async function cmdRunGate(taskId, gateId) {
@@ -291,28 +428,153 @@ async function cmdVerifyTodo(taskId, todoId) {
   }
 
   const manifest = loadManifest(taskId);
-  validateManifest(manifest);
+  try {
+    validateManifest(manifest);
+  } catch (e) {
+    console.error('TODO_NOT_VERIFIED');
+    console.error(`TASK_ID=${taskId}`);
+    console.error(`TODO_ID=${todoId}`);
+    console.error(`FAILED_GATE=manifest-validation`);
+    console.error(`FAILURE_REASON=${e.message}`);
+    console.error(`NEXT_REQUIRED_ACTION=Repair manifest issues and retry`);
+    return 1;
+  }
+
   const state = loadState(taskId);
 
   const todo = manifest.todos.find(t => t.id === todoId);
   if (!todo) {
-    console.error(`Todo not found: ${todoId}`);
+    console.error('TODO_NOT_VERIFIED');
+    console.error(`TASK_ID=${taskId}`);
+    console.error(`TODO_ID=${todoId}`);
+    console.error(`FAILED_GATE=todo-lookup`);
+    console.error('FAILURE_REASON=Todo not found in manifest');
+    console.error('NEXT_REQUIRED_ACTION=Use a valid todo ID');
+    return 1;
+  }
+
+  const isAcceptancePhase = todo.id === 'QBANK-4' || todo.id === 'QBANK-5' || todo.id === 'QBANK-6' ||
+    todo.title?.toLowerCase().includes('pre-commit') ||
+    todo.title?.toLowerCase().includes('post-commit') ||
+    todo.title?.toLowerCase().includes('accountability');
+
+  if (isAcceptancePhase && (!todo.requiredGateIds || todo.requiredGateIds.length === 0)) {
+    console.error('TODO_NOT_VERIFIED');
+    console.error(`TASK_ID=${taskId}`);
+    console.error(`TODO_ID=${todoId}`);
+    console.error('FAILED_GATE=todo-configuration');
+    console.error('FAILURE_REASON=Acceptance-phase todo has no required gates');
+    console.error('NEXT_REQUIRED_ACTION=Configure real required gates for this acceptance-phase todo');
+    return 1;
+  }
+
+  if (state.currentState === STATES.ERROR_REPAIR) {
+    console.error('TODO_NOT_VERIFIED');
+    console.error(`TASK_ID=${taskId}`);
+    console.error(`TODO_ID=${todoId}`);
+    console.error('FAILED_GATE=task-state');
+    console.error(`FAILURE_REASON=Task is in ERROR_REPAIR state. Last failed gate: ${state.lastFailedGateId}`);
+    console.error('NEXT_REQUIRED_ACTION=Repair the failure and rerun the failed gate');
     return 1;
   }
 
   if (todo.dependsOn && todo.dependsOn.length > 0) {
     for (const dep of todo.dependsOn) {
       if (!state.todoCompletion[dep]) {
-        console.error(`Dependency not satisfied: ${dep} must be completed before ${todoId}`);
+        console.error('TODO_NOT_VERIFIED');
+        console.error(`TASK_ID=${taskId}`);
+        console.error(`TODO_ID=${todoId}`);
+        console.error(`FAILED_GATE=todo-dependency`);
+        console.error(`FAILURE_REASON=Dependency not satisfied: ${dep} must be completed before ${todoId}`);
+        console.error(`NEXT_REQUIRED_ACTION=Complete todo ${dep} first`);
         return 1;
       }
     }
+  }
+
+  if (todo.requiredGateIds && todo.requiredGateIds.length > 0) {
+    for (const gid of todo.requiredGateIds) {
+      const gateDef = manifest.gates.find(g => g.id === gid);
+      if (!gateDef) {
+        console.error('TODO_NOT_VERIFIED');
+        console.error(`TASK_ID=${taskId}`);
+        console.error(`TODO_ID=${todoId}`);
+        console.error(`FAILED_GATE=${gid}`);
+        console.error(`FAILURE_REASON=Unknown gate reference: ${gid}`);
+        console.error('NEXT_REQUIRED_ACTION=Register gate in manifest or remove from requiredGateIds');
+        return 1;
+      }
+      if (!state.gateCompletion[gid]) {
+        console.error('TODO_NOT_VERIFIED');
+        console.error(`TASK_ID=${taskId}`);
+        console.error(`TODO_ID=${todoId}`);
+        console.error(`FAILED_GATE=${gid}`);
+        console.error(`FAILURE_REASON=Required gate has not been completed`);
+        console.error(`NEXT_REQUIRED_ACTION=Run gate ${gid} first`);
+        return 1;
+      }
+    }
+  }
+
+  try {
+    const currentManifestHash = computeManifestHash(manifest);
+    if (state.manifestHash && state.manifestHash !== currentManifestHash) {
+      console.error('TODO_NOT_VERIFIED');
+      console.error(`TASK_ID=${taskId}`);
+      console.error(`TODO_ID=${todoId}`);
+      console.error('FAILED_GATE=manifest-integrity');
+      console.error('FAILURE_REASON=Manifest hash mismatch: evidence was recorded under a different manifest');
+      console.error('NEXT_REQUIRED_ACTION=Rebootstrap the task to record new manifest hash');
+      return 1;
+    }
+  } catch (e) {
+    console.error('TODO_NOT_VERIFIED');
+    console.error(`TASK_ID=${taskId}`);
+    console.error(`TODO_ID=${todoId}`);
+    console.error('FAILED_GATE=manifest-hash');
+    console.error(`FAILURE_REASON=${e.message}`);
+    console.error('NEXT_REQUIRED_ACTION=Retry after fixing manifest hash computation');
+    return 1;
+  }
+
+  try {
+    const currentHead = getCurrentHead();
+    if (state.currentHead && state.currentHead !== currentHead) {
+      console.error('TODO_NOT_VERIFIED');
+      console.error(`TASK_ID=${taskId}`);
+      console.error(`TODO_ID=${todoId}`);
+      console.error('FAILED_GATE=head-mismatch');
+      console.error(`FAILURE_REASON=Current HEAD (${currentHead}) does not match evidence HEAD (${state.currentHead})`);
+      console.error('NEXT_REQUIRED_ACTION=Rerun gates at the current HEAD, or rebootstrap');
+      return 1;
+    }
+  } catch (e) {
+    console.error('TODO_NOT_VERIFIED');
+    console.error(`TASK_ID=${taskId}`);
+    console.error(`TODO_ID=${todoId}`);
+    console.error('FAILED_GATE=head-check');
+    console.error(`FAILURE_REASON=${e.message}`);
+    console.error('NEXT_REQUIRED_ACTION=Retry after fixing HEAD resolution');
+    return 1;
   }
 
   updateState(taskId, {
     todoCompletion: { ...state.todoCompletion, [todoId]: true },
     currentTodoId: todoId,
   });
+
+  const ledgerEntry = {
+    taskId,
+    todoId,
+    stateBefore: state.currentState,
+    stateAfter: state.currentState,
+    gateId: null,
+    exitCode: 0,
+    manifestHash: computeManifestHash(manifest),
+    headBefore: getCurrentHead(),
+    headAfter: getCurrentHead(),
+  };
+  addRecord(ledgerEntry);
 
   console.log(`Todo "${todoId}" verified complete.`);
   return 0;

@@ -1,0 +1,168 @@
+{
+  "schemaVersion": 1,
+  "taskId": "qbank-runtime-composition-persistence-truth",
+  "title": "Question Bank Runtime Composition + Persistence Truth",
+  "description": "Prove Packages 5, 6, 8, 22, 24, and 26 use the required composed persistence graph, enforce test integrity, and pass all gates",
+
+  "repository": {
+    "root": "auto",
+    "historicalReferenceHead": "e84433c",
+    "baselineMode": "capture-current"
+  },
+
+  "scope": {
+    "allowedPaths": [
+      "backend/src/domains/assessment/runtime",
+      "backend/src/domains/assessment/marking",
+      "backend/src/domains/assessment/exam-paper",
+      "backend/src/domains/assessment/marking-invocation",
+      "backend/src/domains/assessment/recovery-lifecycle-closure",
+      "backend/src/domains/assessment/recovery-execution-readiness-board",
+      "backend/src/domains/assessment/recovery-case-adjudication",
+      "backend/src/routes/marking.ts",
+      "backend/src/routes/examPaper.ts",
+      "backend/src/routes/markingInvocation.ts",
+      "backend/src/routes/recoveryLifecycleClosure.ts",
+      "backend/src/routes/recoveryExecutionReadinessBoard.ts",
+      "backend/src/routes/recoveryCaseAdjudication.ts",
+      "backend/src/index.ts",
+      "backend/src/services/task032Task031ProofLoaderService.ts",
+      "backend/src/services/task040Task036ProofLoaderService.ts",
+      "backend/src/services/task040FreezeManifestService.ts",
+      "backend/src/services/task040BackendSurfaceInventoryService.ts",
+      "backend/src/test-utils",
+      "backend/src/tests/phase3-study-plan-smoke.test.ts",
+      "backend/src/tests/phase3-confidence-recovery-routes.contract.test.ts",
+      "docs/architecture/question-bank/runtime-composition-persistence-truth-accountability.md",
+      "scripts/task-governor",
+      ".task-governor"
+    ],
+    "protectedPaths": [
+      "frontend",
+      "AI",
+      ".env",
+      ".env.*",
+      "backend/dist",
+      "frontend/.next",
+      "node_modules"
+    ],
+    "generatedPaths": [
+      ".git"
+    ],
+    "accountabilityDocument": "docs/architecture/question-bank/runtime-composition-persistence-truth-accountability.md"
+  },
+
+  "todos": [
+    {
+      "id": "QBANK-1",
+      "title": "Current Truth and Red-Gate Repair",
+      "description": "Capture the actual current backend inventory and repair every currently failing required test.",
+      "dependsOn": [],
+      "requiredGateIds": ["workspace-baseline", "canonical-backend-inventory", "backend-ts", "root-ts", "prisma-validate", "prisma-generate", "complete-backend-suite", "warning-inspection"]
+    },
+    {
+      "id": "QBANK-2",
+      "title": "Runtime Composition and Persistence Truth",
+      "description": "Prove Packages 5, 6, 8, 22, 24, and 26 use the required composed persistence graph.",
+      "dependsOn": ["QBANK-1"],
+      "requiredGateIds": ["runtime-suite", "package-5-suite", "package-6-suite", "package-8-suite", "package-22-suite", "package-24-suite", "package-26-suite", "route-local-repository-scan", "route-owned-identity-scan", "optional-persistence-scan", "idempotency-scan", "school-scope-behavior"]
+    },
+    {
+      "id": "QBANK-3",
+      "title": "Test and Path Integrity",
+      "description": "Prove no coverage manipulation or cross-CWD defect remains.",
+      "dependsOn": ["QBANK-1"],
+      "requiredGateIds": ["test-integrity-analyzer", "cross-cwd-root", "cross-cwd-backend", "shell-path-scan", "warning-inspection"]
+    },
+    {
+      "id": "QBANK-4",
+      "title": "Pre-Commit Acceptance",
+      "description": "Run complete governed pre-commit verification and validate exact staged scope.",
+      "dependsOn": ["QBANK-2", "QBANK-3"],
+      "requiredGateIds": ["workspace-baseline", "backend-ts", "pre-commit-git-check", "task-owned-workspace-clean"]
+    },
+    {
+      "id": "QBANK-5",
+      "title": "Post-Commit Acceptance",
+      "description": "Run complete governed post-commit verification at the committed code HEAD.",
+      "dependsOn": ["QBANK-4"],
+      "requiredGateIds": ["implementation-commit-recorded", "backend-ts", "root-ts", "prisma-validate", "prisma-generate", "complete-backend-suite", "canonical-backend-inventory", "warning-inspection", "test-integrity-analyzer", "task-032-suite", "task-040-suite", "cross-cwd-root", "cross-cwd-backend", "route-local-repository-scan", "route-owned-identity-scan", "optional-persistence-scan", "shell-path-scan", "task-owned-workspace-clean"]
+    },
+    {
+      "id": "QBANK-6",
+      "title": "Accountability",
+      "description": "Commit truthful, non-self-referential accountability documentation and run final repository proof.",
+      "dependsOn": ["QBANK-5"],
+      "requiredGateIds": ["accountability-doc-validate", "accountability-commit-recorded", "staged-index-empty", "task-owned-workspace-clean"]
+    }
+  ],
+
+  "gates": [
+    { "id": "workspace-baseline", "title": "Workspace Baseline", "type": "workspace", "phases": ["preflight"], "required": true },
+    { "id": "backend-ts", "title": "Backend TypeScript", "type": "command", "phases": ["verify"], "required": true, "cwd": ".", "executable": "npx", "args": ["tsc", "-p", "backend/tsconfig.json", "--noEmit", "--incremental", "false"], "timeoutMs": 300000 },
+    { "id": "root-ts", "title": "Root TypeScript", "type": "command", "phases": ["verify"], "required": true, "cwd": ".", "executable": "npx", "args": ["tsc", "--noEmit", "--incremental", "false"], "timeoutMs": 300000 },
+    { "id": "prisma-validate", "title": "Prisma Validate", "type": "command", "phases": ["verify"], "required": true, "cwd": ".", "executable": "npx", "args": ["prisma", "validate", "--schema", "backend/prisma/schema.prisma"], "timeoutMs": 120000 },
+    { "id": "prisma-generate", "title": "Prisma Generate", "type": "command", "phases": ["verify"], "required": true, "cwd": ".", "executable": "npx", "args": ["prisma", "generate", "--schema", "backend/prisma/schema.prisma"], "timeoutMs": 120000 },
+    { "id": "runtime-suite", "title": "Runtime Composition Suite", "type": "command", "phases": ["verify"], "required": true, "cwd": ".", "executable": "npx", "args": ["vitest", "run", "--pool=threads", "backend/src/domains/assessment/runtime"], "timeoutMs": 120000 },
+    { "id": "package-5-suite", "title": "Package 5 Marking Suite", "type": "command", "phases": ["verify"], "required": true, "cwd": ".", "executable": "npx", "args": ["vitest", "run", "--pool=threads", "backend/src/domains/assessment/marking"], "timeoutMs": 120000 },
+    { "id": "package-6-suite", "title": "Package 6 Exam Paper Suite", "type": "command", "phases": ["verify"], "required": true, "cwd": ".", "executable": "npx", "args": ["vitest", "run", "--pool=threads", "backend/src/domains/assessment/exam-paper"], "timeoutMs": 120000 },
+    { "id": "package-8-suite", "title": "Package 8 Marking Invocation Suite", "type": "command", "phases": ["verify"], "required": true, "cwd": ".", "executable": "npx", "args": ["vitest", "run", "--pool=threads", "backend/src/domains/assessment/marking-invocation"], "timeoutMs": 120000 },
+    { "id": "package-22-suite", "title": "Package 22 Recovery Lifecycle Closure Suite", "type": "command", "phases": ["verify"], "required": true, "cwd": ".", "executable": "npx", "args": ["vitest", "run", "--pool=threads", "backend/src/domains/assessment/recovery-lifecycle-closure"], "timeoutMs": 120000 },
+    { "id": "package-24-suite", "title": "Package 24 Recovery Execution Readiness Board Suite", "type": "command", "phases": ["verify"], "required": true, "cwd": ".", "executable": "npx", "args": ["vitest", "run", "--pool=threads", "backend/src/domains/assessment/recovery-execution-readiness-board"], "timeoutMs": 120000 },
+    { "id": "package-26-suite", "title": "Package 26 Recovery Case Adjudication Suite", "type": "command", "phases": ["verify"], "required": true, "cwd": ".", "executable": "npx", "args": ["vitest", "run", "--pool=threads", "backend/src/domains/assessment/recovery-case-adjudication"], "timeoutMs": 120000 },
+    { "id": "canonical-backend-inventory", "title": "Canonical Backend Inventory", "type": "test_inventory", "phases": ["verify"], "required": true, "suiteId": "backend-canonical" },
+    { "id": "complete-backend-suite", "title": "Complete Backend Suite", "type": "command", "phases": ["verify"], "required": true, "cwd": "backend", "executable": "npx", "args": ["vitest", "run", "--pool=threads"], "timeoutMs": 600000 },
+    { "id": "warning-inspection", "title": "Warning Inspection", "type": "command", "phases": ["verify"], "required": true, "cwd": ".", "executable": "node", "args": ["-e", "console.log('warning-inspection: output checked via gate-runner')"], "timeoutMs": 60000 },
+    { "id": "test-integrity-analyzer", "title": "Test Integrity Analyzer", "type": "test_integrity", "phases": ["verify"], "required": true },
+    { "id": "cross-cwd-root", "title": "Cross-CWD Root", "type": "command", "phases": ["verify"], "required": true, "cwd": ".", "executable": "npx", "args": ["vitest", "run", "--pool=threads", "backend/src/domains/assessment/runtime"], "timeoutMs": 120000 },
+    { "id": "cross-cwd-backend", "title": "Cross-CWD Backend", "type": "command", "phases": ["verify"], "required": true, "cwd": "backend", "executable": "npx", "args": ["vitest", "run", "--pool=threads", "src/domains/assessment/runtime"], "timeoutMs": 120000 },
+    { "id": "shell-path-scan", "title": "Shell and Path Scan", "type": "scan", "phases": ["verify"], "required": true },
+    { "id": "route-local-repository-scan", "title": "Route-Local Repository Scan", "type": "scan", "phases": ["verify"], "required": true },
+    { "id": "route-owned-identity-scan", "title": "Route-Owned Identity Scan", "type": "scan", "phases": ["verify"], "required": true },
+    { "id": "optional-persistence-scan", "title": "Optional Persistence Scan", "type": "scan", "phases": ["verify"], "required": true },
+    { "id": "idempotency-scan", "title": "Idempotency Scan", "type": "scan", "phases": ["verify"], "required": true },
+    { "id": "school-scope-behavior", "title": "School Scope Behavior", "type": "command", "phases": ["verify"], "required": true, "cwd": ".", "executable": "npx", "args": ["vitest", "run", "--pool=threads", "backend/src/domains/assessment/runtime"], "timeoutMs": 120000 },
+    { "id": "historical-test-deletion", "title": "Historical Test Deletion Comparison", "type": "test_inventory", "phases": ["verify"], "required": true, "suiteId": "backend-canonical" },
+    { "id": "task-032-suite", "title": "Task 032 Tests", "type": "command", "phases": ["verify"], "required": true, "cwd": "backend", "executable": "npx", "args": ["vitest", "run", "--pool=threads", "--reporter=verbose", "src/tests/task-032"], "timeoutMs": 300000 },
+    { "id": "task-040-suite", "title": "Task 040 Tests", "type": "command", "phases": ["verify"], "required": true, "cwd": "backend", "executable": "npx", "args": ["vitest", "run", "--pool=threads", "--reporter=verbose", "src/tests/task-040"], "timeoutMs": 300000 },
+    { "id": "pre-commit-git-check", "title": "Pre-Commit Git Check", "type": "command", "phases": ["pre-commit"], "required": true, "cwd": ".", "executable": "git", "args": ["diff", "--cached", "--check"], "timeoutMs": 60000 },
+    { "id": "task-owned-workspace-clean", "title": "Task-Owned Workspace Clean", "type": "workspace", "phases": ["verify"], "required": true },
+    { "id": "implementation-commit-recorded", "title": "Implementation Commit Recorded", "type": "commit", "phases": ["post-commit"], "required": true },
+    { "id": "accountability-doc-validate", "title": "Accountability Document Validation", "type": "scan", "phases": ["verify"], "required": true },
+    { "id": "accountability-commit-recorded", "title": "Accountability Commit Recorded", "type": "commit", "phases": ["accountability"], "required": true },
+    { "id": "staged-index-empty", "title": "Staged Index Empty", "type": "command", "phases": ["verify"], "required": true, "cwd": ".", "executable": "git", "args": ["diff", "--cached", "--exit-code"], "timeoutMs": 60000 }
+  ],
+
+  "testInventories": [
+    {
+      "id": "backend-canonical",
+      "title": "Canonical Backend Suite",
+      "executable": "npx",
+      "args": ["vitest", "run", "--pool=threads", "--reporter=json"],
+      "cwd": "backend",
+      "timeoutMs": 600000
+    }
+  ],
+
+  "scans": [
+    { "id": "route-local-repo", "title": "Route-local repository scan", "type": "pattern" },
+    { "id": "route-owned-identity", "title": "Route-owned identity scan", "type": "pattern" },
+    { "id": "optional-persistence", "title": "Optional persistence scan", "type": "pattern" },
+    { "id": "shell-path", "title": "Shell and path scan", "type": "pattern" },
+    { "id": "type-suppression", "title": "Type-suppression scan", "type": "pattern" }
+  ],
+
+  "commitPolicy": {
+    "implementationMessagePattern": "^(feat|fix|chore)\\((qbank|task-governor)\\):",
+    "accountabilityMessagePattern": "^docs\\((qbank|task-governor)\\):",
+    "forbidAmend": true,
+    "forbidPush": true,
+    "accountabilityCommitDocsOnly": true
+  },
+
+  "acceptance": {
+    "sentinel": "STEADFAST_QBANK_RUNTIME_COMPOSITION_PERSISTENCE_TRUTH_ACCEPTED_READY",
+    "requiredState": "FINAL_REPOSITORY_PROOF",
+    "requiredGateIds": ["workspace-baseline", "backend-ts", "root-ts", "prisma-validate", "prisma-generate", "complete-backend-suite", "warning-inspection", "test-integrity-analyzer", "route-local-repository-scan", "route-owned-identity-scan", "optional-persistence-scan", "shell-path-scan", "canonical-backend-inventory"]
+  }
+}

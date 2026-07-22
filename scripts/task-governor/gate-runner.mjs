@@ -68,13 +68,17 @@ export async function runGate(taskId, gateId) {
       repairAttempts: (state.repairAttempts || 0) + 1,
     });
   } else if (gateResult.passed) {
-    updateState(taskId, {
+    const updates = {
       lastSuccessfulGateId: gateId,
       gateCompletion: {
         ...state.gateCompletion,
         [gateId]: true,
       },
-    });
+    };
+    if (state.currentState === STATES.ERROR_REPAIR && state.lastFailedGateId === gateId) {
+      updates.currentState = STATES.TODO_VERIFICATION;
+    }
+    updateState(taskId, updates);
   }
 
   return {
@@ -102,10 +106,25 @@ async function executeGate(gate, manifest, state, taskId) {
       const passed = result.exitCode === 0 && !result.timedOut;
 
       const warnings = checkOutputForFailures(
-        result.stdoutPath ? '' : '',
-        result.stderrPath ? '' : '',
-        WARNING_PATTERNS
+        '', '',
+        WARNING_PATTERNS,
+        result.stdoutPath,
+        result.stderrPath
       );
+
+      const fatalWarningsFound = warnings.length > 0;
+      if (gate.required !== false && fatalWarningsFound) {
+        return {
+          passed: false,
+          exitCode: EXIT_CODES.ERROR_REPAIR_LOCKED,
+          timedOut: result.timedOut,
+          duration: result.duration,
+          warnings,
+          stdoutPath: result.stdoutPath,
+          stderrPath: result.stderrPath,
+          fatalWarnings: true,
+        };
+      }
 
       return {
         passed,
@@ -140,7 +159,7 @@ async function executeGate(gate, manifest, state, taskId) {
     }
 
     case GATE_TYPES.SCAN: {
-      const scanResults = runAllScans(manifest.scope.allowedPaths);
+      const scanResults = runAllScans(manifest.scope.allowedPaths, manifest);
       let totalIssues = 0;
       for (const [, issues] of Object.entries(scanResults)) {
         totalIssues += issues.length;
