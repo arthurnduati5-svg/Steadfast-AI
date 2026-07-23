@@ -27,6 +27,13 @@
     "qa:copilot:advanced": "set SUITE_FILE=docs/copilot-qa-suite.advanced.json&& node docs/copilot-qa-runner.mjs",
     "qa:copilot:research": "set SUITE_FILE=docs/copilot-qa-suite.research.json&& node docs/copilot-qa-runner.mjs",
     "qa:copilot:research:mega": "node docs/build-research-suite.mjs && set SUITE_FILE=docs/copilot-qa-suite.research.generated.json&& node docs/copilot-qa-runner.mjs",
+    "deploy:gate": "node scripts/deployment-readiness-gate.mjs",
+    "deploy:gate:quick": "node scripts/deployment-readiness-gate.mjs --quick",
+    "deploy:gate:env": "node scripts/deployment-readiness-gate.mjs --env-only",
+    "deploy:gate:commands": "node scripts/deployment-readiness-gate.mjs --commands-only",
+    "deploy:gate:docs": "node scripts/deployment-readiness-gate.mjs --docs-only",
+    "deploy:gate:health": "node scripts/deployment-readiness-gate.mjs --health-only",
+    "deploy:gate:reports": "node scripts/deployment-readiness-gate.mjs --reports-only",
     "test:research-routing": "vitest AI/ai/tests/researchIntentGating.contract.test.ts AI/ai/tests/researchOrchestratorRouting.matrix.test.ts AI/ai/tests/researchMode.test.ts"
   },
   "dependencies": {
