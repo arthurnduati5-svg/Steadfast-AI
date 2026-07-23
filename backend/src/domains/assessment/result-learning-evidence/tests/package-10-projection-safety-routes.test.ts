@@ -1,18 +1,16 @@
 import { describe, it, expect } from 'vitest';
 import { ResultLearningEvidenceProjectionSafetyService } from '../services/resultLearningEvidenceProjectionSafetyService';
-import * as fs from 'fs';
-import * as path from 'path';
+import { readBackendSrcFile, checkBackendSrcFileExists } from '../../../../test-utils/repositoryPaths';
 
 describe('Package 10 - Projection Safety and Routes', () => {
   const projectionService = new ResultLearningEvidenceProjectionSafetyService();
 
   it('route file should exist', () => {
-    const routePath = path.resolve('backend/src/routes/resultLearningEvidence.ts');
-    expect(fs.existsSync(routePath)).toBe(true);
+    expect(checkBackendSrcFileExists('routes/resultLearningEvidence.ts')).toBe(true);
   });
 
   it('route file should import from correct service paths', () => {
-    const content = fs.readFileSync('backend/src/routes/resultLearningEvidence.ts', 'utf-8');
+    const content = readBackendSrcFile('routes/resultLearningEvidence.ts');
     expect(content).toContain('resultEvidenceBridgeService');
     expect(content).toContain('objectiveMasteryImpactService');
     expect(content).toContain('masteryMutationPlanService');
@@ -25,31 +23,31 @@ describe('Package 10 - Projection Safety and Routes', () => {
   });
 
   it('route file should not import OpenAI', () => {
-    const content = fs.readFileSync('backend/src/routes/resultLearningEvidence.ts', 'utf-8');
+    const content = readBackendSrcFile('routes/resultLearningEvidence.ts');
     expect(content).not.toContain('openai');
     expect(content).not.toContain('OpenAI');
   });
 
   it('route file should not import OCR libraries', () => {
-    const content = fs.readFileSync('backend/src/routes/resultLearningEvidence.ts', 'utf-8');
+    const content = readBackendSrcFile('routes/resultLearningEvidence.ts');
     expect(content).not.toContain('tesseract');
     expect(content).not.toContain('ocr');
   });
 
   it('route file should not import frontend modules', () => {
-    const content = fs.readFileSync('backend/src/routes/resultLearningEvidence.ts', 'utf-8');
+    const content = readBackendSrcFile('routes/resultLearningEvidence.ts');
     expect(content).not.toContain('react');
     expect(content).not.toContain('\"next/');
     expect(content).not.toContain('frontend');
   });
 
   it('index.ts should mount result-learning-evidence route', () => {
-    const content = fs.readFileSync('backend/src/index.ts', 'utf-8');
+    const content = readBackendSrcFile('index.ts');
     expect(content).toContain('resultLearningEvidence');
   });
 
   it('index.ts mount should use schoolAuthMiddleware', () => {
-    const content = fs.readFileSync('backend/src/index.ts', 'utf-8');
+    const content = readBackendSrcFile('index.ts');
     const mountLines = content.split('\n').filter(l => l.includes('resultLearningEvidence'));
     const importLine = mountLines.find(l => l.includes('import'));
     const useLine = mountLines.find(l => l.includes('app.use'));
@@ -59,7 +57,7 @@ describe('Package 10 - Projection Safety and Routes', () => {
   });
 
   it('ai.ts should not have Package 10 expansion', () => {
-    const aiContent = fs.readFileSync('backend/src/routes/ai.ts', 'utf-8');
+    const aiContent = readBackendSrcFile('routes/ai.ts');
     expect(aiContent).not.toContain('ResultLearningEvidence');
     expect(aiContent).not.toContain('MasteryMutation');
     expect(aiContent).not.toContain('ObjectiveMasteryImpact');
@@ -145,7 +143,7 @@ describe('Package 10 - Projection Safety and Routes', () => {
   });
 
   it('route should contain safe response envelope keys', () => {
-    const content = fs.readFileSync('backend/src/routes/resultLearningEvidence.ts', 'utf-8');
+    const content = readBackendSrcFile('routes/resultLearningEvidence.ts');
     expect(content).toContain('ok');
     expect(content).toContain('requestId');
     expect(content).toContain('resourceId');
@@ -154,7 +152,7 @@ describe('Package 10 - Projection Safety and Routes', () => {
   });
 
   it('route should require idempotency key for mutating endpoints', () => {
-    const content = fs.readFileSync('backend/src/routes/resultLearningEvidence.ts', 'utf-8');
+    const content = readBackendSrcFile('routes/resultLearningEvidence.ts');
     expect(content).toContain('idempotency-key');
     expect(content).toContain('getIdempotencyKey');
   });

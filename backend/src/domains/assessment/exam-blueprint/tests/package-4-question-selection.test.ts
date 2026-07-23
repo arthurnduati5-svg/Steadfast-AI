@@ -84,7 +84,7 @@ describe('Package 4: Question Selection', () => {
       createdByActorId: 'teacher-1',
       createdByRole: 'teacher',
       sourceType: 'teacher_created',
-      securityClass: opts.securityClass || 'quiz_safe',
+      securityClass: (opts.securityClass || 'quiz_safe') as any,
       createdAt: now,
       updatedAt: now,
       archivedAt: null,
@@ -93,10 +93,10 @@ describe('Package 4: Question Selection', () => {
       questionVersionId: `v-${opts.id}`,
       questionId: opts.id,
       versionNumber: 1,
-      status: 'approved',
+      status: 'approved' as const,
       stemSafeText: 'Test question',
-      questionType: opts.type || 'multiple_choice',
-      difficultyBand: opts.difficulty || 'recall',
+      questionType: (opts.type || 'multiple_choice') as any,
+      difficultyBand: (opts.difficulty || 'recall') as any,
       language: 'English',
       studentSafeExplanation: 'Explanation',
       teacherExplanation: 'Teacher note',
@@ -140,7 +140,7 @@ describe('Package 4: Question Selection', () => {
 
   it('only approved QuestionBankItemRecord can be selected', async () => {
     seedApprovedQuestion({ id: 'q1', objectiveId: 'obj-1' });
-    const draftQ = { questionId: 'q-draft', subjectId: 'math', topicId: 'algebra', skillId: 'solving', primaryObjectiveId: 'obj-1', curriculumVersionId: 'cv-1', currentVersionId: 'v-draft', createdByActorId: 'teacher-1', createdByRole: 'teacher', sourceType: 'teacher_created', securityClass: 'quiz_safe', schoolId: 'school-1', status: 'draft', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), archivedAt: null };
+    const draftQ: any = { questionId: 'q-draft', subjectId: 'math', topicId: 'algebra', skillId: 'solving', primaryObjectiveId: 'obj-1', curriculumVersionId: 'cv-1', currentVersionId: 'v-draft', createdByActorId: 'teacher-1', createdByRole: 'teacher', sourceType: 'teacher_created', securityClass: 'quiz_safe', schoolId: 'school-1', status: 'draft', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), archivedAt: null };
     itemRepo.create(draftQ);
     versionRepo.create({ questionVersionId: 'v-draft', questionId: 'q-draft', versionNumber: 1, status: 'draft', stemSafeText: 'Draft', questionType: 'multiple_choice', difficultyBand: 'recall', language: 'English', studentSafeExplanation: '', teacherExplanation: '', estimatedTimeSeconds: 60, createdByActorId: 'teacher-1', createdAt: new Date().toISOString(), approvedAt: null, supersededAt: null, contentHash: 'hash-draft' });
 
@@ -176,7 +176,7 @@ describe('Package 4: Question Selection', () => {
       schoolId: 'school-1',
       questionId: 'q1',
       questionVersionId: 'v-q1',
-      holdType: 'exam_block',
+      holdType: 'policy_block' as const,
       status: 'active',
       reasonCode: 'leak_suspected',
       safeSummary: 'Suspected leak',
@@ -203,8 +203,8 @@ describe('Package 4: Question Selection', () => {
     seedApprovedQuestion({ id: 'q3', objectiveId: 'obj-2', difficulty: 'application' });
 
     const reqs = [
-      { requirementId: 'r1', blueprintVersionId: 'bv-1', schoolId: 'school-1', requirementType: 'objective', subjectId: 'math', topicId: 'algebra', skillId: 'solving', objectiveId: 'obj-1', requiredQuestionCount: 1, requiredMarks: 10, minimumDifficulty: 'recall', maximumDifficulty: 'creation', questionType: 'multiple_choice', weight: 1, isMandatory: true, createdAt: new Date().toISOString() },
-      { requirementId: 'r2', blueprintVersionId: 'bv-1', schoolId: 'school-1', requirementType: 'objective', subjectId: 'math', topicId: 'algebra', skillId: 'solving', objectiveId: 'obj-2', requiredQuestionCount: 1, requiredMarks: 10, minimumDifficulty: 'recall', maximumDifficulty: 'creation', questionType: 'multiple_choice', weight: 1, isMandatory: true, createdAt: new Date().toISOString() },
+      { requirementId: 'r1', blueprintVersionId: 'bv-1', schoolId: 'school-1', requirementType: 'objective' as const, subjectId: 'math', topicId: 'algebra', skillId: 'solving', objectiveId: 'obj-1', requiredQuestionCount: 1, requiredMarks: 10, minimumDifficulty: 'recall' as const, maximumDifficulty: 'creation' as const, questionType: 'multiple_choice' as const, weight: 1, isMandatory: true, createdAt: new Date().toISOString() },
+      { requirementId: 'r2', blueprintVersionId: 'bv-1', schoolId: 'school-1', requirementType: 'objective' as const, subjectId: 'math', topicId: 'algebra', skillId: 'solving', objectiveId: 'obj-2', requiredQuestionCount: 1, requiredMarks: 10, minimumDifficulty: 'recall' as const, maximumDifficulty: 'creation' as const, questionType: 'multiple_choice' as const, weight: 1, isMandatory: true, createdAt: new Date().toISOString() },
     ];
 
     const result1 = await selectionService.selectQuestionsForBlueprint('school-1', blueprintVersion, reqs, 'balanced');
@@ -217,7 +217,7 @@ describe('Package 4: Question Selection', () => {
   it('insufficient pool produces gap report instead of fake success', async () => {
     seedApprovedQuestion({ id: 'q1', objectiveId: 'obj-1' });
     const reqs = [
-      { requirementId: 'r1', blueprintVersionId: 'bv-1', schoolId: 'school-1', requirementType: 'objective', subjectId: 'math', topicId: 'algebra', skillId: 'solving', objectiveId: 'obj-1', requiredQuestionCount: 10, requiredMarks: 100, minimumDifficulty: 'recall', maximumDifficulty: 'creation', questionType: 'multiple_choice', weight: 1, isMandatory: true, createdAt: new Date().toISOString() },
+      { requirementId: 'r1', blueprintVersionId: 'bv-1', schoolId: 'school-1', requirementType: 'objective' as const, subjectId: 'math', topicId: 'algebra', skillId: 'solving', objectiveId: 'obj-1', requiredQuestionCount: 10, requiredMarks: 100, minimumDifficulty: 'recall' as const, maximumDifficulty: 'creation' as const, questionType: 'multiple_choice' as const, weight: 1, isMandatory: true, createdAt: new Date().toISOString() },
     ];
 
     const result = await selectionService.selectQuestionsForBlueprint('school-1', blueprintVersion, reqs, 'balanced');

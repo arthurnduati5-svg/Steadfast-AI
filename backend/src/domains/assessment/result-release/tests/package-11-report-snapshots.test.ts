@@ -14,6 +14,7 @@ import { ResultReleaseIdempotencyService } from '../services/resultReleaseIdempo
 import { ResultReportSnapshotService } from '../services/resultReportSnapshotService';
 import { ParentSafeResultSummaryService } from '../services/parentSafeResultSummaryService';
 import { StudentSafeResultSummaryService } from '../services/studentSafeResultSummaryService';
+import { readBackendSrcFile } from '../../../../test-utils/repositoryPaths';
 
 function makeCtx(overrides?: Partial<ResultReleaseCommandContext>): ResultReleaseCommandContext {
   return {
@@ -235,15 +236,13 @@ describe('Package 11 - Report Snapshots', () => {
   });
 
   it('should not create PDF in report snapshot service', async () => {
-    const fs = await import('fs');
-    const content = fs.readFileSync('backend/src/domains/assessment/result-release/services/resultReportSnapshotService.ts', 'utf-8');
+    const content = readBackendSrcFile('domains/assessment/result-release/services/resultReportSnapshotService.ts');
     expect(content).not.toContain('pdf');
     expect(content).not.toContain('PDF');
   });
 
   it('should not send email/SMS/push/WhatsApp in report snapshot service', async () => {
-    const fs = await import('fs');
-    const content = fs.readFileSync('backend/src/domains/assessment/result-release/services/resultReportSnapshotService.ts', 'utf-8');
+    const content = readBackendSrcFile('domains/assessment/result-release/services/resultReportSnapshotService.ts');
     expect(content).not.toContain('email');
     expect(content).not.toContain('sms');
     expect(content).not.toContain('push');
@@ -252,15 +251,13 @@ describe('Package 11 - Report Snapshots', () => {
   });
 
   it('should not create portal publication in parent summary service', async () => {
-    const fs = await import('fs');
-    const content = fs.readFileSync('backend/src/domains/assessment/result-release/services/parentSafeResultSummaryService.ts', 'utf-8');
+    const content = readBackendSrcFile('domains/assessment/result-release/services/parentSafeResultSummaryService.ts');
     expect(content).not.toContain('portal');
     expect(content).not.toContain('publish');
   });
 
   it('should not create portal publication in student summary service', async () => {
-    const fs = await import('fs');
-    const content = fs.readFileSync('backend/src/domains/assessment/result-release/services/studentSafeResultSummaryService.ts', 'utf-8');
+    const content = readBackendSrcFile('domains/assessment/result-release/services/studentSafeResultSummaryService.ts');
     expect(content).not.toContain('portal');
     expect(content).not.toContain('publish');
   });

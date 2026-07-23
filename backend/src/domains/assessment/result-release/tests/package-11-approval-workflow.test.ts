@@ -12,6 +12,7 @@ import { ResultReleasePacketService } from '../services/resultReleasePacketServi
 import { ResultReleaseApprovalService } from '../services/resultReleaseApprovalService';
 import { BLOCKED_APPROVAL_ROLES, ALLOWED_APPROVAL_ROLES } from '../contracts/resultReleaseContracts';
 import { evaluateReleaseApprovalPolicy } from '../policies/resultReleasePolicyDefinitions';
+import { readBackendSrcFile } from '../../../../test-utils/repositoryPaths';
 
 function makeCtx(overrides?: Partial<ResultReleaseCommandContext>): ResultReleaseCommandContext {
   return {
@@ -197,8 +198,7 @@ describe('Package 11 - Approval Workflow', () => {
   });
 
   it('should not send notifications in approval service', async () => {
-    const fs = await import('fs');
-    const content = fs.readFileSync('backend/src/domains/assessment/result-release/services/resultReleaseApprovalService.ts', 'utf-8');
+    const content = readBackendSrcFile('domains/assessment/result-release/services/resultReleaseApprovalService.ts');
     expect(content).not.toContain('notify');
     expect(content).not.toContain('publish');
     expect(content).not.toContain('email');

@@ -1,17 +1,15 @@
 import { describe, it, expect } from 'vitest';
-import * as fs from 'fs';
-import * as path from 'path';
+import { resolveBackendSrcPath, readBackendSrcFile, checkBackendSrcFileExists } from '../../../../test-utils/repositoryPaths';
 
 describe('Package 9 - Route Contract', () => {
-  const routePath = path.resolve('backend/src/routes/resultGovernance.ts');
-  const exists = fs.existsSync(routePath);
+  const exists = checkBackendSrcFileExists('routes/resultGovernance.ts');
 
   it('should have route file backend/src/routes/resultGovernance.ts', () => {
     expect(exists).toBe(true);
   });
 
   if (exists) {
-    const content = fs.readFileSync(routePath, 'utf-8');
+    const content = readBackendSrcFile('routes/resultGovernance.ts');
 
     it('should be mounted under /api/question-bank/result-governance', () => {
       // Check that routes start with expected patterns
@@ -135,8 +133,7 @@ describe('Package 9 - Route Contract', () => {
   }
 
   it('should have route mounted in index.ts with schoolAuthMiddleware', () => {
-    const indexPath = path.resolve('backend/src/index.ts');
-    const indexContent = fs.readFileSync(indexPath, 'utf-8');
+    const indexContent = readBackendSrcFile('index.ts');
     expect(indexContent).toContain("import resultGovernanceRoutes from './routes/resultGovernance'");
     expect(indexContent).toContain('result-governance');
     expect(indexContent).toContain('schoolAuthMiddleware');
@@ -144,9 +141,8 @@ describe('Package 9 - Route Contract', () => {
   });
 
   it('should not expand ai.ts with result-governance', () => {
-    const aiPath = path.resolve('backend/src/routes/ai.ts');
-    if (fs.existsSync(aiPath)) {
-      const aiContent = fs.readFileSync(aiPath, 'utf-8');
+    if (checkBackendSrcFileExists('routes/ai.ts')) {
+      const aiContent = readBackendSrcFile('routes/ai.ts');
       expect(aiContent).not.toMatch(/resultGovernance|result-governance|ResultGovernance|FinalizationReview|ReleaseReadiness|RegradeRequest/);
     }
   });

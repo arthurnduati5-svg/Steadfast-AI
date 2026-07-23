@@ -1,10 +1,8 @@
 import { describe, it, expect } from 'vitest';
-import * as fs from 'fs';
-import * as path from 'path';
+import { readBackendFile } from '../../../../test-utils/repositoryPaths';
 
 describe('Package 11 - No Duplication', () => {
-  const schemaPath = path.resolve('backend/prisma/schema.prisma');
-  const schemaContent = fs.readFileSync(schemaPath, 'utf-8');
+  const schemaContent = readBackendFile('prisma/schema.prisma');
 
   it('ResultReleasePacketRecord should exist in schema', () => {
     expect(schemaContent).toContain('model ResultReleasePacketRecord');

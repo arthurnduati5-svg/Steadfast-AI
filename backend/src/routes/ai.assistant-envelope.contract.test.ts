@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 
-const AI_ROUTE_PATH = path.resolve(process.cwd(), 'backend/src/routes/ai.ts');
+const AI_ROUTE_PATH = path.resolve(__dirname, 'ai.ts');
 
 describe('ai route assistant envelope wiring contract', () => {
   const source = fs.readFileSync(AI_ROUTE_PATH, 'utf8');

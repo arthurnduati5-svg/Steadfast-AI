@@ -10,6 +10,7 @@ import {
 import { ResultReleaseAuditBridge } from '../services/resultReleaseAuditBridge';
 import { ResultReleaseIdempotencyService } from '../services/resultReleaseIdempotencyService';
 import { ResultReleaseDeliveryIntentService } from '../services/resultReleaseDeliveryIntentService';
+import { readBackendSrcFile } from '../../../../test-utils/repositoryPaths';
 
 function makeCtx(overrides?: Partial<ResultReleaseCommandContext>): ResultReleaseCommandContext {
   return {
@@ -193,8 +194,7 @@ describe('Package 11 - Delivery Intent Deferral', () => {
   });
 
   it('should not import executable delivery adapter in delivery intent service', async () => {
-    const fs = await import('fs');
-    const content = fs.readFileSync('backend/src/domains/assessment/result-release/services/resultReleaseDeliveryIntentService.ts', 'utf-8');
+    const content = readBackendSrcFile('domains/assessment/result-release/services/resultReleaseDeliveryIntentService.ts');
     expect(content).not.toContain('notify');
     expect(content).not.toContain('publish');
     expect(content).not.toContain('email');
@@ -207,8 +207,7 @@ describe('Package 11 - Delivery Intent Deferral', () => {
   });
 
   it('should not import notification client in route file', async () => {
-    const fs = await import('fs');
-    const content = fs.readFileSync('backend/src/routes/resultRelease.ts', 'utf-8');
+    const content = readBackendSrcFile('routes/resultRelease.ts');
     expect(content).not.toContain('notify');
     expect(content).not.toContain('publish');
     expect(content).not.toContain('email');
@@ -220,8 +219,7 @@ describe('Package 11 - Delivery Intent Deferral', () => {
   });
 
   it('should not import PDF library in route file', async () => {
-    const fs = await import('fs');
-    const content = fs.readFileSync('backend/src/routes/resultRelease.ts', 'utf-8');
+    const content = readBackendSrcFile('routes/resultRelease.ts');
     expect(content).not.toContain('pdfkit');
     expect(content).not.toContain('pdfmake');
     expect(content).not.toContain('pdf-lib');
@@ -229,8 +227,7 @@ describe('Package 11 - Delivery Intent Deferral', () => {
   });
 
   it('delivery channels are all future-intent only', async () => {
-    const fs = await import('fs');
-    const content = fs.readFileSync('backend/src/domains/assessment/result-release/contracts/resultReleaseContracts.ts', 'utf-8');
+    const content = readBackendSrcFile('domains/assessment/result-release/contracts/resultReleaseContracts.ts');
     expect(content).toContain('student_portal_future');
     expect(content).toContain('parent_portal_future');
     expect(content).toContain('teacher_dashboard_future');

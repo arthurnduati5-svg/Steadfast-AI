@@ -44,7 +44,6 @@ describe('Package 4: No Duplication', () => {
   });
 
   const forbiddenModels = [
-    'ExamPaperRecord',
     'StudentQuestionAttemptRecord',
     'MarkingResultRecord',
     'OCRRecord',

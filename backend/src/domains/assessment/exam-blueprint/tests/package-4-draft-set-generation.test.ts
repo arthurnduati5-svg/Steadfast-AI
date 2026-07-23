@@ -241,8 +241,9 @@ describe('Package 4: Draft Set Generation', () => {
       supersededAt: null,
     });
 
+    const versionBp2 = await repos.blueprintVersionRepo.findLatestByBlueprintId('bp-2');
     const result = await draftSetService.generateDraftSet(
-      'school-1', blueprint, await repos.blueprintVersionRepo.findLatestByBlueprintId('bp-2')!, [], 3, 'teacher-1', 'teacher',
+      'school-1', blueprint, versionBp2!, [], 3, 'teacher-1', 'teacher',
     );
 
     expect(result.allQuestions.length).toBe(3);
@@ -292,8 +293,9 @@ describe('Package 4: Draft Set Generation', () => {
       supersededAt: null,
     });
 
+    const versionBp3 = await repos.blueprintVersionRepo.findLatestByBlueprintId('bp-3');
     const result = await draftSetService.generateDraftSet(
-      'school-1', blueprint, await repos.blueprintVersionRepo.findLatestByBlueprintId('bp-3')!, [], 3, 'teacher-1', 'teacher',
+      'school-1', blueprint, versionBp3!, [], 3, 'teacher-1', 'teacher',
     );
 
     for (const draft of result.drafts) {
@@ -328,7 +330,8 @@ describe('Package 4: Draft Set Generation', () => {
       blueprintVersionId: 'bv-4', blueprintId: 'bp-4', versionNumber: 1, status: 'approved' as const, title: 'v1', safeDescription: '', durationMinutes: 60, totalMarks: 100, targetQuestionCount: 5, difficultyMixJson: '{}', questionTypeMixJson: '{}', securityClassRequirement: 'practice_safe', coveragePolicy: 'balanced_weighted' as const, selectionStrategy: 'balanced' as const, curriculumVersionId: 'cv-1', createdByActorId: 'teacher-1', createdAt: new Date().toISOString(), approvedAt: new Date().toISOString(), supersededAt: null,
     });
 
-    const result = await draftSetService.generateDraftSet('school-1', blueprint, await repos.blueprintVersionRepo.findLatestByBlueprintId('bp-4')!, [], 3, 'teacher-1', 'teacher');
+    const versionBp4 = await repos.blueprintVersionRepo.findLatestByBlueprintId('bp-4');
+    const result = await draftSetService.generateDraftSet('school-1', blueprint, versionBp4!, [], 3, 'teacher-1', 'teacher');
     for (const d of result.drafts) {
       expect(d.safeTeacherSummary).toBeTruthy();
     }

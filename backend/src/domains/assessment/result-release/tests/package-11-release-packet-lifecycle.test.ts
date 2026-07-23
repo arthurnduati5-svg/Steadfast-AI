@@ -9,6 +9,7 @@ import {
 import { ResultReleaseAuditBridge } from '../services/resultReleaseAuditBridge';
 import { ResultReleaseIdempotencyService } from '../services/resultReleaseIdempotencyService';
 import { ResultReleasePacketService } from '../services/resultReleasePacketService';
+import { readBackendSrcFile } from '../../../../test-utils/repositoryPaths';
 
 function makeCtx(overrides?: Partial<ResultReleaseCommandContext>): ResultReleaseCommandContext {
   return {
@@ -140,8 +141,7 @@ describe('Package 11 - Release Packet Lifecycle', () => {
   });
 
   it('should not send or publish anything (no notification imports in service)', async () => {
-    const fs = await import('fs');
-    const serviceContent = fs.readFileSync('backend/src/domains/assessment/result-release/services/resultReleasePacketService.ts', 'utf-8');
+    const serviceContent = readBackendSrcFile('domains/assessment/result-release/services/resultReleasePacketService.ts');
     expect(serviceContent).not.toContain('notify');
     expect(serviceContent).not.toContain('publish');
     expect(serviceContent).not.toContain('email');
@@ -152,8 +152,7 @@ describe('Package 11 - Release Packet Lifecycle', () => {
   });
 
   it('should not change scores', async () => {
-    const fs = await import('fs');
-    const serviceContent = fs.readFileSync('backend/src/domains/assessment/result-release/services/resultReleasePacketService.ts', 'utf-8');
+    const serviceContent = readBackendSrcFile('domains/assessment/result-release/services/resultReleasePacketService.ts');
     expect(serviceContent).not.toContain('score');
     expect(serviceContent).not.toContain('grade');
   });
