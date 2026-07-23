@@ -1,0 +1,39 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "incremental": false
+  },
+  "include": [
+    "src/domains/assessment/runtime/**/*.ts",
+    "src/domains/assessment/marking/**/*.ts",
+    "src/domains/assessment/exam-paper/**/*.ts",
+    "src/domains/assessment/marking-invocation/**/*.ts",
+    "src/domains/assessment/recovery-lifecycle-closure/**/*.ts",
+    "src/domains/assessment/recovery-execution-readiness-board/**/*.ts",
+    "src/domains/assessment/recovery-case-adjudication/**/*.ts",
+    "src/routes/marking.ts",
+    "src/routes/examPaper.ts",
+    "src/routes/markingInvocation.ts",
+    "src/routes/recoveryLifecycleClosure.ts",
+    "src/routes/recoveryExecutionReadinessBoard.ts",
+    "src/routes/recoveryCaseAdjudication.ts",
+    "src/lib/prisma.ts",
+    "src/domains/assessment/exam-blueprint/**/*.ts",
+    "src/domains/assessment/result-report-card-export/**/*.ts",
+    "src/services/task022ContentGovernanceContracts.ts",
+    "src/contracts/task022CurriculumGovernanceContracts.ts",
+    "src/contracts/task040BackendFreezeContracts.ts",
+    "src/services/task040FreezeManifestService.ts",
+    "src/services/task040BackendSurfaceInventoryService.ts",
+    "src/services/task040Task036ProofLoaderService.ts",
+    "src/services/task032Task031ProofLoaderService.ts"
+  ],
+  "exclude": [
+    "node_modules",
+    "dist",
+    "**/tests/**",
+    "**/*.test.ts",
+    "**/*.spec.ts"
+  ]
+}
