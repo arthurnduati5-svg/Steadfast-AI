@@ -4,12 +4,8 @@ import {
   QuestionGovernanceRepository,
 } from '../../question-bank/contracts/questionBankRepositoryContracts';
 import {
-  QuestionUsageEligibilityRepository,
-} from '../../question-bank/contracts/questionUsageEligibilityContracts';
-import {
   QuestionExposureHoldRepository,
 } from '../../question-bank/contracts/questionDuplicateExposureContracts';
-import { ContentReviewRepository } from '../../question-bank/contracts/questionGovernanceContracts';
 import { ExamBlueprintVersion, ExamBlueprintRequirement } from '../contracts';
 
 export interface EligibleQuestion {
@@ -32,8 +28,8 @@ export interface EligibleQuestion {
 export interface EligibilityDependencies {
   questionBankItemRepo: QuestionBankItemRepository;
   questionVersionRepo: QuestionVersionRepository;
-  questionGovernanceRepo: QuestionGovernanceRepository & ContentReviewRepository;
-  usageEligibilityRepo: QuestionUsageEligibilityRepository;
+  questionGovernanceRepo: QuestionGovernanceRepository;
+  usageEligibilityRepo: QuestionGovernanceRepository;
   exposureHoldRepo: QuestionExposureHoldRepository;
 }
 

@@ -22,6 +22,8 @@ export class ResultReportCardExportAuditBridge {
       resultReportCardExportAuditId: uuidv4(),
       schoolId: ctx.schoolId,
       ...event,
+      reasonCodesJson: event.reasonCodesJson ?? null,
+      metadataJson: event.metadataJson ?? null,
       resultReportCardExportJobId: event.resultReportCardExportJobId ?? null,
       resultReportCardExportTargetId: event.resultReportCardExportTargetId ?? null,
       resultReportCardExportEnvelopeId: event.resultReportCardExportEnvelopeId ?? null,

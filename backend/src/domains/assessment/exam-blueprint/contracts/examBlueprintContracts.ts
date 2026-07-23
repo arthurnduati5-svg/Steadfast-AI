@@ -39,6 +39,7 @@ export interface ExamBlueprintVersion {
   durationMinutes: number;
   totalMarks: number;
   targetQuestionCount: number;
+  curriculumVersionId?: string;
   difficultyMixJson: string;
   questionTypeMixJson: string;
   securityClassRequirement: string;

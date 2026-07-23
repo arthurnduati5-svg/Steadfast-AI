@@ -1,5 +1,5 @@
 import { PrismaClient } from '@prisma/client';
-import { prisma } from '../../../utils/prisma';
+import { prisma } from '../../../../lib/prisma';
 import {
   ExamBlueprint, ExamBlueprintVersion, ExamBlueprintRequirement,
   ExamDraftSet, ExamDraft, ExamDraftQuestion,
@@ -47,6 +47,7 @@ function mapPrismaBlueprintVersion(row: any): ExamBlueprintVersion {
     securityClassRequirement: row.securityClassRequirement,
     coveragePolicy: row.coveragePolicy,
     selectionStrategy: row.selectionStrategy,
+    curriculumVersionId: row.curriculumVersionId ?? '',
     createdByActorId: row.createdByActorId,
     createdAt: row.createdAt?.toISOString() ?? new Date().toISOString(),
     approvedAt: row.approvedAt?.toISOString() ?? null,
