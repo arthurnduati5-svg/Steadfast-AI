@@ -11878,3 +11878,152 @@ model RecoveryCaseAdjudicationIdempotencyRecord {
   @@index([status], map: "p26_aidem_status")
   @@index([createdAt], map: "p26_aidem_ca")
 }
+
+// ── Durable Learning Evidence Event Store Foundation v1 ──
+
+model LearningEvidenceEvent {
+  eventId              String   @id @default(cuid())
+  schoolId             String
+  learnerId            String
+  streamId             String
+  streamSequence       Int
+  eventType            String
+  evidenceCandidateId  String?
+  committedEvidenceId  String?
+  sourceType           String
+  sourceRecordId       String
+  sourceVersion        String
+  objectiveId          String?
+  skillId              String?
+  topicId              String?
+  conceptId            String?
+  actorId              String
+  actorRole            String
+  policyVersion        String
+  schemaVersion        String
+  reasonCodes          Json     @default("[]")
+  safePayloadJson      String   @default("{}")
+  safePayloadHash      String
+  privacyClass         String   @default("learner_safe")
+  occurredAt           DateTime
+  recordedAt           DateTime @default(now())
+  correlationId        String
+  causationId          String?
+  idempotencyKey       String
+  previousEventHash    String   @default("")
+  eventHash            String
+
+  @@unique([schoolId, streamId, streamSequence])
+  @@unique([schoolId, idempotencyKey])
+  @@index([schoolId, learnerId])
+  @@index([schoolId, streamId])
+  @@index([schoolId, evidenceCandidateId])
+  @@index([schoolId, committedEvidenceId])
+  @@index([schoolId, eventType])
+  @@index([schoolId, sourceType])
+  @@index([schoolId, correlationId])
+  @@index([recordedAt])
+}
+
+model LearningEvidenceStream {
+  streamId          String   @id
+  schoolId          String
+  learnerId         String
+  currentSequence   Int      @default(0)
+  latestEventHash   String   @default("")
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@unique([schoolId, streamId])
+  @@index([schoolId, learnerId])
+}
+
+model LearningEvidenceCandidateProjection {
+  evidenceCandidateId String   @id
+  schoolId            String
+  learnerId           String
+  currentState        String   @default("candidate")
+  sourceType          String
+  sourceRecordId      String
+  sourceVersion       String
+  outcome             String?
+  independence        String?
+  evidenceMode        String?
+  confidenceState     String?
+  integrityState      String?
+  finalizationState   String?
+  difficultyBand      String?
+  timeOnTaskBand      String?
+  misconceptionTags   Json     @default("[]")
+  objectiveId         String?
+  skillId             String?
+  topicId             String?
+  conceptId           String?
+  evidenceWeightSuggestion Float?
+  eligibilityReasonCodes Json  @default("[]")
+  latestSequence      Int      @default(0)
+  version             Int      @default(1)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  @@unique([schoolId, evidenceCandidateId])
+  @@index([schoolId, learnerId])
+  @@index([schoolId, learnerId, currentState])
+}
+
+model CommittedLearningEvidenceProjection {
+  committedEvidenceId     String   @id
+  evidenceCandidateId     String   @unique
+  schoolId                String
+  learnerId               String
+  objectiveId             String?
+  skillId                 String?
+  topicId                 String?
+  conceptId               String?
+  outcome                 String
+  evidenceMode            String
+  independence            String
+  confidenceState         String
+  integrityState          String
+  finalizationState       String
+  evidenceWeightSuggestion Float?
+  active                  Boolean  @default(true)
+  supersededByEvidenceId  String?
+  committedAt             DateTime?
+  retainedAt              DateTime?
+  latestSequence          Int      @default(0)
+  version                 Int      @default(1)
+
+  @@unique([schoolId, committedEvidenceId])
+  @@index([schoolId, learnerId])
+  @@index([schoolId, learnerId, active])
+}
+
+model LearningEvidenceIdempotency {
+  id                 String   @id @default(cuid())
+  schoolId           String
+  idempotencyKey     String
+  commandType        String
+  requestHash        String
+  responseReference  String   @default("")
+  createdAt          DateTime @default(now())
+
+  @@unique([schoolId, commandType, idempotencyKey])
+  @@index([schoolId, idempotencyKey])
+  @@index([createdAt])
+}
+
+model LearningEvidenceProjectionCheckpoint {
+  id                  String   @id @default(cuid())
+  projectionName      String
+  schoolId            String
+  partitionKey        String
+  lastProcessedSequence Int   @default(0)
+  lastEventHash       String   @default("")
+  status              String   @default("healthy")
+  failureReason       String   @default("")
+  updatedAt           DateTime @updatedAt
+
+  @@unique([projectionName, schoolId, partitionKey])
+  @@index([schoolId])
+}

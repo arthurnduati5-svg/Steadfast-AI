@@ -1,0 +1,17 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "strict": true,
+    "skipLibCheck": true
+  },
+  "include": [
+    "src/domains/learning-evidence/**/*.ts",
+    "src/tests/learning-evidence-domain/**/*.ts",
+    "src/lib/prisma.ts"
+  ],
+  "exclude": [
+    "node_modules",
+    "dist"
+  ]
+}

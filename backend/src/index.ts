@@ -537,6 +537,13 @@ app.use('/api/copilot/tutor-turn', schoolAuthMiddleware, requireVerifiedSchoolCo
 import safeLearningEvidenceRoutes from './routes/safeLearningEvidenceRoutes';
 app.use('/api/copilot/learning-evidence', schoolAuthMiddleware, requireVerifiedSchoolContext, safeLearningEvidenceRoutes);
 
+// ─── Learning Evidence Event Store Routes (Task 040) ──
+import { createLearningEvidenceRouter } from './domains/learning-evidence/routes/learningEvidenceRoutes';
+import { PrismaLearningEvidenceEventStoreRepository } from './domains/learning-evidence/repositories/prismaLearningEvidenceEventStoreRepository';
+import { prisma } from './lib/prisma';
+const prismaEventStoreRepo = new PrismaLearningEvidenceEventStoreRepository(prisma);
+app.use('/api/copilot/evidence', schoolAuthMiddleware, requireVerifiedSchoolContext, createLearningEvidenceRouter(prismaEventStoreRepo));
+
 // ─── Backend Phase 2 Task 012: Teacher Safe Insight Routes ──
 import teacherSafeInsightRoutes from './routes/teacherSafeInsightRoutes';
 app.use('/api/copilot/teacher-insights', schoolAuthMiddleware, requireVerifiedSchoolContext, teacherSafeInsightRoutes);
