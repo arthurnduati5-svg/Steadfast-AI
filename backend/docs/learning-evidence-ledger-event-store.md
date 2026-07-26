@@ -127,11 +127,12 @@ No hidden `Date.now()` value. The stored event `recordedAt` is the exact value u
 - Production uses `PrismaLearningEvidenceEventStoreRepository` wired in `index.ts`.
 - No silent fallback to in-memory mode.
 - Every mutation uses one Prisma `$transaction` containing:
-  1. Event creation (append-only)
-  2. Conditional stream advancement (upsert)
-  3. Projection update (upsert)
-  4. Checkpoint update when applicable
-  5. Idempotency record creation (create, not upsert — prevents overwriting conflicting requests)
+   1. Event creation (append-only)
+   2. Conditional stream advancement (upsert)
+   3. Projection update (upsert)
+   4. Checkpoint update when applicable
+   5. Idempotency record creation (create, not upsert — prevents overwriting conflicting requests)
+- Database unique constraint on `@@unique([schoolId, streamId, streamSequence])` provides database-level concurrency enforcement. When two concurrent writes target the same stream sequence, the second Prisma transaction fails with a unique constraint violation. The Prisma repository maps this to `LearningEvidenceConcurrencyError`, and the command service returns `EVIDENCE_STREAM_CONCURRENCY_CONFLICT`.
 
 ## Transaction Boundary
 
@@ -144,6 +145,64 @@ Each atomic mutation (`appendEventAtomically`) contains:
 6. Create idempotency record (fails with unique violation if conflicting key+commandType+hash exists)
 
 If any step fails, the entire Prisma transaction rolls back — no partial state is committed.
+
+## Real Prisma Durability Proof
+
+The Prisma durability proof was executed against an isolated PostgreSQL test database (`steadfast_learning_evidence_test`) running on `localhost:8000` (PostgreSQL 17, local Windows service). The test database URL was supplied via `LEARNING_EVIDENCE_TEST_DATABASE_URL` environment variable. Database safety was confirmed before schema application: test-only database name, localhost host, no production credentials, no existing school records.
+
+### Shared Repository Contract
+
+One shared behavioral contract (`learningEvidenceRepositoryContract.ts`) runs identical assertions against both:
+- `InMemoryLearningEvidenceEventStoreRepository` (memory harness)
+- `PrismaLearningEvidenceEventStoreRepository` (Prisma harness)
+
+The contract covers: initial append, ordered append, append-only history, event hash chain, candidate projection persistence, committed projection persistence, projection checkpoint persistence, school isolation, learner isolation, idempotent replay, idempotency conflict, persistence reload (Prisma-only), stream integrity.
+
+### Database-Level Concurrency Proof
+
+Two concurrent `CreateEvidenceCandidate` commands target the same school, learner, and stream with `expectedStreamSequence=0`. Using `Promise.allSettled`, exactly one command succeeds and the other fails. The final stream advances exactly once, exactly one event exists, no duplicate stream sequence is created, and event history validity is confirmed. The same proof applies to concurrent `StartEvidenceValidation` commands against an existing stream.
+
+### Transaction Rollback Proof
+
+A deterministic write failure (duplicate `streamSequence` within the same school/stream) is induced against the real Prisma database. The failed transaction leaves no event, no stream advance, no projection mutation, no checkpoint mutation, and no idempotency record. Prior state remains intact.
+
+### Persistence Reload Proof
+
+Event, stream, candidate projection, committed projection, checkpoint, and idempotency state are written through one Prisma Client. The client is disconnected. A new Prisma Client is constructed. All records are read back and confirmed identical. Every persisted value survives Prisma Client teardown and reconstruction.
+
+### Prisma Mapping Proof
+
+`reasonCodes` (JSON), `misconceptionTags` (JSON), `eligibilityReasonCodes` (JSON), optional objective/skill/topic/concept IDs, `evidenceWeightSuggestion`, timestamps, and status fields survive real database round trips without data loss.
+
+### Test Counts
+
+- **15 existing focused suites**: 67 tests preserved
+- **New Prisma proof file** (`learning-evidence-prisma-durability.test.ts`): 39 tests
+  - 16 shared contract tests (memory)
+  - 16 shared contract tests (Prisma)
+  - 2 database concurrency tests
+  - 1 transaction rollback test
+  - 1 persistence reload test
+  - 1 projection replay test
+  - 2 Prisma mapping tests
+- **Total**: 16 test files, 106 tests, zero failed, zero skipped, zero todo
+
+### Schema Application
+
+```bash
+npx prisma db push --schema prisma/schema.prisma --skip-generate --accept-data-loss
+```
+
+Applied to `postgresql://postgres@localhost:8000/steadfast_learning_evidence_test` (isolated database, not production).
+
+### Infrastructure Cleanup
+
+After verification:
+1. Learning Evidence test rows deleted from the test database
+2. All Prisma Clients disconnected
+3. No Docker containers created or destroyed
+4. Test database and schema preserved for future runs
+5. `LEARNING_EVIDENCE_TEST_DATABASE_URL` process environment variable cleared
 
 ## Memory/Prisma Equivalence
 
@@ -197,7 +256,7 @@ The `rebuildProjections` method:
 
 Seed cases cover: independent correct recall, correct after heavy hints, partial with misconception, skipped, teach-back strong, reflection insufficient, provisional assessment, final assessment, integrity review required, teacher observation, cross-school denial, duplicate idempotent, superseded evidence.
 
-## Fifteen-Suite Inventory
+## Sixteen-Suite Inventory
 
 1. `learning-evidence-contracts.test.ts` — Type system, transitions, error codes, privacy keys
 2. `learning-evidence-privacy.test.ts` — Privacy guard validate/sanitize
@@ -214,6 +273,7 @@ Seed cases cover: independent correct recall, correct after heavy hints, partial
 13. `learning-evidence-projection-safety.test.ts` — Rebuild repairs, divergence detection, event preservation
 14. `learning-evidence-roles.test.ts` — Student self/other, teacher validation, unknown/parent denied, admin rebuild
 15. `learning-evidence-no-false-pass.test.ts` — Empty school, failures leave no events, non-existent candidate, invalid transition
+16. `learning-evidence-prisma-durability.test.ts` — Shared memory/Prisma contract, database concurrency, transaction rollback, persistence reload, projection replay, Prisma mapping
 
 ## Direct Regression Inventory
 
@@ -222,15 +282,24 @@ No test files outside `src/tests/learning-evidence-domain` directly import from 
 ## Verification Commands
 
 ```bash
+# Isolated test database required for Prisma proof
+set LEARNING_EVIDENCE_TEST_DATABASE_URL=postgresql://postgres@localhost:8000/steadfast_learning_evidence_test
+
+# Schema application (one time per test database)
+npx prisma db push --schema prisma/schema.prisma --skip-generate --accept-data-loss
+
 # Task-scoped TypeScript
 cd backend && npx tsc -p tsconfig.learning-evidence-event-store.json --noEmit --incremental false
 
-# All fifteen Learning Evidence suites
+# All sixteen Learning Evidence suites (memory + real Prisma)
 cd backend && npx vitest run src/tests/learning-evidence-domain --pool=threads
 
 # Prisma
 cd backend && npx prisma validate --schema prisma/schema.prisma
 cd backend && npx prisma generate --schema prisma/schema.prisma
+
+# Explicit concurrency proof
+cd backend && npx vitest run src/tests/learning-evidence-domain/learning-evidence-prisma-durability.test.ts --pool=threads
 
 # Integrity scans
 Get-ChildItem -Recurse -File src/domains/learning-evidence | Select-String -Pattern "\.skip|\.todo|\.only"

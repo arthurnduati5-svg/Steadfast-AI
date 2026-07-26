@@ -28,6 +28,7 @@ import type {
   CommittedLearningEvidenceProjectionState,
 } from '../contracts/learningEvidenceProjectionContracts';
 import type { EvidenceCandidateState, NormalizedEvidencePayload, EvidenceSourceLineage } from '../contracts/learningEvidenceEventStoreContracts';
+import { LearningEvidenceConcurrencyError, LearningEvidenceIdempotencyConflictError } from '../repositories/learningEvidenceRepositoryErrors';
 
 const LOGGER_PREFIX = '[LearningEvidenceCommandService]';
 
@@ -103,6 +104,12 @@ export class LearningEvidenceCommandService {
           return { success: false, error: makeError('UNKNOWN_COMMAND', 'Unknown command type', (command as EvidenceCommand).actor.requestId, (command as EvidenceCommand).actor.correlationId, false) };
       }
     } catch (err: any) {
+      if (err instanceof LearningEvidenceConcurrencyError) {
+        return { success: false, error: makeError(EVIDENCE_ERROR_CODES.STREAM_CONCURRENCY_CONFLICT, err.message, command.actor.requestId, command.actor.correlationId, true) };
+      }
+      if (err instanceof LearningEvidenceIdempotencyConflictError) {
+        return { success: false, error: makeError(EVIDENCE_ERROR_CODES.IDEMPOTENCY_CONFLICT, err.message, command.actor.requestId, command.actor.correlationId, false) };
+      }
       const message = err?.message ?? 'Unexpected error';
       return { success: false, error: makeError(EVIDENCE_ERROR_CODES.PERSISTENCE_FAILED, message, command.actor.requestId, command.actor.correlationId, true) };
     }

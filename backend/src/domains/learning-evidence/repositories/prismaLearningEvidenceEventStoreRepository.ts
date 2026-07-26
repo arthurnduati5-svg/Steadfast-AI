@@ -3,7 +3,8 @@
 import type { LearningEvidenceEventRecord, LearningEvidenceStreamState, LearningEvidenceCandidateProjectionState, CommittedLearningEvidenceProjectionState, EvidenceProjectionCheckpointState } from '../contracts/learningEvidenceProjectionContracts';
 import type { EvidenceCandidateState } from '../contracts/learningEvidenceEventStoreContracts';
 import type { LearningEvidenceEventStoreRepository } from './learningEvidenceEventStoreRepository';
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient, Prisma } from '@prisma/client';
+import { LearningEvidenceConcurrencyError, LearningEvidenceIdempotencyConflictError } from './learningEvidenceRepositoryErrors';
 
 export class PrismaLearningEvidenceEventStoreRepository implements LearningEvidenceEventStoreRepository {
   constructor(private prisma: PrismaClient) {}
@@ -18,43 +19,44 @@ export class PrismaLearningEvidenceEventStoreRepository implements LearningEvide
     requestHash?: string,
     commandType?: string,
   ): Promise<void> {
-    await this.prisma.$transaction(async (tx) => {
-      await tx.learningEvidenceEvent.create({
-        data: {
-          eventId: event.eventId,
-          schoolId: event.schoolId,
-          learnerId: event.learnerId,
-          streamId: event.streamId,
-          streamSequence: event.streamSequence,
-          eventType: event.eventType,
-          evidenceCandidateId: event.evidenceCandidateId ?? null,
-          committedEvidenceId: event.committedEvidenceId ?? null,
-          sourceType: event.sourceType,
-          sourceRecordId: event.sourceRecordId,
-          sourceVersion: event.sourceVersion,
-          objectiveId: event.objectiveId ?? null,
-          skillId: event.skillId ?? null,
-          topicId: event.topicId ?? null,
-          conceptId: event.conceptId ?? null,
-          actorId: event.actorId,
-          actorRole: event.actorRole,
-          policyVersion: event.policyVersion,
-          schemaVersion: event.schemaVersion,
-          reasonCodes: event.reasonCodes,
-          safePayloadJson: event.safePayloadJson,
-          safePayloadHash: event.safePayloadHash,
-          privacyClass: event.privacyClass,
-          occurredAt: new Date(event.occurredAt),
-          recordedAt: new Date(event.recordedAt),
-          correlationId: event.correlationId,
-          causationId: event.causationId ?? null,
-          idempotencyKey: event.idempotencyKey,
-          previousEventHash: event.previousEventHash,
-          eventHash: event.eventHash,
-        },
-      });
+    try {
+      await this.prisma.$transaction(async (tx) => {
+        await tx.learningEvidenceEvent.create({
+          data: {
+            eventId: event.eventId,
+            schoolId: event.schoolId,
+            learnerId: event.learnerId,
+            streamId: event.streamId,
+            streamSequence: event.streamSequence,
+            eventType: event.eventType,
+            evidenceCandidateId: event.evidenceCandidateId ?? null,
+            committedEvidenceId: event.committedEvidenceId ?? null,
+            sourceType: event.sourceType,
+            sourceRecordId: event.sourceRecordId,
+            sourceVersion: event.sourceVersion,
+            objectiveId: event.objectiveId ?? null,
+            skillId: event.skillId ?? null,
+            topicId: event.topicId ?? null,
+            conceptId: event.conceptId ?? null,
+            actorId: event.actorId,
+            actorRole: event.actorRole,
+            policyVersion: event.policyVersion,
+            schemaVersion: event.schemaVersion,
+            reasonCodes: event.reasonCodes,
+            safePayloadJson: event.safePayloadJson,
+            safePayloadHash: event.safePayloadHash,
+            privacyClass: event.privacyClass,
+            occurredAt: new Date(event.occurredAt),
+            recordedAt: new Date(event.recordedAt),
+            correlationId: event.correlationId,
+            causationId: event.causationId ?? null,
+            idempotencyKey: event.idempotencyKey,
+            previousEventHash: event.previousEventHash,
+            eventHash: event.eventHash,
+          },
+        });
 
-      await tx.learningEvidenceStream.upsert({
+        await tx.learningEvidenceStream.upsert({
         where: { streamId: stream.streamId },
         update: {
           currentSequence: stream.currentSequence,
@@ -212,6 +214,24 @@ export class PrismaLearningEvidenceEventStoreRepository implements LearningEvide
         });
       }
     });
+    } catch (err: unknown) {
+      const prismaErr = err as any;
+      const code = prismaErr?.code ?? '';
+      const msg = (prismaErr?.message ?? '').toLowerCase();
+      if (code === 'P2002' || code === 'P2003' || code === 'P2025' || msg.includes('unique') || msg.includes('constraint') || msg.includes('duplicate')) {
+        if (msg.includes('streamsequence') || msg.includes('stream_sequence') || msg.includes('streamsequence_unique')) {
+          throw new LearningEvidenceConcurrencyError(`Stream concurrency conflict: ${prismaErr.message}`);
+        }
+        if ((msg.includes('schoolid') && msg.includes('streamid')) || (code === 'P2002' && msg.includes('event'))) {
+          throw new LearningEvidenceConcurrencyError(`Stream concurrency conflict: ${prismaErr.message}`);
+        }
+        if (msg.includes('idempotency')) {
+          throw new LearningEvidenceIdempotencyConflictError(`Idempotency conflict: ${prismaErr.message}`);
+        }
+        throw new LearningEvidenceConcurrencyError(`Database conflict (${code}): ${prismaErr.message}`);
+      }
+      throw err;
+    }
   }
 
   async getStream(schoolId: string, streamId: string): Promise<LearningEvidenceStreamState | null> {
