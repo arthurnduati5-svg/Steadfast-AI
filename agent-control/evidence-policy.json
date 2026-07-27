@@ -1,0 +1,38 @@
+{
+  "schemaVersion": 1,
+  "allowedEvidenceKinds": ["command-output", "test-run", "build-output", "runtime-session", "screenshot", "dom-snapshot", "console-log", "network-log", "deployment-record", "workspace-scan", "manifest-validation", "git-status", "inventory-comparison", "process-record", "staging-receipt", "commit-verification", "post-commit-verification"],
+  "mandatoryFields": ["evidenceId", "taskId", "gateId", "producerScript", "command", "startedAt", "completedAt", "exitCode", "result"],
+  "fileHashing": "SHA-256",
+  "ledgerHashChaining": true,
+  "screenshotTruthRequirements": {
+    "detectedSurface": "must match intendedSurface",
+    "uniqueVisibleLandmark": "must be present",
+    "noErrorOverlay": true,
+    "noBlankImage": true,
+    "viewportMatch": true,
+    "deviceScaleFactorMatch": true,
+    "themeMatch": true
+  },
+  "domLandmarkRequirements": {
+    "routeMatch": true,
+    "landmarkPresent": true,
+    "landmarkTextHash": "verified against expected"
+  },
+  "fatalRuntimeBehavior": "Screenshot capture after fatal runtime error is invalid. New runtime session required after repair.",
+  "warningHandling": "Unhandled runtime warnings must be recorded. Exceeding maxAcceptableConsoleErrors causes rejection.",
+  "deploymentClaimRequirements": {
+    "urlRequired": true,
+    "commitRequired": true,
+    "healthCheckRequired": true
+  },
+  "cleanupEvidence": "Process termination and profile removal must be recorded.",
+  "maxAcceptableConsoleErrors": 0,
+  "maxAcceptableFailedRequests": 0,
+  "blankImageThresholds": {
+    "maxPixelVariance": 5,
+    "minNonBlankPixels": 100
+  },
+  "duplicateImageRules": "Byte-identical screenshots for different surfaces, themes, or viewports are rejected unless manifest explicitly permits.",
+  "evidenceRetentionLocation": "<git-common-dir>/steadfast-agent-control/",
+  "manualOutcomeProhibition": true
+}

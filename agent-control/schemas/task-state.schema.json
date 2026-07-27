@@ -1,0 +1,41 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Steadfast Task State",
+  "type": "object",
+  "required": [
+    "schemaVersion", "taskId", "manifestHash", "currentState", "previousState",
+    "resumeState", "revision", "startingHead", "workingHead",
+    "taskWorktree", "taskBranch", "activeFailureIds", "resolvedFailureIds",
+    "lastTransitionAt", "lastTransitionBy", "previousStateHash", "stateHash",
+    "postCommitVerifiedHead", "acceptedAt", "acceptedSentinelHash"
+  ],
+  "properties": {
+    "schemaVersion": { "type": "integer", "minimum": 1 },
+    "taskId": { "type": "string" },
+    "manifestHash": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "currentState": {
+      "type": "string",
+      "enum": [
+        "CREATED", "BASELINE_CAPTURE", "AUDITING", "IMPLEMENTING",
+        "ERROR_REPAIR", "VERIFYING", "STAGING", "COMMITTING",
+        "POST_COMMIT_VERIFYING", "ACCEPTED", "OWNER_INPUT_REQUIRED"
+      ]
+    },
+    "previousState": { "type": "string" },
+    "resumeState": { "type": "string" },
+    "revision": { "type": "integer", "minimum": 0 },
+    "startingHead": { "type": "string" },
+    "workingHead": { "type": "string" },
+    "taskWorktree": { "type": "string" },
+    "taskBranch": { "type": "string" },
+    "activeFailureIds": { "type": "array", "items": { "type": "string" } },
+    "resolvedFailureIds": { "type": "array", "items": { "type": "string" } },
+    "lastTransitionAt": { "type": "string", "format": "date-time" },
+    "lastTransitionBy": { "type": "string" },
+    "previousStateHash": { "type": "string" },
+    "stateHash": { "type": "string" },
+    "postCommitVerifiedHead": { "type": "string" },
+    "acceptedAt": { "type": "string" },
+    "acceptedSentinelHash": { "type": "string" }
+  }
+}

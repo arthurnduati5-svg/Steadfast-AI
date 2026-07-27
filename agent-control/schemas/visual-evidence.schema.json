@@ -1,0 +1,60 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Steadfast Visual Evidence Record",
+  "type": "object",
+  "required": [
+    "evidenceId", "taskId", "runtimeSessionId", "intendedSurface",
+    "detectedSurface", "uniqueVisibleLandmark", "landmarkSelector",
+    "landmarkTextHash", "route", "uiPath", "viewport", "deviceScaleFactor",
+    "theme", "interactionState", "consoleErrorCount", "failedRequestCount",
+    "fatalErrorBeforeCapture", "screenshotPath", "screenshotHash",
+    "screenshotByteLength", "imageWidth", "imageHeight", "pixelVariance",
+    "blankImageResult", "DOMSnapshotPath", "DOMSnapshotHash",
+    "consoleLogPath", "consoleLogHash", "networkLogPath", "networkLogHash",
+    "capturedAt", "result", "previousRecordHash", "recordHash"
+  ],
+  "properties": {
+    "evidenceId": { "type": "string" },
+    "taskId": { "type": "string" },
+    "runtimeSessionId": { "type": "string" },
+    "intendedSurface": { "type": "string" },
+    "detectedSurface": { "type": "string" },
+    "uniqueVisibleLandmark": { "type": "string" },
+    "landmarkSelector": { "type": "string" },
+    "landmarkTextHash": { "type": "string" },
+    "route": { "type": "string" },
+    "uiPath": { "type": "string" },
+    "viewport": {
+      "type": "object",
+      "required": ["width", "height", "deviceScaleFactor"],
+      "properties": {
+        "width": { "type": "integer" },
+        "height": { "type": "integer" },
+        "deviceScaleFactor": { "type": "number" }
+      }
+    },
+    "deviceScaleFactor": { "type": "number" },
+    "theme": { "type": "string" },
+    "interactionState": { "type": "string" },
+    "consoleErrorCount": { "type": "integer" },
+    "failedRequestCount": { "type": "integer" },
+    "fatalErrorBeforeCapture": { "type": "boolean" },
+    "screenshotPath": { "type": "string" },
+    "screenshotHash": { "type": "string" },
+    "screenshotByteLength": { "type": "integer" },
+    "imageWidth": { "type": "integer" },
+    "imageHeight": { "type": "integer" },
+    "pixelVariance": { "type": "number" },
+    "blankImageResult": { "type": "boolean" },
+    "DOMSnapshotPath": { "type": "string" },
+    "DOMSnapshotHash": { "type": "string" },
+    "consoleLogPath": { "type": "string" },
+    "consoleLogHash": { "type": "string" },
+    "networkLogPath": { "type": "string" },
+    "networkLogHash": { "type": "string" },
+    "capturedAt": { "type": "string", "format": "date-time" },
+    "result": { "type": "string", "enum": ["PASS", "FAIL", "BLOCKED", "OWNER_INPUT_REQUIRED"] },
+    "previousRecordHash": { "type": "string" },
+    "recordHash": { "type": "string" }
+  }
+}

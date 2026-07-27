@@ -1,688 +1,306 @@
 #!/usr/bin/env node
-
-import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync, mkdirSync, appendFileSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
-import { getRepositoryRoot, getGovernorRuntimeDir, getGitDir } from './task-governor/repository-root.mjs';
-import { loadManifest, computeManifestHash } from './task-governor/manifest-loader.mjs';
-import { validateManifest } from './task-governor/manifest-validator.mjs';
-import { loadState, updateState, saveState, getDefaultState } from './task-governor/state-store.mjs';
-import { STATES, EXIT_CODES } from './task-governor/constants.mjs';
-import { runGate, verifyPostCommit, finalizeTask } from './task-governor/gate-runner.mjs';
-import { verifyChain, getRecords, getLastRecord, addRecord } from './task-governor/evidence-ledger.mjs';
-import { captureBaseline, getCurrentHead, getStatus, checkWorkspace } from './task-governor/workspace-guard.mjs';
-import { prepareCommit, recordImplementationCommit, recordAccountabilityCommit } from './task-governor/commit-guard.mjs';
-import { formatStatus, formatStatusJson, formatExplain } from './task-governor/output-format.mjs';
-import { runAllScans } from './task-governor/scan-runner.mjs';
-import { analyzeTestFiles } from './task-governor/test-integrity-analyzer.mjs';
-import { GovernorError } from './task-governor/errors.mjs';
+import { execSync, spawnSync } from 'node:child_process';
+import crypto from 'node:crypto';
+import { getRepositoryRoot, getRuntimeDir, getCurrentHead, ensureDir, computeHash, writeJSON, readJSON, appendLine } from './agent-control-lib/repository.mjs';
+import { STATES, loadState, transitionState, recordFailure, resolveFailure, isValidTransition } from './agent-control-lib/state-machine.mjs';
+
+function requireTaskId(args) {
+  const idx = args.indexOf('--task');
+  if (idx < 0) throw new Error('--task <task-id> required');
+  return args[idx + 1];
+}
+
+function cmdStatus(taskId) {
+  const state = loadState(taskId);
+  if (!state) { console.log(`Task ${taskId}: NOT FOUND`); return; }
+  console.log(`Task: ${taskId}`);
+  console.log(`State: ${state.currentState}`);
+  console.log(`Revision: ${state.revision}`);
+  console.log(`Manifest hash: ${state.manifestHash}`);
+  console.log(`Starting HEAD: ${state.startingHead}`);
+  console.log(`Working HEAD: ${state.workingHead}`);
+  console.log(`Active failures: ${state.activeFailureIds.length > 0 ? state.activeFailureIds.join(', ') : 'none'}`);
+  console.log(`Last transition: ${state.lastTransitionAt}`);
+  if (state.currentState === STATES.ACCEPTED) {
+    console.log(`Accepted at: ${state.acceptedAt}`);
+    console.log(`Accepted sentinel hash: ${state.acceptedSentinelHash}`);
+  }
+  if (state.currentState === STATES.OWNER_INPUT_REQUIRED) {
+    console.log('Status: OWNER_INPUT_REQUIRED — owner input needed to continue');
+  }
+  if (state.currentState !== STATES.ACCEPTED) {
+    console.log(`Next allowed action: advance --to <state>`);
+  }
+}
+
+async function cmdAdvance(taskId, toState) {
+  const state = loadState(taskId);
+  if (!state) throw new Error(`Task ${taskId} not found`);
+  if (state.currentState === STATES.ACCEPTED) throw new Error('Cannot advance an accepted task');
+  if (toState === STATES.ACCEPTED) throw new Error('Only finalize-task.mjs may transition to ACCEPTED');
+
+  const newState = transitionState(taskId, toState, 'task-governor.mjs');
+  console.log(`Task ${taskId}: ${state.currentState} -> ${toState}`);
+  console.log(`Revision: ${newState.revision}`);
+}
+
+async function cmdFail(taskId, gateId, commandFile, returnState) {
+  const state = loadState(taskId);
+  if (!state) throw new Error(`Task ${taskId} not found`);
+
+  const failureId = `${taskId}-${gateId}-${Date.now()}`;
+  const newState = recordFailure(taskId, failureId, state.currentState, returnState || state.currentState, commandFile || '', -1, '');
+
+  const runtimeDir = getRuntimeDir(taskId);
+  const failuresDir = resolve(runtimeDir, 'backlog');
+  ensureDir(failuresDir);
+  appendLine(resolve(failuresDir, 'discoveries.jsonl'), JSON.stringify({
+    failureId,
+    taskId,
+    gateId,
+    commandFile,
+    returnState,
+    timestamp: new Date().toISOString(),
+  }));
+
+  console.log(`FAILURE_RECORDED: ${failureId}`);
+  console.log(`Task moved to ERROR_REPAIR. Resume state: ${newState.resumeState}`);
+}
+
+async function cmdResolve(taskId, failureId, evidencePath) {
+  const newState = resolveFailure(taskId, failureId);
+  if (!newState) throw new Error(`Failed to resolve failure ${failureId}`);
+  console.log(`Failure ${failureId} resolved.`);
+  console.log(`Active failures remaining: ${newState.activeFailureIds.length}`);
+  if (newState.activeFailureIds.length === 0) {
+    console.log(`Task returned to: ${newState.currentState}`);
+  }
+}
+
+async function cmdRun(taskId, gateId, cwd, commandArgs) {
+  if (!commandArgs || commandArgs.length === 0) throw new Error('No command specified');
+
+  const state = loadState(taskId);
+  if (!state) throw new Error(`Task ${taskId} not found`);
+
+  const runtimeDir = getRuntimeDir(taskId);
+  const evidenceDir = resolve(runtimeDir, 'evidence', 'commands');
+  ensureDir(evidenceDir);
+
+  const startTime = new Date().toISOString();
+  const stdoutPath = resolve(evidenceDir, `${gateId}-stdout.txt`);
+  const stderrPath = resolve(evidenceDir, `${gateId}-stderr.txt`);
+
+  const result = spawnSync(commandArgs[0], commandArgs.slice(1), {
+    cwd: cwd || getRepositoryRoot(),
+    encoding: 'utf-8',
+    timeout: 300000,
+    maxBuffer: 10 * 1024 * 1024,
+  });
+
+  const endTime = new Date().toISOString();
+  writeFileSync(stdoutPath, result.stdout || '', 'utf-8');
+  writeFileSync(stderrPath, result.stderr || '', 'utf-8');
+
+  const evidenceId = `${taskId}-${gateId}-${Date.now()}`;
+  const record = {
+    evidenceId,
+    taskId,
+    gateId,
+    evidenceKind: 'command-output',
+    producerScript: 'task-governor.mjs run',
+    command: commandArgs.join(' '),
+    arguments: commandArgs,
+    workingDirectory: cwd || getRepositoryRoot(),
+    startedAt: startTime,
+    completedAt: endTime,
+    exitCode: result.status != null ? result.status : -1,
+    stdoutPath,
+    stdoutHash: computeHash(result.stdout || ''),
+    stderrPath,
+    stderrHash: computeHash(result.stderr || ''),
+    referencedArtifacts: [],
+    artifactHashes: {},
+    warningCount: 0,
+    failedAssertionCount: 0,
+    result: result.status === 0 ? 'PASS' : 'FAIL',
+    previousRecordHash: '',
+    recordHash: '',
+  };
+
+  const ledgerPath = resolve(runtimeDir, 'evidence-ledger.jsonl');
+  const records = existsSync(ledgerPath) ? readFileSync(ledgerPath, 'utf-8').split('\n').filter(l => l.trim()).map(l => JSON.parse(l)) : [];
+  const prevHash = records.length > 0 ? records[records.length - 1].recordHash : crypto.createHash('sha256').update('genesis').digest('hex');
+  record.previousRecordHash = prevHash;
+  record.recordHash = computeHash(JSON.stringify(record));
+  appendLine(ledgerPath, JSON.stringify(record));
+
+  console.log(`Gate: ${gateId}`);
+  console.log(`Exit code: ${result.status}`);
+  console.log(`Result: ${record.result}`);
+  console.log(`Evidence ID: ${evidenceId}`);
+
+  if (result.status !== 0 && gateId.startsWith('mandatory-')) {
+    const failId = `${taskId}-${gateId}-${Date.now()}`;
+    recordFailure(taskId, failId, state.currentState, state.currentState, commandArgs.join(' '), result.status, evidenceDir);
+    console.log(`FAILURE_RECORDED: ${failId}`);
+  }
+
+  return result.status === 0 ? 0 : 1;
+}
+
+async function cmdStage(taskId, pathsFile) {
+  if (!pathsFile || !existsSync(pathsFile)) throw new Error('--paths-file <path> required');
+
+  const root = getRepositoryRoot();
+  const paths = readFileSync(pathsFile, 'utf-8').split('\n').map(l => l.trim()).filter(l => l && !l.startsWith('#'));
+
+  for (const p of paths) {
+    if (p === '.' || p === '-A' || p === '--all') {
+      throw new Error(`BROAD_STAGING_FORBIDDEN: ${p}`);
+    }
+  }
+
+  const stagedPaths = [];
+  for (const p of paths) {
+    const fullPath = resolve(root, p);
+    if (existsSync(fullPath)) {
+      execSync(`git add "${fullPath}"`, { cwd: root, encoding: 'utf-8' });
+      stagedPaths.push(p);
+    } else {
+      execSync(`git add "${p}"`, { cwd: root, encoding: 'utf-8', stdio: 'pipe' });
+      stagedPaths.push(p);
+    }
+  }
+
+  const indexHash = execSync('git write-tree', { cwd: root, encoding: 'utf-8' }).trim();
+  const runtimeDir = getRuntimeDir(taskId);
+  ensureDir(runtimeDir);
+
+  const receipt = {
+    taskId,
+    stagedAt: new Date().toISOString(),
+    stagedBy: 'task-governor.mjs stage',
+    stagedPaths,
+    indexTreeHash: indexHash,
+    pathCount: stagedPaths.length,
+  };
+
+  writeJSON(resolve(runtimeDir, 'staging', 'staging-receipt.json'), receipt);
+  console.log(`Staged ${stagedPaths.length} paths.`);
+  console.log(`Index tree hash: ${indexHash}`);
+  console.log('Staged paths:');
+  stagedPaths.forEach(p => console.log(`  ${p}`));
+}
+
+function cmdReport(taskId) {
+  const state = loadState(taskId);
+  if (!state) throw new Error(`Task ${taskId} not found`);
+
+  const runtimeDir = getRuntimeDir(taskId);
+  const report = {
+    taskId,
+    currentState: state.currentState,
+    revision: state.revision,
+    manifestHash: state.manifestHash,
+    startingHead: state.startingHead,
+    workingHead: state.workingHead,
+    activeFailures: state.activeFailureIds,
+    resolvedFailures: state.resolvedFailureIds,
+    lastTransition: state.lastTransitionAt,
+    hasWorkspaceEvidence: existsSync(resolve(runtimeDir, 'baseline', 'git-status.json')),
+    hasEvidenceLedger: existsSync(resolve(runtimeDir, 'evidence-ledger.jsonl')),
+    hasStagingReceipt: existsSync(resolve(runtimeDir, 'staging', 'staging-receipt.json')),
+    hasCommitVerification: existsSync(resolve(runtimeDir, 'commits', 'commit-verification.json')),
+    hasPostCommitVerification: existsSync(resolve(runtimeDir, 'post-commit', 'verification.json')),
+    accepted: state.currentState === STATES.ACCEPTED,
+  };
+
+  console.log(JSON.stringify(report, null, 2));
+}
 
 async function main() {
   const args = process.argv.slice(2);
-  if (args.length === 0) {
-    console.log('One-Shot Acceptance Governor');
-    console.log('Usage: node scripts/task-governor.mjs <command> [options]');
+  const command = args[0];
+
+  if (!command) {
+    console.log('Steadfast Agent Execution Control Plane — Task Governor');
     console.log('');
     console.log('Commands:');
-    console.log('  doctor                          Verify governor installation');
-    console.log('  validate <task-id>               Validate task manifest');
-    console.log('  bootstrap <task-id>              Bootstrap a task (capture baseline)');
-    console.log('  rebootstrap <task-id> [--reason]  Audited rebootstrap: archive old evidence, start fresh');
-    console.log('  status <task-id>                 Show task status');
-    console.log('  status <task-id> --json          Show task status as JSON');
-    console.log('  resume <task-id>                 Show next required action');
-    console.log('  run-gate <task-id> <gate-id>     Run a specific gate');
-    console.log('  verify-todo <task-id> <todo-id>  Verify a todo is complete');
-    console.log('  prepare-commit <task-id>         Validate staging for commit');
-    console.log('  record-implementation-commit <task-id>  Record an implementation commit');
-    console.log('  verify-post-commit <task-id>     Run post-commit verification');
-    console.log('  record-accountability-commit <task-id>  Record an accountability commit');
-    console.log('  finalize <task-id>               Finalize and accept the task');
-    console.log('  explain <task-id>                Show detailed task explanation');
-    return 0;
+    console.log('  status --task <task-id>');
+    console.log('  advance --task <task-id> --to <state>');
+    console.log('  fail --task <task-id> --gate <gate-id> --command-file <path> --return-state <state>');
+    console.log('  resolve --task <task-id> --failure <failure-id> --evidence <path>');
+    console.log('  run --task <task-id> --gate <gate-id> --cwd <path> -- <command...>');
+    console.log('  stage --task <task-id> --paths-file <path>');
+    console.log('  report --task <task-id>');
+    process.exit(1);
   }
-
-  const command = args[0];
 
   try {
     switch (command) {
-      case 'doctor':
-        return await cmdDoctor();
-      case 'validate':
-        return await cmdValidate(args[1]);
-      case 'bootstrap':
-        return await cmdBootstrap(args[1]);
-      case 'rebootstrap':
-        return await cmdRebootstrap(args[1], args.slice(2));
-      case 'status':
-        if (args[2] === '--json') {
-          return await cmdStatus(args[1], true);
-        }
-        return await cmdStatus(args[1], false);
-      case 'resume':
-        return await cmdResume(args[1]);
-      case 'run-gate':
-        return await cmdRunGate(args[1], args[2]);
-      case 'verify-todo':
-        return await cmdVerifyTodo(args[1], args[2]);
-      case 'prepare-commit':
-        return await cmdPrepareCommit(args[1]);
-      case 'record-implementation-commit':
-        return await cmdRecordImplCommit(args[1]);
-      case 'verify-post-commit':
-        return await cmdVerifyPostCommit(args[1]);
-      case 'record-accountability-commit':
-        return await cmdRecordAccCommit(args[1]);
-      case 'finalize':
-        return await cmdFinalize(args[1]);
-      case 'explain':
-        return await cmdExplain(args[1]);
+      case 'status': {
+        const taskId = requireTaskId(args);
+        cmdStatus(taskId);
+        break;
+      }
+      case 'advance': {
+        const taskId = requireTaskId(args);
+        const toIdx = args.indexOf('--to');
+        if (toIdx < 0) throw new Error('--to <state> required');
+        await cmdAdvance(taskId, args[toIdx + 1]);
+        break;
+      }
+      case 'fail': {
+        const taskId = requireTaskId(args);
+        const gateIdx = args.indexOf('--gate');
+        const fileIdx = args.indexOf('--command-file');
+        const returnIdx = args.indexOf('--return-state');
+        await cmdFail(taskId, gateIdx >= 0 ? args[gateIdx + 1] : 'unknown', fileIdx >= 0 ? args[fileIdx + 1] : null, returnIdx >= 0 ? args[returnIdx + 1] : null);
+        break;
+      }
+      case 'resolve': {
+        const taskId = requireTaskId(args);
+        const failIdx = args.indexOf('--failure');
+        const evIdx = args.indexOf('--evidence');
+        if (failIdx < 0) throw new Error('--failure <failure-id> required');
+        await cmdResolve(taskId, args[failIdx + 1], evIdx >= 0 ? args[evIdx + 1] : '');
+        break;
+      }
+      case 'run': {
+        const taskId = requireTaskId(args);
+        const gateIdx = args.indexOf('--gate');
+        const cwdIdx = args.indexOf('--cwd');
+        const dashIdx = args.indexOf('--');
+        if (gateIdx < 0) throw new Error('--gate <gate-id> required');
+        if (dashIdx < 0) throw new Error('-- <command> required');
+        const cwd = cwdIdx >= 0 ? args[cwdIdx + 1] : null;
+        const commandArgs = args.slice(dashIdx + 1);
+        await cmdRun(taskId, args[gateIdx + 1], cwd, commandArgs);
+        break;
+      }
+      case 'stage': {
+        const taskId = requireTaskId(args);
+        const pathIdx = args.indexOf('--paths-file');
+        if (pathIdx < 0) throw new Error('--paths-file <path> required');
+        await cmdStage(taskId, args[pathIdx + 1]);
+        break;
+      }
+      case 'report': {
+        const taskId = requireTaskId(args);
+        cmdReport(taskId);
+        break;
+      }
       default:
         console.error(`Unknown command: ${command}`);
-        return 1;
+        process.exit(1);
     }
   } catch (err) {
-    if (err instanceof GovernorError) {
-      console.error(`ERROR [${err.exitCode}]: ${err.message}`);
-      return err.exitCode;
-    }
-    console.error(`UNEXPECTED ERROR: ${err.message}`);
-    console.error(err.stack);
-    return 1;
+    console.error(`ERROR: ${err.message}`);
+    process.exit(1);
   }
 }
 
-async function cmdDoctor() {
-  const checks = [];
-
-  try {
-    const root = getRepositoryRoot();
-    checks.push({ name: 'Repository root', ok: !!root, detail: root });
-  } catch (e) {
-    checks.push({ name: 'Repository root', ok: false, detail: e.message });
-  }
-
-  try {
-    const gitDir = getGitDir();
-    checks.push({ name: 'Git directory', ok: !!gitDir, detail: gitDir });
-  } catch (e) {
-    checks.push({ name: 'Git directory', ok: false, detail: e.message });
-  }
-
-  const requiredModules = [
-    'repository-root.mjs', 'constants.mjs', 'errors.mjs',
-    'manifest-loader.mjs', 'manifest-validator.mjs', 'state-machine.mjs',
-    'state-store.mjs', 'evidence-ledger.mjs', 'workspace-guard.mjs',
-    'process-runner.mjs', 'test-inventory.mjs', 'test-integrity-analyzer.mjs',
-    'scan-runner.mjs', 'gate-runner.mjs', 'commit-guard.mjs',
-    'finalizer.mjs', 'output-format.mjs',
-  ];
-
-  for (const mod of requiredModules) {
-    const modPath = resolve(getRepositoryRoot(), 'scripts/task-governor', mod);
-    checks.push({
-      name: `Module: ${mod}`,
-      ok: existsSync(modPath),
-      detail: modPath,
-    });
-  }
-
-  const manifestSchemaPath = resolve(getRepositoryRoot(), '.task-governor/schemas/task-manifest.schema.json');
-  checks.push({
-    name: 'Manifest schema',
-    ok: existsSync(manifestSchemaPath),
-    detail: manifestSchemaPath,
-  });
-
-  console.log('=== One-Shot Acceptance Governor Doctor ===');
-  console.log('');
-  for (const check of checks) {
-    const icon = check.ok ? '✓' : '✗';
-    console.log(`  ${icon} ${check.name}`);
-    if (check.detail) console.log(`       ${check.detail}`);
-  }
-
-  const allPassed = checks.every(c => c.ok);
-  console.log('');
-  console.log(allPassed ? 'STATUS: OPERATIONAL' : 'STATUS: ISSUES DETECTED');
-
-  return allPassed ? 0 : 1;
-}
-
-async function cmdValidate(taskId) {
-  if (!taskId) {
-    console.error('Usage: node scripts/task-governor.mjs validate <task-id>');
-    return 1;
-  }
-  const manifest = loadManifest(taskId);
-  validateManifest(manifest);
-  console.log(`Manifest "${taskId}" is valid.`);
-  return 0;
-}
-
-async function cmdBootstrap(taskId) {
-  if (!taskId) {
-    console.error('Usage: node scripts/task-governor.mjs bootstrap <task-id>');
-    return 1;
-  }
-
-  const manifest = loadManifest(taskId);
-  validateManifest(manifest);
-
-  const state = getDefaultState(taskId);
-  state.currentHead = getCurrentHead();
-
-  const baseline = captureBaseline(manifest.scope);
-  const runtimeDir = getGovernorRuntimeDir(taskId);
-  const baselinePath = `${runtimeDir}/baseline-workspace.json`;
-  const baseDir = dirname(baselinePath);
-  if (!existsSync(baseDir)) mkdirSync(baseDir, { recursive: true });
-  writeFileSync(baselinePath, JSON.stringify(baseline, null, 2), 'utf-8');
-
-  state.baselineCaptured = true;
-  state.currentState = STATES.IMPLEMENTING;
-  saveState(state);
-
-  console.log(`Task "${taskId}" bootstrapped.`);
-  console.log(`State: ${state.currentState}`);
-  console.log(`Starting HEAD: ${state.currentHead}`);
-  console.log(`Baseline saved to: ${baselinePath}`);
-
-  return 0;
-}
-
-async function cmdRebootstrap(taskId, extraArgs) {
-  if (!taskId) {
-    console.error('Usage: node scripts/task-governor.mjs rebootstrap <task-id> [--reason "..."]');
-    return 1;
-  }
-
-  const reasonIndex = extraArgs.indexOf('--reason');
-  const reason = reasonIndex >= 0 && extraArgs[reasonIndex + 1] ? extraArgs[reasonIndex + 1] : 'Governor repair invoked provisional evidence rebootstrap';
-
-  const manifest = loadManifest(taskId);
-  validateManifest(manifest);
-  const previousState = loadState(taskId);
-  const previousManifestHash = computeManifestHash(manifest);
-  const runtimeDir = getGovernorRuntimeDir(taskId);
-  const prevHead = getCurrentHead();
-  const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-
-  let archiveLocation = null;
-  if (existsSync(runtimeDir)) {
-    const gitDir = getGitDir();
-    archiveLocation = resolve(gitDir, `task-governor-archive/${taskId}-${timestamp}`);
-    const archiveDir = dirname(archiveLocation);
-    if (!existsSync(archiveDir)) mkdirSync(archiveDir, { recursive: true });
-
-    try {
-      const { execSync } = await import('node:child_process');
-      execSync(`copy "${runtimeDir}" "${archiveLocation}" /E /I /Y`, { shell: true, cwd: getRepositoryRoot() });
-    } catch {
-      try {
-        const src = runtimeDir + '\\*';
-        const { execSync } = await import('node:child_process');
-        execSync(`xcopy "${src}" "${archiveLocation}" /E /I /Y`, { shell: true, cwd: getRepositoryRoot() });
-      } catch (e2) {
-        archiveLocation = null;
-      }
-    }
-  }
-
-  const state = getDefaultState(taskId);
-  state.currentHead = prevHead;
-  state.manifestHash = previousManifestHash;
-
-  const baseline = captureBaseline(manifest.scope);
-  const baselinePath = `${runtimeDir}/baseline-workspace.json`;
-  const baseDir = dirname(baselinePath);
-  if (!existsSync(baseDir)) mkdirSync(baseDir, { recursive: true });
-  writeFileSync(baselinePath, JSON.stringify(baseline, null, 2), 'utf-8');
-
-  const rebootstrapRecord = {
-    taskId,
-    reason,
-    previousManifestHash: previousManifestHash,
-    newManifestHash: previousManifestHash,
-    previousState: previousState.currentState || 'UNKNOWN',
-    previousHead: prevHead,
-    timestamp: new Date().toISOString(),
-    archiveLocation: archiveLocation || 'none',
-    previousTodoCompletion: previousState.todoCompletion || {},
-    previousGateCompletion: previousState.gateCompletion || {},
-  };
-
-  const rebootstrapPath = `${runtimeDir}/rebootstrap-record.json`;
-  if (!existsSync(dirname(rebootstrapPath))) mkdirSync(dirname(rebootstrapPath), { recursive: true });
-  writeFileSync(rebootstrapPath, JSON.stringify(rebootstrapRecord, null, 2), 'utf-8');
-
-  state.baselineCaptured = true;
-  state.currentState = STATES.IMPLEMENTING;
-  saveState(state);
-
-  console.log(`Task "${taskId}" rebootstrapped.`);
-  console.log(`State: ${state.currentState}`);
-  console.log(`Starting HEAD: ${state.currentHead}`);
-  console.log(`Reason: ${reason}`);
-  console.log(`Previous evidence archived to: ${archiveLocation || 'N/A'}`);
-  console.log(`Rebootstrap record saved to: ${rebootstrapPath}`);
-
-  return 0;
-}
-
-async function cmdStatus(taskId, json) {
-  if (!taskId) {
-    console.error('Usage: node scripts/task-governor.mjs status <task-id> [--json]');
-    return 1;
-  }
-
-  const manifest = loadManifest(taskId);
-  validateManifest(manifest);
-  const state = loadState(taskId);
-  const gates = manifest.gates || [];
-  const todos = manifest.todos || [];
-
-  if (json) {
-    console.log(formatStatusJson(taskId, state, manifest));
-  } else {
-    console.log(formatStatus(taskId, state, manifest, gates, todos));
-  }
-
-  if (state.currentState === STATES.ACCEPTED_READY) {
-    return 0;
-  }
-  if (state.currentState === STATES.BLOCKED) {
-    return EXIT_CODES.EXTERNAL_BLOCKER;
-  }
-  if (state.currentState === STATES.ERROR_REPAIR) {
-    return EXIT_CODES.ERROR_REPAIR_LOCKED;
-  }
-  return 0;
-}
-
-async function cmdResume(taskId) {
-  if (!taskId) {
-    console.error('Usage: node scripts/task-governor.mjs resume <task-id>');
-    return 1;
-  }
-
-  const manifest = loadManifest(taskId);
-  validateManifest(manifest);
-  const state = loadState(taskId);
-
-  try {
-    verifyChain(taskId);
-  } catch (e) {
-    console.error(`WARNING: ${e.message}`);
-  }
-
-  if (state.currentState === STATES.ACCEPTED_READY) {
-    console.log(`NEXT_REQUIRED_ACTION=Task is already accepted`);
-    console.log('NEXT_ALLOWED_COMMAND=none');
-    return 0;
-  }
-  if (state.currentState === STATES.BLOCKED) {
-    console.log('NEXT_REQUIRED_ACTION=Resolve external blocker and rebootstrap');
-    console.log('NEXT_ALLOWED_COMMAND=node scripts/task-governor.mjs rebootstrap <task-id> --reason "Blocker resolved"');
-    return EXIT_CODES.EXTERNAL_BLOCKER;
-  }
-
-  if (state.currentState === STATES.ERROR_REPAIR) {
-    if (state.lastFailedGateId) {
-      const gateDef = manifest.gates.find(g => g.id === state.lastFailedGateId);
-      const lastRecord = getLastRecord(taskId);
-      let failureDetail = '';
-      if (lastRecord && lastRecord.exitCode != null) {
-        failureDetail = ` (exit code: ${lastRecord.exitCode})`;
-      }
-      console.log('NEXT_REQUIRED_ACTION=Repair the failure recorded by ' + state.lastFailedGateId + failureDetail + ', then rerun that gate');
-      console.log('NEXT_ALLOWED_COMMAND=node scripts/task-governor.mjs run-gate ' + taskId + ' ' + state.lastFailedGateId);
-    } else {
-      console.log('NEXT_REQUIRED_ACTION=Run a gate to begin verification');
-      console.log('NEXT_ALLOWED_COMMAND=node scripts/task-governor.mjs run-gate ' + taskId + ' <gate-id>');
-    }
-    return EXIT_CODES.ERROR_REPAIR_LOCKED;
-  }
-
-  const todos = manifest.todos || [];
-  const gates = manifest.gates || [];
-
-  const nextIncompleteTodo = todos.find(t => !state.todoCompletion[t.id]);
-  if (!nextIncompleteTodo) {
-    console.log('NEXT_REQUIRED_ACTION=All todos complete. Run finalize.');
-    console.log('NEXT_ALLOWED_COMMAND=node scripts/task-governor.mjs finalize ' + taskId);
-    return 0;
-  }
-
-  if (nextIncompleteTodo.dependsOn && nextIncompleteTodo.dependsOn.length > 0) {
-    for (const dep of nextIncompleteTodo.dependsOn) {
-      if (!state.todoCompletion[dep]) {
-        const depTodo = todos.find(t => t.id === dep);
-        console.log('NEXT_REQUIRED_ACTION=Complete dependency todo ' + dep + ' first');
-        console.log('NEXT_ALLOWED_COMMAND=node scripts/task-governor.mjs resume ' + taskId);
-        return 0;
-      }
-    }
-  }
-
-  const requiredGates = nextIncompleteTodo.requiredGateIds || [];
-  const firstIncompleteGateId = requiredGates.find(gid => !state.gateCompletion[gid]);
-
-  if (firstIncompleteGateId) {
-    console.log('NEXT_REQUIRED_ACTION=Run gate ' + firstIncompleteGateId);
-    console.log('NEXT_ALLOWED_COMMAND=node scripts/task-governor.mjs run-gate ' + taskId + ' ' + firstIncompleteGateId);
-    return 0;
-  }
-
-  console.log('NEXT_REQUIRED_ACTION=Verify todo ' + nextIncompleteTodo.id);
-  console.log('NEXT_ALLOWED_COMMAND=node scripts/task-governor.mjs verify-todo ' + taskId + ' ' + nextIncompleteTodo.id);
-  return 0;
-}
-
-async function cmdRunGate(taskId, gateId) {
-  if (!taskId || !gateId) {
-    console.error('Usage: node scripts/task-governor.mjs run-gate <task-id> <gate-id>');
-    return 1;
-  }
-
-  const result = await runGate(taskId, gateId);
-  console.log(`Gate: ${result.gateId}`);
-  console.log(`Result: ${result.passed ? 'PASSED' : 'FAILED'}`);
-  console.log(`Exit code: ${result.exitCode}`);
-
-  if (result.warnings && result.warnings.length > 0) {
-    console.log('Warnings:');
-    for (const w of result.warnings) {
-      console.log(`  - ${w.pattern} at position ${w.index}`);
-    }
-  }
-
-  if (result.workspaceIssues && result.workspaceIssues.length > 0) {
-    console.log('Workspace issues:');
-    for (const issue of result.workspaceIssues) {
-      console.log(`  - ${issue}`);
-    }
-  }
-
-  if (result.integrityIssues && result.integrityIssues.length > 0) {
-    console.log('Integrity issues:');
-    for (const issue of result.integrityIssues) {
-      console.log(`  - [${issue.ruleId}] ${issue.file}:${issue.line} — ${issue.excerpt}`);
-    }
-  }
-
-  if (result.scanResults) {
-    let totalIssues = 0;
-    for (const [, issues] of Object.entries(result.scanResults)) {
-      totalIssues += issues.length;
-    }
-    console.log(`Scan issues found: ${totalIssues}`);
-  }
-
-  return result.passed ? 0 : 1;
-}
-
-async function cmdVerifyTodo(taskId, todoId) {
-  if (!taskId || !todoId) {
-    console.error('Usage: node scripts/task-governor.mjs verify-todo <task-id> <todo-id>');
-    return 1;
-  }
-
-  const manifest = loadManifest(taskId);
-  try {
-    validateManifest(manifest);
-  } catch (e) {
-    console.error('TODO_NOT_VERIFIED');
-    console.error(`TASK_ID=${taskId}`);
-    console.error(`TODO_ID=${todoId}`);
-    console.error(`FAILED_GATE=manifest-validation`);
-    console.error(`FAILURE_REASON=${e.message}`);
-    console.error(`NEXT_REQUIRED_ACTION=Repair manifest issues and retry`);
-    return 1;
-  }
-
-  const state = loadState(taskId);
-
-  const todo = manifest.todos.find(t => t.id === todoId);
-  if (!todo) {
-    console.error('TODO_NOT_VERIFIED');
-    console.error(`TASK_ID=${taskId}`);
-    console.error(`TODO_ID=${todoId}`);
-    console.error(`FAILED_GATE=todo-lookup`);
-    console.error('FAILURE_REASON=Todo not found in manifest');
-    console.error('NEXT_REQUIRED_ACTION=Use a valid todo ID');
-    return 1;
-  }
-
-  const isAcceptancePhase = todo.id === 'QBANK-4' || todo.id === 'QBANK-5' || todo.id === 'QBANK-6' ||
-    todo.title?.toLowerCase().includes('pre-commit') ||
-    todo.title?.toLowerCase().includes('post-commit') ||
-    todo.title?.toLowerCase().includes('accountability');
-
-  if (isAcceptancePhase && (!todo.requiredGateIds || todo.requiredGateIds.length === 0)) {
-    console.error('TODO_NOT_VERIFIED');
-    console.error(`TASK_ID=${taskId}`);
-    console.error(`TODO_ID=${todoId}`);
-    console.error('FAILED_GATE=todo-configuration');
-    console.error('FAILURE_REASON=Acceptance-phase todo has no required gates');
-    console.error('NEXT_REQUIRED_ACTION=Configure real required gates for this acceptance-phase todo');
-    return 1;
-  }
-
-  if (state.currentState === STATES.ERROR_REPAIR) {
-    console.error('TODO_NOT_VERIFIED');
-    console.error(`TASK_ID=${taskId}`);
-    console.error(`TODO_ID=${todoId}`);
-    console.error('FAILED_GATE=task-state');
-    console.error(`FAILURE_REASON=Task is in ERROR_REPAIR state. Last failed gate: ${state.lastFailedGateId}`);
-    console.error('NEXT_REQUIRED_ACTION=Repair the failure and rerun the failed gate');
-    return 1;
-  }
-
-  if (todo.dependsOn && todo.dependsOn.length > 0) {
-    for (const dep of todo.dependsOn) {
-      if (!state.todoCompletion[dep]) {
-        console.error('TODO_NOT_VERIFIED');
-        console.error(`TASK_ID=${taskId}`);
-        console.error(`TODO_ID=${todoId}`);
-        console.error(`FAILED_GATE=todo-dependency`);
-        console.error(`FAILURE_REASON=Dependency not satisfied: ${dep} must be completed before ${todoId}`);
-        console.error(`NEXT_REQUIRED_ACTION=Complete todo ${dep} first`);
-        return 1;
-      }
-    }
-  }
-
-  if (todo.requiredGateIds && todo.requiredGateIds.length > 0) {
-    for (const gid of todo.requiredGateIds) {
-      const gateDef = manifest.gates.find(g => g.id === gid);
-      if (!gateDef) {
-        console.error('TODO_NOT_VERIFIED');
-        console.error(`TASK_ID=${taskId}`);
-        console.error(`TODO_ID=${todoId}`);
-        console.error(`FAILED_GATE=${gid}`);
-        console.error(`FAILURE_REASON=Unknown gate reference: ${gid}`);
-        console.error('NEXT_REQUIRED_ACTION=Register gate in manifest or remove from requiredGateIds');
-        return 1;
-      }
-      if (!state.gateCompletion[gid]) {
-        console.error('TODO_NOT_VERIFIED');
-        console.error(`TASK_ID=${taskId}`);
-        console.error(`TODO_ID=${todoId}`);
-        console.error(`FAILED_GATE=${gid}`);
-        console.error(`FAILURE_REASON=Required gate has not been completed`);
-        console.error(`NEXT_REQUIRED_ACTION=Run gate ${gid} first`);
-        return 1;
-      }
-    }
-  }
-
-  try {
-    const currentManifestHash = computeManifestHash(manifest);
-    if (state.manifestHash && state.manifestHash !== currentManifestHash) {
-      console.error('TODO_NOT_VERIFIED');
-      console.error(`TASK_ID=${taskId}`);
-      console.error(`TODO_ID=${todoId}`);
-      console.error('FAILED_GATE=manifest-integrity');
-      console.error('FAILURE_REASON=Manifest hash mismatch: evidence was recorded under a different manifest');
-      console.error('NEXT_REQUIRED_ACTION=Rebootstrap the task to record new manifest hash');
-      return 1;
-    }
-  } catch (e) {
-    console.error('TODO_NOT_VERIFIED');
-    console.error(`TASK_ID=${taskId}`);
-    console.error(`TODO_ID=${todoId}`);
-    console.error('FAILED_GATE=manifest-hash');
-    console.error(`FAILURE_REASON=${e.message}`);
-    console.error('NEXT_REQUIRED_ACTION=Retry after fixing manifest hash computation');
-    return 1;
-  }
-
-  try {
-    const currentHead = getCurrentHead();
-    if (state.currentHead && state.currentHead !== currentHead) {
-      console.error('TODO_NOT_VERIFIED');
-      console.error(`TASK_ID=${taskId}`);
-      console.error(`TODO_ID=${todoId}`);
-      console.error('FAILED_GATE=head-mismatch');
-      console.error(`FAILURE_REASON=Current HEAD (${currentHead}) does not match evidence HEAD (${state.currentHead})`);
-      console.error('NEXT_REQUIRED_ACTION=Rerun gates at the current HEAD, or rebootstrap');
-      return 1;
-    }
-  } catch (e) {
-    console.error('TODO_NOT_VERIFIED');
-    console.error(`TASK_ID=${taskId}`);
-    console.error(`TODO_ID=${todoId}`);
-    console.error('FAILED_GATE=head-check');
-    console.error(`FAILURE_REASON=${e.message}`);
-    console.error('NEXT_REQUIRED_ACTION=Retry after fixing HEAD resolution');
-    return 1;
-  }
-
-  updateState(taskId, {
-    todoCompletion: { ...state.todoCompletion, [todoId]: true },
-    currentTodoId: todoId,
-  });
-
-  const ledgerEntry = {
-    taskId,
-    todoId,
-    stateBefore: state.currentState,
-    stateAfter: state.currentState,
-    gateId: null,
-    exitCode: 0,
-    manifestHash: computeManifestHash(manifest),
-    headBefore: getCurrentHead(),
-    headAfter: getCurrentHead(),
-  };
-  addRecord(ledgerEntry);
-
-  console.log(`Todo "${todoId}" verified complete.`);
-  return 0;
-}
-
-async function cmdPrepareCommit(taskId) {
-  if (!taskId) {
-    console.error('Usage: node scripts/task-governor.mjs prepare-commit <task-id>');
-    return 1;
-  }
-
-  const result = prepareCommit(taskId);
-  console.log(`Staged files: ${result.stagedCount}`);
-  for (const file of result.stagedFiles) {
-    console.log(`  ${file}`);
-  }
-  console.log('Prepare-commit passed.');
-  return 0;
-}
-
-async function cmdRecordImplCommit(taskId) {
-  if (!taskId) {
-    console.error('Usage: node scripts/task-governor.mjs record-implementation-commit <task-id>');
-    return 1;
-  }
-
-  const result = recordImplementationCommit(taskId);
-  console.log(`Implementation commit: ${result.implementationCommitHash}`);
-  return 0;
-}
-
-async function cmdVerifyPostCommit(taskId) {
-  if (!taskId) {
-    console.error('Usage: node scripts/task-governor.mjs verify-post-commit <task-id>');
-    return 1;
-  }
-
-  const errors = await verifyPostCommit(taskId);
-  if (errors.length === 0) {
-    console.log('Post-commit verification passed.');
-    return 0;
-  }
-
-  console.log('Post-commit verification FAILED:');
-  for (const err of errors) {
-    console.log(`  - ${err}`);
-  }
-  return 1;
-}
-
-async function cmdRecordAccCommit(taskId) {
-  if (!taskId) {
-    console.error('Usage: node scripts/task-governor.mjs record-accountability-commit <task-id>');
-    return 1;
-  }
-
-  const result = recordAccountabilityCommit(taskId);
-  console.log(`Accountability commit: ${result.accountabilityCommitHash}`);
-  return 0;
-}
-
-async function cmdFinalize(taskId) {
-  if (!taskId) {
-    console.error('Usage: node scripts/task-governor.mjs finalize <task-id>');
-    return 1;
-  }
-
-  const result = await finalizeTask(taskId);
-
-  if (!result.accepted) {
-    console.log('TASK_NOT_ACCEPTED');
-    console.log(`TASK_ID=${taskId}`);
-    const state = loadState(taskId);
-    console.log(`STATE=${state.currentState}`);
-    if (result.errors.length > 0) {
-      console.log(`FAILED_GATE=${result.errors[0].split(':')[0] || 'finalize'}`);
-      console.log(`FAILURE_REASON=${result.errors[0]}`);
-    }
-    console.log('NEXT_REQUIRED_ACTION=Repair the first failed gate and rerun finalize');
-    return EXIT_CODES.FINALIZATION_NOT_PERMITTED;
-  }
-
-  console.log(`TASK_ACCEPTED: ${taskId}`);
-  console.log(`FINAL_HEAD: ${result.receipt.finalHead}`);
-  console.log(`IMPLEMENTATION_COMMIT: ${result.receipt.implementationCommit}`);
-  console.log(`ACCOUNTABILITY_COMMIT: ${result.receipt.accountabilityCommit}`);
-
-  if (result.sentinel) {
-    console.log(result.sentinel);
-  }
-
-  return 0;
-}
-
-async function cmdExplain(taskId) {
-  if (!taskId) {
-    console.error('Usage: node scripts/task-governor.mjs explain <task-id>');
-    return 1;
-  }
-
-  const manifest = loadManifest(taskId);
-  validateManifest(manifest);
-  const state = loadState(taskId);
-  const gates = manifest.gates || [];
-  const todos = manifest.todos || [];
-
-  console.log(formatExplain(state, manifest, gates, todos));
-  return 0;
-}
-
-process.exit(await main());
+main();

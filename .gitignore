@@ -56,3 +56,10 @@ test-results/
 
 # Local agent verification reports
 reports/
+agent-control/test-fixtures/test-manifest.json
+agent-control/test-fixtures/stage-paths.txt
+agent-control/test-fixtures/test-prompt.md
+agent-control/test-fixtures/test-manifest-02.json
+agent-control/test-fixtures/test-manifest-theme.json
+agent-control/test-fixtures/bootstrap-manifest.json
+agent-control/test-fixtures/bootstrap-prompt.md

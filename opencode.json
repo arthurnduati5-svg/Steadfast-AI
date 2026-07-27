@@ -1,0 +1,85 @@
+{
+  "version": 1,
+  "agent": {
+    "defaultAgent": "task-builder",
+    "agents": {
+      "task-auditor": {
+        "description": "Validates task scope and identity",
+        "filePath": ".opencode/agents/task-auditor.md"
+      },
+      "task-builder": {
+        "description": "Implements manifest-scoped changes",
+        "filePath": ".opencode/agents/task-builder.md"
+      },
+      "error-repair": {
+        "description": "Repairs failures within same task",
+        "filePath": ".opencode/agents/error-repair.md"
+      },
+      "task-verifier": {
+        "description": "Runs deterministic validation gates",
+        "filePath": ".opencode/agents/task-verifier.md"
+      }
+    }
+  },
+  "commands": {
+    "task-start": {
+      "description": "Start a new governed task",
+      "filePath": ".opencode/commands/task-start.md"
+    },
+    "task-resume": {
+      "description": "Resume an existing governed task",
+      "filePath": ".opencode/commands/task-resume.md"
+    },
+    "task-status": {
+      "description": "Show task status",
+      "filePath": ".opencode/commands/task-status.md"
+    },
+    "task-finalize": {
+      "description": "Finalize and accept a task",
+      "filePath": ".opencode/commands/task-finalize.md"
+    }
+  },
+  "skills": [
+    {
+      "name": "governed-execution",
+      "description": "Execute tasks within Steadfast control plane",
+      "filePath": ".opencode/skills/governed-execution/SKILL.md"
+    }
+  ],
+  "permissions": {
+    "deny": [
+      "git push",
+      "git push --force",
+      "git reset --hard",
+      "git clean",
+      "git add .",
+      "git add -A",
+      "git add --all",
+      "git commit --amend"
+    ],
+    "warn": [
+      "npm run dev",
+      "next dev",
+      "vite",
+      "nodemon",
+      "ts-node-dev"
+    ]
+  },
+  "rules": [
+    "Agent may build but may not accept tasks",
+    "Every task requires an immutable manifest",
+    "Every task uses one task ID, no repair/closure clones",
+    "Every failure enters same-task ERROR_REPAIR",
+    "Only scripts advance task state",
+    "Only finalize-task.mjs emits acceptance",
+    "Exact-path staging is mandatory",
+    "Broad staging is forbidden",
+    "Task worktrees must be clean",
+    "Active browser profiles are protected",
+    "Foreground servers are forbidden",
+    "Current-scope errors must be repaired before advancement",
+    "Unrelated defects become backlog discoveries",
+    "Acceptance criteria may not change after locking",
+    "No duplicate repair or closure task may be created"
+  ]
+}

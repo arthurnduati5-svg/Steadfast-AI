@@ -1,0 +1,36 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Steadfast Evidence Ledger Record",
+  "type": "object",
+  "required": [
+    "evidenceId", "taskId", "gateId", "evidenceKind", "producerScript",
+    "command", "arguments", "workingDirectory", "startedAt", "completedAt",
+    "exitCode", "stdoutPath", "stdoutHash", "stderrPath", "stderrHash",
+    "referencedArtifacts", "artifactHashes", "warningCount",
+    "failedAssertionCount", "result", "previousRecordHash", "recordHash"
+  ],
+  "properties": {
+    "evidenceId": { "type": "string" },
+    "taskId": { "type": "string" },
+    "gateId": { "type": "string" },
+    "evidenceKind": { "type": "string" },
+    "producerScript": { "type": "string" },
+    "command": { "type": "string" },
+    "arguments": { "type": "array", "items": { "type": "string" } },
+    "workingDirectory": { "type": "string" },
+    "startedAt": { "type": "string", "format": "date-time" },
+    "completedAt": { "type": "string", "format": "date-time" },
+    "exitCode": { "type": "integer" },
+    "stdoutPath": { "type": "string" },
+    "stdoutHash": { "type": "string" },
+    "stderrPath": { "type": "string" },
+    "stderrHash": { "type": "string" },
+    "referencedArtifacts": { "type": "array", "items": { "type": "string" } },
+    "artifactHashes": { "type": "object" },
+    "warningCount": { "type": "integer", "minimum": 0 },
+    "failedAssertionCount": { "type": "integer", "minimum": 0 },
+    "result": { "type": "string", "enum": ["PASS", "FAIL", "BLOCKED", "OWNER_INPUT_REQUIRED"] },
+    "previousRecordHash": { "type": "string" },
+    "recordHash": { "type": "string" }
+  }
+}

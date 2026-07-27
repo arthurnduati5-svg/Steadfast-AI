@@ -1,0 +1,124 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Steadfast Task Manifest",
+  "type": "object",
+  "required": [
+    "schemaVersion", "controlPlaneVersion", "taskId", "title", "taskType",
+    "riskProfile", "originalPromptPath", "originalPromptHash", "repositoryRoot",
+    "startingBranch", "startingHead", "createdAt", "ownerAcceptanceCriteria",
+    "taskOwnedPaths", "allowedSharedDependencyPaths", "forbiddenPaths",
+    "taskCommands", "requiredTestCommands", "requiredTestSuites",
+    "requiredTestFilePatterns", "testConfigurationFiles", "runtimeAcceptance",
+    "visualAcceptance", "requiredThemes", "requiredSurfaces", "requiredViewports",
+    "requiredInteractionStates", "requiredEvidenceKinds", "expectedCommitMessage",
+    "acceptedSentinel", "postCommitCommands", "deploymentRequired",
+    "integrationAuthorized", "baselinePolicy", "warningPolicy",
+    "generatedOutputPolicy", "browserPolicy", "backlogPolicy"
+  ],
+  "properties": {
+    "schemaVersion": { "type": "integer", "minimum": 1 },
+    "controlPlaneVersion": { "type": "string", "pattern": "^\\d+\\.\\d+\\.\\d+$" },
+    "taskId": { "type": "string", "minLength": 1, "pattern": "^[a-zA-Z0-9_-]+$" },
+    "title": { "type": "string", "minLength": 1 },
+    "taskType": { "type": "string", "enum": ["frontend", "backend", "ai", "integration", "governance", "documentation"] },
+    "riskProfile": { "type": "string", "enum": ["LOW", "MEDIUM", "HIGH"] },
+    "originalPromptPath": { "type": "string" },
+    "originalPromptHash": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "repositoryRoot": { "type": "string" },
+    "startingBranch": { "type": "string" },
+    "startingHead": { "type": "string", "pattern": "^[a-f0-9]{7,40}$" },
+    "createdAt": { "type": "string", "format": "date-time" },
+    "ownerAcceptanceCriteria": {
+      "type": "array",
+      "items": { "type": "string" },
+      "minItems": 1
+    },
+    "taskOwnedPaths": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "allowedSharedDependencyPaths": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "forbiddenPaths": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "taskCommands": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "requiredTestCommands": {
+      "type": "array",
+      "items": { "type": "string" },
+      "minItems": 1
+    },
+    "requiredTestSuites": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "requiredTestFilePatterns": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "testConfigurationFiles": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "runtimeAcceptance": { "type": "boolean" },
+    "visualAcceptance": { "type": "boolean" },
+    "requiredThemes": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "requiredSurfaces": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "requiredViewports": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["width", "height"],
+        "properties": {
+          "width": { "type": "integer" },
+          "height": { "type": "integer" }
+        }
+      }
+    },
+    "requiredInteractionStates": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "requiredEvidenceKinds": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "expectedCommitMessage": { "type": "string" },
+    "acceptedSentinel": { "type": "string" },
+    "postCommitCommands": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "deploymentRequired": { "type": "boolean" },
+    "integrationAuthorized": { "type": "boolean" },
+    "baselinePolicy": { "type": "object" },
+    "warningPolicy": { "type": "object" },
+    "generatedOutputPolicy": { "type": "object" },
+    "browserPolicy": {
+      "type": "object",
+      "properties": {
+        "required": { "type": "boolean" },
+        "viewport": {
+          "type": "object",
+          "properties": {
+            "width": { "type": "integer" },
+            "height": { "type": "integer" }
+          }
+        }
+      }
+    },
+    "backlogPolicy": { "type": "object" }
+  }
+}

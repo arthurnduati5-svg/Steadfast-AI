@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "profiles": {
+    "LOW": {
+      "description": "Documentation, isolated text changes, small static configuration",
+      "requiredGates": ["manifest-valid", "manifest-unchanged", "baseline-captured", "audit-complete", "workspace-scope-valid", "evidence-valid", "exact-staging-valid", "commit-valid", "post-commit-valid", "task-worktree-clean", "sentinel-provenance-valid"]
+    },
+    "MEDIUM": {
+      "description": "Backend feature, frontend feature, isolated contracts, test changes",
+      "requiredGates": ["manifest-valid", "manifest-unchanged", "baseline-captured", "audit-complete", "workspace-scope-valid", "test-inventory-valid", "required-tests-pass", "warnings-valid", "evidence-valid", "exact-staging-valid", "commit-valid", "post-commit-valid", "task-worktree-clean", "sentinel-provenance-valid"]
+    },
+    "HIGH": {
+      "description": "Production build, runtime behavior, browser automation, visual acceptance, deployment, integration, migrations, process supervision",
+      "requiredGates": ["manifest-valid", "manifest-unchanged", "baseline-captured", "audit-complete", "workspace-scope-valid", "test-inventory-valid", "required-tests-pass", "warnings-valid", "evidence-valid", "runtime-valid", "browser-ownership-valid", "visual-evidence-valid", "required-surfaces-valid", "required-themes-valid", "exact-staging-valid", "commit-valid", "post-commit-valid", "task-worktree-clean", "sentinel-provenance-valid"]
+    }
+  }
+}
