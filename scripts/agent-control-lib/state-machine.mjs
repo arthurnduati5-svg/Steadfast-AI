@@ -1,7 +1,7 @@
 import { readFileSync, writeFileSync, existsSync, mkdirSync, appendFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import crypto from 'node:crypto';
-import { getRuntimeDir, ensureDir, computeHash, writeJSON, readJSON, appendLine } from './repository.mjs';
+import { getRuntimeDir, ensureDir, computeHash, writeJSON, readJSON, readLines, appendLine } from './repository.mjs';
 
 const STATE_SCHEMA_VERSION = 1;
 
@@ -48,7 +48,8 @@ function getHistoryPath(taskId) {
 }
 
 export function getDefaultState(taskId, manifestHash, startingHead, taskWorktree, taskBranch) {
-  return {
+  const genesis = crypto.createHash('sha256').update('genesis').digest('hex');
+  const base = {
     schemaVersion: STATE_SCHEMA_VERSION,
     taskId,
     manifestHash: manifestHash || '',
@@ -64,12 +65,15 @@ export function getDefaultState(taskId, manifestHash, startingHead, taskWorktree
     resolvedFailureIds: [],
     lastTransitionAt: new Date().toISOString(),
     lastTransitionBy: 'system',
-    previousStateHash: crypto.createHash('sha256').update('genesis').digest('hex'),
+    previousStateHash: genesis,
     stateHash: '',
     postCommitVerifiedHead: '',
     acceptedAt: '',
     acceptedSentinelHash: '',
   };
+  const hash = computeStateHash(base);
+  base.stateHash = hash;
+  return base;
 }
 
 export function loadState(taskId) {
@@ -78,11 +82,50 @@ export function loadState(taskId) {
   return JSON.parse(readFileSync(sp, 'utf-8'));
 }
 
-function computeStateHash(state) {
+export function computeStateHash(state) {
   const obj = { ...state };
   delete obj.previousStateHash;
   delete obj.stateHash;
   return computeHash(JSON.stringify(obj));
+}
+
+export function writeState(taskId, state) {
+  const stateHash = computeStateHash(state);
+  const toWrite = { ...state, stateHash };
+  const sp = getStatePath(taskId);
+  writeJSON(sp, toWrite);
+  return toWrite;
+}
+
+export function validateStateChain(taskId) {
+  const state = loadState(taskId);
+  if (!state) return { valid: false, errors: ['STATE_NOT_FOUND'] };
+  const errors = [];
+  const recomputed = computeStateHash(state);
+  if (state.stateHash && state.stateHash !== recomputed) {
+    errors.push('STATE_HASH_MISMATCH');
+  }
+  if (state.revision < 0) {
+    errors.push('NEGATIVE_REVISION');
+  }
+  const historyPath = getHistoryPath(taskId);
+  const historyLines = readLines(historyPath);
+  if (historyLines.length > 0 && state.revision > 0 && historyLines.length < state.revision) {
+    errors.push('STATE_HISTORY_INCOMPLETE');
+  }
+  if (historyLines.length > 0) {
+    const lastHistory = JSON.parse(historyLines[historyLines.length - 1]);
+    if (lastHistory.stateHash !== state.stateHash) {
+      errors.push('STATE_HISTORY_LAST_HASH_MISMATCH');
+    }
+    if (lastHistory.revision !== state.revision) {
+      errors.push('STATE_HISTORY_REVISION_MISMATCH');
+    }
+  }
+  if (state.revision > 0 && !state.previousStateHash) {
+    errors.push('MISSING_PREVIOUS_STATE_HASH');
+  }
+  return { valid: errors.length === 0, errors };
 }
 
 export function transitionState(taskId, toState, transitionBy = 'task-governor.mjs') {
@@ -93,8 +136,16 @@ export function transitionState(taskId, toState, transitionBy = 'task-governor.m
     throw new Error(`Illegal state transition: ${state.currentState} -> ${toState}`);
   }
 
+  if (toState === STATES.ACCEPTED && transitionBy !== 'finalize-task.mjs') {
+    throw new Error(`Only finalize-task.mjs can transition to ACCEPTED`);
+  }
+
+  const chainCheck = validateStateChain(taskId);
+  if (!chainCheck.valid) {
+    throw new Error(`State chain invalid before transition: ${chainCheck.errors.join(', ')}`);
+  }
+
   const previousHash = state.stateHash || crypto.createHash('sha256').update('genesis').digest('hex');
-  const newStateHash = computeStateHash({ ...state, currentState: toState, previousState: state.currentState });
 
   const newState = {
     ...state,
@@ -105,28 +156,35 @@ export function transitionState(taskId, toState, transitionBy = 'task-governor.m
     lastTransitionAt: new Date().toISOString(),
     lastTransitionBy: transitionBy,
     previousStateHash: previousHash,
-    stateHash: newStateHash,
+    stateHash: '',
+    postCommitVerifiedHead: (toState === STATES.ACCEPTED) ? state.postCommitVerifiedHead : state.postCommitVerifiedHead,
   };
 
-  writeJSON(getStatePath(taskId), newState);
+  const written = writeState(taskId, newState);
 
   const historyRecord = {
     timestamp: newState.lastTransitionAt,
     fromState: state.currentState,
     toState,
-    revision: newState.revision,
+    revision: written.revision,
     transitionBy,
     previousStateHash: previousHash,
-    stateHash: newStateHash,
+    stateHash: written.stateHash,
   };
-  appendLine(getHistoryPath(taskId), JSON.stringify(historyRecord));
+  const historyPath = getHistoryPath(taskId);
+  appendLine(historyPath, JSON.stringify(historyRecord));
 
-  return newState;
+  return written;
 }
 
 export function recordFailure(taskId, failureId, originatingState, returnState, failingCommand, exitCode, evidencePath) {
   const state = loadState(taskId);
   if (!state) throw new Error(`Task ${taskId} not found`);
+
+  const chainCheck = validateStateChain(taskId);
+  if (!chainCheck.valid) {
+    throw new Error(`State chain invalid before recording failure: ${chainCheck.errors.join(', ')}`);
+  }
 
   const failureRecord = {
     failureId,
@@ -140,8 +198,6 @@ export function recordFailure(taskId, failureId, originatingState, returnState, 
     createdAt: new Date().toISOString(),
   };
 
-  const runtimeDir = getRuntimeDir(taskId);
-  const failuresPath = resolve(runtimeDir, 'task-state.json');
   const updated = {
     ...state,
     activeFailureIds: [...new Set([...state.activeFailureIds, failureId])],
@@ -151,15 +207,21 @@ export function recordFailure(taskId, failureId, originatingState, returnState, 
     revision: state.revision + 1,
     lastTransitionAt: new Date().toISOString(),
     lastTransitionBy: 'task-governor.mjs',
+    previousStateHash: state.stateHash || crypto.createHash('sha256').update('genesis').digest('hex'),
   };
 
-  writeJSON(failuresPath, updated);
-  return updated;
+  const written = writeState(taskId, updated);
+  return written;
 }
 
 export function resolveFailure(taskId, failureId) {
   const state = loadState(taskId);
   if (!state) throw new Error(`Task ${taskId} not found`);
+
+  const chainCheck = validateStateChain(taskId);
+  if (!chainCheck.valid) {
+    throw new Error(`State chain invalid before resolving failure: ${chainCheck.errors.join(', ')}`);
+  }
 
   const activeFailures = state.activeFailureIds.filter(f => f !== failureId);
   const resolvedFailures = [...new Set([...state.resolvedFailureIds, failureId])];
@@ -173,10 +235,11 @@ export function resolveFailure(taskId, failureId) {
     revision: state.revision + 1,
     lastTransitionAt: new Date().toISOString(),
     lastTransitionBy: 'task-governor.mjs',
+    previousStateHash: state.stateHash || crypto.createHash('sha256').update('genesis').digest('hex'),
   };
 
-  writeJSON(getStatePath(taskId), updated);
-  return updated;
+  const written = writeState(taskId, updated);
+  return written;
 }
 
 export function isAccepted(taskId) {

@@ -20,6 +20,22 @@ function captureBaseline(taskId) {
   const stagedFiles = getStagedFiles();
   const head = getCurrentHead();
 
+  const statusLines = gitStatus.split('\n').filter(l => l.trim());
+  const modifiedTracked = statusLines.filter(l => l.startsWith(' M') || l.startsWith('M ') || l.startsWith('MM'));
+  const untracked = statusLines.filter(l => l.startsWith('??'));
+  const deleted = statusLines.filter(l => l.startsWith(' D') || l.startsWith('D '));
+  const renamed = statusLines.filter(l => l.startsWith(' R') || l.startsWith('R '));
+
+  const dirtyTrackedHashes = {};
+  for (const line of modifiedTracked) {
+    const path = line.slice(3).trim();
+    try {
+      dirtyTrackedHashes[path] = computeHash(readFileSync(resolve(root, path)));
+    } catch (e) {
+      dirtyTrackedHashes[path] = 'UNREADABLE';
+    }
+  }
+
   const baseline = {
     taskId,
     phase: 'baseline',
@@ -28,8 +44,18 @@ function captureBaseline(taskId) {
     branch: execSync('git rev-parse --abbrev-ref HEAD', { encoding: 'utf-8', timeout: 5000 }).trim(),
     gitStatus,
     stagedFiles,
-    hasUntracked: gitStatus.split('\n').filter(l => l.startsWith('??')).length > 0,
-    hasModified: gitStatus.split('\n').filter(l => l.startsWith(' M') || l.startsWith('M ')).length > 0,
+    statusLineCount: statusLines.length,
+    modifiedTrackedCount: modifiedTracked.length,
+    untrackedCount: untracked.length,
+    deletedCount: deleted.length,
+    renamedCount: renamed.length,
+    modifiedTracked,
+    untracked,
+    deleted,
+    renamed,
+    dirtyTrackedHashes,
+    hasUntracked: untracked.length > 0,
+    hasModified: modifiedTracked.length > 0,
   };
 
   writeJSON(resolve(baselineDir, 'git-status.json'), baseline);
@@ -74,6 +100,9 @@ function checkWorkspace(taskId) {
     return { valid: false, errors: ['No baseline captured. Run capture-baseline first.'] };
   }
 
+  const manifestPath = resolve(runtimeDir, 'task-manifest.json');
+  const manifest = existsSync(manifestPath) ? readJSON(manifestPath) : { taskOwnedPaths: [] };
+
   const baseline = readJSON(baselinePath);
   const currentStatus = getGitStatus();
   const currentHead = getCurrentHead();
@@ -81,30 +110,76 @@ function checkWorkspace(taskId) {
   const errors = [];
   const warnings = [];
 
-  if (currentHead !== baseline.head) {
+  if (currentHead !== baseline.head && !currentHead.startsWith('0000')) {
     warnings.push(`HEAD changed: ${baseline.head} -> ${currentHead}`);
   }
 
   const currentLines = currentStatus.split('\n').filter(l => l.trim());
   const trackedModified = currentLines.filter(l => l.startsWith(' M') || l.startsWith('M ') || l.startsWith('MM'));
   const untracked = currentLines.filter(l => l.startsWith('??'));
-  const stagedNonGovernance = currentLines.filter(l => l.startsWith('A ') || l.startsWith('M ') || l.startsWith('D '));
+  const deleted = currentLines.filter(l => l.startsWith(' D') || l.startsWith('D '));
+  const renamed = currentLines.filter(l => l.startsWith(' R') || l.startsWith('R '));
+  const staged = currentLines.filter(l => l.startsWith('A ') || l.startsWith('M ') || l.startsWith('D ') || l.startsWith('R '));
 
-  const baselineLines = (baseline.gitStatus || '').split('\n').filter(l => l.trim());
-  const baselineModified = baselineLines.filter(l => l.startsWith(' M') || l.startsWith('M ') || l.startsWith('MM'));
-  const baselineModifiedPaths = new Set(baselineModified.map(l => l.slice(3).trim()));
+  const baselineModifiedPaths = new Set((baseline.modifiedTracked || []).map(l => l.slice(3).trim()));
+  const baselineUntrackedPaths = new Set((baseline.untracked || []).map(l => l.slice(3).trim()));
+
+  const isTaskOwned = (path) => {
+    return (manifest.taskOwnedPaths || []).some(owned => path === owned || path.startsWith(owned));
+  };
+
+  const manifestPathFromLock = resolve(runtimeDir, 'task-manifest.json');
+  const taskOwnedPaths = existsSync(manifestPathFromLock) ? (readJSON(manifestPathFromLock)?.taskOwnedPaths || []) : [];
 
   const newModified = trackedModified.filter(l => !baselineModifiedPaths.has(l.slice(3).trim()));
+  const preExistingModified = trackedModified.filter(l => baselineModifiedPaths.has(l.slice(3).trim()));
+
+  if (preExistingModified.length > 0) {
+    for (const line of preExistingModified) {
+      const path = line.slice(3).trim();
+      if (!isTaskOwned(path)) {
+        const oldHash = baseline.dirtyTrackedHashes && baseline.dirtyTrackedHashes[path];
+        if (oldHash && oldHash !== 'UNREADABLE') {
+          try {
+            const newHash = computeHash(readFileSync(resolve(root, path)));
+            if (newHash !== oldHash) {
+              errors.push(`CHANGED_PRE_EXISTING_DIRT: ${path}`);
+            }
+          } catch (e) {
+            errors.push(`UNREADABLE_PRE_EXISTING_PATH: ${path}`);
+          }
+        }
+      }
+    }
+  }
 
   if (newModified.length > 0) {
-    errors.push(`New modified tracked files: ${newModified.map(l => l.slice(3)).join(', ')}`);
+    errors.push(`NEW_MODIFIED_TRACKED_FILES: ${newModified.map(l => l.slice(3)).join(', ')}`);
   }
 
-  if (trackedModified.length > 0 && newModified.length === 0) {
-    warnings.push(`${trackedModified.length} pre-existing modified file(s) unchanged since baseline`);
+  const newUntracked = untracked.filter(l => {
+    const path = l.slice(3).trim();
+    if (isTaskOwned(path)) return true;
+    return !baselineUntrackedPaths.has(path);
+  });
+
+  if (newUntracked.length > 0) {
+    errors.push(`UNTRACKED_FILES: ${newUntracked.map(l => l.slice(3)).join(', ')}`);
   }
 
-  return { valid: errors.length === 0, errors, warnings, untracked: untracked.length };
+  if (deleted.length > 0) {
+    errors.push(`DELETED_FILES: ${deleted.map(l => l.slice(3)).join(', ')}`);
+  }
+
+  if (renamed.length > 0) {
+    errors.push(`RENAMED_FILES: ${renamed.map(l => l.slice(3)).join(', ')}`);
+  }
+
+  if (staged.length > 0) {
+    errors.push(`STAGED_FILES_EXIST: ${staged.map(l => l.slice(3)).join(', ')}`);
+  }
+
+  return { valid: errors.length === 0, errors, warnings, untrackedCount: untracked.length };
 }
 
 function checkDirtyNext(taskId) {

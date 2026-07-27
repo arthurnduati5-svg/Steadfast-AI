@@ -179,6 +179,8 @@ async function cmdStage(taskId, pathsFile) {
   const runtimeDir = getRuntimeDir(taskId);
   ensureDir(runtimeDir);
 
+  const preCommitHead = getCurrentHead();
+
   const receipt = {
     taskId,
     stagedAt: new Date().toISOString(),
@@ -186,6 +188,7 @@ async function cmdStage(taskId, pathsFile) {
     stagedPaths,
     indexTreeHash: indexHash,
     pathCount: stagedPaths.length,
+    preCommitHead,
   };
 
   writeJSON(resolve(runtimeDir, 'staging', 'staging-receipt.json'), receipt);

@@ -30,6 +30,23 @@ function runGateCheck(script, argsList) {
   }
 }
 
+function printResult(result) {
+  if (result.accepted) {
+    console.log(`TASK_ACCEPTED: ${result.taskId}`);
+    console.log(`ACCEPTED_COMMIT: ${result.acceptanceRecord?.acceptedCommit || ''}`);
+    console.log(`SENTINEL: ${result.sentinel || ''}`);
+    if (result.sentinel) console.log(result.sentinel);
+  } else {
+    console.log('TASK_NOT_ACCEPTED');
+    console.log(`TASK_ID=${result.taskId}`);
+    console.log(`STATE=${result.state || ''}`);
+    if (result.errors && result.errors.length > 0) {
+      result.errors.forEach((e, i) => console.log(`ERROR_${i + 1}=${e}`));
+    }
+    console.log('NEXT_REQUIRED_ACTION=Repair all errors and rerun finalize-task.mjs');
+  }
+}
+
 async function finalize(taskId) {
   const root = getRepositoryRoot();
   const runtimeDir = getRuntimeDir(taskId);
@@ -39,12 +56,16 @@ async function finalize(taskId) {
   const state = loadState(taskId);
   if (!state) {
     errors.push('TASK_NOT_FOUND');
-    return finalizeResult(taskId, errors);
+    const result = finalizeResult(taskId, errors);
+    printResult(result);
+    return result;
   }
 
   if (state.currentState === STATES.ACCEPTED) {
     errors.push('TASK_ALREADY_ACCEPTED');
-    return finalizeResult(taskId, errors);
+    const result = finalizeResult(taskId, errors);
+    printResult(result);
+    return result;
   }
 
   const gateScript = resolve(scriptsDir, 'task-governor.mjs');
@@ -53,10 +74,19 @@ async function finalize(taskId) {
   const manifestLockPath = resolve(runtimeDir, 'task-manifest.lock.json');
   if (!existsSync(manifestLockPath)) {
     errors.push('MANIFEST_NOT_LOCKED');
-    return finalizeResult(taskId, errors);
+    const result = finalizeResult(taskId, errors);
+    printResult(result);
+    return result;
   }
 
   const lock = readJSON(manifestLockPath);
+  if (!lock) {
+    errors.push('MANIFEST_NOT_LOCKED');
+    const result = finalizeResult(taskId, errors);
+    printResult(result);
+    return result;
+  }
+
   const manifestPath = resolve(runtimeDir, 'task-manifest.json');
   let manifest = null;
   if (existsSync(manifestPath)) {
@@ -124,11 +154,26 @@ async function finalize(taskId) {
     errors.push('STAGING_RECEIPT_MISSING');
   }
 
+  const acceptedSentinel = (manifest && manifest.acceptedSentinel) || `${taskId}_ACCEPTED`;
+
   const result = finalizeResult(taskId, errors, state, lock);
 
   if (errors.length === 0) {
+    if (!manifest) {
+      errors.push('MANIFEST_ACCESS_REQUIRED');
+      const r = finalizeResult(taskId, errors, state, lock);
+      printResult(r);
+      return r;
+    }
+    const expectedSentinel = manifest.acceptedSentinel;
+    if (!expectedSentinel || expectedSentinel.trim().length === 0) {
+      errors.push('MANIFEST_SENTINEL_EMPTY');
+      const r = finalizeResult(taskId, errors, state, lock);
+      printResult(r);
+      return r;
+    }
     transitionState(taskId, STATES.ACCEPTED, 'finalize-task.mjs');
-    const sentinelText = `${taskId}_ACCEPTED`;
+    const sentinelText = expectedSentinel;
     const sentinelContent = [
       `Task: ${taskId}`,
       `Manifest hash: ${lock.manifestHash}`,
@@ -160,16 +205,9 @@ async function finalize(taskId) {
     result.sentinel = sentinelText;
     result.acceptanceRecord = acceptanceRecord;
 
-    console.log(`TASK_ACCEPTED: ${taskId}`);
-    console.log(`ACCEPTED_COMMIT: ${acceptanceRecord.acceptedCommit}`);
-    console.log(`SENTINEL: ${sentinelText}`);
-    console.log(sentinelText);
+    printResult(result);
   } else {
-    console.log('TASK_NOT_ACCEPTED');
-    console.log(`TASK_ID=${taskId}`);
-    console.log(`STATE=${state.currentState}`);
-    errors.forEach((e, i) => console.log(`ERROR_${i + 1}=${e}`));
-    console.log('NEXT_REQUIRED_ACTION=Repair all errors and rerun finalize-task.mjs');
+    printResult(result);
   }
 
   return result;

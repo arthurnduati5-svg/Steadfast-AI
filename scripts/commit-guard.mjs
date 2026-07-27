@@ -30,6 +30,25 @@ function validateCommit(taskId) {
     errors.push('STAGING_RECEIPT_INVALID: missing indexTreeHash');
   }
 
+  if (receipt.createdAt) {
+    const commitTime = execSync('git log --format=%ct -1 HEAD', { cwd: root, encoding: 'utf-8', timeout: 5000 }).trim();
+    const receiptTime = new Date(receipt.createdAt).getTime();
+    if (receiptTime > commitTime * 1000) {
+      errors.push('RECEIPT_CREATED_AFTER_COMMIT');
+    }
+  }
+
+  if (!receipt.preCommitHead) {
+    errors.push('STAGING_RECEIPT_INVALID: missing preCommitHead');
+  } else {
+    const commitParent = execSync('git log --format=%P -1 HEAD', { cwd: root, encoding: 'utf-8', timeout: 5000 }).trim();
+    const parents = commitParent.split(' ').map(p => p.trim()).filter(p => p);
+    if (!parents.includes(receipt.preCommitHead)) {
+      errors.push('COMMIT_PARENT_MISMATCH: HEAD parent does not match receipt preCommitHead');
+    }
+    const isAmend = execSync('git rev-list --count --all --objects HEAD', { cwd: root, encoding: 'utf-8', timeout: 5000 }).trim();
+  }
+
   const lockPath = resolve(runtimeDir, 'task-manifest.lock.json');
   if (existsSync(lockPath)) {
     const lock = readJSON(lockPath);
