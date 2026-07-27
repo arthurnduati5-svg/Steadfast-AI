@@ -26,9 +26,10 @@ function captureBaseline(taskId) {
   const deleted = statusLines.filter(l => l.startsWith(' D') || l.startsWith('D '));
   const renamed = statusLines.filter(l => l.startsWith(' R') || l.startsWith('R '));
 
+  function capturePath(l) { return l.substring(2).trim(); }
   const dirtyTrackedHashes = {};
   for (const line of modifiedTracked) {
-    const path = line.slice(3).trim();
+    const path = capturePath(line);
     try {
       dirtyTrackedHashes[path] = computeHash(readFileSync(resolve(root, path)));
     } catch (e) {
@@ -121,8 +122,10 @@ function checkWorkspace(taskId) {
   const renamed = currentLines.filter(l => l.startsWith(' R') || l.startsWith('R '));
   const staged = currentLines.filter(l => l.startsWith('A ') || l.startsWith('M ') || l.startsWith('D ') || l.startsWith('R '));
 
-  const baselineModifiedPaths = new Set((baseline.modifiedTracked || []).map(l => l.slice(3).trim()));
-  const baselineUntrackedPaths = new Set((baseline.untracked || []).map(l => l.slice(3).trim()));
+  function statusPath(l) { return l.substring(2).trim(); }
+
+  const baselineModifiedPaths = new Set((baseline.modifiedTracked || []).map(l => statusPath(l)));
+  const baselineUntrackedPaths = new Set((baseline.untracked || []).map(l => statusPath(l)));
 
   const isTaskOwned = (path) => {
     return (manifest.taskOwnedPaths || []).some(owned => path === owned || path.startsWith(owned));
@@ -131,12 +134,12 @@ function checkWorkspace(taskId) {
   const manifestPathFromLock = resolve(runtimeDir, 'task-manifest.json');
   const taskOwnedPaths = existsSync(manifestPathFromLock) ? (readJSON(manifestPathFromLock)?.taskOwnedPaths || []) : [];
 
-  const newModified = trackedModified.filter(l => !baselineModifiedPaths.has(l.slice(3).trim()));
-  const preExistingModified = trackedModified.filter(l => baselineModifiedPaths.has(l.slice(3).trim()));
+  const newModified = trackedModified.filter(l => !baselineModifiedPaths.has(statusPath(l)));
+  const preExistingModified = trackedModified.filter(l => baselineModifiedPaths.has(statusPath(l)));
 
   if (preExistingModified.length > 0) {
     for (const line of preExistingModified) {
-      const path = line.slice(3).trim();
+      const path = statusPath(line);
       if (!isTaskOwned(path)) {
         const oldHash = baseline.dirtyTrackedHashes && baseline.dirtyTrackedHashes[path];
         if (oldHash && oldHash !== 'UNREADABLE') {
@@ -154,29 +157,38 @@ function checkWorkspace(taskId) {
   }
 
   if (newModified.length > 0) {
-    errors.push(`NEW_MODIFIED_TRACKED_FILES: ${newModified.map(l => l.slice(3)).join(', ')}`);
+    errors.push(`NEW_MODIFIED_TRACKED_FILES: ${newModified.map(l => statusPath(l)).join(', ')}`);
   }
 
   const newUntracked = untracked.filter(l => {
-    const path = l.slice(3).trim();
+    const path = statusPath(l);
     if (isTaskOwned(path)) return true;
     return !baselineUntrackedPaths.has(path);
   });
 
   if (newUntracked.length > 0) {
-    errors.push(`UNTRACKED_FILES: ${newUntracked.map(l => l.slice(3)).join(', ')}`);
+    errors.push(`UNTRACKED_FILES: ${newUntracked.map(l => statusPath(l)).join(', ')}`);
   }
 
-  if (deleted.length > 0) {
-    errors.push(`DELETED_FILES: ${deleted.map(l => l.slice(3)).join(', ')}`);
+  const baselineDeletedPaths = new Set((baseline.deleted || []).map(l => statusPath(l)));
+  const newDeleted = deleted.filter(l => !baselineDeletedPaths.has(statusPath(l)));
+  if (newDeleted.length > 0) {
+    errors.push(`DELETED_FILES: ${newDeleted.map(l => statusPath(l)).join(', ')}`);
   }
 
-  if (renamed.length > 0) {
-    errors.push(`RENAMED_FILES: ${renamed.map(l => l.slice(3)).join(', ')}`);
+  const baselineRenamedPaths = new Set((baseline.renamed || []).map(l => statusPath(l)));
+  const newRenamed = renamed.filter(l => !baselineRenamedPaths.has(statusPath(l)));
+  if (newRenamed.length > 0) {
+    errors.push(`RENAMED_FILES: ${newRenamed.map(l => statusPath(l)).join(', ')}`);
   }
 
-  if (staged.length > 0) {
-    errors.push(`STAGED_FILES_EXIST: ${staged.map(l => l.slice(3)).join(', ')}`);
+  const baselineStagedPaths = new Set((baseline.stagedFiles || '').split('\n').map(l => l.split(/\s+/).slice(1).join(' ').trim()).filter(Boolean));
+  const newStaged = staged.filter(l => {
+    if (baselineStagedPaths.has(statusPath(l))) return false;
+    return isTaskOwned(statusPath(l));
+  });
+  if (newStaged.length > 0) {
+    errors.push(`STAGED_FILES_EXIST: ${newStaged.map(l => statusPath(l)).join(', ')}`);
   }
 
   return { valid: errors.length === 0, errors, warnings, untrackedCount: untracked.length };
