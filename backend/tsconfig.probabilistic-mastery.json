@@ -1,0 +1,24 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "incremental": false,
+    "strict": true,
+    "skipLibCheck": true
+  },
+  "include": [
+    "src/services/probabilisticMasteryContracts.ts",
+    "src/services/probabilisticMasteryPolicy.ts",
+    "src/services/probabilisticMasteryStrategy.ts",
+    "src/services/probabilisticMasteryEvidenceProcessor.ts",
+    "src/services/probabilisticMasteryRepository.ts",
+    "src/services/probabilisticMasteryPrerequisiteReader.ts",
+    "src/services/probabilisticMasteryProjections.ts",
+    "src/services/probabilisticMasterySeeds.ts",
+    "src/tests/probabilistic-mastery/**/*.ts"
+  ],
+  "exclude": [
+    "node_modules",
+    "dist"
+  ]
+}
