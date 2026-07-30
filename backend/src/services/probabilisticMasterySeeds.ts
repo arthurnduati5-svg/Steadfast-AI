@@ -19,12 +19,12 @@ function ts(dateStr: string): Date {
   return new Date(dateStr);
 }
 
-export function createActor(schoolId: string, role: 'student' | 'teacher' | 'school_admin' | 'internal_operator' | 'parent' | 'unknown' = 'student'): MasteryActorContext {
+export function createActor(schoolId: string, role: 'student' | 'teacher' | 'school_admin' | 'internal_operator' | 'parent' | 'unknown' = 'teacher'): MasteryActorContext {
   return {
     schoolId,
     actorId: `fixture-actor-${schoolId}`,
     actorRole: role,
-    learnerId: FIXTURE_LEARNER_1,
+    learnerId: role === 'teacher' || role === 'student' ? FIXTURE_LEARNER_1 : undefined,
     requestId: 'fixture-request',
     correlationId: 'fixture-correlation',
   };
@@ -75,6 +75,9 @@ export function createEvidence(
 export function allFixtures(policy: MasteryPolicyConfig): {
   actorA: MasteryActorContext;
   actorB: MasteryActorContext;
+  teacherActorA: MasteryActorContext;
+  teacherActorB: MasteryActorContext;
+  schoolAdminActorA: MasteryActorContext;
   targetA1: MasteryTarget;
   targetA2: MasteryTarget;
   targetB1: MasteryTarget;
@@ -82,6 +85,9 @@ export function allFixtures(policy: MasteryPolicyConfig): {
 } {
   const actorA = createActor(FIXTURE_SCHOOL_A);
   const actorB = createActor(FIXTURE_SCHOOL_B);
+  const teacherActorA = createActor(FIXTURE_SCHOOL_A, 'teacher');
+  const teacherActorB = createActor(FIXTURE_SCHOOL_B, 'teacher');
+  const schoolAdminActorA = createActor(FIXTURE_SCHOOL_A, 'school_admin');
   const targetA1 = createTarget(FIXTURE_SCHOOL_A, FIXTURE_LEARNER_1, FIXTURE_TARGET_SKILL_A);
   const targetA2 = createTarget(FIXTURE_SCHOOL_A, FIXTURE_LEARNER_1, FIXTURE_TARGET_SKILL_B);
   const targetB1 = createTarget(FIXTURE_SCHOOL_B, FIXTURE_LEARNER_1, FIXTURE_TARGET_SKILL_A);
@@ -89,6 +95,9 @@ export function allFixtures(policy: MasteryPolicyConfig): {
   return {
     actorA,
     actorB,
+    teacherActorA,
+    teacherActorB,
+    schoolAdminActorA,
     targetA1,
     targetA2,
     targetB1,

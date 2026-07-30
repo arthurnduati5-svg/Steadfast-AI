@@ -100,11 +100,42 @@ describe('ProbabilisticMasteryContracts', () => {
       strategyVersion: '1.0',
       stateRevision: 1,
       updatedAt: new Date(),
+      consecutiveMissCountSinceMastered: 0,
     };
     expect(state.probabilityOfMastery).toBeGreaterThanOrEqual(0);
     expect(state.probabilityOfMastery).toBeLessThanOrEqual(1);
     expect(state.confidence).toBeGreaterThanOrEqual(0);
     expect(state.confidence).toBeLessThanOrEqual(1);
+  });
+
+  it('MasteryState includes consecutiveMissCountSinceMastered', () => {
+    const state: MasteryState = {
+      schoolId: 's1',
+      learnerId: 'l1',
+      targetNodeId: 'n1',
+      targetNodeType: 'skill',
+      curriculumVersionId: 'v1',
+      probabilityOfMastery: 0.5,
+      confidence: 0.7,
+      evidenceCount: 5,
+      lastEvidenceAt: new Date(),
+      decayRisk: 0.1,
+      misconceptionTags: [],
+      independenceScore: 0.8,
+      hintDependencyScore: 0.2,
+      retentionScore: 0.6,
+      transferScore: 0.4,
+      visibleLabel: 'developing',
+      policyVersion: 'v1',
+      strategyId: 's1',
+      strategyVersion: '1.0',
+      stateRevision: 1,
+      updatedAt: new Date(),
+      consecutiveMissCountSinceMastered: 0,
+    };
+    expect(state.consecutiveMissCountSinceMastered).toBe(0);
+    state.consecutiveMissCountSinceMastered = 3;
+    expect(state.consecutiveMissCountSinceMastered).toBe(3);
   });
 
   it('MasteryEstimationStrategy interface works', () => {

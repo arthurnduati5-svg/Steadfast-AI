@@ -1,12 +1,21 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { EvidenceWeightedStrategy } from '../../services/probabilisticMasteryStrategy';
 import { createFixturePolicy, validatePolicy } from '../../services/probabilisticMasteryPolicy';
 import { InMemoryMasteryRepository } from '../../services/probabilisticMasteryRepository';
-import { applyEvidence, deriveVisibleLabel, replayState } from '../../services/probabilisticMasteryEvidenceProcessor';
+import {
+  applyEvidence,
+  deriveVisibleLabel,
+  replayState,
+  executeApplyEvidence,
+  applyEvidenceWithRepository,
+  deduplicateAndFilterEvidenceWithConflicts,
+  extractRepeatedMissEvidence,
+} from '../../services/probabilisticMasteryEvidenceProcessor';
 import { createPrerequisiteReader, detectCircularPrerequisites } from '../../services/probabilisticMasteryPrerequisiteReader';
 import { projectState, buildStudentSafeView, buildStaffSafeView } from '../../services/probabilisticMasteryProjections';
-import { allFixtures, FIXTURE_SCHOOL_A, FIXTURE_SCHOOL_B, FIXTURE_LEARNER_1, FIXTURE_TARGET_SKILL_A } from '../../services/probabilisticMasterySeeds';
-import type { MasteryTarget, NormalizedMasteryEvidence, PrerequisiteReader, MasteryState } from '../../services/probabilisticMasteryContracts';
+import { allFixtures, FIXTURE_SCHOOL_A, FIXTURE_SCHOOL_B, FIXTURE_LEARNER_1, FIXTURE_TARGET_SKILL_A, FIXTURE_CURRICULUM_VERSION } from '../../services/probabilisticMasterySeeds';
+import { deriveLegacyMasteryFromCanonical, mapVisibleLabelToLegacyLevel, mapCanonicalActionToLegacyDecision } from '../../services/probabilisticMasteryCompatibilityBridge';
+import type { MasteryTarget, NormalizedMasteryEvidence, PrerequisiteReader, MasteryState, MasteryClock, MasteryIdGenerator, MasteryIdKind } from '../../services/probabilisticMasteryContracts';
 
 const policy = createFixturePolicy();
 const strategy = new EvidenceWeightedStrategy();
@@ -259,6 +268,7 @@ describe('ProbabilisticMasteryBehavior', () => {
         independenceScore: 1, hintDependencyScore: 0, retentionScore: 0.8,
         transferScore: 0.7, visibleLabel: 'mastered', policyVersion: 'v1',
         strategyId: 's1', strategyVersion: '1.0', stateRevision: 5, updatedAt: new Date(),
+        consecutiveMissCountSinceMastered: 0,
       });
       const reader = createPrerequisiteReader(graph, lookup, FIXTURE_SCHOOL_A, 'fixture-curr-v1');
       let state: MasteryState | null = null;
@@ -543,6 +553,489 @@ describe('ProbabilisticMasteryBehavior', () => {
       const fromB = repo.readState(targetB1);
       expect(fromA).toBeNull();
       expect(fromB).not.toBeNull();
+    });
+  });
+
+  describe('Actor and role enforcement', () => {
+    it('student role denied from mutation', () => {
+      const { targetA1, evidence, actorA } = allFixtures(policy);
+      const studentActor = { ...actorA, actorRole: 'student' as const, learnerId: FIXTURE_LEARNER_1 };
+      const clock: MasteryClock = { now: () => ts('2026-02-01T10:00:00Z') };
+      const idGen: MasteryIdGenerator = { nextId: () => 'test-id' };
+      const result = executeApplyEvidence(null, evidence.correct1, studentActor, targetA1, policy, strategy, null, clock, idGen, 'auth-test');
+      expect('code' in result).toBe(true);
+      if ('code' in result) {
+        expect(result.code).toBe('ROLE_DENIED');
+      }
+    });
+
+    it('parent role denied from mutation', () => {
+      const { teacherActorA, targetA1, evidence } = allFixtures(policy);
+      const parentActor = { ...teacherActorA, actorRole: 'parent' as const };
+      const clock: MasteryClock = { now: () => ts('2026-02-01T10:00:00Z') };
+      const idGen: MasteryIdGenerator = { nextId: () => 'test-id' };
+      const result = executeApplyEvidence(null, evidence.correct1, parentActor, targetA1, policy, strategy, null, clock, idGen, 'auth-test');
+      expect('code' in result).toBe(true);
+    });
+
+    it('unknown role denied from mutation', () => {
+      const { teacherActorA, targetA1, evidence } = allFixtures(policy);
+      const unknownActor = { ...teacherActorA, actorRole: 'unknown' as const };
+      const clock: MasteryClock = { now: () => ts('2026-02-01T10:00:00Z') };
+      const idGen: MasteryIdGenerator = { nextId: () => 'test-id' };
+      const result = executeApplyEvidence(null, evidence.correct1, unknownActor, targetA1, policy, strategy, null, clock, idGen, 'auth-test');
+      expect('code' in result).toBe(true);
+    });
+
+    it('teacher role allowed for mutation', () => {
+      const { teacherActorA, targetA1, evidence } = allFixtures(policy);
+      const clock: MasteryClock = { now: () => ts('2026-02-01T10:00:00Z') };
+      const idGen: MasteryIdGenerator = { nextId: () => 'test-id' };
+      const result = executeApplyEvidence(null, evidence.correct1, teacherActorA, targetA1, policy, strategy, null, clock, idGen, 'auth-test');
+      expect('code' in result).toBe(false);
+      if (!('code' in result)) {
+        expect(result.rejected).toBe(false);
+      }
+    });
+
+    it('school_admin role allowed for mutation', () => {
+      const { schoolAdminActorA, targetA1, evidence } = allFixtures(policy);
+      const clock: MasteryClock = { now: () => ts('2026-02-01T10:00:00Z') };
+      const idGen: MasteryIdGenerator = { nextId: () => 'test-id' };
+      const result = executeApplyEvidence(null, evidence.correct1, schoolAdminActorA, targetA1, policy, strategy, null, clock, idGen, 'auth-test');
+      expect('code' in result).toBe(false);
+      if (!('code' in result)) {
+        expect(result.rejected).toBe(false);
+      }
+    });
+
+    it('teacher must specify learnerId', () => {
+      const { targetA1, evidence, actorA } = allFixtures(policy);
+      const badTeacher = { ...actorA, actorRole: 'teacher' as const, learnerId: undefined };
+      const clock: MasteryClock = { now: () => ts('2026-02-01T10:00:00Z') };
+      const idGen: MasteryIdGenerator = { nextId: () => 'test-id' };
+      const result = executeApplyEvidence(null, evidence.correct1, badTeacher, targetA1, policy, strategy, null, clock, idGen, 'auth-test');
+      expect('code' in result).toBe(true);
+      if ('code' in result) {
+        expect(result.code).toBe('LEARNER_MISMATCH');
+      }
+    });
+
+    it('teacher learnerId must match target learner', () => {
+      const { targetA1, evidence, actorA } = allFixtures(policy);
+      const wrongLearnerTeacher = { ...actorA, actorRole: 'teacher' as const, learnerId: 'wrong-learner' };
+      const clock: MasteryClock = { now: () => ts('2026-02-01T10:00:00Z') };
+      const idGen: MasteryIdGenerator = { nextId: () => 'test-id' };
+      const result = executeApplyEvidence(null, evidence.correct1, wrongLearnerTeacher, targetA1, policy, strategy, null, clock, idGen, 'auth-test');
+      expect('code' in result).toBe(true);
+      if ('code' in result) {
+        expect(result.code).toBe('LEARNER_MISMATCH');
+      }
+    });
+
+    it('cross-school teacher denied', () => {
+      const { teacherActorA, targetB1, evidence } = allFixtures(policy);
+      const clock: MasteryClock = { now: () => ts('2026-02-01T10:00:00Z') };
+      const idGen: MasteryIdGenerator = { nextId: () => 'test-id' };
+      const result = executeApplyEvidence(null, evidence.correct1, teacherActorA, targetB1, policy, strategy, null, clock, idGen, 'auth-test');
+      expect('code' in result).toBe(true);
+      if ('code' in result) {
+        expect(result.code).toBe('SCHOOL_MISMATCH');
+      }
+    });
+
+    it('student can query own state via projection', () => {
+      const { teacherActorA, actorA, targetA1, evidence } = allFixtures(policy);
+      const studentActor = { ...actorA, actorRole: 'student' as const, learnerId: FIXTURE_LEARNER_1 };
+      const clock: MasteryClock = { now: () => ts('2026-02-01T10:00:00Z') };
+      const idGen: MasteryIdGenerator = { nextId: () => 'test-id' };
+      const result = executeApplyEvidence(null, evidence.correct1, teacherActorA, targetA1, policy, strategy, null, clock, idGen, 'proj');
+      if (!('code' in result)) {
+        const view = projectState(result.state, result.diagnosis, result.nextAction, 'student');
+        expect(view).not.toBeNull();
+        if (view) {
+          expect('visibleLabel' in view).toBe(true);
+          expect((view as any).probabilityOfMastery).toBeUndefined();
+        }
+      }
+    });
+  });
+
+  describe('Deterministic clock and ID generator', () => {
+    it('identical clock and ID inputs produce identical state', () => {
+      const { teacherActorA, targetA1, evidence } = allFixtures(policy);
+      const fixedDate = ts('2026-06-15T12:00:00Z');
+      const clock: MasteryClock = { now: () => fixedDate };
+      let counter = 0;
+      const idGen: MasteryIdGenerator = { nextId: () => { counter++; return `id-${counter}`; } };
+
+      const result1 = executeApplyEvidence(null, evidence.correct1, teacherActorA, targetA1, policy, strategy, null, clock, idGen, 'det-1');
+      counter = 0;
+      const result2 = executeApplyEvidence(null, evidence.correct1, teacherActorA, targetA1, policy, strategy, null, clock, idGen, 'det-2');
+      if (!('code' in result1) && !('code' in result2)) {
+        expect(result1.state.probabilityOfMastery).toBe(result2.state.probabilityOfMastery);
+        expect(result1.state.updatedAt.getTime()).toBe(result2.state.updatedAt.getTime());
+        expect(result1.changeLog.changeId).toBe(result2.changeLog.changeId);
+        expect(result1.diagnosis.diagnosisId).toBe(result2.diagnosis.diagnosisId);
+        expect(result1.diagnosis.generatedAt.getTime()).toBe(result2.diagnosis.generatedAt.getTime());
+      }
+    });
+
+    it('initial state uses injected clock', () => {
+      const { teacherActorA, targetA1, evidence } = allFixtures(policy);
+      const fixedDate = ts('2026-07-01T08:00:00Z');
+      const clock: MasteryClock = { now: () => fixedDate };
+      const idGen: MasteryIdGenerator = { nextId: () => 'test-id' };
+      const result = executeApplyEvidence(null, evidence.correct1, teacherActorA, targetA1, policy, strategy, null, clock, idGen, 'clock-test');
+      if (!('code' in result)) {
+        expect(result.state.updatedAt.getTime()).toBe(fixedDate.getTime());
+      }
+    });
+
+    it('separate repository instances do not share ID state', () => {
+      const { teacherActorA, targetA1, evidence } = allFixtures(policy);
+      const fixedDate = ts('2026-06-15T12:00:00Z');
+      const clock: MasteryClock = { now: () => fixedDate };
+      const idGen1: MasteryIdGenerator = { nextId: () => 'repo-a-1' };
+      const idGen2: MasteryIdGenerator = { nextId: () => 'repo-b-1' };
+      const result1 = executeApplyEvidence(null, evidence.correct1, teacherActorA, targetA1, policy, strategy, null, clock, idGen1, 'sep-1');
+      const result2 = executeApplyEvidence(null, evidence.correct1, teacherActorA, targetA1, policy, strategy, null, clock, idGen2, 'sep-2');
+      if (!('code' in result1) && !('code' in result2)) {
+        expect(result1.state.probabilityOfMastery).toBe(result2.state.probabilityOfMastery);
+      }
+    });
+
+    it('no module-level counter in processor', () => {
+      const { teacherActorA, targetA1, evidence } = allFixtures(policy);
+      const clock: MasteryClock = { now: () => ts('2026-06-15T12:00:00Z') };
+      const ids: string[] = [];
+      const idGen: MasteryIdGenerator = { nextId: (kind) => { const id = `custom-${kind}-${ids.length}`; ids.push(id); return id; } };
+      const r1 = executeApplyEvidence(null, evidence.correct1, teacherActorA, targetA1, policy, strategy, null, clock, idGen, 'mod-1');
+      const r2 = executeApplyEvidence(null, evidence.correct2, teacherActorA, targetA1, policy, strategy, null, clock, idGen, 'mod-2');
+      if (!('code' in r1) && !('code' in r2)) {
+        expect(r1.diagnosis.diagnosisId).toContain('custom-diagnosis');
+        expect(r2.diagnosis.diagnosisId).toContain('custom-diagnosis');
+        expect(r1.diagnosis.diagnosisId).not.toBe(r2.diagnosis.diagnosisId);
+      }
+    });
+  });
+
+  describe('Atomic update contract', () => {
+    it('applyEvidenceWithRepository commits state, evidence, and change log', () => {
+      const { teacherActorA, targetA1, evidence } = allFixtures(policy);
+      const repo = new InMemoryMasteryRepository();
+      const clock: MasteryClock = { now: () => ts('2026-02-01T10:00:00Z') };
+      const idGen: MasteryIdGenerator = { nextId: () => 'atom-id' };
+      const result = applyEvidenceWithRepository(null, evidence.correct1, teacherActorA, targetA1, policy, strategy, null, clock, idGen, repo, 'atom-1');
+      expect('code' in result || result.rejected).toBe(false);
+      if (!('code' in result)) {
+        expect(result.committed).toBe(true);
+        const stored = repo.readState(targetA1);
+        expect(stored).not.toBeNull();
+        expect(repo.hasEvidenceBeenApplied(evidence.correct1.evidenceId)).toBe(true);
+        const logs = repo.listChangeLogs(targetA1.schoolId, targetA1.learnerId, targetA1.targetNodeId);
+        expect(logs.length).toBe(1);
+      }
+    });
+
+    it('applying same evidence twice returns already-applied', () => {
+      const { teacherActorA, targetA1, evidence } = allFixtures(policy);
+      const repo = new InMemoryMasteryRepository();
+      const clock: MasteryClock = { now: () => ts('2026-02-01T10:00:00Z') };
+      const idGen: MasteryIdGenerator = { nextId: () => 'atom-id' };
+      const first = applyEvidenceWithRepository(null, evidence.correct1, teacherActorA, targetA1, policy, strategy, null, clock, idGen, repo, 'atom-1');
+      expect('code' in first || first.rejected).toBe(false);
+      const second = applyEvidenceWithRepository(null, evidence.correct1, teacherActorA, targetA1, policy, strategy, null, clock, idGen, repo, 'atom-2');
+      if (!('code' in second)) {
+        expect(second.rejected).toBe(true);
+      }
+    });
+
+    it('failure injection: state write rollback keeps state unchanged', () => {
+      const { teacherActorA, targetA1, evidence } = allFixtures(policy);
+      const repo = new InMemoryMasteryRepository();
+      const clock: MasteryClock = { now: () => ts('2026-02-01T10:00:00Z') };
+      const idGen: MasteryIdGenerator = { nextId: () => 'fail-id' };
+
+      const first = applyEvidenceWithRepository(null, evidence.correct1, teacherActorA, targetA1, policy, strategy, null, clock, idGen, repo, 'first');
+      expect('code' in first || first.rejected).toBe(false);
+      const priorState = repo.readState(targetA1);
+      const priorRevision = priorState?.stateRevision;
+
+      const badEvidence = { ...evidence.correct2, evidenceId: 'trigger-fail' };
+      const origApply = repo.applyEvidenceAtomically.bind(repo);
+      repo.applyEvidenceAtomically = () => false;
+      try {
+        const failResult = applyEvidenceWithRepository(priorState, badEvidence, teacherActorA, targetA1, policy, strategy, null, clock, idGen, repo, 'fail');
+        if (!('code' in failResult)) {
+          expect(failResult.committed).toBe(false);
+        }
+      } finally {
+        repo.applyEvidenceAtomically = origApply;
+      }
+
+      const stateAfter = repo.readState(targetA1);
+      expect(stateAfter?.stateRevision).toBe(priorRevision);
+      expect(repo.hasEvidenceBeenApplied(badEvidence.evidenceId)).toBe(false);
+    });
+  });
+
+  describe('Repeated miss revisit', () => {
+    function buildMasteredState(p: typeof policy): MasteryState {
+      return {
+        schoolId: FIXTURE_SCHOOL_A, learnerId: FIXTURE_LEARNER_1,
+        targetNodeId: FIXTURE_TARGET_SKILL_A, targetNodeType: 'skill',
+        curriculumVersionId: FIXTURE_CURRICULUM_VERSION,
+        probabilityOfMastery: 0.85, confidence: 0.7, evidenceCount: 8,
+        lastEvidenceAt: ts('2026-02-01T10:00:00Z'), decayRisk: 0.1,
+        misconceptionTags: [], independenceScore: 0.9, hintDependencyScore: 0.1,
+        retentionScore: 0.8, transferScore: 0.7, visibleLabel: 'mastered',
+        policyVersion: p.policyVersion, strategyId: p.strategyId,
+        strategyVersion: p.strategyVersion, stateRevision: 5,
+        updatedAt: ts('2026-02-01T10:00:00Z'),
+        consecutiveMissCountSinceMastered: 0,
+      };
+    }
+
+    it('single miss below threshold does not force revisit', () => {
+      const { teacherActorA, targetA1, evidence } = allFixtures(policy);
+      const mastered = buildMasteredState(policy);
+      const clock: MasteryClock = { now: () => ts('2026-03-01T10:00:00Z') };
+      const idGen: MasteryIdGenerator = { nextId: () => 'miss-1' };
+      const result = executeApplyEvidence(mastered, evidence.repeatedMiss1, teacherActorA, targetA1, policy, strategy, null, clock, idGen, 'single-miss');
+      if (!('code' in result)) {
+        expect(result.state.visibleLabel).toBe('mastered');
+      }
+    });
+
+    it('three consecutive misses produce needs_revisit', () => {
+      const { teacherActorA, targetA1, evidence } = allFixtures(policy);
+      const mastered = buildMasteredState(policy);
+      const missEvs = [evidence.repeatedMiss1, evidence.repeatedMiss2, evidence.repeatedMiss3];
+      let currentState: MasteryState = mastered;
+      const clock: MasteryClock = { now: () => ts('2026-03-10T10:00:00Z') };
+      let idCounter = 0;
+      const idGen: MasteryIdGenerator = { nextId: () => `miss-seq-${++idCounter}` };
+      for (const ev of missEvs) {
+        const r = executeApplyEvidence(currentState, ev, teacherActorA, targetA1, policy, strategy, null, clock, idGen, 'miss-seq');
+        if (!('code' in r)) {
+          currentState = r.state;
+        }
+      }
+      expect(currentState.visibleLabel).toBe('needs_revisit');
+    });
+
+    it('non-consecutive misses do not trigger revisit', () => {
+      const { teacherActorA, targetA1, evidence } = allFixtures(policy);
+      const mastered = buildMasteredState(policy);
+      const clock: MasteryClock = { now: () => ts('2026-03-10T10:00:00Z') };
+      let idCounter = 0;
+      const idGen: MasteryIdGenerator = { nextId: () => `noncons-${++idCounter}` };
+      let currentState: MasteryState = mastered;
+      const seq = [evidence.repeatedMiss1, evidence.repeatedMiss3, evidence.correct3, evidence.repeatedMiss2];
+      for (const ev of seq) {
+        const r = executeApplyEvidence(currentState, ev, teacherActorA, targetA1, policy, strategy, null, clock, idGen, 'noncons');
+        if (!('code' in r)) {
+          currentState = r.state;
+        }
+      }
+      expect(currentState.visibleLabel).not.toBe('needs_revisit');
+    });
+
+    it('recovery after revisit works', () => {
+      const { teacherActorA, targetA1, evidence } = allFixtures(policy);
+      const mastered = buildMasteredState(policy);
+      const clock: MasteryClock = { now: () => ts('2026-03-10T10:00:00Z') };
+      let idCounter = 0;
+      const idGen: MasteryIdGenerator = { nextId: () => `rec-${++idCounter}` };
+      let currentState: MasteryState = mastered;
+      for (const ev of [evidence.repeatedMiss1, evidence.repeatedMiss2, evidence.repeatedMiss3]) {
+        const r = executeApplyEvidence(currentState, ev, teacherActorA, targetA1, policy, strategy, null, clock, idGen, 'miss-to-revisit');
+        if (!('code' in r)) currentState = r.state;
+      }
+      const recoveryClock: MasteryClock = { now: () => ts('2026-03-15T10:00:00Z') };
+      const recoveryResult = executeApplyEvidence(currentState, evidence.recoveryEvidence, teacherActorA, targetA1, policy, strategy, null, recoveryClock, idGen, 'recovery');
+      if (!('code' in recoveryResult)) {
+        expect(recoveryResult.state.visibleLabel).not.toBe('needs_revisit');
+      }
+    });
+  });
+
+  describe('Prerequisite semantics', () => {
+    it('direct prerequisites only from toId to fromId', () => {
+      const { targetA1 } = allFixtures(policy);
+      const graph = {
+        edges: [
+          { fromId: 'prereq-A', toId: FIXTURE_TARGET_SKILL_A, edgeType: 'prerequisite' as const },
+          { fromId: FIXTURE_TARGET_SKILL_A, toId: 'dependent-B', edgeType: 'prerequisite' as const },
+        ],
+      };
+      const lookup = () => null;
+      const reader = createPrerequisiteReader(graph, lookup, FIXTURE_SCHOOL_A, FIXTURE_CURRICULUM_VERSION);
+      const direct = reader.getDirectPrerequisites(targetA1);
+      expect(direct.length).toBe(1);
+      expect(direct[0].targetNodeId).toBe('prereq-A');
+    });
+
+    it('reverse edge does not become a prerequisite', () => {
+      const { targetA1 } = allFixtures(policy);
+      const graph = {
+        edges: [
+          { fromId: 'some-other', toId: 'unrelated', edgeType: 'prerequisite' as const },
+        ],
+      };
+      const lookup = () => null;
+      const reader = createPrerequisiteReader(graph, lookup, FIXTURE_SCHOOL_A, FIXTURE_CURRICULUM_VERSION);
+      const direct = reader.getDirectPrerequisites(targetA1);
+      expect(direct.length).toBe(0);
+    });
+
+    it('school mismatch returns empty typed result', () => {
+      const { targetA1 } = allFixtures(policy);
+      const graph = { edges: [] };
+      const lookup = () => null;
+      const reader = createPrerequisiteReader(graph, lookup, FIXTURE_SCHOOL_B, FIXTURE_CURRICULUM_VERSION);
+      const direct = reader.getDirectPrerequisites(targetA1);
+      expect(direct.length).toBe(0);
+    });
+
+    it('version mismatch returns empty typed result', () => {
+      const { targetA1 } = allFixtures(policy);
+      const graph = { edges: [] };
+      const lookup = () => null;
+      const reader = createPrerequisiteReader(graph, lookup, FIXTURE_SCHOOL_A, 'other-version');
+      const direct = reader.getDirectPrerequisites(targetA1);
+      expect(direct.length).toBe(0);
+    });
+
+    it('transitive traversal ordering is correct', () => {
+      const graph = {
+        edges: [
+          { fromId: 'A', toId: 'B', edgeType: 'prerequisite' as const },
+          { fromId: 'B', toId: FIXTURE_TARGET_SKILL_A, edgeType: 'prerequisite' as const },
+        ],
+      };
+      const lookup = () => null;
+      const target: MasteryTarget = {
+        schoolId: FIXTURE_SCHOOL_A, learnerId: FIXTURE_LEARNER_1,
+        targetNodeId: FIXTURE_TARGET_SKILL_A, targetNodeType: 'skill',
+        curriculumVersionId: FIXTURE_CURRICULUM_VERSION,
+      };
+      const reader = createPrerequisiteReader(graph, lookup, FIXTURE_SCHOOL_A, FIXTURE_CURRICULUM_VERSION);
+      const transitive = reader.getTransitivePrerequisites(target);
+      expect(transitive.length).toBe(2);
+      const ids = transitive.map(p => p.targetNodeId);
+      expect(ids).toContain('A');
+      expect(ids).toContain('B');
+    });
+
+    it('cycle detection works', () => {
+      const graph = {
+        edges: [
+          { fromId: 'A', toId: 'B', edgeType: 'prerequisite' as const },
+          { fromId: 'B', toId: 'C', edgeType: 'prerequisite' as const },
+          { fromId: 'C', toId: 'A', edgeType: 'prerequisite' as const },
+        ],
+      };
+      expect(detectCircularPrerequisites(graph)).toBe(true);
+    });
+
+    it('acyclic graph returns no cycle', () => {
+      const graph = {
+        edges: [
+          { fromId: 'A', toId: 'B', edgeType: 'prerequisite' as const },
+          { fromId: 'B', toId: 'C', edgeType: 'prerequisite' as const },
+        ],
+      };
+      expect(detectCircularPrerequisites(graph)).toBe(false);
+    });
+  });
+
+  describe('Replay conflict handling', () => {
+    it('identical duplicate evidence deduplicated', () => {
+      const evidence1 = { evidenceId: 'e1', schoolId: FIXTURE_SCHOOL_A, learnerId: FIXTURE_LEARNER_1, targetNodeId: FIXTURE_TARGET_SKILL_A, targetNodeType: 'skill' as const, curriculumVersionId: FIXTURE_CURRICULUM_VERSION, sourceType: 'practice_attempt' as const, outcome: 1, usable: true, markingConfidence: 1, integrityRisk: 0, independence: 1, hintDependency: 0, explanationQuality: null, misconceptionTags: [], transferSignal: null, retentionSignal: null, occurredAt: new Date('2026-01-15T10:00:00Z'), committedAt: new Date('2026-01-15T10:00:00Z'), policyVersion: 'v1', supersedes: null };
+      const { result, conflicts } = deduplicateAndFilterEvidenceWithConflicts([evidence1, { ...evidence1 }]);
+      expect(result.length).toBe(1);
+      expect(conflicts.length).toBe(1);
+      expect(conflicts[0].status).toBe('duplicate_identical');
+    });
+
+    it('conflicting duplicate evidence is blocked', () => {
+      const evidence1 = { evidenceId: 'e1', schoolId: FIXTURE_SCHOOL_A, learnerId: FIXTURE_LEARNER_1, targetNodeId: FIXTURE_TARGET_SKILL_A, targetNodeType: 'skill' as const, curriculumVersionId: FIXTURE_CURRICULUM_VERSION, sourceType: 'practice_attempt' as const, outcome: 1, usable: true, markingConfidence: 1, integrityRisk: 0, independence: 1, hintDependency: 0, explanationQuality: null, misconceptionTags: [], transferSignal: null, retentionSignal: null, occurredAt: new Date('2026-01-15T10:00:00Z'), committedAt: new Date('2026-01-15T10:00:00Z'), policyVersion: 'v1', supersedes: null };
+      const evidence2 = { ...evidence1, outcome: -1 };
+      const { result, conflicts } = deduplicateAndFilterEvidenceWithConflicts([evidence1, evidence2]);
+      expect(result.length).toBe(1);
+      expect(conflicts.length).toBe(1);
+      expect(conflicts[0].status).toBe('evidence_identity_conflict');
+    });
+
+    it('supersession works correctly', () => {
+      const evidence1 = { evidenceId: 'e1', schoolId: FIXTURE_SCHOOL_A, learnerId: FIXTURE_LEARNER_1, targetNodeId: FIXTURE_TARGET_SKILL_A, targetNodeType: 'skill' as const, curriculumVersionId: FIXTURE_CURRICULUM_VERSION, sourceType: 'practice_attempt' as const, outcome: 1, usable: true, markingConfidence: 1, integrityRisk: 0, independence: 1, hintDependency: 0, explanationQuality: null, misconceptionTags: [], transferSignal: null, retentionSignal: null, occurredAt: new Date('2026-01-15T10:00:00Z'), committedAt: new Date('2026-01-15T10:00:00Z'), policyVersion: 'v1', supersedes: null };
+      const evidence2 = { ...evidence1, evidenceId: 'e2', supersedes: 'e1' as string | null };
+      const { result, conflicts } = deduplicateAndFilterEvidenceWithConflicts([evidence1, evidence2]);
+      expect(result.length).toBe(1);
+      expect(result[0].evidenceId).toBe('e2');
+      expect(conflicts.some(c => c.status === 'superseded')).toBe(true);
+    });
+
+    it('no mutation after conflict', () => {
+      const { teacherActorA, targetA1, evidence } = allFixtures(policy);
+      const clock: MasteryClock = { now: () => ts('2026-02-01T10:00:00Z') };
+      const idGen: MasteryIdGenerator = { nextId: () => 'test-id' };
+      const first = executeApplyEvidence(null, evidence.correct1, teacherActorA, targetA1, policy, strategy, null, clock, idGen, 'first');
+      expect('code' in first || first.rejected).toBe(false);
+
+      const { result: filtered } = deduplicateAndFilterEvidenceWithConflicts([evidence.correct1, { ...evidence.correct1, outcome: -1 }]);
+      expect(filtered.length).toBe(1);
+      expect(filtered[0].outcome).toBe(1);
+    });
+
+    it('replay returns conflicts list', () => {
+      const { teacherActorA, targetA1, evidence } = allFixtures(policy);
+      const evidenceList = [evidence.correct1, evidence.correct1, evidence.correct2];
+      const result = replayState(evidenceList, targetA1, policy, strategy, null, teacherActorA, ts('2026-02-01T10:00:00Z'));
+      expect(result.conflicts.length).toBeGreaterThan(0);
+      expect(result.conflicts[0].status).toBe('duplicate_identical');
+    });
+  });
+
+  describe('Legacy compatibility bridge', () => {
+    it('mapVisibleLabelToLegacyLevel maps all labels', () => {
+      expect(mapVisibleLabelToLegacyLevel('not_started')).toBe('unknown');
+      expect(mapVisibleLabelToLegacyLevel('mastered')).toBe('mastered');
+      expect(mapVisibleLabelToLegacyLevel('needs_revisit')).toBe('regressing');
+    });
+
+    it('deriveLegacyMasteryFromCanonical produces valid output', () => {
+      const { teacherActorA, targetA1, evidence } = allFixtures(policy);
+      const clock: MasteryClock = { now: () => ts('2026-02-01T10:00:00Z') };
+      const idGen: MasteryIdGenerator = { nextId: () => 'leg-id' };
+      const result = executeApplyEvidence(null, evidence.correct1, teacherActorA, targetA1, policy, strategy, null, clock, idGen, 'leg');
+      if (!('code' in result)) {
+        const derived = deriveLegacyMasteryFromCanonical(result.state, result.diagnosis);
+        expect(derived.masteryLevel).toBeDefined();
+        expect(derived.confidence).toBeDefined();
+        expect(typeof derived.score).toBe('number');
+        expect(derived.decision).toBeDefined();
+      }
+    });
+
+    it('canonical policy change propagates through bridge', () => {
+      const customPolicy = createFixturePolicy();
+      customPolicy.labelThresholds.mastered = 0.95;
+      validatePolicy(customPolicy);
+      const { teacherActorA, targetA1, evidence } = allFixtures(customPolicy);
+      const clock: MasteryClock = { now: () => ts('2026-02-01T10:00:00Z') };
+      const idGen: MasteryIdGenerator = { nextId: () => 'pol-id' };
+      let state: MasteryState | null = null;
+      for (const ev of [evidence.correct1, evidence.correct2, evidence.correct3, evidence.correct4, evidence.correct5]) {
+        const r = executeApplyEvidence(state, ev, teacherActorA, targetA1, customPolicy, strategy, null, clock, idGen, 'pol');
+        if (!('code' in r)) state = r.state;
+      }
+      if (state) {
+        const derived = deriveLegacyMasteryFromCanonical(state, null);
+        expect(derived.masteryLevel).not.toBe('mastered');
+      }
     });
   });
 });

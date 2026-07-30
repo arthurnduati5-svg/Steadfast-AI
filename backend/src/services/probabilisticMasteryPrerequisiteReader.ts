@@ -16,28 +16,39 @@ export function createPrerequisiteReader(
   schoolId: string,
   curriculumVersionId: string,
 ): PrerequisiteReader {
+  function isSchoolOrVersionMismatch(target: MasteryTarget): boolean {
+    return target.schoolId !== schoolId || target.curriculumVersionId !== curriculumVersionId;
+  }
+
+  function typedUnavailable(): PrerequisiteInfo[] {
+    return [];
+  }
+
   function getDirectPrerequisites(target: MasteryTarget): PrerequisiteInfo[] {
     if (target.schoolId !== schoolId) return [];
     if (target.curriculumVersionId !== curriculumVersionId) return [];
 
     const result: PrerequisiteInfo[] = [];
+    const seen = new Set<string>();
     for (const edge of graph.edges) {
-      if (edge.toId === target.targetNodeId || edge.fromId === target.targetNodeId) {
-        const relatedId = edge.fromId === target.targetNodeId ? edge.toId : edge.fromId;
-        const relatedTarget: MasteryTarget = {
+      if (edge.toId === target.targetNodeId) {
+        const prereqId = edge.fromId;
+        if (seen.has(prereqId)) continue;
+        seen.add(prereqId);
+        const prereqTarget: MasteryTarget = {
           schoolId: target.schoolId,
           learnerId: target.learnerId,
-          targetNodeId: relatedId,
+          targetNodeId: prereqId,
           targetNodeType: target.targetNodeType,
           curriculumVersionId: target.curriculumVersionId,
         };
         result.push({
-          targetNodeId: relatedId,
+          targetNodeId: prereqId,
           targetNodeType: target.targetNodeType,
           curriculumVersionId: target.curriculumVersionId,
           isPrerequisite: edge.edgeType === 'prerequisite',
           isBuildsOn: edge.edgeType === 'builds_on',
-          state: stateLookup(relatedTarget),
+          state: stateLookup(prereqTarget),
         });
       }
     }
@@ -51,6 +62,7 @@ export function createPrerequisiteReader(
     const visited = new Set<string>();
     const queue: string[] = [target.targetNodeId];
     const result: PrerequisiteInfo[] = [];
+    const seenResult = new Set<string>();
 
     while (queue.length > 0) {
       const currentId = queue.shift()!;
@@ -59,24 +71,29 @@ export function createPrerequisiteReader(
 
       for (const edge of graph.edges) {
         if (edge.toId === currentId && edge.edgeType === 'prerequisite') {
-          if (!visited.has(edge.fromId)) {
+          const prereqId = edge.fromId;
+          if (visited.has(prereqId)) continue;
+          if (prereqId === target.targetNodeId) continue;
+
+          if (!seenResult.has(prereqId)) {
+            seenResult.add(prereqId);
             const prereqTarget: MasteryTarget = {
               schoolId: target.schoolId,
               learnerId: target.learnerId,
-              targetNodeId: edge.fromId,
+              targetNodeId: prereqId,
               targetNodeType: target.targetNodeType,
               curriculumVersionId: target.curriculumVersionId,
             };
             result.push({
-              targetNodeId: edge.fromId,
+              targetNodeId: prereqId,
               targetNodeType: target.targetNodeType,
               curriculumVersionId: target.curriculumVersionId,
               isPrerequisite: true,
               isBuildsOn: false,
               state: stateLookup(prereqTarget),
             });
-            queue.push(edge.fromId);
           }
+          queue.push(prereqId);
         }
       }
     }

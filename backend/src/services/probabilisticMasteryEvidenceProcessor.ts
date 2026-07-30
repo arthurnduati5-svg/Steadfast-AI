@@ -13,17 +13,40 @@ import type {
   DiagnosisStatus,
   VisibleMasteryLabel,
   PrerequisiteReader,
-  PrerequisiteInfo,
+  MasteryClock,
+  MasteryIdGenerator,
+  AuthorizationError,
+  ReplayConflictResult,
 } from './probabilisticMasteryContracts';
+import { authorizeMutation } from './probabilisticMasteryContracts';
+import type { MasteryRepository, AtomicUpdate } from './probabilisticMasteryRepository';
 
 function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
 }
 
-let idCounter = 0;
-function generateId(): string {
-  idCounter++;
-  return `pm_${idCounter}`;
+function computeNormalizedHash(evidence: NormalizedMasteryEvidence): string {
+  const relevant = {
+    eid: evidence.evidenceId,
+    sid: evidence.schoolId,
+    lid: evidence.learnerId,
+    nid: evidence.targetNodeId,
+    cv: evidence.curriculumVersionId,
+    st: evidence.sourceType,
+    o: evidence.outcome,
+    mc: evidence.markingConfidence,
+    ir: evidence.integrityRisk,
+    ind: evidence.independence,
+    hd: evidence.hintDependency,
+    eq: evidence.explanationQuality,
+    mt: [...evidence.misconceptionTags].sort(),
+    ts: evidence.transferSignal,
+    rs: evidence.retentionSignal,
+    oa: evidence.occurredAt.toISOString(),
+    ca: evidence.committedAt.toISOString(),
+    sup: evidence.supersedes,
+  };
+  return JSON.stringify(relevant);
 }
 
 function applyDecay(state: MasteryState, policy: MasteryPolicyConfig, now: Date): MasteryState {
@@ -78,6 +101,32 @@ export function deriveVisibleLabel(
   return 'not_started';
 }
 
+export function extractRepeatedMissEvidence(
+  evidenceList: NormalizedMasteryEvidence[],
+  state: MasteryState,
+  policy: MasteryPolicyConfig,
+  now: Date,
+): NormalizedMasteryEvidence[] {
+  const sorted = [...evidenceList].sort((a, b) => a.occurredAt.getTime() - b.occurredAt.getTime());
+  const misses: NormalizedMasteryEvidence[] = [];
+  for (const ev of sorted) {
+    if (ev.schoolId !== state.schoolId) continue;
+    if (ev.learnerId !== state.learnerId) continue;
+    if (ev.targetNodeId !== state.targetNodeId) continue;
+    if (ev.curriculumVersionId !== state.curriculumVersionId) continue;
+    if (ev.outcome >= 0) {
+      misses.length = 0;
+      continue;
+    }
+    if (policy.masteredToNeedsRevisitDecayDays > 0) {
+      const ageDays = (now.getTime() - ev.occurredAt.getTime()) / (1000 * 60 * 60 * 24);
+      if (ageDays > policy.masteredToNeedsRevisitDecayDays) continue;
+    }
+    misses.push(ev);
+  }
+  return misses;
+}
+
 export function evaluatePrerequisites(
   target: MasteryTarget,
   reader: PrerequisiteReader | null,
@@ -113,6 +162,8 @@ export function diagnose(
   state: MasteryState,
   policy: MasteryPolicyConfig,
   prerequisiteResult: { blocked: boolean; weakDirect: string[]; weakTransitive: string[] },
+  idGenerator: MasteryIdGenerator,
+  clock: MasteryClock,
 ): CognitiveDiagnosis {
   const reasonCodes: ReasonCode[] = [];
   let diagnosisStatus: DiagnosisStatus = 'healthy';
@@ -163,7 +214,7 @@ export function diagnose(
   }
 
   return {
-    diagnosisId: generateId(),
+    diagnosisId: idGenerator.nextId('diagnosis'),
     schoolId: state.schoolId,
     learnerId: state.learnerId,
     targetNodeId: state.targetNodeId,
@@ -176,7 +227,7 @@ export function diagnose(
     evidenceCount: state.evidenceCount,
     confidence: state.confidence,
     contributingEvidenceIds,
-    generatedAt: new Date(),
+    generatedAt: clock.now(),
     policyVersion: policy.policyVersion,
   };
 }
@@ -248,9 +299,9 @@ function sortEvidence(evidenceList: NormalizedMasteryEvidence[]): NormalizedMast
   });
 }
 
-function deduplicateAndFilterEvidence(
+export function deduplicateAndFilterEvidenceWithConflicts(
   evidenceList: NormalizedMasteryEvidence[],
-): NormalizedMasteryEvidence[] {
+): { result: NormalizedMasteryEvidence[]; conflicts: ReplayConflictResult[] } {
   const supersededIds = new Set<string>();
   for (const e of evidenceList) {
     if (e.supersedes) {
@@ -258,28 +309,48 @@ function deduplicateAndFilterEvidence(
     }
   }
 
-  const seen = new Map<string, NormalizedMasteryEvidence>();
+  const seen = new Map<string, { hash: string; evidence: NormalizedMasteryEvidence }>();
   const result: NormalizedMasteryEvidence[] = [];
+  const conflicts: ReplayConflictResult[] = [];
 
   for (const e of sortEvidence(evidenceList)) {
-    if (supersededIds.has(e.evidenceId)) continue;
-
-    const existing = seen.get(e.evidenceId);
-    if (existing) {
-      const existingContent = JSON.stringify(existing);
-      const newContent = JSON.stringify(e);
-      if (existingContent !== newContent) continue;
+    if (supersededIds.has(e.evidenceId)) {
+      conflicts.push({ status: 'superseded', evidenceId: e.evidenceId });
       continue;
     }
 
-    seen.set(e.evidenceId, e);
+    const existing = seen.get(e.evidenceId);
+    if (existing) {
+      const newHash = computeNormalizedHash(e);
+      if (existing.hash === newHash) {
+        conflicts.push({ status: 'duplicate_identical', evidenceId: e.evidenceId });
+        continue;
+      } else {
+        conflicts.push({
+          status: 'evidence_identity_conflict',
+          evidenceId: e.evidenceId,
+          conflictWithEvidenceId: existing.evidence.evidenceId,
+        });
+        continue;
+      }
+    }
+
+    const hash = computeNormalizedHash(e);
+    seen.set(e.evidenceId, { hash, evidence: e });
     result.push(e);
   }
 
+  return { result, conflicts };
+}
+
+export function deduplicateAndFilterEvidence(
+  evidenceList: NormalizedMasteryEvidence[],
+): NormalizedMasteryEvidence[] {
+  const { result } = deduplicateAndFilterEvidenceWithConflicts(evidenceList);
   return result;
 }
 
-function createInitialState(target: MasteryTarget, policy: MasteryPolicyConfig): MasteryState {
+function createInitialState(target: MasteryTarget, policy: MasteryPolicyConfig, clock: MasteryClock): MasteryState {
   return {
     schoolId: target.schoolId,
     learnerId: target.learnerId,
@@ -301,11 +372,12 @@ function createInitialState(target: MasteryTarget, policy: MasteryPolicyConfig):
     strategyId: policy.strategyId,
     strategyVersion: policy.strategyVersion,
     stateRevision: 0,
-    updatedAt: new Date(),
+    updatedAt: clock.now(),
+    consecutiveMissCountSinceMastered: 0,
   };
 }
 
-export function applyEvidence(
+export function executeApplyEvidence(
   currentState: MasteryState | null,
   evidence: NormalizedMasteryEvidence,
   actor: MasteryActorContext,
@@ -313,13 +385,17 @@ export function applyEvidence(
   policy: MasteryPolicyConfig,
   strategy: MasteryEstimationStrategy,
   prerequisiteReader: PrerequisiteReader | null,
-  now: Date,
+  clock: MasteryClock,
+  idGenerator: MasteryIdGenerator,
   correlationId: string,
-): EvidenceApplicationResult & { rejected: boolean; rejectReason: string | null } {
+): (EvidenceApplicationResult & { rejected: boolean; rejectReason: string | null }) | AuthorizationError {
+  const authError = authorizeMutation(actor, target);
+  if (authError) return authError;
+
   const validationError = validateEvidence(evidence, actor, target, policy);
   if (validationError) {
     return {
-      state: currentState || createInitialState(target, policy),
+      state: currentState || createInitialState(target, policy, clock),
       changeLog: null as unknown as MasteryChangeLog,
       diagnosis: null as unknown as CognitiveDiagnosis,
       nextAction: null as unknown as NextBestAction,
@@ -328,7 +404,8 @@ export function applyEvidence(
     };
   }
 
-  let state = currentState ? { ...currentState } : createInitialState(target, policy);
+  const now = clock.now();
+  let state = currentState ? { ...currentState } : createInitialState(target, policy, clock);
 
   state = applyDecay(state, policy, now);
 
@@ -378,8 +455,20 @@ export function applyEvidence(
   }
 
   if (evidence.outcome < 0 && prevProbability >= policy.labelThresholds.mastered) {
-    const consecutiveMisses = 1;
-    if (consecutiveMisses >= policy.masteredToNeedsRevisitMissCount) {
+    if (policy.masteredToNeedsRevisitMissCount > 0) {
+      const stateLabel = state.visibleLabel;
+      if (stateLabel === 'mastered') {
+        const currentMisses = 1;
+        let cumulativeMisses = currentMisses;
+        if (currentState) {
+          const priorEvidence: NormalizedMasteryEvidence[] = [];
+          const missedEv = extractRepeatedMissEvidence(priorEvidence, state, policy, now);
+          cumulativeMisses = missedEv.length + currentMisses;
+        }
+        if (cumulativeMisses >= policy.masteredToNeedsRevisitMissCount) {
+          state.visibleLabel = 'needs_revisit';
+        }
+      }
     }
   }
 
@@ -394,17 +483,44 @@ export function applyEvidence(
   }
 
   state.probabilityOfMastery = effectiveProbability;
-  state.visibleLabel = deriveVisibleLabel(state.probabilityOfMastery, state.evidenceCount, policy);
   state.stateRevision = (currentState?.stateRevision ?? 0) + 1;
   state.updatedAt = now;
 
-  const diagnosisResult = diagnose(state, policy, prerequisiteResult);
+  state.visibleLabel = deriveVisibleLabel(state.probabilityOfMastery, state.evidenceCount, policy);
+
+  if (evidence.outcome < 0 && policy.masteredToNeedsRevisitMissCount > 0) {
+    const wasMastered = currentState !== null && currentState.visibleLabel === 'mastered';
+    const hadPriorMisses = currentState !== null && currentState.consecutiveMissCountSinceMastered > 0;
+    if (wasMastered || hadPriorMisses) {
+      state.consecutiveMissCountSinceMastered = (currentState ? currentState.consecutiveMissCountSinceMastered : 0) + 1;
+      state.visibleLabel = 'mastered';
+      if (state.consecutiveMissCountSinceMastered >= policy.masteredToNeedsRevisitMissCount) {
+        state.visibleLabel = 'needs_revisit';
+      }
+    }
+  } else {
+    state.consecutiveMissCountSinceMastered = 0;
+  }
+
+  if (state.visibleLabel !== 'mastered') {
+    state.consecutiveMissCountSinceMastered = 0;
+  }
+
+  const diagnosisResult = diagnose(state, policy, prerequisiteResult, idGenerator, clock);
   const nextAction = classifyNextAction(state, diagnosisResult);
 
   const reasonCodes: ReasonCode[] = [...diagnosisResult.reasonCodes];
 
+  if (state.visibleLabel === 'needs_revisit') {
+    if (!reasonCodes.includes('repeated_misconception' as ReasonCode)) {
+      reasonCodes.push('repeated_misconception' as ReasonCode);
+    }
+    diagnosisResult.reasonCodes = reasonCodes;
+    diagnosisResult.primaryReason = 'repeated_misconception';
+  }
+
   const changeLog: MasteryChangeLog = {
-    changeId: generateId(),
+    changeId: idGenerator.nextId('changeLog'),
     schoolId: state.schoolId,
     learnerId: state.learnerId,
     targetNodeId: state.targetNodeId,
@@ -428,6 +544,104 @@ export function applyEvidence(
   };
 }
 
+export function applyEvidence(
+  currentState: MasteryState | null,
+  evidence: NormalizedMasteryEvidence,
+  actor: MasteryActorContext,
+  target: MasteryTarget,
+  policy: MasteryPolicyConfig,
+  strategy: MasteryEstimationStrategy,
+  prerequisiteReader: PrerequisiteReader | null,
+  now: Date,
+  correlationId: string,
+): EvidenceApplicationResult & { rejected: boolean; rejectReason: string | null } {
+  const clock: MasteryClock = { now: () => now };
+  const idGen = createFallbackIdGenerator();
+  const result = executeApplyEvidence(currentState, evidence, actor, target, policy, strategy, prerequisiteReader, clock, idGen, correlationId);
+  if ('code' in result) {
+    return {
+      state: currentState || createInitialState(target, policy, clock),
+      changeLog: null as unknown as MasteryChangeLog,
+      diagnosis: null as unknown as CognitiveDiagnosis,
+      nextAction: null as unknown as NextBestAction,
+      rejected: true,
+      rejectReason: result.message,
+    };
+  }
+  return result;
+}
+
+function createFallbackIdGenerator(): MasteryIdGenerator {
+  let counter = 0;
+  return { nextId: () => { counter++; return `pm_${counter}`; } };
+}
+
+export function applyEvidenceWithRepository(
+  currentState: MasteryState | null,
+  evidence: NormalizedMasteryEvidence,
+  actor: MasteryActorContext,
+  target: MasteryTarget,
+  policy: MasteryPolicyConfig,
+  strategy: MasteryEstimationStrategy,
+  prerequisiteReader: PrerequisiteReader | null,
+  clock: MasteryClock,
+  idGenerator: MasteryIdGenerator,
+  repository: MasteryRepository,
+  correlationId: string,
+): (EvidenceApplicationResult & { rejected: boolean; rejectReason: string | null; committed: boolean }) | AuthorizationError {
+  const authError = authorizeMutation(actor, target);
+  if (authError) return authError;
+
+  if (repository.hasEvidenceBeenApplied(evidence.evidenceId)) {
+    const priorState = repository.readState(target);
+    const priorLogs = repository.listChangeLogs(target.schoolId, target.learnerId, target.targetNodeId);
+    const priorLog = priorLogs.length > 0 ? priorLogs[priorLogs.length - 1] : null;
+    return {
+      state: priorState || createInitialState(target, policy, clock),
+      changeLog: priorLog as unknown as MasteryChangeLog,
+      diagnosis: null as unknown as CognitiveDiagnosis,
+      nextAction: null as unknown as NextBestAction,
+      rejected: true,
+      rejectReason: 'evidence already applied',
+      committed: false,
+    };
+  }
+
+  const result = executeApplyEvidence(currentState, evidence, actor, target, policy, strategy, prerequisiteReader, clock, idGenerator, correlationId);
+  if ('code' in result) {
+    return {
+      state: currentState || createInitialState(target, policy, clock),
+      changeLog: null as unknown as MasteryChangeLog,
+      diagnosis: null as unknown as CognitiveDiagnosis,
+      nextAction: null as unknown as NextBestAction,
+      rejected: true,
+      rejectReason: result.message,
+      committed: false,
+    };
+  }
+  if (result.rejected) {
+    return { ...result, committed: false };
+  }
+
+  const atomicUpdate: AtomicUpdate = {
+    state: result.state,
+    changeLog: result.changeLog,
+    evidenceId: evidence.evidenceId,
+  };
+
+  const committed = repository.applyEvidenceAtomically(atomicUpdate);
+  if (!committed) {
+    return {
+      ...result,
+      rejected: true,
+      rejectReason: 'atomic commit failed',
+      committed: false,
+    };
+  }
+
+  return { ...result, committed: true };
+}
+
 export type { EvidenceApplicationResult };
 
 export function replayState(
@@ -438,19 +652,25 @@ export function replayState(
   prerequisiteReader: PrerequisiteReader | null,
   actor: MasteryActorContext,
   now: Date,
-): { state: MasteryState; evidenceIdsUsed: string[] } {
-  let state = createInitialState(target, policy);
+): { state: MasteryState; evidenceIdsUsed: string[]; conflicts: ReplayConflictResult[] } {
+  const clock: MasteryClock = { now: () => now };
+  const idGen = createFallbackIdGenerator();
+  let state = createInitialState(target, policy, clock);
   const evidenceIdsUsed: string[] = [];
+  const conflicts: ReplayConflictResult[] = [];
 
-  const filtered = deduplicateAndFilterEvidence(evidenceList);
+  const { result: filtered, conflicts: dedupConflicts } = deduplicateAndFilterEvidenceWithConflicts(evidenceList);
+  for (const c of dedupConflicts) {
+    conflicts.push(c);
+  }
 
   for (const evidence of filtered) {
-    const result = applyEvidence(state, evidence, actor, target, policy, strategy, prerequisiteReader, now, 'replay');
-    if (!result.rejected) {
+    const result = executeApplyEvidence(state, evidence, actor, target, policy, strategy, prerequisiteReader, clock, idGen, 'replay');
+    if (!('code' in result) && !result.rejected) {
       state = { ...result.state };
       evidenceIdsUsed.push(evidence.evidenceId);
     }
   }
 
-  return { state, evidenceIdsUsed };
+  return { state, evidenceIdsUsed, conflicts };
 }

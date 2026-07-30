@@ -15,6 +15,12 @@
     "src/services/probabilisticMasteryPrerequisiteReader.ts",
     "src/services/probabilisticMasteryProjections.ts",
     "src/services/probabilisticMasterySeeds.ts",
+    "src/services/probabilisticMasteryCompatibilityBridge.ts",
+    "src/services/masteryContracts.ts",
+    "src/services/masteryScoringService.ts",
+    "src/services/masteryDecisionService.ts",
+    "src/services/masteryEvidenceService.ts",
+    "src/services/masteryAggregationService.ts",
     "src/tests/probabilistic-mastery/**/*.ts"
   ],
   "exclude": [

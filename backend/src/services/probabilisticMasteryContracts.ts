@@ -95,6 +95,7 @@ export interface MasteryState {
   strategyVersion: string;
   stateRevision: number;
   updatedAt: Date;
+  consecutiveMissCountSinceMastered: number;
 }
 
 export type ReasonCode =
@@ -251,4 +252,116 @@ export interface EvidenceApplicationResult {
   changeLog: MasteryChangeLog;
   diagnosis: CognitiveDiagnosis;
   nextAction: NextBestAction;
+}
+
+export interface MasteryClock {
+  now(): Date;
+}
+
+export type MasteryIdKind = 'state' | 'diagnosis' | 'changeLog' | 'evidenceApplication';
+
+export interface MasteryIdGenerator {
+  nextId(kind: MasteryIdKind): string;
+}
+
+export type ReplayConflictResultStatus =
+  | 'applied'
+  | 'duplicate_identical'
+  | 'evidence_identity_conflict'
+  | 'superseded'
+  | 'superseding';
+
+export interface ReplayConflictResult {
+  status: ReplayConflictResultStatus;
+  evidenceId: string;
+  conflictWithEvidenceId?: string;
+}
+
+export interface MasteryUpdateCommand {
+  actor: MasteryActorContext;
+  target: MasteryTarget;
+  evidence: NormalizedMasteryEvidence;
+  policy: MasteryPolicyConfig;
+  strategy: MasteryEstimationStrategy;
+  prerequisiteReader: PrerequisiteReader | null;
+  clock: MasteryClock;
+  idGenerator: MasteryIdGenerator;
+  correlationId: string;
+}
+
+export interface MasteryQuery {
+  actor: MasteryActorContext;
+  target: MasteryTarget;
+  currentState: MasteryState | null;
+  diagnosis: CognitiveDiagnosis | null;
+  nextAction: NextBestAction | null;
+}
+
+export type AuthorizedMutationRole = 'teacher' | 'school_admin' | 'internal_operator';
+export type AuthorizedQueryRole = 'student' | 'teacher' | 'school_admin' | 'internal_operator';
+
+export interface AuthorizationError {
+  code: 'ACTOR_NOT_AUTHORIZED' | 'SCHOOL_MISMATCH' | 'LEARNER_MISMATCH' | 'VERSION_MISMATCH' | 'ROLE_DENIED';
+  message: string;
+}
+
+export function isAuthorizationError(value: unknown): value is AuthorizationError {
+  return typeof value === 'object' && value !== null && 'code' in value;
+}
+
+export function authorizeMutation(actor: MasteryActorContext, target: MasteryTarget): AuthorizationError | null {
+  if (!actor.schoolId) return { code: 'SCHOOL_MISMATCH', message: 'Actor schoolId is empty' };
+  if (!actor.actorId) return { code: 'ACTOR_NOT_AUTHORIZED', message: 'ActorId is empty' };
+  if (actor.actorRole === 'unknown' || actor.actorRole === 'parent' || actor.actorRole === 'student') {
+    return { code: 'ROLE_DENIED', message: `Role ${actor.actorRole} cannot mutate mastery state` };
+  }
+  if (actor.schoolId !== target.schoolId) {
+    return { code: 'SCHOOL_MISMATCH', message: 'Actor school differs from target school' };
+  }
+  if (actor.actorRole === 'teacher') {
+    if (!actor.learnerId) return { code: 'LEARNER_MISMATCH', message: 'Teacher must specify learnerId' };
+    if (actor.learnerId !== target.learnerId) {
+      return { code: 'LEARNER_MISMATCH', message: 'Teacher learnerId differs from target learner' };
+    }
+  }
+  return null;
+}
+
+export function authorizeQuery(actor: MasteryActorContext, target: MasteryTarget): AuthorizationError | null {
+  if (!actor.schoolId) return { code: 'SCHOOL_MISMATCH', message: 'Actor schoolId is empty' };
+  if (!actor.actorId) return { code: 'ACTOR_NOT_AUTHORIZED', message: 'ActorId is empty' };
+  if (actor.actorRole === 'unknown' || actor.actorRole === 'parent') {
+    return { code: 'ROLE_DENIED', message: `Role ${actor.actorRole} cannot query mastery state` };
+  }
+  if (actor.schoolId !== target.schoolId) {
+    return { code: 'SCHOOL_MISMATCH', message: 'Actor school differs from target school' };
+  }
+  if (actor.actorRole === 'student') {
+    if (!actor.learnerId) return { code: 'LEARNER_MISMATCH', message: 'Student must specify learnerId' };
+    if (actor.learnerId !== target.learnerId) {
+      return { code: 'LEARNER_MISMATCH', message: 'Student can only query own state' };
+    }
+  }
+  if (actor.actorRole === 'teacher') {
+    if (!actor.learnerId) return { code: 'LEARNER_MISMATCH', message: 'Teacher must specify learnerId' };
+    if (actor.learnerId !== target.learnerId) {
+      return { code: 'LEARNER_MISMATCH', message: 'Teacher learnerId differs from target learner' };
+    }
+  }
+  return null;
+}
+
+export function createDefaultClock(): MasteryClock {
+  return { now: () => new Date() };
+}
+
+let defaultIdCounter = 0;
+export function createDefaultIdGenerator(): MasteryIdGenerator {
+  const idCounter = { value: 0 };
+  return {
+    nextId(_kind: MasteryIdKind): string {
+      idCounter.value++;
+      return `pm_${idCounter.value}`;
+    },
+  };
 }

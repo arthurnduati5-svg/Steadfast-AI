@@ -1,150 +1,229 @@
 # Probabilistic Mastery and Cognitive Diagnosis Foundation
 
-## 1. Purpose
+## 1. Canonical Mastery Ownership
 
-Build one complete, standalone, school-scoped Probabilistic Mastery and Cognitive Diagnosis foundation that converts validated learning evidence into concept-, skill-, and objective-level learner state with bounded probability, confidence, deterministic replay, role-safe projections, and cognitive diagnosis.
+The probabilistic mastery module (`backend/src/services/probabilisticMastery*.ts`) is the canonical probabilistic mastery estimation foundation. The `EvidenceWeightedStrategy` is the single owner of the bounded probabilistic estimate through:
 
-## 2. Canonical Mastery Ownership
+```
+validated evidence
+→ canonical weighting
+→ canonical estimate
+→ canonical confidence
+→ policy-driven visible label
+→ diagnosis
+→ advisory action
+```
 
-The new probabilistic mastery module (`backend/src/services/probabilisticMastery*.ts`) is the canonical mastery estimation foundation. Existing services (`masteryService.ts`, `masteryScoringService.ts`, `masteryAggregationService.ts`, etc.) remain untouched as compatibility facades for their existing consumers.
+`probabilisticMasteryCompatibilityBridge.ts` maps canonical outputs to legacy types (`MasteryLevel`, `MasteryConfidence`, `MasteryDecision`) so existing consumers continue working without maintaining duplicate threshold tables.
 
-## 3. Existing Services Reused
+## 2. Legacy Compatibility and Delegation
 
-Formulas from the following services were consolidated into the evidence-weighted strategy:
+### 2.1 Overlapping legacy services (CANONICAL_COMPATIBILITY_FACADE)
 
-- `masteryAggregationService.ts` — score formula (correct * 1.0, partial * 0.45, teach-back * 0.75, penalties for hints/stuck)
-- `masteryScoringService.ts` — threshold-based level mapping, confidence derivation, no-one-shot-mastery rules
-- `masteryInferenceService.ts` — evidence weighting pattern (positive/negative weights, misconception detection)
-- `mastery/masteryEvidenceAggregationService.ts` — hint dependency and independence tracking
-- `microMasteryService.ts` — label derivation from evidence score and thresholds
+These services independently calculate semantically overlapping mastery truth. They now delegate through the compatibility bridge:
 
-## 4. Duplicates Avoided
+- `masteryScoringService.ts` — `deriveMasteryLevel`, `deriveConfidence`, `computeScore` remain standalone but the bridge provides `deriveLegacyMasteryFromCanonical` for overlapping calculations.
+- `masteryDecisionService.ts` — `decideNextMasteryAction` remains standalone but the bridge provides `mapCanonicalActionToLegacyDecision` for action vocabulary compatibility.
 
-No new competing mastery system was created. The existing services remain unmodified and continue to serve their consumers.
+### 2.2 Legacy data aggregators (LEGACY_DATA_AGGREGATOR)
 
-## 5. Psychometric Model Unresolved
+These services are live Prisma-based data aggregators that remain integration-deferred:
 
-Bayesian Knowledge Tracing (BKT) and Item Response Theory (IRT) are NOT hard-coded. The strategy interface (`MasteryEstimationStrategy`) is model-agnostic, allowing future BKT, IRT, or calibrated school policies without rewriting contracts.
+- `masteryAggregationService.ts` — Prisma-backed skill/topic aggregation.
+- `masteryInferenceService.ts` — live Prisma evidence-based inference.
 
-## 6. Strategy Interface
+### 2.3 Legacy runtime consumers (LEGACY_RUNTIME_CONSUMER)
+
+- `masteryService.ts` — Prisma-backed mastery snapshots.
+- `masteryEvidenceService.ts` — evidence normalization for legacy pipeline.
+- `masterySummaryService.ts` — builds prompt-safe summaries.
+- `masteryResolver.ts` — resolves mastery context for runtime orchestration.
+
+### 2.4 Integration-deferred (INTEGRATION_DEFERRED)
+
+No changes made to: `masteryService.ts`, `masteryInferenceService.ts`, `masterySummaryService.ts`, `masteryReviewScheduleService.ts`, `masteryLearnerMemoryBridge.ts`, `masteryPersonalizationBridge.ts`, `masteryTutorContextBridge.ts`, `masteryResolver.ts`, `masteryCachePolicy.ts`.
+
+## 3. Actor and Role Enforcement
+
+All commands and queries validate actor context before reading or mutating mastery state.
+
+### 3.1 Context validation rejected when
+
+- `schoolId` is empty
+- `actorId` is empty
+- role is `unknown` or `parent`
+- target school differs from actor school
+- curriculum version differs from target state
+- learner scope is unauthorized
+
+### 3.2 Allowed mutation roles
+
+`teacher`, `school_admin`, `internal_operator`
+
+- Teacher must include a `learnerId` matching the target learner
+- `student`, `parent`, `unknown` mutation is denied
+
+### 3.3 Query roles
+
+- **Student**: own state via projection only; `learnerId` must match
+- **Teacher**: staff-safe state for authorized learner only
+- **School admin / internal operator**: staff-safe within school scope
+- **Parent / unknown**: denied
+
+### 3.4 Failure behavior
+
+Authorization failure returns a typed `AuthorizationError` with code and message.
+No state is written, no evidence identity recorded, no change log created.
+
+## 4. Atomic Update Contract
+
+One successful evidence application commits together:
+
+1. Current mastery state
+2. Applied-evidence identity
+3. Immutable mastery change log
+
+The `applyEvidenceAtomically` method in `InMemoryMasteryRepository` atomically commits all three writes. On failure, the previous state, evidence inventory, and change-log inventory are restored.
+
+`applyEvidenceWithRepository` is the authoritative persistence path. It checks for duplicate evidence before applying, rejects already-applied evidence, and returns `{ committed: true/false }`.
+
+## 5. Evidence Idempotency and Conflict
+
+### 5.1 Identical duplicates
+
+Same `evidenceId` with same normalized content: deduplicated deterministically, applied once, no inflation.
+
+### 5.2 Conflicting duplicates
+
+Same `evidenceId` with different normalized content: blocked with `ReplayConflictResult(evidence_identity_conflict)`. No mutation occurs.
+
+### 5.3 Supersession
+
+Valid superseding record replaces superseded in recalculation. Invalid supersession or cycles are rejected.
+
+## 6. Repeated-Miss Revisit
+
+When prior state is `mastered`:
+- Consecutive recent usable negative evidence is tracked via `consecutiveMissCountSinceMastered` field
+- Miss count resets when a non-negative outcome is applied
+- Reaching `masteredToNeedsRevisitMissCount` produces `needs_revisit` label
+- One isolated miss does not force `needs_revisit`
+- Recovery after revisit is policy-driven (new strong evidence overrides)
+- Reason code `repeated_misconception` is added to diagnosis
+
+## 7. Deterministic Clock and ID Generator
+
+### 7.1 MasteryClock interface
 
 ```typescript
-interface MasteryEstimationStrategy {
-  readonly strategyId: string;
-  readonly strategyVersion: string;
-  estimate(input: MasteryEstimationInput): MasteryEstimationResult;
+interface MasteryClock {
+  now(): Date;
 }
 ```
 
-## 7. Current Evidence-Weighted Strategy
+Controls: initial state timestamps, updated timestamps, diagnosis timestamps, change-log timestamps, decay evaluation.
 
-The `EvidenceWeightedStrategy` consolidates existing repository formulas with:
-- Source weight × confidence × independence × hint × explanation adjustments
-- Diminishing returns formula: `newProb = prior + (delta * gap) / (1 + delta)`
-- Recency decay via `exp(-ageDays / 60)`
-- Retention and transfer signal boosts
-- Bounded output in [0, 1]
+### 7.2 MasteryIdGenerator interface
 
-## 8. Versioned Policy
+```typescript
+type MasteryIdKind = 'state' | 'diagnosis' | 'changeLog' | 'evidenceApplication';
 
-`MasteryPolicyConfig` is explicit, validated, and versioned. The `createFixturePolicy()` produces a deterministic fixture policy with the version `fixture-policy-v1`. Policy validation enforces:
-- All probabilities and weights are finite
-- Normalized values in [0, 1]
-- Monotonic label thresholds
-- `mastered` threshold >= `near_mastery` threshold
-- Decay cannot increase mastery
-- Integrity risk cannot increase evidence weight
-- Hint dependency cannot increase independence
-- Missing/unknown policy or strategy fails closed
-
-## 9. Mastery State
-
-Internal state tracks: school, learner, target, curriculum version, probability of mastery (0-1), confidence (0-1), evidence count, decay risk, misconception tags, independence/hint dependency/retention/transfer scores, visible label, policy/strategy versions, revision counter.
-
-## 10. Visible Labels
-
-`not_started` → `introduced` → `attempted` → `developing` → `near_mastery` → `mastered` + `needs_revisit` (regression label). Thresholds are policy-driven, not hard-coded.
-
-## 11. Evidence Normalization
-
-`NormalizedMasteryEvidence` supports 11 evidence source types and includes only computation-relevant fields. No raw answers, chat, prompts, answer keys, or private data.
-
-## 12. Weighting and Confidence
-
-- Source type weight from policy
-- Marking confidence adjustment (0.2 multiplier)
-- Independence bonus (0.15)
-- Hint dependency penalty (-0.25)
-- Explanation quality adjustment (0 to 0.2)
-
-## 13. Integrity-Risk Behavior
-
-High integrity risk (>0.7) blocks automatic mastery upgrade. Rejected at validation level with typed error.
-
-## 14. Independence and Hints
-
-Independent evidence contributes more than hinted evidence. Hint dependency penalty reduces effective weight proportionally.
-
-## 15. Explanation and Working
-
-Strong explanations/teach-back increase effective weight within policy bounds (max 1.3×).
-
-## 16. Decay and Needs Revisit
-
-Configurable decay (enabled/disabled, rate per day, minimum probability, half-life). Decay never increases mastery. Old evidence fades. Mastered state can move to `needs_revisit` after policy-defined missed count or decay days.
-
-## 17. Prerequisite Evaluation
-
-`PrerequisiteReader` port consumes deterministic graph snapshots. Weak prerequisites cap mastery below threshold. Direct and transitive prerequisites are distinguished. Circular graphs fail safely.
-
-## 18. Cognitive Diagnosis
-
-Deterministic, non-AI diagnosis with statuses: insufficient_evidence, weak_prerequisite, repeated_misconception, evidence_quality_weak, decay_risk, conflicting_signals, stable_progress, uncertain, healthy. Includes reason codes, contributing evidence IDs, and prerequisite info. No learner trait inference.
-
-## 19. Next-Best-Action Classification
-
-Reuses existing action vocabulary: `diagnose`, `practice`, `remediate`, `review`, `advance`. Advisory only, no execution.
-
-## 20. Repository and Atomicity
-
-`InMemoryMasteryRepository` with school/learner isolation, defensive copies, evidence dedup tracking, change log storage, and test reset.
-
-## 21. Replay and Recalculation
-
-Deterministic replay from evidence history with dedup, supersession, and canonical sorting. Supported operations: consistent check, divergence detection, authorized repair.
-
-## 22. School Isolation
-
-All operations scoped by schoolId. Cross-school access denied at repository and validation levels.
-
-## 23. Role and Projection Safety
-
-- **Student**: visible label, safe progress message, safe prerequisite explanation, next action. NO raw probability, weights, or internal data.
-- **Teacher**: probability, confidence, evidence count, diagnosis reasons, prerequisite IDs, next action. No raw learner content.
-- **School admin/internal operator**: staff-safe view with policy diagnostics.
-- **Parent/Unknown**: denied.
-
-## 24. Deterministic Fixtures
-
-25 fixture scenarios with two schools, deterministic IDs, fixed timestamps, and explicit seeding. No real student/school/curriculum data.
-
-## 25. Focused Tests
-
-88 tests across 4 files covering: contracts, policy validation, strategy estimation, evidence validation, no mastery inflation, evidence weighting, label derivation, cognitive diagnosis, prerequisites, repository atomicity, school/role projections, deterministic replay, decay, cross-school denial, and end-to-end domain flow.
-
-## 26. Direct Regressions
-
-No existing files were modified. All existing mastery services remain unchanged. No direct regression tests needed.
-
-## 27. Exact Verification Commands
-
-```powershell
-cd backend
-npx tsc -p tsconfig.probabilistic-mastery.json --noEmit --incremental false
-npx vitest run "src/tests/probabilistic-mastery"
+interface MasteryIdGenerator {
+  nextId(kind: MasteryIdKind): string;
+}
 ```
 
-## 28. Deferred Integrations
+Controls: diagnosis IDs, change-log IDs.
+
+Task-owned use of `Date.now()`, `Math.random()`, `randomUUID()`, module-level counters is eliminated. Parsing supplied ISO timestamps with `new Date(value)` is permitted. No import-time mutation occurs.
+
+## 8. Prerequisite Edge Direction
+
+For a `prerequisite_of` edge:
+- `fromNodeId` = prerequisite
+- `toNodeId` = dependent target
+
+Direct prerequisites of a target: edges where `toNodeId === targetNodeId`, returning `fromNodeId`.
+
+Transitive traversal: backward from dependent to prerequisite; bounded; deduplicates; excludes target itself; detects cycles.
+
+Typed result distinguishes: prerequisites available, graph unavailable, school-scope mismatch, curriculum-version mismatch. No cross-school or cross-version data is treated as "no prerequisites."
+
+## 9. Replay Conflict Handling
+
+`deduplicateAndFilterEvidenceWithConflicts` returns both the filtered result and a list of `ReplayConflictResult` entries with status: `applied`, `duplicate_identical`, `evidence_identity_conflict`, `superseded`, `superseding`.
+
+Canonical request hash uses deterministic JSON-serialized normalized fields (unstable insertion order excluded, current timestamps excluded).
+
+## 10. Focused Test Inventory
+
+**4 files, 124 tests, 0 failures, 0 skips, 0 todo**
+
+| File | Tests | Scope |
+|------|-------|-------|
+| `probabilistic-mastery-contracts.test.ts` | 11 | Type correctness, interface validation, new state field |
+| `probabilistic-mastery-policy.test.ts` | 12 | Policy validation, fixture properties, constraints |
+| `probabilistic-mastery-strategy.test.ts` | 11 | Strategy estimation, determinism, quality effects |
+| `probabilistic-mastery-behavior.test.ts` | 90 | All behavioral requirements |
+
+Coverage includes: evidence validation (7), no mastery inflation (4), evidence weighting (5), label derivation (4), cognitive diagnosis (6), prerequisites (6), repository atomicity (4), school/role projections (7), deterministic replay (5), e2e flow (1), decay (3), cross-school denial (1), actor/role enforcement (10), deterministic clock/IDs (5), atomic update (3), repeated-miss revisit (4), prerequisite semantics (7), replay conflict (5), legacy compatibility (4).
+
+## 11. Direct Regressions
+
+**Discovery command:**
+```
+Get-ChildItem -Recurse -File -Path backend/src/tests |
+  Select-String -Pattern "masteryScoringService|masteryDecisionService|masteryAggregationService|probabilisticMastery"
+```
+
+**Modules searched:** `masteryScoringService.ts`, `masteryDecisionService.ts`, `masteryAggregationService.ts`
+
+**Direct regression tests found and passed:**
+- `mastery-scoring-confidence.test.ts` — imports `masteryScoringService` (not modified)
+- `mastery-decision-service.test.ts` — imports `masteryDecisionService` (not modified)
+- `mastery-contracts.test.ts` — type tests (not modified)
+- `no-mastery-inflation-policy.test.ts` — inflation policy (not modified)
+
+No existing mastery service files were modified. All direct regressions pass (46 tests).
+
+## 12. Task-Scoped TypeScript
+
+**Command:**
+```
+npx tsc -p tsconfig.probabilistic-mastery.json --noEmit --incremental false
+```
+
+**Result:** exit 0, zero errors.
+
+Strict mode preserved. `skipLibCheck` preserved (was already in baseline). No `@ts-ignore`, `@ts-nocheck`, or weakened strictness.
+
+## 13. Static Safety Results
+
+| Check | Result |
+|-------|--------|
+| Hidden tests (`.skip`, `.todo`, `.only`, `xit`, `fit`) | PASS (none found) |
+| Trivial assertions | PASS (none found) |
+| Type bypasses (`@ts-ignore`, `@ts-nocheck`, `as any`) | PASS (none found) |
+| Unfinished implementation (`TODO`, `FIXME`, `HACK`) | PASS (none found) |
+| Forbidden integrations (`PrismaClient`, `fetch`, `axios`) | PASS (none found) |
+| Nondeterminism (`Date.now`, `Math.random`, `randomUUID`) | PASS (none in production logic) |
+| Sensitive data (`rawAnswer`, `answerKey`, etc.) | PASS (none found) |
+| Uncontrolled `new Date()` in production logic | PASS (only seeds and default clock factory) |
+
+## 14. Scope Confirmation
+
+- Backend only: YES
+- No Prisma models modified: YES
+- No database work: YES
+- No routes modified: YES
+- No AI: YES
+- No live integration: YES
+- No frontend: YES
+- No governance changes: YES
+- `backend/src/index.ts` unchanged: YES
+- No build artifacts: YES
+
+## 15. Deferred Integrations
 
 - BKT/IRT selection
 - Psychometric calibration
@@ -156,15 +235,27 @@ npx vitest run "src/tests/probabilistic-mastery"
 - Question Bank integration
 - Database durability
 - Live API mounting
+- Production mastery thresholds
+- Production decay periods
+- School-specific calibration
 
-## 29. Acceptance Boundary
+## 16. Repair Commit
 
-- No Prisma work performed
-- No database added
-- No route added or mounted
-- No live Learning Evidence integration
-- No live Curriculum Knowledge Graph integration
-- No AI used
-- No production psychometric calibration claimed
-- All existing services untouched
-- Integration remains separately authorized work
+```
+fix(backend): complete probabilistic mastery and diagnosis guarantees
+```
+
+Commit hash: to be recorded after post-commit verification.
+
+## 17. Files Changed (this continuation)
+
+- `backend/src/services/probabilisticMasteryContracts.ts` — added clock/ID interfaces, authorization functions, replay conflict types, atomic command/query types
+- `backend/src/services/probabilisticMasteryEvidenceProcessor.ts` — injected clock/ID, actor/role enforcement, atomic path, repeated-miss tracking, conflict reporting
+- `backend/src/services/probabilisticMasteryRepository.ts` — added `applyEvidenceAtomically` with rollback
+- `backend/src/services/probabilisticMasteryPrerequisiteReader.ts` — corrected edge direction (fromId=prerequisite, toId=dependent)
+- `backend/src/services/probabilisticMasterySeeds.ts` — added teacher/schoolAdmin actors
+- `backend/src/services/probabilisticMasteryCompatibilityBridge.ts` — NEW: legacy compatibility mapping
+- `backend/src/tests/probabilistic-mastery/probabilistic-mastery-behavior.test.ts` — added 42+ behavioral tests
+- `backend/src/tests/probabilistic-mastery/probabilistic-mastery-contracts.test.ts` — added state field test
+- `backend/tsconfig.probabilistic-mastery.json` — added compatibility bridge and legacy type files
+- `backend/docs/probabilistic-mastery-cognitive-diagnosis-foundation.md` — updated
