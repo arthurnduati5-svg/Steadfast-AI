@@ -42,6 +42,8 @@ const MODE_TRANSITION_MAP: Record<StudentLearningSessionMode, Partial<Record<Stu
   growth_action: {},
   tutor_turn: {},
   blocked: {},
+  session_paused: {},
+  session_complete: {},
 };
 
 const STATUS_AFFECTING_TRANSITIONS: StudentLearningSessionTransitionType[] = [

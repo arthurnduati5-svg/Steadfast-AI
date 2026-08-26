@@ -1357,12 +1357,14 @@ model StudentLearningSessionState {
   studentId               String?
   externalStudentId       String?
 
-  status                  String   @default("active")
-  currentMode             String   @default("session_start")
+  status                  String   @default("created")
+  stage                   String   @default("orienting")
+  currentMode             String   @default("none")
   previousMode            String?
   subject                 String?
   topic                   String?
   skillTag                String?
+  objectiveId             String?
 
   activeChallengeId       String?
   activeRemediationPathId String?
@@ -1374,8 +1376,12 @@ model StudentLearningSessionState {
   safeEvidenceRefs        Json     @default("[]")
   reasonCodes             Json     @default("[]")
   privacyMetadata         Json     @default("{}")
+  sourceTruthStatus       String   @default("unknown")
+  confidenceBucket        String   @default("not_enough_evidence")
+  stateVersion            Int      @default(1)
 
   lastTransitionAt        DateTime @default(now())
+  endedAt                 DateTime?
   createdAt               DateTime @default(now())
   updatedAt               DateTime @updatedAt
 
@@ -1389,8 +1395,12 @@ model StudentLearningSessionEvent {
   schoolId            String
   tutorLearnerId      String
   sessionId           String
+  studentId           String?
 
   eventType           String
+  transitionType      String?
+  previousStatus      String?
+  resultingStatus     String?
   previousMode        String?
   nextMode            String?
   subject             String?
@@ -1401,12 +1411,17 @@ model StudentLearningSessionEvent {
   safeEvidenceRefs    Json     @default("[]")
   reasonCodes         Json     @default("[]")
   privacyMetadata     Json     @default("{}")
+  operationVersion    Int      @default(1)
+  idempotencyKey      String?
+  requestId           String?
+  correlationId       String?
 
   createdAt           DateTime @default(now())
 
   @@index([schoolId, tutorLearnerId])
   @@index([schoolId, tutorLearnerId, sessionId])
   @@index([sessionId, createdAt])
+  @@index([idempotencyKey])
 }
 
 // ── Task 021: School Integration Durable Persistence v1 ──

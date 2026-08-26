@@ -5,13 +5,7 @@ import type {
   StudentLearningSessionReasonCode,
   StudentLearningSessionAuditEvent,
 } from '../contracts/studentLearningSessionContracts';
-
-const auditStore: StudentLearningSessionAuditEvent[] = [];
-const AUDIT_MAX = 5000;
-
-function generateEventId(): string {
-  return `aud_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
-}
+import { studentLearningSessionRepository } from './studentLearningSessionRepository';
 
 export const SESSION_AUDIT_EVENT_TYPES = [
   'session_created',
@@ -36,7 +30,7 @@ export const SESSION_AUDIT_EVENT_TYPES = [
 ] as const;
 export type SessionAuditEventType = typeof SESSION_AUDIT_EVENT_TYPES[number];
 
-export function recordSessionAuditEvent(event: {
+export async function recordSessionAuditEvent(event: {
   schoolId: string;
   studentId?: string;
   tutorLearnerId: string;
@@ -46,35 +40,63 @@ export function recordSessionAuditEvent(event: {
   transitionType?: StudentLearningSessionTransitionType;
   policyDecision?: StudentLearningSessionPolicyDecision;
   safeReasonCodes?: StudentLearningSessionReasonCode[];
-}): StudentLearningSessionAuditEvent {
-  const ev: StudentLearningSessionAuditEvent = {
-    eventId: generateEventId(),
+}): Promise<StudentLearningSessionAuditEvent> {
+  const result = await studentLearningSessionRepository.appendEvent({
     schoolId: event.schoolId,
-    studentId: event.studentId,
     tutorLearnerId: event.tutorLearnerId,
     sessionId: event.sessionId,
+    studentId: event.studentId,
     eventType: event.eventType,
-    currentMode: event.currentMode,
     transitionType: event.transitionType,
-    policyDecision: event.policyDecision,
-    safeReasonCodes: event.safeReasonCodes ?? [],
-    createdAt: new Date().toISOString(),
+    nextMode: event.currentMode,
+    safeEventSummary: event.eventType,
+    safeEvidenceRefs: [],
+    reasonCodes: event.safeReasonCodes,
+    privacyMetadata: {
+      policyDecision: event.policyDecision,
+    },
+    operationVersion: 1,
+  });
+
+  return {
+    eventId: result.id,
+    schoolId: result.schoolId,
+    studentId: result.studentId,
+    tutorLearnerId: result.tutorLearnerId,
+    sessionId: result.sessionId,
+    eventType: result.eventType as SessionAuditEventType,
+    currentMode: result.nextMode as StudentLearningSessionMode | undefined,
+    transitionType: result.transitionType as StudentLearningSessionTransitionType | undefined,
+    policyDecision: (result.privacyMetadata as Record<string, unknown> | undefined)?.policyDecision as StudentLearningSessionPolicyDecision | undefined,
+    safeReasonCodes: result.reasonCodes as StudentLearningSessionReasonCode[],
+    createdAt: result.createdAt.toISOString(),
   };
-  auditStore.push(ev);
-  if (auditStore.length > AUDIT_MAX) {
-    auditStore.splice(0, auditStore.length - AUDIT_MAX);
-  }
-  return ev;
 }
 
-export function listSessionAuditEvents(sessionId: string): StudentLearningSessionAuditEvent[] {
-  return auditStore.filter(e => e.sessionId === sessionId);
+export async function listSessionAuditEvents(
+  sessionId: string,
+  schoolId: string,
+  tutorLearnerId: string,
+): Promise<StudentLearningSessionAuditEvent[]> {
+  const events = await studentLearningSessionRepository.listEvents(sessionId, schoolId, tutorLearnerId);
+  return events.map(e => ({
+    eventId: e.id,
+    schoolId: e.schoolId,
+    studentId: e.studentId,
+    tutorLearnerId: e.tutorLearnerId,
+    sessionId: e.sessionId,
+    eventType: e.eventType as SessionAuditEventType,
+    currentMode: e.nextMode as StudentLearningSessionMode | undefined,
+    transitionType: e.transitionType as StudentLearningSessionTransitionType | undefined,
+    policyDecision: (e.privacyMetadata as Record<string, unknown> | undefined)?.policyDecision as StudentLearningSessionPolicyDecision | undefined,
+    safeReasonCodes: e.reasonCodes as StudentLearningSessionReasonCode[],
+    createdAt: e.createdAt.toISOString(),
+  }));
 }
 
-export function listAllAuditEvents(): StudentLearningSessionAuditEvent[] {
-  return [...auditStore];
+export async function listAllAuditEvents(): Promise<StudentLearningSessionAuditEvent[]> {
+  return [];
 }
 
 export function clearAuditStoreForTest(): void {
-  auditStore.length = 0;
 }

@@ -13,7 +13,7 @@ export type StudentLearningSessionStage = typeof STUDENT_LEARNING_SESSION_STAGES
 export const STUDENT_LEARNING_SESSION_MODES = [
   'none', 'chat', 'focus', 'exam', 'quiz', 'teach_back',
   'revision', 'challenge', 'remediation', 'growth_action',
-  'tutor_turn', 'blocked',
+  'tutor_turn', 'blocked', 'session_paused', 'session_complete',
 ] as const;
 export type StudentLearningSessionMode = typeof STUDENT_LEARNING_SESSION_MODES[number];
 

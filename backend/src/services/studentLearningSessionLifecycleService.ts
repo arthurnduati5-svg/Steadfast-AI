@@ -9,141 +9,203 @@ import type {
   StudentLearningSessionContext,
 } from '../contracts/studentLearningSessionContracts';
 import { getInitialSessionState } from './studentLearningSessionStateMachine';
+import {
+  studentLearningSessionRepository,
+  CreateSessionInput,
+  UpdateSessionInput,
+} from './studentLearningSessionRepository';
 
-const sessionStore: Map<string, StudentLearningSessionRecord> = new Map();
-
-function generateId(): string {
-  return `sls_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
-}
-
-function now(): Date {
-  return new Date();
-}
-
-function cloneRecord(r: StudentLearningSessionRecord): StudentLearningSessionRecord {
-  return JSON.parse(JSON.stringify(r));
-}
-
-export function createStudentLearningSession(context: StudentLearningSessionContext): StudentLearningSessionLifecycleResult {
-  const id = generateId();
-  const initial = getInitialSessionState();
-  const t = now();
-  const record: StudentLearningSessionRecord = {
-    id,
+export async function createStudentLearningSession(
+  context: StudentLearningSessionContext,
+): Promise<StudentLearningSessionLifecycleResult> {
+  const input: CreateSessionInput = {
     schoolId: context.schoolId,
-    studentId: context.studentId,
     tutorLearnerId: context.tutorLearnerId,
+    studentId: context.studentId,
+    externalStudentId: undefined,
     subjectId: context.subjectId,
     topicId: context.topicId,
     skillId: context.skillId,
     objectiveId: context.objectiveId,
-    status: initial.status,
-    stage: initial.stage,
-    currentMode: initial.currentMode,
-    allowedTransitions: [],
-    blockedTransitions: [],
-    safeReasonCodes: ['session_created'],
-    safeEvidenceRefs: [],
-    safeActionRefs: [],
-    startedAt: t,
-    lastActiveAt: t,
-    createdAt: t,
-    updatedAt: t,
   };
-  sessionStore.set(id, record);
-  return { session: cloneRecord(record), created: true, resumed: false, safeReasonCodes: ['session_created'] };
+  const record = await studentLearningSessionRepository.createSession(input);
+  return { session: record, created: true, resumed: false, safeReasonCodes: ['session_created'] };
 }
 
-export function resumeStudentLearningSession(sessionId: string, context: StudentLearningSessionContext): StudentLearningSessionLifecycleResult | null {
-  const record = sessionStore.get(sessionId);
+export async function resumeStudentLearningSession(
+  sessionId: string,
+  context: StudentLearningSessionContext,
+): Promise<StudentLearningSessionLifecycleResult | null> {
+  const record = await studentLearningSessionRepository.getSession(
+    sessionId,
+    context.schoolId,
+    context.tutorLearnerId,
+  );
   if (!record) return null;
-  if (record.schoolId !== context.schoolId || (record.tutorLearnerId !== context.tutorLearnerId && record.studentId !== context.studentId)) return null;
+  if (record.studentId !== context.studentId && record.tutorLearnerId !== context.tutorLearnerId) return null;
   if (record.status === 'completed' || record.status === 'abandoned' || record.status === 'expired' || record.status === 'blocked') return null;
-  if (record.status !== 'paused') return { session: cloneRecord(record), created: false, resumed: false, safeReasonCodes: ['session_active'] };
-  const t = now();
-  record.status = 'active';
-  record.lastActiveAt = t;
-  record.updatedAt = t;
-  record.safeReasonCodes = [...record.safeReasonCodes.filter(c => c !== 'session_resumed'), 'session_resumed'];
-  sessionStore.set(sessionId, record);
-  return { session: cloneRecord(record), created: false, resumed: true, safeReasonCodes: ['session_resumed'] };
+  if (record.status !== 'paused') return { session: record, created: false, resumed: false, safeReasonCodes: ['session_active'] };
+
+  const updateInput: UpdateSessionInput = {
+    status: 'active',
+    stage: record.stage,
+    currentMode: 'chat',
+    previousMode: record.currentMode,
+    reasonCodes: [...record.safeReasonCodes.filter(c => c !== 'session_resumed'), 'session_resumed'],
+    sourceTruthStatus: 'unknown',
+    confidenceBucket: 'not_enough_evidence',
+  };
+  const result = await studentLearningSessionRepository.updateSession(
+    sessionId,
+    context.schoolId,
+    context.tutorLearnerId,
+    1,
+    updateInput,
+  );
+  return { session: result.record, created: false, resumed: true, safeReasonCodes: ['session_resumed'] };
 }
 
-export function pauseStudentLearningSession(sessionId: string, context: StudentLearningSessionContext): StudentLearningSessionLifecycleResult | null {
-  const record = sessionStore.get(sessionId);
+export async function pauseStudentLearningSession(
+  sessionId: string,
+  context: StudentLearningSessionContext,
+): Promise<StudentLearningSessionLifecycleResult | null> {
+  const record = await studentLearningSessionRepository.getSession(
+    sessionId,
+    context.schoolId,
+    context.tutorLearnerId,
+  );
   if (!record) return null;
-  if (record.schoolId !== context.schoolId || (record.tutorLearnerId !== context.tutorLearnerId && record.studentId !== context.studentId)) return null;
+  if (record.studentId !== context.studentId && record.tutorLearnerId !== context.tutorLearnerId) return null;
   if (record.status !== 'active') return null;
-  const t = now();
-  record.status = 'paused';
-  record.lastActiveAt = t;
-  record.updatedAt = t;
-  record.safeReasonCodes = [...record.safeReasonCodes.filter(c => c !== 'session_paused'), 'session_paused'];
-  sessionStore.set(sessionId, record);
-  return { session: cloneRecord(record), created: false, resumed: false, safeReasonCodes: ['session_paused'] };
+
+  const updateInput: UpdateSessionInput = {
+    status: 'paused',
+    stage: record.stage,
+    currentMode: 'session_paused',
+    previousMode: record.currentMode,
+    reasonCodes: [...record.safeReasonCodes.filter(c => c !== 'session_paused'), 'session_paused'],
+  };
+  const result = await studentLearningSessionRepository.updateSession(
+    sessionId,
+    context.schoolId,
+    context.tutorLearnerId,
+    1,
+    updateInput,
+  );
+  return { session: result.record, created: false, resumed: false, safeReasonCodes: ['session_paused'] };
 }
 
-export function completeStudentLearningSession(sessionId: string, context: StudentLearningSessionContext): StudentLearningSessionLifecycleResult | null {
-  const record = sessionStore.get(sessionId);
+export async function completeStudentLearningSession(
+  sessionId: string,
+  context: StudentLearningSessionContext,
+): Promise<StudentLearningSessionLifecycleResult | null> {
+  const record = await studentLearningSessionRepository.getSession(
+    sessionId,
+    context.schoolId,
+    context.tutorLearnerId,
+  );
   if (!record) return null;
-  if (record.schoolId !== context.schoolId || (record.tutorLearnerId !== context.tutorLearnerId && record.studentId !== context.studentId)) return null;
+  if (record.studentId !== context.studentId && record.tutorLearnerId !== context.tutorLearnerId) return null;
   if (record.status !== 'active') return null;
-  const t = now();
-  record.status = 'completed';
-  record.endedAt = t;
-  record.lastActiveAt = t;
-  record.updatedAt = t;
-  record.safeReasonCodes = [...record.safeReasonCodes.filter(c => c !== 'session_completed'), 'session_completed'];
-  sessionStore.set(sessionId, record);
-  return { session: cloneRecord(record), created: false, resumed: false, safeReasonCodes: ['session_completed'] };
+
+  const updateInput: UpdateSessionInput = {
+    status: 'completed',
+    stage: record.stage,
+    currentMode: 'session_complete',
+    previousMode: record.currentMode,
+    reasonCodes: [...record.safeReasonCodes.filter(c => c !== 'session_completed'), 'session_completed'],
+  };
+  const result = await studentLearningSessionRepository.updateSession(
+    sessionId,
+    context.schoolId,
+    context.tutorLearnerId,
+    1,
+    updateInput,
+  );
+  return { session: result.record, created: false, resumed: false, safeReasonCodes: ['session_completed'] };
 }
 
-export function abandonStudentLearningSession(sessionId: string, context: StudentLearningSessionContext): StudentLearningSessionLifecycleResult | null {
-  const record = sessionStore.get(sessionId);
+export async function abandonStudentLearningSession(
+  sessionId: string,
+  context: StudentLearningSessionContext,
+): Promise<StudentLearningSessionLifecycleResult | null> {
+  const record = await studentLearningSessionRepository.getSession(
+    sessionId,
+    context.schoolId,
+    context.tutorLearnerId,
+  );
   if (!record) return null;
-  if (record.schoolId !== context.schoolId || (record.tutorLearnerId !== context.tutorLearnerId && record.studentId !== context.studentId)) return null;
+  if (record.studentId !== context.studentId && record.tutorLearnerId !== context.tutorLearnerId) return null;
   if (record.status !== 'active') return null;
-  const t = now();
-  record.status = 'abandoned';
-  record.endedAt = t;
-  record.lastActiveAt = t;
-  record.updatedAt = t;
-  record.safeReasonCodes = [...record.safeReasonCodes.filter(c => c !== 'session_abandoned'), 'session_abandoned'];
-  sessionStore.set(sessionId, record);
-  return { session: cloneRecord(record), created: false, resumed: false, safeReasonCodes: ['session_abandoned'] };
+
+  const updateInput: UpdateSessionInput = {
+    status: 'abandoned',
+    stage: record.stage,
+    currentMode: 'session_complete',
+    previousMode: record.currentMode,
+    reasonCodes: [...record.safeReasonCodes.filter(c => c !== 'session_abandoned'), 'session_abandoned'],
+  };
+  const result = await studentLearningSessionRepository.updateSession(
+    sessionId,
+    context.schoolId,
+    context.tutorLearnerId,
+    1,
+    updateInput,
+  );
+  return { session: result.record, created: false, resumed: false, safeReasonCodes: ['session_abandoned'] };
 }
 
-export function expireStudentLearningSession(sessionId: string): StudentLearningSessionLifecycleResult | null {
-  const record = sessionStore.get(sessionId);
+export async function expireStudentLearningSession(
+  sessionId: string,
+  schoolId: string,
+  tutorLearnerId: string,
+): Promise<StudentLearningSessionLifecycleResult | null> {
+  const record = await studentLearningSessionRepository.getSession(
+    sessionId,
+    schoolId,
+    tutorLearnerId,
+  );
   if (!record) return null;
   if (record.status === 'completed' || record.status === 'abandoned' || record.status === 'blocked') return null;
-  const t = now();
-  record.status = 'expired';
-  record.endedAt = t;
-  record.lastActiveAt = t;
-  record.updatedAt = t;
-  record.safeReasonCodes = [...record.safeReasonCodes.filter(c => c !== 'session_expired'), 'session_expired'];
-  sessionStore.set(sessionId, record);
-  return { session: cloneRecord(record), created: false, resumed: false, safeReasonCodes: ['session_expired'] };
+
+  const updateInput: UpdateSessionInput = {
+    status: 'expired',
+    stage: record.stage,
+    currentMode: 'session_complete',
+    previousMode: record.currentMode,
+    reasonCodes: [...record.safeReasonCodes.filter(c => c !== 'session_expired'), 'session_expired'],
+  };
+  const result = await studentLearningSessionRepository.updateSession(
+    sessionId,
+    schoolId,
+    tutorLearnerId,
+    1,
+    updateInput,
+  );
+  return { session: result.record, created: false, resumed: false, safeReasonCodes: ['session_expired'] };
 }
 
-export function getStudentLearningSession(sessionId: string): StudentLearningSessionRecord | null {
-  const record = sessionStore.get(sessionId);
-  return record ? cloneRecord(record) : null;
+export async function getStudentLearningSession(
+  sessionId: string,
+  schoolId: string,
+  tutorLearnerId: string,
+): Promise<StudentLearningSessionRecord | null> {
+  return studentLearningSessionRepository.getSession(sessionId, schoolId, tutorLearnerId);
 }
 
-export function listStudentLearningSessionsForLearner(schoolId: string, tutorLearnerId: string): StudentLearningSessionRecord[] {
-  return Array.from(sessionStore.values())
-    .filter(r => r.schoolId === schoolId && r.tutorLearnerId === tutorLearnerId)
-    .map(cloneRecord);
+export async function listStudentLearningSessionsForLearner(
+  schoolId: string,
+  tutorLearnerId: string,
+): Promise<StudentLearningSessionRecord[]> {
+  return studentLearningSessionRepository.listSessionsForLearner(schoolId, tutorLearnerId);
 }
 
 export function clearStudentLearningSessionStoreForTest(): void {
-  sessionStore.clear();
 }
 
-export function updateSessionTransition(
+export async function updateSessionTransition(
   sessionId: string,
+  context: StudentLearningSessionContext,
   updates: Partial<{
     status: StudentLearningSessionStatus;
     stage: StudentLearningSessionStage;
@@ -151,7 +213,7 @@ export function updateSessionTransition(
     previousMode: StudentLearningSessionMode;
     allowedTransitions: StudentLearningSessionTransitionType[];
     blockedTransitions: StudentLearningSessionTransitionType[];
-    safeReasonCodes: StudentLearningSessionReasonCode[];
+    reasonCodes: StudentLearningSessionReasonCode[];
     safeEvidenceRefs: string[];
     safeActionRefs: string[];
     lastGrowthActionId: string;
@@ -161,31 +223,32 @@ export function updateSessionTransition(
     lastRecommendationId: string;
     lastEvidenceEventId: string;
   }>,
-): StudentLearningSessionRecord | null {
-  const record = sessionStore.get(sessionId);
+): Promise<StudentLearningSessionRecord | null> {
+  const record = await studentLearningSessionRepository.getSession(
+    sessionId,
+    context.schoolId,
+    context.tutorLearnerId,
+  );
   if (!record) return null;
   if (record.status === 'completed' || record.status === 'abandoned' || record.status === 'blocked') return null;
-  const t = now();
-  if (updates.status !== undefined) record.status = updates.status;
-  if (updates.stage !== undefined) record.stage = updates.stage;
+
+  const updateInput: UpdateSessionInput = {};
+  if (updates.status !== undefined) updateInput.status = updates.status;
+  if (updates.stage !== undefined) updateInput.stage = updates.stage;
   if (updates.currentMode !== undefined) {
-    record.previousMode = record.currentMode;
-    record.currentMode = updates.currentMode;
+    updateInput.currentMode = updates.currentMode;
+    updateInput.previousMode = updates.previousMode ?? record.currentMode;
   }
-  if (updates.previousMode !== undefined) record.previousMode = updates.previousMode;
-  if (updates.allowedTransitions !== undefined) record.allowedTransitions = updates.allowedTransitions;
-  if (updates.blockedTransitions !== undefined) record.blockedTransitions = updates.blockedTransitions;
-  if (updates.safeReasonCodes !== undefined) record.safeReasonCodes = updates.safeReasonCodes;
-  if (updates.safeEvidenceRefs !== undefined) record.safeEvidenceRefs = updates.safeEvidenceRefs;
-  if (updates.safeActionRefs !== undefined) record.safeActionRefs = updates.safeActionRefs;
-  if (updates.lastGrowthActionId !== undefined) record.lastGrowthActionId = updates.lastGrowthActionId;
-  if (updates.lastTutorTurnId !== undefined) record.lastTutorTurnId = updates.lastTutorTurnId;
-  if (updates.lastChallengeId !== undefined) record.lastChallengeId = updates.lastChallengeId;
-  if (updates.lastRemediationPathId !== undefined) record.lastRemediationPathId = updates.lastRemediationPathId;
-  if (updates.lastRecommendationId !== undefined) record.lastRecommendationId = updates.lastRecommendationId;
-  if (updates.lastEvidenceEventId !== undefined) record.lastEvidenceEventId = updates.lastEvidenceEventId;
-  record.lastActiveAt = t;
-  record.updatedAt = t;
-  sessionStore.set(sessionId, record);
-  return cloneRecord(record);
+  if (updates.previousMode !== undefined) updateInput.previousMode = updates.previousMode;
+  if (updates.reasonCodes !== undefined) updateInput.reasonCodes = updates.reasonCodes;
+  if (updates.safeEvidenceRefs !== undefined) updateInput.safeEvidenceRefs = updates.safeEvidenceRefs;
+
+  const result = await studentLearningSessionRepository.updateSession(
+    sessionId,
+    context.schoolId,
+    context.tutorLearnerId,
+    1,
+    updateInput,
+  );
+  return result.success ? result.record : null;
 }

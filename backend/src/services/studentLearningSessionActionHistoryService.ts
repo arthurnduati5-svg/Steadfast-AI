@@ -4,14 +4,9 @@ import type {
   StudentLearningSessionReasonCode,
   StudentLearningSessionActionHistoryEvent,
 } from '../contracts/studentLearningSessionContracts';
+import { studentLearningSessionRepository } from './studentLearningSessionRepository';
 
-const actionHistoryStore: Map<string, StudentLearningSessionActionHistoryEvent[]> = new Map();
-
-function generateEventId(): string {
-  return `ah_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
-}
-
-export function recordSessionActionHistoryEvent(event: {
+export async function recordSessionActionHistoryEvent(event: {
   sessionId: string;
   schoolId: string;
   studentId?: string;
@@ -22,47 +17,52 @@ export function recordSessionActionHistoryEvent(event: {
   status: string;
   safeReasonCodes?: StudentLearningSessionReasonCode[];
   safeEvidenceRefs?: string[];
-}): StudentLearningSessionActionHistoryEvent {
-  const ev: StudentLearningSessionActionHistoryEvent = {
-    eventId: generateEventId(),
-    sessionId: event.sessionId,
+}): Promise<StudentLearningSessionActionHistoryEvent> {
+  const result = await studentLearningSessionRepository.appendEvent({
     schoolId: event.schoolId,
-    studentId: event.studentId,
     tutorLearnerId: event.tutorLearnerId,
-    actionType: event.actionType,
-    mode: event.mode,
+    sessionId: event.sessionId,
+    studentId: event.studentId,
+    eventType: event.actionType,
     transitionType: event.transitionType,
-    status: event.status,
-    safeReasonCodes: event.safeReasonCodes ?? [],
-    safeEvidenceRefs: event.safeEvidenceRefs ?? [],
-    createdAt: new Date().toISOString(),
+    resultingStatus: event.status as any,
+    nextMode: event.mode,
+    safeEventSummary: event.actionType,
+    safeEvidenceRefs: event.safeEvidenceRefs,
+    reasonCodes: event.safeReasonCodes,
+    operationVersion: 1,
+  });
+
+  return {
+    eventId: result.id,
+    sessionId: result.sessionId,
+    schoolId: result.schoolId,
+    studentId: result.studentId,
+    tutorLearnerId: result.tutorLearnerId,
+    actionType: result.eventType,
+    mode: (result.nextMode || 'none') as StudentLearningSessionMode,
+    transitionType: result.transitionType,
+    status: result.resultingStatus || 'unknown',
+    safeReasonCodes: result.reasonCodes as StudentLearningSessionReasonCode[],
+    safeEvidenceRefs: result.safeEvidenceRefs,
+    createdAt: result.createdAt.toISOString(),
   };
-  const existing = actionHistoryStore.get(event.sessionId) || [];
-  existing.push(ev);
-  actionHistoryStore.set(event.sessionId, existing);
-  return ev;
 }
 
-export function listSessionActionHistoryEvents(sessionId: string): StudentLearningSessionActionHistoryEvent[] {
-  return [...(actionHistoryStore.get(sessionId) || [])];
+export async function listSessionActionHistoryEvents(
+  sessionId: string,
+  schoolId: string,
+  tutorLearnerId: string,
+): Promise<StudentLearningSessionActionHistoryEvent[]> {
+  return studentLearningSessionRepository.listActionHistory(sessionId, schoolId, tutorLearnerId);
 }
 
-export function buildSafeActionHistoryView(sessionId: string): StudentLearningSessionActionHistoryEvent[] {
-  const events = actionHistoryStore.get(sessionId) || [];
-  return events.map(e => ({
-    eventId: e.eventId,
-    sessionId: e.sessionId,
-    schoolId: e.schoolId,
-    studentId: e.studentId,
-    tutorLearnerId: e.tutorLearnerId,
-    actionType: e.actionType,
-    mode: e.mode,
-    transitionType: e.transitionType,
-    status: e.status,
-    safeReasonCodes: e.safeReasonCodes,
-    safeEvidenceRefs: e.safeEvidenceRefs,
-    createdAt: e.createdAt,
-  }));
+export async function buildSafeActionHistoryView(
+  sessionId: string,
+  schoolId: string,
+  tutorLearnerId: string,
+): Promise<StudentLearningSessionActionHistoryEvent[]> {
+  return studentLearningSessionRepository.listActionHistory(sessionId, schoolId, tutorLearnerId);
 }
 
 export function assertActionHistoryEventIsSafe(event: StudentLearningSessionActionHistoryEvent): void {
@@ -81,5 +81,4 @@ export function assertActionHistoryEventIsSafe(event: StudentLearningSessionActi
 }
 
 export function clearSessionActionHistoryForTest(): void {
-  actionHistoryStore.clear();
 }

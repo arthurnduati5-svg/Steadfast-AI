@@ -21,7 +21,7 @@ import { buildStudentLearningSessionSnapshot, buildEmptySessionSnapshot, buildLe
 import { buildResumeContextFromSession, buildEmptyResumeContext, assertResumeContextIsSafe } from '../services/studentLearningSessionResumeContextService';
 import { buildCompletedSessionSummary, buildAbandonedSessionSummary, assertExitSummaryIsSafe } from '../services/studentLearningSessionExitSummaryService';
 import { rejectForbiddenFields as rejectForbiddenStudentLearningSessionFields, findForbiddenFields as findForbiddenStudentLearningSessionFields } from '../lib/studentLearningSessionValidation';
-import { recordSessionActionHistoryEvent, listSessionActionHistoryEvents, buildSafeActionHistoryView } from '../services/studentLearningSessionActionHistoryService';
+import { recordSessionActionHistoryEvent, buildSafeActionHistoryView } from '../services/studentLearningSessionActionHistoryService';
 import { recordSessionAuditEvent } from '../services/studentLearningSessionAuditService';
 import {
   buildSessionCreatedResponse,
@@ -42,17 +42,19 @@ import {
 } from '../services/studentLearningSessionResponseBuilder';
 
 import type { StudentLearningSessionContext, StudentLearningSessionMode } from '../contracts/studentLearningSessionContracts';
+import { studentLearningSessionRepository } from '../services/studentLearningSessionRepository';
 
 const router = Router();
 const accessPolicy = new StudentLearningSessionAccessPolicy();
 const sourceTruthPolicy = new StudentLearningSessionSourceTruthPolicy();
 
 function resolveContext(req: Request): StudentLearningSessionContext | null {
-  if (!req.user) return null;
+  const user = (req as any).user;
+  if (!user) return null;
   return {
-    schoolId: (req.user as any).schoolId || '',
-    studentId: (req.user as any).id || '',
-    tutorLearnerId: (req.user as any).id || '',
+    schoolId: user.schoolId || '',
+    studentId: user.id || '',
+    tutorLearnerId: user.id || '',
   };
 }
 
@@ -85,6 +87,10 @@ function checkForbiddenInput(req: Request, res: Response): boolean {
   return false;
 }
 
+function getIdempotencyKey(req: Request): string | undefined {
+  return (req.headers['idempotency-key'] as string) || (req.headers['x-idempotency-key'] as string);
+}
+
 // POST /api/copilot/learning-sessions
 router.post('/', async (req: Request, res: Response) => {
   try {
@@ -97,9 +103,19 @@ router.post('/', async (req: Request, res: Response) => {
     if (!access.allowed) {
       return sendError(res, 403, buildGenericErrorResponse('Access denied: ' + access.safeReasonCodes.join(', ')) as unknown as Record<string, unknown>);
     }
-    const result = createStudentLearningSession(ctx);
+
+    const idempotencyKey = getIdempotencyKey(req);
+    let result;
+    if (idempotencyKey) {
+      const existing = await studentLearningSessionRepository.getSessionByIdempotencyKey(idempotencyKey, ctx.schoolId, ctx.tutorLearnerId);
+      if (existing) {
+        return res.status(201).json(buildSessionCreatedResponse({ session: existing, created: true, resumed: false, safeReasonCodes: ['session_created'] }));
+      }
+    }
+
+    result = await createStudentLearningSession(ctx);
     const response = buildSessionCreatedResponse(result);
-    recordSessionAuditEvent({
+    await recordSessionAuditEvent({
       schoolId: ctx.schoolId,
       tutorLearnerId: ctx.tutorLearnerId,
       sessionId: result.session.id,
@@ -124,7 +140,7 @@ router.get('/', async (req: Request, res: Response) => {
     if (!access.allowed) {
       return sendError(res, 403, buildGenericErrorResponse('Access denied') as unknown as Record<string, unknown>);
     }
-    const sessions = listStudentLearningSessionsForLearner(ctx.schoolId, ctx.tutorLearnerId);
+    const sessions = await listStudentLearningSessionsForLearner(ctx.schoolId, ctx.tutorLearnerId);
     res.json({
       ok: true,
       status: sessions.length > 0 ? 'active' : 'empty',
@@ -153,7 +169,7 @@ router.get('/:sessionId', async (req: Request, res: Response) => {
       return sendError(res, 401, buildGenericErrorResponse('Authentication required') as unknown as Record<string, unknown>);
     }
     const { sessionId } = req.params;
-    const record = getStudentLearningSession(sessionId);
+    const record = await getStudentLearningSession(sessionId, ctx.schoolId, ctx.tutorLearnerId);
     if (!record) {
       return sendError(res, 404, buildGenericErrorResponse('Session not found') as unknown as Record<string, unknown>);
     }
@@ -183,12 +199,21 @@ router.post('/:sessionId/resume', async (req: Request, res: Response) => {
     if (!access.allowed) {
       return sendError(res, 403, buildGenericErrorResponse('Access denied') as unknown as Record<string, unknown>);
     }
-    const result = resumeStudentLearningSession(sessionId, ctx);
+
+    const idempotencyKey = getIdempotencyKey(req);
+    if (idempotencyKey) {
+      const existing = await studentLearningSessionRepository.getSessionByIdempotencyKey(idempotencyKey, ctx.schoolId, ctx.tutorLearnerId);
+      if (existing && existing.id === sessionId) {
+        return res.json(buildSessionResumedResponse({ session: existing, created: false, resumed: true, safeReasonCodes: ['session_resumed'] }));
+      }
+    }
+
+    const result = await resumeStudentLearningSession(sessionId, ctx);
     if (!result) {
       return sendError(res, 404, buildGenericErrorResponse('Session not found or cannot be resumed') as unknown as Record<string, unknown>);
     }
     const response = buildSessionResumedResponse(result);
-    recordSessionAuditEvent({
+    await recordSessionAuditEvent({
       schoolId: ctx.schoolId,
       tutorLearnerId: ctx.tutorLearnerId,
       sessionId,
@@ -215,12 +240,21 @@ router.post('/:sessionId/pause', async (req: Request, res: Response) => {
     if (!access.allowed) {
       return sendError(res, 403, buildGenericErrorResponse('Access denied') as unknown as Record<string, unknown>);
     }
-    const result = pauseStudentLearningSession(sessionId, ctx);
+
+    const idempotencyKey = getIdempotencyKey(req);
+    if (idempotencyKey) {
+      const existing = await studentLearningSessionRepository.getSessionByIdempotencyKey(idempotencyKey, ctx.schoolId, ctx.tutorLearnerId);
+      if (existing && existing.id === sessionId && existing.status === 'paused') {
+        return res.json(buildSessionPausedResponse({ session: existing, created: false, resumed: false, safeReasonCodes: ['session_paused'] }));
+      }
+    }
+
+    const result = await pauseStudentLearningSession(sessionId, ctx);
     if (!result) {
       return sendError(res, 404, buildGenericErrorResponse('Session not found or cannot be paused') as unknown as Record<string, unknown>);
     }
     const response = buildSessionPausedResponse(result);
-    recordSessionAuditEvent({
+    await recordSessionAuditEvent({
       schoolId: ctx.schoolId,
       tutorLearnerId: ctx.tutorLearnerId,
       sessionId,
@@ -247,12 +281,21 @@ router.post('/:sessionId/complete', async (req: Request, res: Response) => {
     if (!access.allowed) {
       return sendError(res, 403, buildGenericErrorResponse('Access denied') as unknown as Record<string, unknown>);
     }
-    const result = completeStudentLearningSession(sessionId, ctx);
+
+    const idempotencyKey = getIdempotencyKey(req);
+    if (idempotencyKey) {
+      const existing = await studentLearningSessionRepository.getSessionByIdempotencyKey(idempotencyKey, ctx.schoolId, ctx.tutorLearnerId);
+      if (existing && existing.id === sessionId && existing.status === 'completed') {
+        return res.json(buildSessionCompletedResponse({ session: existing, created: false, resumed: false, safeReasonCodes: ['session_completed'] }));
+      }
+    }
+
+    const result = await completeStudentLearningSession(sessionId, ctx);
     if (!result) {
       return sendError(res, 404, buildGenericErrorResponse('Session not found or cannot be completed') as unknown as Record<string, unknown>);
     }
     const response = buildSessionCompletedResponse(result);
-    recordSessionAuditEvent({
+    await recordSessionAuditEvent({
       schoolId: ctx.schoolId,
       tutorLearnerId: ctx.tutorLearnerId,
       sessionId,
@@ -279,12 +322,21 @@ router.post('/:sessionId/abandon', async (req: Request, res: Response) => {
     if (!access.allowed) {
       return sendError(res, 403, buildGenericErrorResponse('Access denied') as unknown as Record<string, unknown>);
     }
-    const result = abandonStudentLearningSession(sessionId, ctx);
+
+    const idempotencyKey = getIdempotencyKey(req);
+    if (idempotencyKey) {
+      const existing = await studentLearningSessionRepository.getSessionByIdempotencyKey(idempotencyKey, ctx.schoolId, ctx.tutorLearnerId);
+      if (existing && existing.id === sessionId && existing.status === 'abandoned') {
+        return res.json(buildSessionAbandonedResponse({ session: existing, created: false, resumed: false, safeReasonCodes: ['session_abandoned'] }));
+      }
+    }
+
+    const result = await abandonStudentLearningSession(sessionId, ctx);
     if (!result) {
       return sendError(res, 404, buildGenericErrorResponse('Session not found or cannot be abandoned') as unknown as Record<string, unknown>);
     }
     const response = buildSessionAbandonedResponse(result);
-    recordSessionAuditEvent({
+    await recordSessionAuditEvent({
       schoolId: ctx.schoolId,
       tutorLearnerId: ctx.tutorLearnerId,
       sessionId,
@@ -313,13 +365,32 @@ router.post('/:sessionId/transition', async (req: Request, res: Response) => {
       return sendError(res, 400, buildGenericErrorResponse('transitionType is required') as unknown as Record<string, unknown>);
     }
 
-    const record = getStudentLearningSession(sessionId);
+    const record = await getStudentLearningSession(sessionId, ctx.schoolId, ctx.tutorLearnerId);
     if (!record) {
       return sendError(res, 404, buildGenericErrorResponse('Session not found') as unknown as Record<string, unknown>);
     }
     const access = accessPolicy.checkAccess(ctx, record.schoolId, record.studentId || '', record.tutorLearnerId);
     if (!access.allowed) {
       return sendError(res, 403, buildGenericErrorResponse('Access denied') as unknown as Record<string, unknown>);
+    }
+
+    const idempotencyKey = getIdempotencyKey(req);
+    if (idempotencyKey) {
+      const existing = await studentLearningSessionRepository.getSessionByIdempotencyKey(idempotencyKey, ctx.schoolId, ctx.tutorLearnerId);
+      if (existing && existing.id === sessionId) {
+        return res.json(buildSessionTransitionResponse({
+          allowed: true,
+          transitionType,
+          fromMode: record.currentMode,
+          toMode: existing.currentMode,
+          policyDecision: 'allowed',
+          transitionStatus: 'allowed',
+          safeReasonCodes: ['session_active'],
+          safeAlternatives: [],
+          sessionStatus: existing.status,
+          sessionStage: existing.stage,
+        }));
+      }
     }
 
     const result = transitionSessionState(
@@ -331,16 +402,14 @@ router.post('/:sessionId/transition', async (req: Request, res: Response) => {
     );
 
     if (result.allowed) {
-      const updated = updateSessionTransition(sessionId, {
+      const updated = await updateSessionTransition(sessionId, ctx, {
         status: result.sessionStatus,
         stage: result.sessionStage,
         currentMode: result.toMode,
         previousMode: result.fromMode,
-        allowedTransitions: [],
-        blockedTransitions: [],
-        safeReasonCodes: result.safeReasonCodes,
+        reasonCodes: result.safeReasonCodes,
       });
-      recordSessionAuditEvent({
+      await recordSessionAuditEvent({
         schoolId: ctx.schoolId,
         tutorLearnerId: ctx.tutorLearnerId,
         sessionId,
@@ -351,7 +420,7 @@ router.post('/:sessionId/transition', async (req: Request, res: Response) => {
         safeReasonCodes: result.safeReasonCodes,
       });
     } else {
-      recordSessionAuditEvent({
+      await recordSessionAuditEvent({
         schoolId: ctx.schoolId,
         tutorLearnerId: ctx.tutorLearnerId,
         sessionId,
@@ -378,7 +447,7 @@ router.get('/:sessionId/snapshot', async (req: Request, res: Response) => {
       return sendError(res, 401, buildGenericErrorResponse('Authentication required') as unknown as Record<string, unknown>);
     }
     const { sessionId } = req.params;
-    const record = getStudentLearningSession(sessionId);
+    const record = await getStudentLearningSession(sessionId, ctx.schoolId, ctx.tutorLearnerId);
     if (!record) {
       const emptySnapshot = buildEmptySessionSnapshot();
       const response = buildSessionSnapshotResponse(emptySnapshot);
@@ -391,7 +460,7 @@ router.get('/:sessionId/snapshot', async (req: Request, res: Response) => {
     const snapshot = buildLearnerSafeSessionSnapshot(record);
     assertSessionSnapshotIsSafe(snapshot);
     const response = buildSessionSnapshotResponse(snapshot);
-    recordSessionAuditEvent({
+    await recordSessionAuditEvent({
       schoolId: ctx.schoolId,
       tutorLearnerId: ctx.tutorLearnerId,
       sessionId,
@@ -413,7 +482,7 @@ router.get('/:sessionId/resume-context', async (req: Request, res: Response) => 
       return sendError(res, 401, buildGenericErrorResponse('Authentication required') as unknown as Record<string, unknown>);
     }
     const { sessionId } = req.params;
-    const record = getStudentLearningSession(sessionId);
+    const record = await getStudentLearningSession(sessionId, ctx.schoolId, ctx.tutorLearnerId);
     if (!record) {
       const empty = buildEmptyResumeContext();
       const response = buildResumeContextResponse(empty);
@@ -426,7 +495,7 @@ router.get('/:sessionId/resume-context', async (req: Request, res: Response) => 
     const resumeContext = buildResumeContextFromSession(record);
     assertResumeContextIsSafe(resumeContext);
     const response = buildResumeContextResponse(resumeContext);
-    recordSessionAuditEvent({
+    await recordSessionAuditEvent({
       schoolId: ctx.schoolId,
       tutorLearnerId: ctx.tutorLearnerId,
       sessionId,
@@ -448,7 +517,7 @@ router.get('/:sessionId/exit-summary', async (req: Request, res: Response) => {
       return sendError(res, 401, buildGenericErrorResponse('Authentication required') as unknown as Record<string, unknown>);
     }
     const { sessionId } = req.params;
-    const record = getStudentLearningSession(sessionId);
+    const record = await getStudentLearningSession(sessionId, ctx.schoolId, ctx.tutorLearnerId);
     if (!record) {
       return sendError(res, 404, buildGenericErrorResponse('Session not found') as unknown as Record<string, unknown>);
     }
@@ -462,7 +531,7 @@ router.get('/:sessionId/exit-summary', async (req: Request, res: Response) => {
       : buildCompletedSessionSummary(record, modesUsed, []);
     assertExitSummaryIsSafe(summary);
     const response = buildExitSummaryResponse(summary);
-    recordSessionAuditEvent({
+    await recordSessionAuditEvent({
       schoolId: ctx.schoolId,
       tutorLearnerId: ctx.tutorLearnerId,
       sessionId,
@@ -484,7 +553,7 @@ router.get('/:sessionId/actions', async (req: Request, res: Response) => {
       return sendError(res, 401, buildGenericErrorResponse('Authentication required') as unknown as Record<string, unknown>);
     }
     const { sessionId } = req.params;
-    const record = getStudentLearningSession(sessionId);
+    const record = await getStudentLearningSession(sessionId, ctx.schoolId, ctx.tutorLearnerId);
     if (!record) {
       return sendError(res, 404, buildGenericErrorResponse('Session not found') as unknown as Record<string, unknown>);
     }
@@ -492,7 +561,7 @@ router.get('/:sessionId/actions', async (req: Request, res: Response) => {
     if (!access.allowed) {
       return sendError(res, 403, buildGenericErrorResponse('Access denied') as unknown as Record<string, unknown>);
     }
-    const events = buildSafeActionHistoryView(sessionId);
+    const events = await buildSafeActionHistoryView(sessionId, ctx.schoolId, ctx.tutorLearnerId);
     res.json({
       ok: true,
       status: 'actions',
@@ -516,7 +585,7 @@ router.post('/:sessionId/audit', async (req: Request, res: Response) => {
     const { sessionId } = req.params;
     const { eventType, currentMode, transitionType, policyDecision } = req.body || {};
 
-    const record = getStudentLearningSession(sessionId);
+    const record = await getStudentLearningSession(sessionId, ctx.schoolId, ctx.tutorLearnerId);
     if (!record) {
       return sendError(res, 404, buildGenericErrorResponse('Session not found') as unknown as Record<string, unknown>);
     }
@@ -525,7 +594,7 @@ router.post('/:sessionId/audit', async (req: Request, res: Response) => {
       return sendError(res, 403, buildGenericErrorResponse('Access denied') as unknown as Record<string, unknown>);
     }
 
-    const auditEvent = recordSessionAuditEvent({
+    const auditEvent = await recordSessionAuditEvent({
       schoolId: ctx.schoolId,
       studentId: ctx.studentId,
       tutorLearnerId: ctx.tutorLearnerId,
