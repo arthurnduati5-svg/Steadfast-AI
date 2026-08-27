@@ -29,34 +29,6 @@ export async function createStudentLearningSession(
   context: StudentLearningSessionContext,
   meta?: StudentLearningSessionIdempotencyMeta,
 ): Promise<StudentLearningSessionLifecycleResult> {
-  if (meta?.idempotencyKey && meta?.requestFingerprint) {
-    const existing = await studentLearningSessionRepository.checkIdempotency(
-      meta.idempotencyKey,
-      context.schoolId,
-      context.tutorLearnerId,
-      meta.requestFingerprint,
-    );
-    if (existing.exists) {
-      if (existing.fingerprintMatch && existing.event) {
-        const session = await studentLearningSessionRepository.getSession(
-          existing.event.sessionId,
-          context.schoolId,
-          context.tutorLearnerId,
-        );
-        if (session) {
-          return { session, created: false, resumed: false, safeReasonCodes: ['session_created'] };
-        }
-      } else {
-        return {
-          session: null as unknown as StudentLearningSessionRecord,
-          created: false,
-          resumed: false,
-          safeReasonCodes: ['idempotency_key_conflict'],
-        };
-      }
-    }
-  }
-
   const input: CreateSessionInput = {
     schoolId: context.schoolId,
     tutorLearnerId: context.tutorLearnerId,
@@ -67,26 +39,30 @@ export async function createStudentLearningSession(
     skillId: context.skillId,
     objectiveId: context.objectiveId,
   };
-  const record = await studentLearningSessionRepository.createSession(input);
 
-  if (meta?.idempotencyKey || meta?.requestFingerprint) {
-    const versioned = await studentLearningSessionRepository.getSessionWithVersion(record.id, context.schoolId, context.tutorLearnerId);
-    await studentLearningSessionRepository.appendEvent({
-      schoolId: context.schoolId,
-      tutorLearnerId: context.tutorLearnerId,
-      sessionId: record.id,
-      studentId: context.studentId,
-      eventType: 'session_created',
-      safeEventSummary: 'session_created',
-      safeEvidenceRefs: [],
-      reasonCodes: ['session_created'],
-      privacyMetadata: {},
-      operationVersion: versioned?.stateVersion ?? 1,
-      idempotencyKey: meta.idempotencyKey,
-      requestFingerprint: meta.requestFingerprint,
-    });
+  if (meta?.idempotencyKey && meta?.requestFingerprint) {
+    const result = await studentLearningSessionRepository.createSessionWithEvent(
+      input,
+      meta.idempotencyKey,
+      meta.requestFingerprint,
+    );
+    if (result.conflict === 'idempotency') {
+      return {
+        session: null as unknown as StudentLearningSessionRecord,
+        created: false,
+        resumed: false,
+        safeReasonCodes: ['idempotency_key_conflict'],
+      };
+    }
+    return {
+      session: result.record,
+      created: result.created,
+      resumed: false,
+      safeReasonCodes: ['session_created'],
+    };
   }
 
+  const record = await studentLearningSessionRepository.createSession(input);
   return { session: record, created: true, resumed: false, safeReasonCodes: ['session_created'] };
 }
 

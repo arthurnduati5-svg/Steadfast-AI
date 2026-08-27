@@ -265,6 +265,13 @@ export interface TransactionalMutationResult {
   conflict?: 'version' | 'idempotency';
 }
 
+export interface CreateSessionWithEventResult {
+  record: StudentLearningSessionRecord;
+  event: StudentLearningSessionEvent | null;
+  created: boolean;
+  conflict?: 'idempotency';
+}
+
 export class StudentLearningSessionRepository {
   async createSession(input: CreateSessionInput): Promise<StudentLearningSessionRecord> {
     const now = new Date();
@@ -431,11 +438,144 @@ export class StudentLearningSessionRepository {
         privacyMetadata: (input.privacyMetadata || {}) as Prisma.InputJsonValue,
         operationVersion: input.operationVersion,
         idempotencyKey: input.idempotencyKey || null,
+        requestFingerprint: input.requestFingerprint || null,
         requestId: input.requestId || null,
         correlationId: input.correlationId || null,
       },
     });
     return toEventRecord(row);
+  }
+
+  async createSessionWithEvent(
+    input: CreateSessionInput,
+    idempotencyKey?: string,
+    requestFingerprint?: string,
+  ): Promise<CreateSessionWithEventResult> {
+    const isKeyed = !!idempotencyKey && !!requestFingerprint;
+
+    if (!isKeyed) {
+      const record = await this.createSession(input);
+      return { record, event: null, created: true };
+    }
+
+    const scopedKey = idempotencyKey!;
+    const scopedFp = requestFingerprint!;
+
+    try {
+      return await prisma.$transaction(async (tx) => {
+        const existingEvent = await tx.studentLearningSessionEvent.findFirst({
+          where: {
+            idempotencyKey: scopedKey,
+            schoolId: input.schoolId,
+            tutorLearnerId: input.tutorLearnerId,
+          },
+        });
+
+        if (existingEvent) {
+          if (existingEvent.requestFingerprint === scopedFp) {
+            const session = await tx.studentLearningSessionState.findUnique({
+              where: { id: existingEvent.sessionId },
+            });
+            if (session) {
+              return {
+                record: toSessionRecord(session as SessionStateRow),
+                event: toEventRecord(existingEvent as SessionEventRow),
+                created: false,
+              };
+            }
+            return { record: null as unknown as StudentLearningSessionRecord, event: null, created: false, conflict: 'idempotency' };
+          }
+          return { record: null as unknown as StudentLearningSessionRecord, event: null, created: false, conflict: 'idempotency' };
+        }
+
+        const now = new Date();
+        const sessionRow = await tx.studentLearningSessionState.create({
+          data: {
+            schoolId: input.schoolId,
+            tutorLearnerId: input.tutorLearnerId,
+            studentId: input.studentId || null,
+            externalStudentId: input.externalStudentId || null,
+            status: 'created',
+            stage: 'orienting',
+            currentMode: 'none',
+            subject: input.subjectId || null,
+            topic: input.topicId || null,
+            skillTag: input.skillId || null,
+            objectiveId: input.objectiveId || null,
+            safeEvidenceRefs: [],
+            reasonCodes: ['session_created'],
+            privacyMetadata: {},
+            sourceTruthStatus: 'unknown',
+            confidenceBucket: 'not_enough_evidence',
+            stateVersion: 1,
+            lastTransitionAt: now,
+            createdAt: now,
+            updatedAt: now,
+          },
+        });
+
+        const eventRow = (await tx.studentLearningSessionEvent.create({
+          data: {
+            schoolId: input.schoolId,
+            tutorLearnerId: input.tutorLearnerId,
+            sessionId: sessionRow.id,
+            studentId: input.studentId || null,
+            eventType: 'session_created',
+            transitionType: null,
+            previousStatus: null,
+            resultingStatus: null,
+            previousMode: null,
+            nextMode: null,
+            subject: input.subjectId || null,
+            topic: input.topicId || null,
+            skillTag: input.skillId || null,
+            safeEventSummary: 'session_created',
+            safeEvidenceRefs: [],
+            reasonCodes: ['session_created'],
+            privacyMetadata: {},
+            operationVersion: 1,
+            idempotencyKey: scopedKey,
+            requestFingerprint: scopedFp,
+            requestId: null,
+            correlationId: null,
+          },
+        })) as unknown as SessionEventRow;
+
+        return {
+          record: toSessionRecord(sessionRow as SessionStateRow),
+          event: toEventRecord(eventRow),
+          created: true,
+        };
+      });
+    } catch (err: unknown) {
+      const code = (err as unknown as { code?: string })?.code;
+      const isP2002 =
+        (err instanceof Prisma.PrismaClientKnownRequestError && (err as unknown as { code: string }).code === 'P2002') ||
+        code === 'P2002';
+      if (isP2002) {
+        const winnerEvent = await prisma.studentLearningSessionEvent.findFirst({
+          where: { idempotencyKey: scopedKey, schoolId: input.schoolId, tutorLearnerId: input.tutorLearnerId },
+        });
+        if (winnerEvent) {
+          if (winnerEvent.requestFingerprint === scopedFp) {
+            const session = await prisma.studentLearningSessionState.findUnique({
+              where: { id: winnerEvent.sessionId },
+            });
+            if (session) {
+              return {
+                record: toSessionRecord(session as SessionStateRow),
+                event: toEventRecord(winnerEvent as SessionEventRow),
+                created: false,
+              };
+            }
+          } else {
+            return { record: null as unknown as StudentLearningSessionRecord, event: null, created: false, conflict: 'idempotency' };
+          }
+        }
+        return { record: null as unknown as StudentLearningSessionRecord, event: null, created: false, conflict: 'idempotency' };
+      }
+      throw err;
+    }
   }
 
   async listEvents(

@@ -10,6 +10,9 @@ const sessionStateStore = new Map<string, any>();
 const sessionEventStore = new Map<string, any>();
 let sessionIdCounter = 0;
 let eventIdCounter = 0;
+let forceNextEventFailure = false;
+function setForceNextEventFailure(v: boolean) { forceNextEventFailure = v; }
+function shouldFailNextEvent() { if (forceNextEventFailure) { forceNextEventFailure = false; return true; } return false; }
 
 function resetSessionStores() {
   sessionStateStore.clear();
@@ -32,7 +35,37 @@ vi.mock('../lib/prisma', () => {
     default: {
       $queryRaw: mockQueryRaw,
       $transaction: vi.fn().mockImplementation(async (callback: any) => {
-        return await callback({
+        const txCreatedStateIds = new Set<string>();
+        const txCreatedEventIds = new Set<string>();
+        const txUpdatedStateIds = new Set<string>();
+        const eventCreateWithUniqueCheckTx = async (data: any) => {
+          if (shouldFailNextEvent()) {
+            const err: any = new Error('simulated event failure');
+            err.code = 'SIMULATED_FAILURE';
+            throw err;
+          }
+          if (data.idempotencyKey) {
+            for (const existing of sessionEventStore.values()) {
+              if (
+                existing.idempotencyKey === data.idempotencyKey &&
+                existing.schoolId === data.schoolId &&
+                existing.tutorLearnerId === data.tutorLearnerId
+              ) {
+                const err: any = new Error('Unique constraint failed on idempotencyKey');
+                err.code = 'P2002';
+                err.name = 'PrismaClientKnownRequestError';
+                throw err;
+              }
+            }
+          }
+          const id = generateEventId();
+          const event = { id, ...data, createdAt: new Date() };
+          sessionEventStore.set(id, event);
+          txCreatedEventIds.add(id);
+          return event;
+        };
+        try {
+          return await callback({
           studentLearningSessionState: {
             findUnique: vi.fn().mockImplementation(({ where }: any) => {
               const session = sessionStateStore.get(where.id);
@@ -74,6 +107,7 @@ vi.mock('../lib/prisma', () => {
                 updatedAt: data.updatedAt || new Date(),
               };
               sessionStateStore.set(id, session);
+              txCreatedStateIds.add(id);
               return Promise.resolve(session);
             }),
             update: vi.fn().mockImplementation(({ where, data }: any) => {
@@ -81,6 +115,7 @@ vi.mock('../lib/prisma', () => {
               if (!session) return Promise.resolve(null);
               const updated = { ...session, ...data, updatedAt: data.updatedAt || new Date() };
               sessionStateStore.set(where.id, updated);
+              txUpdatedStateIds.add(where.id);
               return Promise.resolve(updated);
             }),
             updateMany: vi.fn().mockImplementation(({ where, data }: any) => {
@@ -134,22 +169,22 @@ vi.mock('../lib/prisma', () => {
               }
               return Promise.resolve(events);
             }),
-            create: vi.fn().mockImplementation(({ data }: any) => {
-              const id = generateEventId();
-              const event = {
-                id,
-                ...data,
-                createdAt: new Date(),
-              };
-              sessionEventStore.set(id, event);
-              return Promise.resolve(event);
-            }),
+            create: vi.fn().mockImplementation(({ data }: any) => eventCreateWithUniqueCheckTx(data)),
             update: vi.fn().mockResolvedValue({}),
             updateMany: vi.fn().mockResolvedValue({ count: 0 }),
             delete: vi.fn().mockResolvedValue({}),
             count: vi.fn().mockResolvedValue(0),
           },
         });
+        } catch (e) {
+          // Roll back only mutations performed within THIS transaction. Winner
+          // transactions running concurrently commit their own rows which must
+          // remain durable (mirrors real Postgres transaction isolation).
+          for (const id of txCreatedStateIds) sessionStateStore.delete(id);
+          for (const id of txCreatedEventIds) sessionEventStore.delete(id);
+          for (const id of txUpdatedStateIds) sessionStateStore.delete(id);
+          throw e;
+        }
       }),
       learningArtifact: {
         findUnique: vi.fn().mockResolvedValue(null),
@@ -382,6 +417,25 @@ vi.mock('../lib/prisma', () => {
           return Promise.resolve(events);
         }),
         create: vi.fn().mockImplementation(({ data }: any) => {
+          if (shouldFailNextEvent()) {
+            const err: any = new Error('simulated event failure');
+            err.code = 'SIMULATED_FAILURE';
+            throw err;
+          }
+          if (data.idempotencyKey) {
+            for (const existing of sessionEventStore.values()) {
+              if (
+                existing.idempotencyKey === data.idempotencyKey &&
+                existing.schoolId === data.schoolId &&
+                existing.tutorLearnerId === data.tutorLearnerId
+              ) {
+                const err: any = new Error('Unique constraint failed on idempotencyKey');
+                err.code = 'P2002';
+                err.name = 'PrismaClientKnownRequestError';
+                throw err;
+              }
+            }
+          }
           const id = generateEventId();
           const event = {
             id,
@@ -401,7 +455,7 @@ vi.mock('../lib/prisma', () => {
 });
 
 // Export reset function for tests
-export { resetSessionStores };
+export { resetSessionStores, setForceNextEventFailure };
 
 vi.mock('redis', () => {
   const mockClient = {
