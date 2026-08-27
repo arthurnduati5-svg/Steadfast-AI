@@ -454,8 +454,73 @@ export class StudentLearningSessionRepository {
     const isKeyed = !!idempotencyKey && !!requestFingerprint;
 
     if (!isKeyed) {
-      const record = await this.createSession(input);
-      return { record, event: null, created: true };
+      // Unkeyed creation must still be atomic: the authoritative session_created
+      // event is written in the same transaction as the state. Either both
+      // persist or both roll back. idempotencyKey/requestFingerprint remain null.
+      try {
+        return await prisma.$transaction(async (tx) => {
+          const now = new Date();
+          const sessionRow = await tx.studentLearningSessionState.create({
+            data: {
+              schoolId: input.schoolId,
+              tutorLearnerId: input.tutorLearnerId,
+              studentId: input.studentId || null,
+              externalStudentId: input.externalStudentId || null,
+              status: 'created',
+              stage: 'orienting',
+              currentMode: 'none',
+              subject: input.subjectId || null,
+              topic: input.topicId || null,
+              skillTag: input.skillId || null,
+              objectiveId: input.objectiveId || null,
+              safeEvidenceRefs: [],
+              reasonCodes: ['session_created'],
+              privacyMetadata: {},
+              sourceTruthStatus: 'unknown',
+              confidenceBucket: 'not_enough_evidence',
+              stateVersion: 1,
+              lastTransitionAt: now,
+              createdAt: now,
+              updatedAt: now,
+            },
+          });
+
+          const eventRow = (await tx.studentLearningSessionEvent.create({
+            data: {
+              schoolId: input.schoolId,
+              tutorLearnerId: input.tutorLearnerId,
+              sessionId: sessionRow.id,
+              studentId: input.studentId || null,
+              eventType: 'session_created',
+              transitionType: null,
+              previousStatus: null,
+              resultingStatus: null,
+              previousMode: null,
+              nextMode: null,
+              subject: input.subjectId || null,
+              topic: input.topicId || null,
+              skillTag: input.skillId || null,
+              safeEventSummary: 'session_created',
+              safeEvidenceRefs: [],
+              reasonCodes: ['session_created'],
+              privacyMetadata: {},
+              operationVersion: 1,
+              idempotencyKey: null,
+              requestFingerprint: null,
+              requestId: null,
+              correlationId: null,
+            },
+          })) as unknown as SessionEventRow;
+
+          return {
+            record: toSessionRecord(sessionRow as SessionStateRow),
+            event: toEventRecord(eventRow),
+            created: true,
+          };
+        });
+      } catch (err: unknown) {
+        throw err;
+      }
     }
 
     const scopedKey = idempotencyKey!;

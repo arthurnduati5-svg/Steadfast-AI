@@ -62,8 +62,13 @@ export async function createStudentLearningSession(
     };
   }
 
-  const record = await studentLearningSessionRepository.createSession(input);
-  return { session: record, created: true, resumed: false, safeReasonCodes: ['session_created'] };
+  const result = await studentLearningSessionRepository.createSessionWithEvent(input);
+  return {
+    session: result.record,
+    created: result.created,
+    resumed: false,
+    safeReasonCodes: ['session_created'],
+  };
 }
 
 export async function resumeStudentLearningSession(
