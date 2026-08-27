@@ -142,9 +142,10 @@ router.post('/', async (req: Request, res: Response) => {
     }
 
     const idempotencyKey = getIdempotencyKey(req);
+    let requestFingerprint: string | undefined;
     if (idempotencyKey) {
-      const fingerprint = computeRequestFingerprint(req);
-      const existing = await studentLearningSessionRepository.checkIdempotency(idempotencyKey, ctx.schoolId, ctx.tutorLearnerId, fingerprint);
+      requestFingerprint = computeRequestFingerprint(req);
+      const existing = await studentLearningSessionRepository.checkIdempotency(idempotencyKey, ctx.schoolId, ctx.tutorLearnerId, requestFingerprint);
       if (existing.exists) {
         if (existing.fingerprintMatch && existing.event) {
           const session = await studentLearningSessionRepository.getSession(existing.event.sessionId, ctx.schoolId, ctx.tutorLearnerId);
@@ -157,7 +158,11 @@ router.post('/', async (req: Request, res: Response) => {
       }
     }
 
-    const result = await createStudentLearningSession(ctx);
+    const meta = idempotencyKey && requestFingerprint ? { idempotencyKey, requestFingerprint } : undefined;
+    const result = await createStudentLearningSession(ctx, meta);
+    if ((result as unknown as { safeReasonCodes: string[] }).safeReasonCodes?.includes('idempotency_key_conflict')) {
+      return sendError(res, 409, buildIdempotencyConflictResponse());
+    }
     const response = buildSessionCreatedResponse(result);
     res.status(201).json(response);
   } catch (err) {
@@ -238,9 +243,10 @@ router.post('/:sessionId/resume', async (req: Request, res: Response) => {
     }
 
     const idempotencyKey = getIdempotencyKey(req);
+    let requestFingerprintResume: string | undefined;
     if (idempotencyKey) {
-      const fingerprint = computeRequestFingerprint(req);
-      const existing = await studentLearningSessionRepository.checkIdempotency(idempotencyKey, ctx.schoolId, ctx.tutorLearnerId, fingerprint);
+      requestFingerprintResume = computeRequestFingerprint(req);
+      const existing = await studentLearningSessionRepository.checkIdempotency(idempotencyKey, ctx.schoolId, ctx.tutorLearnerId, requestFingerprintResume);
       if (existing.exists) {
         if (existing.fingerprintMatch && existing.event) {
           const session = await studentLearningSessionRepository.getSession(existing.event.sessionId, ctx.schoolId, ctx.tutorLearnerId);
@@ -253,7 +259,8 @@ router.post('/:sessionId/resume', async (req: Request, res: Response) => {
       }
     }
 
-    const result = await resumeStudentLearningSession(sessionId, ctx);
+    const resumeMeta = idempotencyKey && requestFingerprintResume ? { idempotencyKey, requestFingerprint: requestFingerprintResume } : undefined;
+    const result = await resumeStudentLearningSession(sessionId, ctx, resumeMeta);
     if (!result) {
       return sendError(res, 404, buildGenericErrorResponse('Session not found or cannot be resumed') as unknown as Record<string, unknown>);
     }
@@ -280,9 +287,10 @@ router.post('/:sessionId/pause', async (req: Request, res: Response) => {
     }
 
     const idempotencyKey = getIdempotencyKey(req);
+    let requestFingerprintPause: string | undefined;
     if (idempotencyKey) {
-      const fingerprint = computeRequestFingerprint(req);
-      const existing = await studentLearningSessionRepository.checkIdempotency(idempotencyKey, ctx.schoolId, ctx.tutorLearnerId, fingerprint);
+      requestFingerprintPause = computeRequestFingerprint(req);
+      const existing = await studentLearningSessionRepository.checkIdempotency(idempotencyKey, ctx.schoolId, ctx.tutorLearnerId, requestFingerprintPause);
       if (existing.exists) {
         if (existing.fingerprintMatch && existing.event) {
           const session = await studentLearningSessionRepository.getSession(existing.event.sessionId, ctx.schoolId, ctx.tutorLearnerId);
@@ -295,7 +303,8 @@ router.post('/:sessionId/pause', async (req: Request, res: Response) => {
       }
     }
 
-    const result = await pauseStudentLearningSession(sessionId, ctx);
+    const pauseMeta = idempotencyKey && requestFingerprintPause ? { idempotencyKey, requestFingerprint: requestFingerprintPause } : undefined;
+    const result = await pauseStudentLearningSession(sessionId, ctx, pauseMeta);
     if (!result) {
       return sendError(res, 404, buildGenericErrorResponse('Session not found or cannot be paused') as unknown as Record<string, unknown>);
     }
@@ -322,9 +331,10 @@ router.post('/:sessionId/complete', async (req: Request, res: Response) => {
     }
 
     const idempotencyKey = getIdempotencyKey(req);
+    let requestFingerprintComplete: string | undefined;
     if (idempotencyKey) {
-      const fingerprint = computeRequestFingerprint(req);
-      const existing = await studentLearningSessionRepository.checkIdempotency(idempotencyKey, ctx.schoolId, ctx.tutorLearnerId, fingerprint);
+      requestFingerprintComplete = computeRequestFingerprint(req);
+      const existing = await studentLearningSessionRepository.checkIdempotency(idempotencyKey, ctx.schoolId, ctx.tutorLearnerId, requestFingerprintComplete);
       if (existing.exists) {
         if (existing.fingerprintMatch && existing.event) {
           const session = await studentLearningSessionRepository.getSession(existing.event.sessionId, ctx.schoolId, ctx.tutorLearnerId);
@@ -337,7 +347,8 @@ router.post('/:sessionId/complete', async (req: Request, res: Response) => {
       }
     }
 
-    const result = await completeStudentLearningSession(sessionId, ctx);
+    const completeMeta = idempotencyKey && requestFingerprintComplete ? { idempotencyKey, requestFingerprint: requestFingerprintComplete } : undefined;
+    const result = await completeStudentLearningSession(sessionId, ctx, completeMeta);
     if (!result) {
       return sendError(res, 404, buildGenericErrorResponse('Session not found or cannot be completed') as unknown as Record<string, unknown>);
     }
@@ -364,9 +375,10 @@ router.post('/:sessionId/abandon', async (req: Request, res: Response) => {
     }
 
     const idempotencyKey = getIdempotencyKey(req);
+    let requestFingerprintAbandon: string | undefined;
     if (idempotencyKey) {
-      const fingerprint = computeRequestFingerprint(req);
-      const existing = await studentLearningSessionRepository.checkIdempotency(idempotencyKey, ctx.schoolId, ctx.tutorLearnerId, fingerprint);
+      requestFingerprintAbandon = computeRequestFingerprint(req);
+      const existing = await studentLearningSessionRepository.checkIdempotency(idempotencyKey, ctx.schoolId, ctx.tutorLearnerId, requestFingerprintAbandon);
       if (existing.exists) {
         if (existing.fingerprintMatch && existing.event) {
           const session = await studentLearningSessionRepository.getSession(existing.event.sessionId, ctx.schoolId, ctx.tutorLearnerId);
@@ -379,7 +391,8 @@ router.post('/:sessionId/abandon', async (req: Request, res: Response) => {
       }
     }
 
-    const result = await abandonStudentLearningSession(sessionId, ctx);
+    const abandonMeta = idempotencyKey && requestFingerprintAbandon ? { idempotencyKey, requestFingerprint: requestFingerprintAbandon } : undefined;
+    const result = await abandonStudentLearningSession(sessionId, ctx, abandonMeta);
     if (!result) {
       return sendError(res, 404, buildGenericErrorResponse('Session not found or cannot be abandoned') as unknown as Record<string, unknown>);
     }
@@ -416,9 +429,10 @@ router.post('/:sessionId/transition', async (req: Request, res: Response) => {
     }
 
     const idempotencyKey = getIdempotencyKey(req);
+    let requestFingerprintTransition: string | undefined;
     if (idempotencyKey) {
-      const fingerprint = computeRequestFingerprint(req);
-      const existing = await studentLearningSessionRepository.checkIdempotency(idempotencyKey, ctx.schoolId, ctx.tutorLearnerId, fingerprint);
+      requestFingerprintTransition = computeRequestFingerprint(req);
+      const existing = await studentLearningSessionRepository.checkIdempotency(idempotencyKey, ctx.schoolId, ctx.tutorLearnerId, requestFingerprintTransition);
       if (existing.exists) {
         if (existing.fingerprintMatch && existing.event) {
           const session = await studentLearningSessionRepository.getSession(existing.event.sessionId, ctx.schoolId, ctx.tutorLearnerId);
@@ -442,6 +456,8 @@ router.post('/:sessionId/transition', async (req: Request, res: Response) => {
       }
     }
 
+    const transitionMeta = idempotencyKey && requestFingerprintTransition ? { idempotencyKey, requestFingerprint: requestFingerprintTransition } : undefined;
+
     const result = transitionSessionState(
       record.status,
       record.stage,
@@ -457,7 +473,7 @@ router.post('/:sessionId/transition', async (req: Request, res: Response) => {
         currentMode: result.toMode,
         previousMode: result.fromMode,
         reasonCodes: result.safeReasonCodes,
-      });
+      }, transitionMeta);
     } else {
     }
 

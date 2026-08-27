@@ -257,9 +257,9 @@ describe('Task 016: StudentLearningSessionLifecycleService', () => {
     expect(result).toBeNull();
   });
 
-  it('clearStudentLearningSessionStoreForTest clears all sessions', async () => {
+  it('resetSessionStores clears all sessions', async () => {
     await createStudentLearningSession(baseContext);
-    clearStudentLearningSessionStoreForTest();
+    resetSessionStores();
     const sessions = await listStudentLearningSessionsForLearner('school-1', 'learner-1');
     expect(sessions.length).toBe(0);
   });

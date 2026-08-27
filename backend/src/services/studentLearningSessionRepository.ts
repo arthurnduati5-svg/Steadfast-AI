@@ -33,6 +33,7 @@ interface StudentLearningSessionEvent {
   privacyMetadata: Record<string, unknown>;
   operationVersion: number;
   idempotencyKey?: string;
+  requestFingerprint?: string;
   requestId?: string;
   correlationId?: string;
   createdAt: Date;
@@ -91,6 +92,7 @@ interface SessionEventRow {
   privacyMetadata: unknown;
   operationVersion: number;
   idempotencyKey: string | null;
+  requestFingerprint: string | null;
   requestId: string | null;
   correlationId: string | null;
   createdAt: Date;
@@ -152,6 +154,7 @@ function toEventRecord(row: SessionEventRow): StudentLearningSessionEvent {
     privacyMetadata: (row.privacyMetadata && typeof row.privacyMetadata === 'object') ? row.privacyMetadata as Record<string, unknown> : {},
     operationVersion: row.operationVersion,
     idempotencyKey: row.idempotencyKey ?? undefined,
+    requestFingerprint: row.requestFingerprint ?? undefined,
     requestId: row.requestId ?? undefined,
     correlationId: row.correlationId ?? undefined,
     createdAt: row.createdAt,
@@ -228,6 +231,7 @@ export interface AppendEventInput {
   privacyMetadata?: Record<string, unknown>;
   operationVersion: number;
   idempotencyKey?: string;
+  requestFingerprint?: string;
   requestId?: string;
   correlationId?: string;
 }
@@ -488,6 +492,13 @@ export class StudentLearningSessionRepository {
     return { exists: true, event: toEventRecord(row), fingerprintMatch };
   }
 
+  async getSessionByIdLegacy(sessionId: string): Promise<StudentLearningSessionRecord | null> {
+    const row = await prisma.studentLearningSessionState.findUnique({
+      where: { id: sessionId },
+    });
+    return row ? toSessionRecord(row as unknown as SessionStateRow) : null;
+  }
+
   async getSessionByIdempotencyKey(
     idempotencyKey: string,
     schoolId: string,
@@ -585,6 +596,27 @@ export class StudentLearningSessionRepository {
       });
 
       if (updateResult.count === 0) {
+        if (idempotencyKey && requestFingerprint) {
+          const winner = await tx.studentLearningSessionEvent.findFirst({
+            where: { idempotencyKey, schoolId, tutorLearnerId },
+          });
+          if (winner) {
+            if (winner.requestFingerprint === requestFingerprint) {
+              const session = await tx.studentLearningSessionState.findUnique({
+                where: { id: sessionId },
+              });
+              if (session) {
+                return {
+                  record: toSessionRecord(session),
+                  event: toEventRecord(winner),
+                  success: true,
+                };
+              }
+            } else {
+              return { record: null!, event: null!, success: false, conflict: 'idempotency' };
+            }
+          }
+        }
         const current = await tx.studentLearningSessionState.findFirst({
           where: { id: sessionId, schoolId, tutorLearnerId },
         });
@@ -599,32 +631,62 @@ export class StudentLearningSessionRepository {
       });
 
       const newVersion = expectedVersion + 1;
-      const eventRow = await tx.studentLearningSessionEvent.create({
-        data: {
-          schoolId,
-          tutorLearnerId,
-          sessionId,
-          studentId: event.studentId || null,
-          eventType: event.eventType,
-          transitionType: event.transitionType || null,
-          previousStatus: event.previousStatus || null,
-          resultingStatus: event.resultingStatus || null,
-          previousMode: event.previousMode || null,
-          nextMode: event.nextMode || null,
-          subject: event.subject || null,
-          topic: event.topic || null,
-          skillTag: event.skillTag || null,
-          safeEventSummary: event.safeEventSummary || null,
-          safeEvidenceRefs: event.safeEvidenceRefs || [],
-          reasonCodes: event.reasonCodes || [],
-          privacyMetadata: (event.privacyMetadata || {}) as any,
-          operationVersion: newVersion,
-          idempotencyKey: idempotencyKey || null,
-          requestFingerprint: requestFingerprint || null,
-          requestId: event.requestId || null,
-          correlationId: event.correlationId || null,
-        },
-      });
+      let eventRow;
+      try {
+        eventRow = await tx.studentLearningSessionEvent.create({
+          data: {
+            schoolId,
+            tutorLearnerId,
+            sessionId,
+            studentId: event.studentId || null,
+            eventType: event.eventType,
+            transitionType: event.transitionType || null,
+            previousStatus: event.previousStatus || null,
+            resultingStatus: event.resultingStatus || null,
+            previousMode: event.previousMode || null,
+            nextMode: event.nextMode || null,
+            subject: event.subject || null,
+            topic: event.topic || null,
+            skillTag: event.skillTag || null,
+            safeEventSummary: event.safeEventSummary || null,
+            safeEvidenceRefs: event.safeEvidenceRefs || [],
+            reasonCodes: event.reasonCodes || [],
+            privacyMetadata: (event.privacyMetadata || {}) as any,
+            operationVersion: newVersion,
+            idempotencyKey: idempotencyKey || null,
+            requestFingerprint: requestFingerprint || null,
+            requestId: event.requestId || null,
+            correlationId: event.correlationId || null,
+          },
+        });
+      } catch (err: unknown) {
+        if (
+          err instanceof Prisma.PrismaClientKnownRequestError &&
+          err.code === 'P2002'
+        ) {
+          const winner = await tx.studentLearningSessionEvent.findFirst({
+            where: { idempotencyKey, schoolId, tutorLearnerId },
+          });
+          if (winner) {
+            if (winner.requestFingerprint === requestFingerprint) {
+              const session = await tx.studentLearningSessionState.findUnique({
+                where: { id: sessionId },
+              });
+              if (session) {
+                return {
+                  record: toSessionRecord(session),
+                  event: toEventRecord(winner),
+                  success: true,
+                };
+              }
+            } else {
+              return { record: null!, event: null!, success: false, conflict: 'idempotency' };
+            }
+          }
+          return { record: null!, event: null!, success: false, conflict: 'idempotency' };
+        }
+        throw err;
+      }
 
       return {
         record: toSessionRecord(updated!),

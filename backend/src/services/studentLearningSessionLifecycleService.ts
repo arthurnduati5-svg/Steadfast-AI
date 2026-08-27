@@ -7,6 +7,7 @@ import type {
   StudentLearningSessionReasonCode,
   StudentLearningSessionLifecycleResult,
   StudentLearningSessionContext,
+  StudentLearningSessionIdempotencyMeta,
 } from '../contracts/studentLearningSessionContracts';
 import {
   getInitialSessionState,
@@ -23,11 +24,39 @@ import {
   TransactionalMutationInput,
   VersionedSessionRecord,
 } from './studentLearningSessionRepository';
-import { resetSessionStores } from '../tests/vitest-setup';
 
 export async function createStudentLearningSession(
   context: StudentLearningSessionContext,
+  meta?: StudentLearningSessionIdempotencyMeta,
 ): Promise<StudentLearningSessionLifecycleResult> {
+  if (meta?.idempotencyKey && meta?.requestFingerprint) {
+    const existing = await studentLearningSessionRepository.checkIdempotency(
+      meta.idempotencyKey,
+      context.schoolId,
+      context.tutorLearnerId,
+      meta.requestFingerprint,
+    );
+    if (existing.exists) {
+      if (existing.fingerprintMatch && existing.event) {
+        const session = await studentLearningSessionRepository.getSession(
+          existing.event.sessionId,
+          context.schoolId,
+          context.tutorLearnerId,
+        );
+        if (session) {
+          return { session, created: false, resumed: false, safeReasonCodes: ['session_created'] };
+        }
+      } else {
+        return {
+          session: null as unknown as StudentLearningSessionRecord,
+          created: false,
+          resumed: false,
+          safeReasonCodes: ['idempotency_key_conflict'],
+        };
+      }
+    }
+  }
+
   const input: CreateSessionInput = {
     schoolId: context.schoolId,
     tutorLearnerId: context.tutorLearnerId,
@@ -39,12 +68,32 @@ export async function createStudentLearningSession(
     objectiveId: context.objectiveId,
   };
   const record = await studentLearningSessionRepository.createSession(input);
+
+  if (meta?.idempotencyKey || meta?.requestFingerprint) {
+    const versioned = await studentLearningSessionRepository.getSessionWithVersion(record.id, context.schoolId, context.tutorLearnerId);
+    await studentLearningSessionRepository.appendEvent({
+      schoolId: context.schoolId,
+      tutorLearnerId: context.tutorLearnerId,
+      sessionId: record.id,
+      studentId: context.studentId,
+      eventType: 'session_created',
+      safeEventSummary: 'session_created',
+      safeEvidenceRefs: [],
+      reasonCodes: ['session_created'],
+      privacyMetadata: {},
+      operationVersion: versioned?.stateVersion ?? 1,
+      idempotencyKey: meta.idempotencyKey,
+      requestFingerprint: meta.requestFingerprint,
+    });
+  }
+
   return { session: record, created: true, resumed: false, safeReasonCodes: ['session_created'] };
 }
 
 export async function resumeStudentLearningSession(
   sessionId: string,
   context: StudentLearningSessionContext,
+  meta?: StudentLearningSessionIdempotencyMeta,
 ): Promise<StudentLearningSessionLifecycleResult | null> {
   const versioned = await studentLearningSessionRepository.getSessionWithVersion(
     sessionId,
@@ -91,6 +140,8 @@ export async function resumeStudentLearningSession(
     expectedVersion: versioned.stateVersion,
     updates: updateInput,
     event: eventInput,
+    idempotencyKey: meta?.idempotencyKey,
+    requestFingerprint: meta?.requestFingerprint,
   });
 
   if (!result.success) return null;
@@ -100,6 +151,7 @@ export async function resumeStudentLearningSession(
 export async function pauseStudentLearningSession(
   sessionId: string,
   context: StudentLearningSessionContext,
+  meta?: StudentLearningSessionIdempotencyMeta,
 ): Promise<StudentLearningSessionLifecycleResult | null> {
   const versioned = await studentLearningSessionRepository.getSessionWithVersion(
     sessionId,
@@ -143,6 +195,8 @@ export async function pauseStudentLearningSession(
     expectedVersion: versioned.stateVersion,
     updates: updateInput,
     event: eventInput,
+    idempotencyKey: meta?.idempotencyKey,
+    requestFingerprint: meta?.requestFingerprint,
   });
 
   if (!result.success) return null;
@@ -152,6 +206,7 @@ export async function pauseStudentLearningSession(
 export async function completeStudentLearningSession(
   sessionId: string,
   context: StudentLearningSessionContext,
+  meta?: StudentLearningSessionIdempotencyMeta,
 ): Promise<StudentLearningSessionLifecycleResult | null> {
   const versioned = await studentLearningSessionRepository.getSessionWithVersion(
     sessionId,
@@ -195,6 +250,8 @@ export async function completeStudentLearningSession(
     expectedVersion: versioned.stateVersion,
     updates: updateInput,
     event: eventInput,
+    idempotencyKey: meta?.idempotencyKey,
+    requestFingerprint: meta?.requestFingerprint,
   });
 
   if (!result.success) return null;
@@ -204,6 +261,7 @@ export async function completeStudentLearningSession(
 export async function abandonStudentLearningSession(
   sessionId: string,
   context: StudentLearningSessionContext,
+  meta?: StudentLearningSessionIdempotencyMeta,
 ): Promise<StudentLearningSessionLifecycleResult | null> {
   const versioned = await studentLearningSessionRepository.getSessionWithVersion(
     sessionId,
@@ -247,6 +305,8 @@ export async function abandonStudentLearningSession(
     expectedVersion: versioned.stateVersion,
     updates: updateInput,
     event: eventInput,
+    idempotencyKey: meta?.idempotencyKey,
+    requestFingerprint: meta?.requestFingerprint,
   });
 
   if (!result.success) return null;
@@ -257,6 +317,7 @@ export async function expireStudentLearningSession(
   sessionId: string,
   schoolId: string,
   tutorLearnerId: string,
+  meta?: StudentLearningSessionIdempotencyMeta,
 ): Promise<StudentLearningSessionLifecycleResult | null> {
   const versioned = await studentLearningSessionRepository.getSessionWithVersion(
     sessionId,
@@ -299,6 +360,8 @@ export async function expireStudentLearningSession(
     expectedVersion: versioned.stateVersion,
     updates: updateInput,
     event: eventInput,
+    idempotencyKey: meta?.idempotencyKey,
+    requestFingerprint: meta?.requestFingerprint,
   });
 
   if (!result.success) return null;
@@ -321,13 +384,15 @@ export async function listStudentLearningSessionsForLearner(
 }
 
 export function clearStudentLearningSessionStoreForTest(): void {
-  resetSessionStores();
+  // Production code must not depend on the Vitest harness or test-only in-memory
+  // session stores. Test reset behavior now lives in the test setup layer
+  // (resetSessionStores). This export is retained only for backward compatibility
+  // and is intentionally a harmless no-op in production.
 }
 
 export async function updateSessionTransition(
   sessionId: string,
-  context: StudentLearningSessionContext,
-  updates: Partial<{
+  contextOrUpdates: StudentLearningSessionContext | Partial<{
     status: StudentLearningSessionStatus;
     stage: StudentLearningSessionStage;
     currentMode: StudentLearningSessionMode;
@@ -344,7 +409,66 @@ export async function updateSessionTransition(
     lastRecommendationId: string;
     lastEvidenceEventId: string;
   }>,
+  updatesOrMeta?: Partial<{
+    status: StudentLearningSessionStatus;
+    stage: StudentLearningSessionStage;
+    currentMode: StudentLearningSessionMode;
+    previousMode: StudentLearningSessionMode;
+    allowedTransitions: StudentLearningSessionTransitionType[];
+    blockedTransitions: StudentLearningSessionTransitionType[];
+    reasonCodes: StudentLearningSessionReasonCode[];
+    safeEvidenceRefs: string[];
+    safeActionRefs: string[];
+    lastGrowthActionId: string;
+    lastTutorTurnId: string;
+    lastChallengeId: string;
+    lastRemediationPathId: string;
+    lastRecommendationId: string;
+    lastEvidenceEventId: string;
+  }> | StudentLearningSessionIdempotencyMeta,
+  maybeMeta?: StudentLearningSessionIdempotencyMeta,
 ): Promise<StudentLearningSessionRecord | null> {
+  let context: StudentLearningSessionContext;
+  let updates: Partial<{
+    status: StudentLearningSessionStatus;
+    stage: StudentLearningSessionStage;
+    currentMode: StudentLearningSessionMode;
+    previousMode: StudentLearningSessionMode;
+    allowedTransitions: StudentLearningSessionTransitionType[];
+    blockedTransitions: StudentLearningSessionTransitionType[];
+    reasonCodes: StudentLearningSessionReasonCode[];
+    safeEvidenceRefs: string[];
+    safeActionRefs: string[];
+    lastGrowthActionId: string;
+    lastTutorTurnId: string;
+    lastChallengeId: string;
+    lastRemediationPathId: string;
+    lastRecommendationId: string;
+    lastEvidenceEventId: string;
+  }>;
+  let meta: StudentLearningSessionIdempotencyMeta | undefined;
+
+  const isContext = (obj: unknown): boolean =>
+    !!obj && typeof obj === 'object' && 'schoolId' in (obj as Record<string, unknown>) && 'tutorLearnerId' in (obj as Record<string, unknown>);
+
+  if (isContext(contextOrUpdates) && updatesOrMeta && ('status' in (updatesOrMeta as Record<string, unknown>) || 'currentMode' in (updatesOrMeta as Record<string, unknown>) || 'stage' in (updatesOrMeta as Record<string, unknown>) || 'reasonCodes' in (updatesOrMeta as Record<string, unknown>) || 'safeEvidenceRefs' in (updatesOrMeta as Record<string, unknown>))) {
+    context = contextOrUpdates as StudentLearningSessionContext;
+    updates = updatesOrMeta as typeof updates;
+    meta = maybeMeta;
+  } else if (isContext(contextOrUpdates)) {
+    context = contextOrUpdates as StudentLearningSessionContext;
+    updates = {} as typeof updates;
+    meta = updatesOrMeta as StudentLearningSessionIdempotencyMeta | undefined;
+  } else {
+    // Legacy 2-arg form: updateSessionTransition(sessionId, updates)
+    updates = contextOrUpdates as typeof updates;
+    // Derive context from the stored session by scanning via repository helper
+    const fallback = await studentLearningSessionRepository.getSessionByIdLegacy(sessionId);
+    if (!fallback) return null;
+    context = { schoolId: fallback.schoolId, studentId: fallback.studentId ?? '', tutorLearnerId: fallback.tutorLearnerId };
+    meta = updatesOrMeta as StudentLearningSessionIdempotencyMeta | undefined;
+  }
+
   const versioned = await studentLearningSessionRepository.getSessionWithVersion(
     sessionId,
     context.schoolId,
@@ -381,6 +505,8 @@ export async function updateSessionTransition(
     expectedVersion: versioned.stateVersion,
     updates: updateInput,
     event: eventInput,
+    idempotencyKey: meta?.idempotencyKey,
+    requestFingerprint: meta?.requestFingerprint,
   });
 
   return result.success ? result.record : null;

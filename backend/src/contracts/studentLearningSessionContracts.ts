@@ -75,6 +75,7 @@ export const STUDENT_LEARNING_SESSION_REASON_CODES = [
   'safe_snapshot_created', 'safe_exit_summary_created',
   'session_evidence_bridged', 'no_live_ai', 'no_live_school_connector',
   'no_existing_session_found', 'session_active', 'not_enough_safe_session_context',
+  'idempotency_key_conflict',
 ] as const;
 export type StudentLearningSessionReasonCode = typeof STUDENT_LEARNING_SESSION_REASON_CODES[number];
 
@@ -124,6 +125,11 @@ export interface StudentLearningSessionContext {
   topicId?: string;
   skillId?: string;
   objectiveId?: string;
+}
+
+export interface StudentLearningSessionIdempotencyMeta {
+  idempotencyKey?: string;
+  requestFingerprint?: string;
 }
 
 export interface StudentLearningSessionRequest {
