@@ -1413,6 +1413,7 @@ model StudentLearningSessionEvent {
   privacyMetadata     Json     @default("{}")
   operationVersion    Int      @default(1)
   idempotencyKey      String?
+  requestFingerprint  String?
   requestId           String?
   correlationId       String?
 
@@ -1422,6 +1423,7 @@ model StudentLearningSessionEvent {
   @@index([schoolId, tutorLearnerId, sessionId])
   @@index([sessionId, createdAt])
   @@index([idempotencyKey])
+  @@unique([schoolId, tutorLearnerId, idempotencyKey])
 }
 
 // ── Task 021: School Integration Durable Persistence v1 ──

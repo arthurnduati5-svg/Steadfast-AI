@@ -5,11 +5,152 @@ import * as path from 'path';
 import { config } from 'dotenv';
 config({ path: path.resolve(__dirname, '../../.env') });
 
+// In-memory stores for test isolation
+const sessionStateStore = new Map<string, any>();
+const sessionEventStore = new Map<string, any>();
+let sessionIdCounter = 0;
+let eventIdCounter = 0;
+
+function resetSessionStores() {
+  sessionStateStore.clear();
+  sessionEventStore.clear();
+  sessionIdCounter = 0;
+  eventIdCounter = 0;
+}
+
+function generateSessionId() {
+  return `sls_${++sessionIdCounter}_${Date.now()}`;
+}
+
+function generateEventId() {
+  return `evt_${++eventIdCounter}_${Date.now()}`;
+}
+
 vi.mock('../lib/prisma', () => {
   const mockQueryRaw = vi.fn().mockRejectedValue(new Error('prisma unavailable (test mock)'));
   return {
     default: {
       $queryRaw: mockQueryRaw,
+      $transaction: vi.fn().mockImplementation(async (callback: any) => {
+        return await callback({
+          studentLearningSessionState: {
+            findUnique: vi.fn().mockImplementation(({ where }: any) => {
+              const session = sessionStateStore.get(where.id);
+              return Promise.resolve(session || null);
+            }),
+            findFirst: vi.fn().mockImplementation(({ where }: any) => {
+              for (const session of sessionStateStore.values()) {
+                if (where.id && session.id !== where.id) continue;
+                if (where.schoolId && session.schoolId !== where.schoolId) continue;
+                if (where.tutorLearnerId && session.tutorLearnerId !== where.tutorLearnerId) continue;
+                if (where.stateVersion !== undefined && session.stateVersion !== where.stateVersion) continue;
+                return Promise.resolve(session);
+              }
+              return Promise.resolve(null);
+            }),
+            findMany: vi.fn().mockImplementation(({ where, orderBy, take }: any) => {
+              let sessions = Array.from(sessionStateStore.values());
+              if (where) {
+                sessions = sessions.filter(s => {
+                  if (where.schoolId && s.schoolId !== where.schoolId) return false;
+                  if (where.tutorLearnerId && s.tutorLearnerId !== where.tutorLearnerId) return false;
+                  return true;
+                });
+              }
+              if (orderBy && orderBy.updatedAt === 'desc') {
+                sessions.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
+              }
+              if (take) {
+                sessions = sessions.slice(0, take);
+              }
+              return Promise.resolve(sessions);
+            }),
+            create: vi.fn().mockImplementation(({ data }: any) => {
+              const id = generateSessionId();
+              const session = {
+                id,
+                ...data,
+                createdAt: data.createdAt || new Date(),
+                updatedAt: data.updatedAt || new Date(),
+              };
+              sessionStateStore.set(id, session);
+              return Promise.resolve(session);
+            }),
+            update: vi.fn().mockImplementation(({ where, data }: any) => {
+              const session = sessionStateStore.get(where.id);
+              if (!session) return Promise.resolve(null);
+              const updated = { ...session, ...data, updatedAt: data.updatedAt || new Date() };
+              sessionStateStore.set(where.id, updated);
+              return Promise.resolve(updated);
+            }),
+            updateMany: vi.fn().mockImplementation(({ where, data }: any) => {
+              let count = 0;
+              for (const [id, session] of sessionStateStore.entries()) {
+                if (where.id && session.id !== where.id) continue;
+                if (where.schoolId && session.schoolId !== where.schoolId) continue;
+                if (where.tutorLearnerId && session.tutorLearnerId !== where.tutorLearnerId) continue;
+                if (where.stateVersion !== undefined && session.stateVersion !== where.stateVersion) continue;
+                const updated = { ...session, ...data, updatedAt: data.updatedAt || new Date() };
+                sessionStateStore.set(id, updated);
+                count++;
+              }
+              return Promise.resolve({ count });
+            }),
+            delete: vi.fn().mockImplementation(({ where }: any) => {
+              const deleted = sessionStateStore.delete(where.id);
+              return Promise.resolve(deleted ? { id: where.id } : null);
+            }),
+            count: vi.fn().mockResolvedValue(0),
+          },
+          studentLearningSessionEvent: {
+            findUnique: vi.fn().mockImplementation(({ where }: any) => {
+              const event = sessionEventStore.get(where.id);
+              return Promise.resolve(event || null);
+            }),
+            findFirst: vi.fn().mockImplementation(({ where }: any) => {
+              for (const event of sessionEventStore.values()) {
+                if (where.idempotencyKey && event.idempotencyKey !== where.idempotencyKey) continue;
+                if (where.schoolId && event.schoolId !== where.schoolId) continue;
+                if (where.tutorLearnerId && event.tutorLearnerId !== where.tutorLearnerId) continue;
+                return Promise.resolve(event);
+              }
+              return Promise.resolve(null);
+            }),
+            findMany: vi.fn().mockImplementation(({ where, orderBy, take }: any) => {
+              let events = Array.from(sessionEventStore.values());
+              if (where) {
+                events = events.filter(e => {
+                  if (where.sessionId && e.sessionId !== where.sessionId) return false;
+                  if (where.schoolId && e.schoolId !== where.schoolId) return false;
+                  if (where.tutorLearnerId && e.tutorLearnerId !== where.tutorLearnerId) return false;
+                  return true;
+                });
+              }
+              if (orderBy && orderBy.createdAt === 'asc') {
+                events.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+              }
+              if (take) {
+                events = events.slice(0, take);
+              }
+              return Promise.resolve(events);
+            }),
+            create: vi.fn().mockImplementation(({ data }: any) => {
+              const id = generateEventId();
+              const event = {
+                id,
+                ...data,
+                createdAt: new Date(),
+              };
+              sessionEventStore.set(id, event);
+              return Promise.resolve(event);
+            }),
+            update: vi.fn().mockResolvedValue({}),
+            updateMany: vi.fn().mockResolvedValue({ count: 0 }),
+            delete: vi.fn().mockResolvedValue({}),
+            count: vi.fn().mockResolvedValue(0),
+          },
+        });
+      }),
       learningArtifact: {
         findUnique: vi.fn().mockResolvedValue(null),
         findMany: vi.fn().mockResolvedValue([]),
@@ -139,9 +280,128 @@ vi.mock('../lib/prisma', () => {
         findFirst: vi.fn().mockResolvedValue(null),
         count: vi.fn().mockResolvedValue(0),
       },
+      studentLearningSessionState: {
+        findUnique: vi.fn().mockImplementation(({ where }: any) => {
+          const session = sessionStateStore.get(where.id);
+          return Promise.resolve(session || null);
+        }),
+        findFirst: vi.fn().mockImplementation(({ where }: any) => {
+          for (const session of sessionStateStore.values()) {
+            if (where.id && session.id !== where.id) continue;
+            if (where.schoolId && session.schoolId !== where.schoolId) continue;
+            if (where.tutorLearnerId && session.tutorLearnerId !== where.tutorLearnerId) continue;
+            if (where.stateVersion !== undefined && session.stateVersion !== where.stateVersion) continue;
+            return Promise.resolve(session);
+          }
+          return Promise.resolve(null);
+        }),
+        findMany: vi.fn().mockImplementation(({ where, orderBy, take }: any) => {
+          let sessions = Array.from(sessionStateStore.values());
+          if (where) {
+            sessions = sessions.filter(s => {
+              if (where.schoolId && s.schoolId !== where.schoolId) return false;
+              if (where.tutorLearnerId && s.tutorLearnerId !== where.tutorLearnerId) return false;
+              return true;
+            });
+          }
+          if (orderBy && orderBy.updatedAt === 'desc') {
+            sessions.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
+          }
+          if (take) {
+            sessions = sessions.slice(0, take);
+          }
+          return Promise.resolve(sessions);
+        }),
+        create: vi.fn().mockImplementation(({ data }: any) => {
+          const id = generateSessionId();
+          const session = {
+            id,
+            ...data,
+            createdAt: data.createdAt || new Date(),
+            updatedAt: data.updatedAt || new Date(),
+          };
+          sessionStateStore.set(id, session);
+          return Promise.resolve(session);
+        }),
+        update: vi.fn().mockImplementation(({ where, data }: any) => {
+          const session = sessionStateStore.get(where.id);
+          if (!session) return Promise.resolve(null);
+          const updated = { ...session, ...data, updatedAt: data.updatedAt || new Date() };
+          sessionStateStore.set(where.id, updated);
+          return Promise.resolve(updated);
+        }),
+        updateMany: vi.fn().mockImplementation(({ where, data }: any) => {
+          let count = 0;
+          for (const [id, session] of sessionStateStore.entries()) {
+            if (where.id && session.id !== where.id) continue;
+            if (where.schoolId && session.schoolId !== where.schoolId) continue;
+            if (where.tutorLearnerId && session.tutorLearnerId !== where.tutorLearnerId) continue;
+            if (where.stateVersion !== undefined && session.stateVersion !== where.stateVersion) continue;
+            const updated = { ...session, ...data, updatedAt: data.updatedAt || new Date() };
+            sessionStateStore.set(id, updated);
+            count++;
+          }
+          return Promise.resolve({ count });
+        }),
+        delete: vi.fn().mockImplementation(({ where }: any) => {
+          const deleted = sessionStateStore.delete(where.id);
+          return Promise.resolve(deleted ? { id: where.id } : null);
+        }),
+        count: vi.fn().mockResolvedValue(0),
+      },
+      studentLearningSessionEvent: {
+        findUnique: vi.fn().mockImplementation(({ where }: any) => {
+          const event = sessionEventStore.get(where.id);
+          return Promise.resolve(event || null);
+        }),
+        findFirst: vi.fn().mockImplementation(({ where }: any) => {
+          for (const event of sessionEventStore.values()) {
+            if (where.idempotencyKey && event.idempotencyKey !== where.idempotencyKey) continue;
+            if (where.schoolId && event.schoolId !== where.schoolId) continue;
+            if (where.tutorLearnerId && event.tutorLearnerId !== where.tutorLearnerId) continue;
+            return Promise.resolve(event);
+          }
+          return Promise.resolve(null);
+        }),
+        findMany: vi.fn().mockImplementation(({ where, orderBy, take }: any) => {
+          let events = Array.from(sessionEventStore.values());
+          if (where) {
+            events = events.filter(e => {
+              if (where.sessionId && e.sessionId !== where.sessionId) return false;
+              if (where.schoolId && e.schoolId !== where.schoolId) return false;
+              if (where.tutorLearnerId && e.tutorLearnerId !== where.tutorLearnerId) return false;
+              return true;
+            });
+          }
+          if (orderBy && orderBy.createdAt === 'asc') {
+            events.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+          }
+          if (take) {
+            events = events.slice(0, take);
+          }
+          return Promise.resolve(events);
+        }),
+        create: vi.fn().mockImplementation(({ data }: any) => {
+          const id = generateEventId();
+          const event = {
+            id,
+            ...data,
+            createdAt: new Date(),
+          };
+          sessionEventStore.set(id, event);
+          return Promise.resolve(event);
+        }),
+        update: vi.fn().mockResolvedValue({}),
+        updateMany: vi.fn().mockResolvedValue({ count: 0 }),
+        delete: vi.fn().mockResolvedValue({}),
+        count: vi.fn().mockResolvedValue(0),
+      },
     } as any,
   };
 });
+
+// Export reset function for tests
+export { resetSessionStores };
 
 vi.mock('redis', () => {
   const mockClient = {

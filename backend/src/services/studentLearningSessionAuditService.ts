@@ -40,7 +40,14 @@ export async function recordSessionAuditEvent(event: {
   transitionType?: StudentLearningSessionTransitionType;
   policyDecision?: StudentLearningSessionPolicyDecision;
   safeReasonCodes?: StudentLearningSessionReasonCode[];
+  operationVersion?: number;
 }): Promise<StudentLearningSessionAuditEvent> {
+  let operationVersion = event.operationVersion;
+  if (operationVersion === undefined) {
+    const session = await studentLearningSessionRepository.getSessionWithVersion(event.sessionId, event.schoolId, event.tutorLearnerId);
+    operationVersion = session?.stateVersion ?? 1;
+  }
+
   const result = await studentLearningSessionRepository.appendEvent({
     schoolId: event.schoolId,
     tutorLearnerId: event.tutorLearnerId,
@@ -55,7 +62,7 @@ export async function recordSessionAuditEvent(event: {
     privacyMetadata: {
       policyDecision: event.policyDecision,
     },
-    operationVersion: 1,
+    operationVersion,
   });
 
   return {

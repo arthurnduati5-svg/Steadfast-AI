@@ -20,8 +20,8 @@ import type {
 const STATUS_TRANSITION_MAP: Record<StudentLearningSessionStatus, Partial<Record<StudentLearningSessionTransitionType, StudentLearningSessionStatus>>> = {
   created: { start_session: 'active' },
   active: { pause_session: 'paused', complete_session: 'completed', abandon_session: 'abandoned', expire_session: 'expired' },
-  paused: { resume_session: 'resumed' },
-  resumed: { resume_session: 'active' },
+  paused: { resume_session: 'active' },
+  resumed: {},
   completed: {},
   abandoned: {},
   expired: { start_session: 'active' },
@@ -51,7 +51,7 @@ const STATUS_AFFECTING_TRANSITIONS: StudentLearningSessionTransitionType[] = [
   'complete_session', 'abandon_session', 'expire_session',
 ];
 
-function computeToMode(
+export function computeToMode(
   transitionType: StudentLearningSessionTransitionType,
   currentMode: StudentLearningSessionMode,
 ): StudentLearningSessionMode {
@@ -77,14 +77,14 @@ function computeToMode(
   }
 }
 
-function computeToStatus(
+export function computeToStatus(
   transitionType: StudentLearningSessionTransitionType,
   currentStatus: StudentLearningSessionStatus,
 ): StudentLearningSessionStatus {
   switch (transitionType) {
     case 'start_session': return 'active';
     case 'pause_session': return 'paused';
-    case 'resume_session': return currentStatus === 'paused' ? 'resumed' : 'active';
+    case 'resume_session': return 'active';
     case 'complete_session': return 'completed';
     case 'abandon_session': return 'abandoned';
     case 'expire_session': return 'expired';

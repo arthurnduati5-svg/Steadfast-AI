@@ -1,4 +1,5 @@
 import { Router, Request, Response } from 'express';
+import { createHash } from 'crypto';
 
 import {
   createStudentLearningSession,
@@ -91,6 +92,42 @@ function getIdempotencyKey(req: Request): string | undefined {
   return (req.headers['idempotency-key'] as string) || (req.headers['x-idempotency-key'] as string);
 }
 
+function computeRequestFingerprint(req: Request): string {
+  const body = req.body || {};
+  const fingerprintData = {
+    path: req.path,
+    method: req.method,
+    transitionType: body.transitionType,
+    requestedMode: body.requestedMode,
+    sessionId: req.params.sessionId,
+  };
+  const json = JSON.stringify(fingerprintData, Object.keys(fingerprintData).sort());
+  return createHash('sha256').update(json).digest('hex');
+}
+
+function buildIdempotencyConflictResponse(): Record<string, unknown> {
+  return {
+    ok: false,
+    status: 'idempotency_conflict',
+    policyDecision: 'blocked_idempotency_conflict',
+    safeReasonCodes: ['idempotency_key_conflict'],
+    message: 'Idempotency key reused with different request parameters',
+    generatedAt: new Date().toISOString(),
+    rawPrivateDataIncluded: false,
+    hiddenReasoningIncluded: false,
+    teacherOnlyDataIncluded: false,
+    answerKeyIncluded: false,
+    modelAnswerIncluded: false,
+    markingSchemeIncluded: false,
+    correctAnswerIncluded: false,
+    safeguardingRawDetailIncluded: false,
+    deenSensitivePrivateTextIncluded: false,
+    rawTranscriptIncluded: false,
+    liveAiCallIncluded: false,
+    liveSchoolConnectorIncluded: false,
+  };
+}
+
 // POST /api/copilot/learning-sessions
 router.post('/', async (req: Request, res: Response) => {
   try {
@@ -105,23 +142,23 @@ router.post('/', async (req: Request, res: Response) => {
     }
 
     const idempotencyKey = getIdempotencyKey(req);
-    let result;
     if (idempotencyKey) {
-      const existing = await studentLearningSessionRepository.getSessionByIdempotencyKey(idempotencyKey, ctx.schoolId, ctx.tutorLearnerId);
-      if (existing) {
-        return res.status(201).json(buildSessionCreatedResponse({ session: existing, created: true, resumed: false, safeReasonCodes: ['session_created'] }));
+      const fingerprint = computeRequestFingerprint(req);
+      const existing = await studentLearningSessionRepository.checkIdempotency(idempotencyKey, ctx.schoolId, ctx.tutorLearnerId, fingerprint);
+      if (existing.exists) {
+        if (existing.fingerprintMatch && existing.event) {
+          const session = await studentLearningSessionRepository.getSession(existing.event.sessionId, ctx.schoolId, ctx.tutorLearnerId);
+          if (session) {
+            return res.status(201).json(buildSessionCreatedResponse({ session, created: true, resumed: false, safeReasonCodes: ['session_created'] }));
+          }
+        } else {
+          return sendError(res, 409, buildIdempotencyConflictResponse());
+        }
       }
     }
 
-    result = await createStudentLearningSession(ctx);
+    const result = await createStudentLearningSession(ctx);
     const response = buildSessionCreatedResponse(result);
-    await recordSessionAuditEvent({
-      schoolId: ctx.schoolId,
-      tutorLearnerId: ctx.tutorLearnerId,
-      sessionId: result.session.id,
-      eventType: 'session_created',
-      safeReasonCodes: result.safeReasonCodes,
-    });
     res.status(201).json(response);
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'Unknown error';
@@ -202,9 +239,17 @@ router.post('/:sessionId/resume', async (req: Request, res: Response) => {
 
     const idempotencyKey = getIdempotencyKey(req);
     if (idempotencyKey) {
-      const existing = await studentLearningSessionRepository.getSessionByIdempotencyKey(idempotencyKey, ctx.schoolId, ctx.tutorLearnerId);
-      if (existing && existing.id === sessionId) {
-        return res.json(buildSessionResumedResponse({ session: existing, created: false, resumed: true, safeReasonCodes: ['session_resumed'] }));
+      const fingerprint = computeRequestFingerprint(req);
+      const existing = await studentLearningSessionRepository.checkIdempotency(idempotencyKey, ctx.schoolId, ctx.tutorLearnerId, fingerprint);
+      if (existing.exists) {
+        if (existing.fingerprintMatch && existing.event) {
+          const session = await studentLearningSessionRepository.getSession(existing.event.sessionId, ctx.schoolId, ctx.tutorLearnerId);
+          if (session && session.id === sessionId) {
+            return res.json(buildSessionResumedResponse({ session, created: false, resumed: true, safeReasonCodes: ['session_resumed'] }));
+          }
+        } else {
+          return sendError(res, 409, buildIdempotencyConflictResponse());
+        }
       }
     }
 
@@ -213,13 +258,6 @@ router.post('/:sessionId/resume', async (req: Request, res: Response) => {
       return sendError(res, 404, buildGenericErrorResponse('Session not found or cannot be resumed') as unknown as Record<string, unknown>);
     }
     const response = buildSessionResumedResponse(result);
-    await recordSessionAuditEvent({
-      schoolId: ctx.schoolId,
-      tutorLearnerId: ctx.tutorLearnerId,
-      sessionId,
-      eventType: 'session_resumed',
-      safeReasonCodes: result.safeReasonCodes,
-    });
     res.json(response);
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'Unknown error';
@@ -243,9 +281,17 @@ router.post('/:sessionId/pause', async (req: Request, res: Response) => {
 
     const idempotencyKey = getIdempotencyKey(req);
     if (idempotencyKey) {
-      const existing = await studentLearningSessionRepository.getSessionByIdempotencyKey(idempotencyKey, ctx.schoolId, ctx.tutorLearnerId);
-      if (existing && existing.id === sessionId && existing.status === 'paused') {
-        return res.json(buildSessionPausedResponse({ session: existing, created: false, resumed: false, safeReasonCodes: ['session_paused'] }));
+      const fingerprint = computeRequestFingerprint(req);
+      const existing = await studentLearningSessionRepository.checkIdempotency(idempotencyKey, ctx.schoolId, ctx.tutorLearnerId, fingerprint);
+      if (existing.exists) {
+        if (existing.fingerprintMatch && existing.event) {
+          const session = await studentLearningSessionRepository.getSession(existing.event.sessionId, ctx.schoolId, ctx.tutorLearnerId);
+          if (session && session.id === sessionId && session.status === 'paused') {
+            return res.json(buildSessionPausedResponse({ session, created: false, resumed: false, safeReasonCodes: ['session_paused'] }));
+          }
+        } else {
+          return sendError(res, 409, buildIdempotencyConflictResponse());
+        }
       }
     }
 
@@ -254,13 +300,6 @@ router.post('/:sessionId/pause', async (req: Request, res: Response) => {
       return sendError(res, 404, buildGenericErrorResponse('Session not found or cannot be paused') as unknown as Record<string, unknown>);
     }
     const response = buildSessionPausedResponse(result);
-    await recordSessionAuditEvent({
-      schoolId: ctx.schoolId,
-      tutorLearnerId: ctx.tutorLearnerId,
-      sessionId,
-      eventType: 'session_paused',
-      safeReasonCodes: result.safeReasonCodes,
-    });
     res.json(response);
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'Unknown error';
@@ -284,9 +323,17 @@ router.post('/:sessionId/complete', async (req: Request, res: Response) => {
 
     const idempotencyKey = getIdempotencyKey(req);
     if (idempotencyKey) {
-      const existing = await studentLearningSessionRepository.getSessionByIdempotencyKey(idempotencyKey, ctx.schoolId, ctx.tutorLearnerId);
-      if (existing && existing.id === sessionId && existing.status === 'completed') {
-        return res.json(buildSessionCompletedResponse({ session: existing, created: false, resumed: false, safeReasonCodes: ['session_completed'] }));
+      const fingerprint = computeRequestFingerprint(req);
+      const existing = await studentLearningSessionRepository.checkIdempotency(idempotencyKey, ctx.schoolId, ctx.tutorLearnerId, fingerprint);
+      if (existing.exists) {
+        if (existing.fingerprintMatch && existing.event) {
+          const session = await studentLearningSessionRepository.getSession(existing.event.sessionId, ctx.schoolId, ctx.tutorLearnerId);
+          if (session && session.id === sessionId && session.status === 'completed') {
+            return res.json(buildSessionCompletedResponse({ session, created: false, resumed: false, safeReasonCodes: ['session_completed'] }));
+          }
+        } else {
+          return sendError(res, 409, buildIdempotencyConflictResponse());
+        }
       }
     }
 
@@ -295,13 +342,6 @@ router.post('/:sessionId/complete', async (req: Request, res: Response) => {
       return sendError(res, 404, buildGenericErrorResponse('Session not found or cannot be completed') as unknown as Record<string, unknown>);
     }
     const response = buildSessionCompletedResponse(result);
-    await recordSessionAuditEvent({
-      schoolId: ctx.schoolId,
-      tutorLearnerId: ctx.tutorLearnerId,
-      sessionId,
-      eventType: 'session_completed',
-      safeReasonCodes: result.safeReasonCodes,
-    });
     res.json(response);
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'Unknown error';
@@ -325,9 +365,17 @@ router.post('/:sessionId/abandon', async (req: Request, res: Response) => {
 
     const idempotencyKey = getIdempotencyKey(req);
     if (idempotencyKey) {
-      const existing = await studentLearningSessionRepository.getSessionByIdempotencyKey(idempotencyKey, ctx.schoolId, ctx.tutorLearnerId);
-      if (existing && existing.id === sessionId && existing.status === 'abandoned') {
-        return res.json(buildSessionAbandonedResponse({ session: existing, created: false, resumed: false, safeReasonCodes: ['session_abandoned'] }));
+      const fingerprint = computeRequestFingerprint(req);
+      const existing = await studentLearningSessionRepository.checkIdempotency(idempotencyKey, ctx.schoolId, ctx.tutorLearnerId, fingerprint);
+      if (existing.exists) {
+        if (existing.fingerprintMatch && existing.event) {
+          const session = await studentLearningSessionRepository.getSession(existing.event.sessionId, ctx.schoolId, ctx.tutorLearnerId);
+          if (session && session.id === sessionId && session.status === 'abandoned') {
+            return res.json(buildSessionAbandonedResponse({ session, created: false, resumed: false, safeReasonCodes: ['session_abandoned'] }));
+          }
+        } else {
+          return sendError(res, 409, buildIdempotencyConflictResponse());
+        }
       }
     }
 
@@ -336,13 +384,6 @@ router.post('/:sessionId/abandon', async (req: Request, res: Response) => {
       return sendError(res, 404, buildGenericErrorResponse('Session not found or cannot be abandoned') as unknown as Record<string, unknown>);
     }
     const response = buildSessionAbandonedResponse(result);
-    await recordSessionAuditEvent({
-      schoolId: ctx.schoolId,
-      tutorLearnerId: ctx.tutorLearnerId,
-      sessionId,
-      eventType: 'session_abandoned',
-      safeReasonCodes: result.safeReasonCodes,
-    });
     res.json(response);
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'Unknown error';
@@ -376,20 +417,28 @@ router.post('/:sessionId/transition', async (req: Request, res: Response) => {
 
     const idempotencyKey = getIdempotencyKey(req);
     if (idempotencyKey) {
-      const existing = await studentLearningSessionRepository.getSessionByIdempotencyKey(idempotencyKey, ctx.schoolId, ctx.tutorLearnerId);
-      if (existing && existing.id === sessionId) {
-        return res.json(buildSessionTransitionResponse({
-          allowed: true,
-          transitionType,
-          fromMode: record.currentMode,
-          toMode: existing.currentMode,
-          policyDecision: 'allowed',
-          transitionStatus: 'allowed',
-          safeReasonCodes: ['session_active'],
-          safeAlternatives: [],
-          sessionStatus: existing.status,
-          sessionStage: existing.stage,
-        }));
+      const fingerprint = computeRequestFingerprint(req);
+      const existing = await studentLearningSessionRepository.checkIdempotency(idempotencyKey, ctx.schoolId, ctx.tutorLearnerId, fingerprint);
+      if (existing.exists) {
+        if (existing.fingerprintMatch && existing.event) {
+          const session = await studentLearningSessionRepository.getSession(existing.event.sessionId, ctx.schoolId, ctx.tutorLearnerId);
+          if (session && session.id === sessionId) {
+            return res.json(buildSessionTransitionResponse({
+              allowed: true,
+              transitionType,
+              fromMode: record.currentMode,
+              toMode: session.currentMode,
+              policyDecision: 'allowed',
+              transitionStatus: 'allowed',
+              safeReasonCodes: ['session_active'],
+              safeAlternatives: [],
+              sessionStatus: session.status,
+              sessionStage: session.stage,
+            }));
+          }
+        } else {
+          return sendError(res, 409, buildIdempotencyConflictResponse());
+        }
       }
     }
 
@@ -409,26 +458,7 @@ router.post('/:sessionId/transition', async (req: Request, res: Response) => {
         previousMode: result.fromMode,
         reasonCodes: result.safeReasonCodes,
       });
-      await recordSessionAuditEvent({
-        schoolId: ctx.schoolId,
-        tutorLearnerId: ctx.tutorLearnerId,
-        sessionId,
-        eventType: 'session_transition_allowed',
-        currentMode: result.toMode,
-        transitionType: result.transitionType,
-        policyDecision: result.policyDecision,
-        safeReasonCodes: result.safeReasonCodes,
-      });
     } else {
-      await recordSessionAuditEvent({
-        schoolId: ctx.schoolId,
-        tutorLearnerId: ctx.tutorLearnerId,
-        sessionId,
-        eventType: 'session_transition_blocked',
-        transitionType: result.transitionType,
-        policyDecision: result.policyDecision,
-        safeReasonCodes: result.safeReasonCodes,
-      });
     }
 
     const response = buildSessionTransitionResponse(result);

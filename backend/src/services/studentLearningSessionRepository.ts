@@ -235,6 +235,30 @@ export interface AppendEventInput {
 export interface IdempotencyCheckResult {
   exists: boolean;
   event?: StudentLearningSessionEvent;
+  fingerprintMatch?: boolean;
+}
+
+export interface VersionedSessionRecord {
+  record: StudentLearningSessionRecord;
+  stateVersion: number;
+}
+
+export interface TransactionalMutationInput {
+  sessionId: string;
+  schoolId: string;
+  tutorLearnerId: string;
+  expectedVersion: number;
+  updates: UpdateSessionInput;
+  event: Omit<AppendEventInput, 'schoolId' | 'tutorLearnerId' | 'sessionId' | 'operationVersion'>;
+  idempotencyKey?: string;
+  requestFingerprint?: string;
+}
+
+export interface TransactionalMutationResult {
+  record: StudentLearningSessionRecord;
+  event: StudentLearningSessionEvent;
+  success: boolean;
+  conflict?: 'version' | 'idempotency';
 }
 
 export class StudentLearningSessionRepository {
@@ -265,6 +289,25 @@ export class StudentLearningSessionRepository {
       },
     });
     return toSessionRecord(row);
+  }
+
+  async getSessionWithVersion(
+    sessionId: string,
+    schoolId: string,
+    tutorLearnerId: string,
+  ): Promise<VersionedSessionRecord | null> {
+    const row = await prisma.studentLearningSessionState.findFirst({
+      where: {
+        id: sessionId,
+        schoolId,
+        tutorLearnerId,
+      },
+    });
+    if (!row) return null;
+    return {
+      record: toSessionRecord(row),
+      stateVersion: row.stateVersion,
+    };
   }
 
   async getSession(
@@ -430,14 +473,19 @@ export class StudentLearningSessionRepository {
   async checkIdempotency(
     idempotencyKey: string,
     schoolId: string,
+    tutorLearnerId: string,
+    requestFingerprint: string,
   ): Promise<IdempotencyCheckResult> {
     const row = await prisma.studentLearningSessionEvent.findFirst({
       where: {
         idempotencyKey,
         schoolId,
+        tutorLearnerId,
       },
     });
-    return row ? { exists: true, event: toEventRecord(row) } : { exists: false };
+    if (!row) return { exists: false };
+    const fingerprintMatch = row.requestFingerprint === requestFingerprint;
+    return { exists: true, event: toEventRecord(row), fingerprintMatch };
   }
 
   async getSessionByIdempotencyKey(
@@ -454,6 +502,136 @@ export class StudentLearningSessionRepository {
     });
     if (!event) return null;
     return this.getSession(event.sessionId, schoolId, tutorLearnerId);
+  }
+
+  async mutateSessionWithEvent(
+    input: TransactionalMutationInput,
+  ): Promise<TransactionalMutationResult> {
+    const { sessionId, schoolId, tutorLearnerId, expectedVersion, updates, event, idempotencyKey, requestFingerprint } = input;
+
+    return await prisma.$transaction(async (tx) => {
+      if (idempotencyKey && requestFingerprint) {
+        const existingEvent = await tx.studentLearningSessionEvent.findFirst({
+          where: {
+            idempotencyKey,
+            schoolId,
+            tutorLearnerId,
+          },
+        });
+
+        if (existingEvent) {
+          if (existingEvent.requestFingerprint === requestFingerprint) {
+            const session = await tx.studentLearningSessionState.findUnique({
+              where: { id: sessionId },
+            });
+            if (session) {
+              return {
+                record: toSessionRecord(session),
+                event: toEventRecord(existingEvent),
+                success: true,
+              };
+            }
+            return { record: null!, event: null!, success: false, conflict: 'idempotency' };
+          } else {
+            return { record: null!, event: null!, success: false, conflict: 'idempotency' };
+          }
+        }
+      }
+
+      const now = new Date();
+      const data: Record<string, unknown> = {
+        updatedAt: now,
+        lastTransitionAt: now,
+      };
+
+      if (updates.status !== undefined) data.status = updates.status;
+      if (updates.stage !== undefined) data.stage = updates.stage;
+      if (updates.currentMode !== undefined) {
+        data.currentMode = updates.currentMode;
+        data.previousMode = updates.previousMode ?? undefined;
+      }
+      if (updates.previousMode !== undefined) data.previousMode = updates.previousMode;
+      if (updates.subject !== undefined) data.subject = updates.subject;
+      if (updates.topic !== undefined) data.topic = updates.topic;
+      if (updates.skillTag !== undefined) data.skillTag = updates.skillTag;
+      if (updates.objectiveId !== undefined) data.objectiveId = updates.objectiveId;
+      if (updates.activeChallengeId !== undefined) data.activeChallengeId = updates.activeChallengeId;
+      if (updates.activeRemediationPathId !== undefined) data.activeRemediationPathId = updates.activeRemediationPathId;
+      if (updates.activeRevisionItemId !== undefined) data.activeRevisionItemId = updates.activeRevisionItemId;
+      if (updates.supportLevel !== undefined) data.supportLevel = updates.supportLevel;
+      if (updates.difficultyLevel !== undefined) data.difficultyLevel = updates.difficultyLevel;
+      if (updates.safeProgressSummary !== undefined) data.safeProgressSummary = updates.safeProgressSummary;
+      if (updates.safeEvidenceRefs !== undefined) data.safeEvidenceRefs = updates.safeEvidenceRefs;
+      if (updates.reasonCodes !== undefined) data.reasonCodes = updates.reasonCodes;
+      if (updates.privacyMetadata !== undefined) data.privacyMetadata = updates.privacyMetadata;
+      if (updates.sourceTruthStatus !== undefined) data.sourceTruthStatus = updates.sourceTruthStatus;
+      if (updates.confidenceBucket !== undefined) data.confidenceBucket = updates.confidenceBucket;
+
+      if (updates.status && ['completed', 'abandoned', 'expired'].includes(updates.status)) {
+        data.endedAt = now;
+      }
+
+      const updateResult = await tx.studentLearningSessionState.updateMany({
+        where: {
+          id: sessionId,
+          schoolId,
+          tutorLearnerId,
+          stateVersion: expectedVersion,
+        },
+        data: {
+          ...data,
+          stateVersion: expectedVersion + 1,
+        },
+      });
+
+      if (updateResult.count === 0) {
+        const current = await tx.studentLearningSessionState.findFirst({
+          where: { id: sessionId, schoolId, tutorLearnerId },
+        });
+        if (!current) {
+          return { record: null!, event: null!, success: false, conflict: 'version' };
+        }
+        return { record: toSessionRecord(current), event: null!, success: false, conflict: 'version' };
+      }
+
+      const updated = await tx.studentLearningSessionState.findUnique({
+        where: { id: sessionId },
+      });
+
+      const newVersion = expectedVersion + 1;
+      const eventRow = await tx.studentLearningSessionEvent.create({
+        data: {
+          schoolId,
+          tutorLearnerId,
+          sessionId,
+          studentId: event.studentId || null,
+          eventType: event.eventType,
+          transitionType: event.transitionType || null,
+          previousStatus: event.previousStatus || null,
+          resultingStatus: event.resultingStatus || null,
+          previousMode: event.previousMode || null,
+          nextMode: event.nextMode || null,
+          subject: event.subject || null,
+          topic: event.topic || null,
+          skillTag: event.skillTag || null,
+          safeEventSummary: event.safeEventSummary || null,
+          safeEvidenceRefs: event.safeEvidenceRefs || [],
+          reasonCodes: event.reasonCodes || [],
+          privacyMetadata: (event.privacyMetadata || {}) as any,
+          operationVersion: newVersion,
+          idempotencyKey: idempotencyKey || null,
+          requestFingerprint: requestFingerprint || null,
+          requestId: event.requestId || null,
+          correlationId: event.correlationId || null,
+        },
+      });
+
+      return {
+        record: toSessionRecord(updated!),
+        event: toEventRecord(eventRow),
+        success: true,
+      };
+    });
   }
 }
 
