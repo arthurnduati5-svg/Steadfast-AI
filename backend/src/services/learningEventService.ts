@@ -19,17 +19,35 @@ import type { ResolvedTutorIdentity } from './tutorStateContracts';
 const eventMemoryStore = new Map<string, LearningEvent>();
 
 // ── Prisma availability ──
+// Map fallback is explicitly test/non-production only (R2.2/R2.3).
+function isTestFallbackAllowed(): boolean {
+  return process.env.NODE_ENV === 'test';
+}
+
 let _prismaAvailable: boolean | null = null;
 
 async function isPrismaAvailable(): Promise<boolean> {
-  if (_prismaAvailable !== null) return _prismaAvailable;
+  if (_prismaAvailable !== null) {
+    if (_prismaAvailable === false && !isTestFallbackAllowed()) {
+      throw new Error('Prisma unavailable — fail closed in production');
+    }
+    return _prismaAvailable;
+  }
   try {
     await (prisma as any).$queryRaw`SELECT 1`;
     _prismaAvailable = true;
   } catch {
+    if (!isTestFallbackAllowed()) {
+      _prismaAvailable = false;
+      throw new Error('Prisma unavailable — fail closed in production');
+    }
     _prismaAvailable = false;
   }
   return _prismaAvailable;
+}
+
+function resetPrismaAvailabilityForTest(): void {
+  _prismaAvailable = null;
 }
 
 function nowISO(): string {
@@ -154,12 +172,30 @@ export class LearningEventService {
   ): Promise<LearningEvent> {
     const event = this.buildLearningEvent(identity, input);
 
-    // In-memory store (non-DB fallback only)
+    if (!isTestFallbackAllowed()) {
+      // Production: Prisma is authoritative — fail closed, never use Map.
+      await (prisma as any).learningEvent.create({
+        data: this.toPrismaCreateData(event),
+      });
+      return event;
+    }
+
+    // Test / isolated no-DB mode: try Prisma, fallback to Map.
+    const available = await isPrismaAvailable().catch(() => false as boolean);
+    if (available) {
+      try {
+        await (prisma as any).learningEvent.create({
+          data: this.toPrismaCreateData(event),
+        });
+        // Also keep in Map for deterministic test reads when mock DB is empty.
+        eventMemoryStore.set(event.eventId, event);
+        return event;
+      } catch {
+        // Prisma write failed in test — fallback to Map.
+      }
+    }
+    // Non-DB fallback only — explicitly test-only.
     eventMemoryStore.set(event.eventId, event);
-
-    // Try Prisma persistence
-    await this._persistPrismaEvent(event);
-
     return event;
   }
 
@@ -178,13 +214,32 @@ export class LearningEventService {
   ): Promise<LearningEvent[]> {
     const limit = options?.limit || 50;
 
-    // Try Prisma first
-    const fromDb = await this._listPrismaEvents(identity, options);
+    if (!isTestFallbackAllowed()) {
+      // Production: Prisma only — fail closed, never fallback to Map.
+      const where: Record<string, unknown> = {
+        schoolId: identity.schoolId,
+        studentId: identity.studentId,
+      };
+      if (options?.kind) where.kind = options.kind;
+      if (options?.sessionId) where.sessionId = options.sessionId;
+      if (options?.subject) where.subject = options.subject;
+      if (options?.topic) where.topic = options.topic;
+      const records = await (prisma as any).learningEvent.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        take: limit,
+      });
+      if (!records || records.length === 0) return [];
+      return records.map((r: any) => this._mapPrismaEvent(r)).slice(0, limit);
+    }
+
+    // Test: try Prisma first, fallback to Map.
+    const fromDb = await this._listPrismaEvents(identity, options).catch(() => null);
     if (fromDb && fromDb.length > 0) {
       return fromDb.slice(0, limit);
     }
 
-    // Fallback: in-memory
+    // Fallback: in-memory — explicitly test-only.
     const all: LearningEvent[] = [];
     for (const event of eventMemoryStore.values()) {
       if (event.schoolId !== identity.schoolId) continue;
@@ -208,7 +263,12 @@ export class LearningEventService {
     identity: ResolvedTutorIdentity,
     eventId: string,
   ): Promise<LearningEvent | null> {
-    // Check in-memory
+    if (!isTestFallbackAllowed()) {
+      // Production: Prisma only — fail closed.
+      return this._getPrismaEvent(identity, eventId);
+    }
+
+    // Test: check Map first, fallback to Prisma.
     const memEvent = eventMemoryStore.get(eventId);
     if (memEvent) {
       if (memEvent.schoolId !== identity.schoolId) return null;
@@ -216,15 +276,20 @@ export class LearningEventService {
       return memEvent;
     }
 
-    // Try Prisma
-    return this._getPrismaEvent(identity, eventId);
+    // Try Prisma — in test, swallow transient failures and fallback to null.
+    return this._getPrismaEvent(identity, eventId).catch(() => null);
   }
 
   // ── Prisma persistence helpers ──
 
   private async _persistPrismaEvent(event: LearningEvent): Promise<void> {
     const available = await isPrismaAvailable();
-    if (!available) return;
+    if (!available) {
+      if (!isTestFallbackAllowed()) {
+        throw new Error('Prisma unavailable — fail closed in production');
+      }
+      return;
+    }
     try {
       await (prisma as any).learningEvent.create({
         data: {
@@ -246,8 +311,9 @@ export class LearningEventService {
           privacyLevel: event.privacyLevel,
         },
       });
-    } catch {
-      // Prisma unavailable — in-memory copy is already stored
+    } catch (err) {
+      if (!isTestFallbackAllowed()) throw err;
+      // Prisma unavailable in test — in-memory copy is already stored
     }
   }
 
@@ -262,7 +328,12 @@ export class LearningEventService {
     },
   ): Promise<LearningEvent[] | null> {
     const available = await isPrismaAvailable();
-    if (!available) return null;
+    if (!available) {
+      if (!isTestFallbackAllowed()) {
+        throw new Error('Prisma unavailable — fail closed in production');
+      }
+      return null;
+    }
     try {
       const where: Record<string, unknown> = {
         schoolId: identity.schoolId,
@@ -281,7 +352,8 @@ export class LearningEventService {
 
       if (!records || records.length === 0) return null;
       return records.map((r: any) => this._mapPrismaEvent(r));
-    } catch {
+    } catch (err) {
+      if (!isTestFallbackAllowed()) throw err;
       return null;
     }
   }
@@ -291,7 +363,12 @@ export class LearningEventService {
     eventId: string,
   ): Promise<LearningEvent | null> {
     const available = await isPrismaAvailable();
-    if (!available) return null;
+    if (!available) {
+      if (!isTestFallbackAllowed()) {
+        throw new Error('Prisma unavailable — fail closed in production');
+      }
+      return null;
+    }
     try {
       const record = await (prisma as any).learningEvent.findUnique({
         where: { id: eventId },
@@ -300,7 +377,8 @@ export class LearningEventService {
       if (record.schoolId !== identity.schoolId) return null;
       if (record.studentId !== identity.studentId) return null;
       return this._mapPrismaEvent(record);
-    } catch {
+    } catch (err) {
+      if (!isTestFallbackAllowed()) throw err;
       return null;
     }
   }
@@ -334,4 +412,9 @@ export const learningEventService = new LearningEventService();
 // For testing
 export function _clearEventMemoryStoreForTest(): void {
   eventMemoryStore.clear();
+  resetPrismaAvailabilityForTest();
+}
+
+export function _resetLearningEventPrismaAvailabilityForTest(): void {
+  resetPrismaAvailabilityForTest();
 }

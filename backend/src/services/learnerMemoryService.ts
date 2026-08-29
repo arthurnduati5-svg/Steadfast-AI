@@ -42,14 +42,28 @@ const memoryStore = new Map<string, LearnerMemoryItem>();
 const memoryLookupByKey = new Map<string, string[]>(); // schoolId:studentId -> memoryId[]
 
 // ── Prisma availability ──
+// Map fallback is explicitly test/non-production only (R2.2/R2.3).
+function isTestFallbackAllowed(): boolean {
+  return process.env.NODE_ENV === 'test';
+}
+
 let _prismaAvailable: boolean | null = null;
 
 async function isPrismaAvailable(): Promise<boolean> {
-  if (_prismaAvailable !== null) return _prismaAvailable;
+  if (_prismaAvailable !== null) {
+    if (_prismaAvailable === false && !isTestFallbackAllowed()) {
+      throw new Error('Prisma unavailable — fail closed in production');
+    }
+    return _prismaAvailable;
+  }
   try {
     await (prisma as any).$queryRaw`SELECT 1`;
     _prismaAvailable = true;
   } catch {
+    if (!isTestFallbackAllowed()) {
+      _prismaAvailable = false;
+      throw new Error('Prisma unavailable — fail closed in production');
+    }
     _prismaAvailable = false;
   }
   return _prismaAvailable;
@@ -166,7 +180,10 @@ export class LearnerMemoryService {
       return memory;
     }
 
-    // Non-DB fallback only.
+    // Non-DB fallback only — explicitly test-only (R2.2).
+    if (!isTestFallbackAllowed()) {
+      throw new Error('Prisma unavailable — fail closed in production');
+    }
     memoryStore.set(memoryId, memory);
     const key = memoryKey(identity.schoolId, identity.studentId);
     const existing = memoryLookupByKey.get(key) || [];
@@ -221,7 +238,10 @@ export class LearnerMemoryService {
       return mapped.slice(0, limit);
     }
 
-    // Non-DB fallback only.
+    // Non-DB fallback only — explicitly test-only (R2.2).
+    if (!isTestFallbackAllowed()) {
+      throw new Error('Prisma unavailable — fail closed in production');
+    }
     const key = memoryKey(identity.schoolId, identity.studentId);
     const memoryIds = memoryLookupByKey.get(key) || [];
     const results: LearnerMemoryItem[] = [];
@@ -268,6 +288,9 @@ export class LearnerMemoryService {
       return this._mapPrismaMemory(record);
     }
 
+    if (!isTestFallbackAllowed()) {
+      throw new Error('Prisma unavailable — fail closed in production');
+    }
     const mem = memoryStore.get(memoryId);
     if (!mem) return null;
     if (mem.schoolId !== identity.schoolId) return null;
@@ -304,6 +327,9 @@ export class LearnerMemoryService {
       return this._mapPrismaMemory(records[0]);
     }
 
+    if (!isTestFallbackAllowed()) {
+      throw new Error('Prisma unavailable — fail closed in production');
+    }
     const key = memoryKey(identity.schoolId, identity.studentId);
     const memoryIds = memoryLookupByKey.get(key) || [];
     for (const memId of memoryIds) {
@@ -355,6 +381,9 @@ export class LearnerMemoryService {
       return updated;
     }
 
+    if (!isTestFallbackAllowed()) {
+      throw new Error('Prisma unavailable — fail closed in production');
+    }
     memoryStore.set(memoryId, updated);
     return updated;
   }
@@ -390,6 +419,9 @@ export class LearnerMemoryService {
       return updated;
     }
 
+    if (!isTestFallbackAllowed()) {
+      throw new Error('Prisma unavailable — fail closed in production');
+    }
     memoryStore.set(memoryId, updated);
     return updated;
   }
@@ -437,6 +469,9 @@ export class LearnerMemoryService {
       return updated;
     }
 
+    if (!isTestFallbackAllowed()) {
+      throw new Error('Prisma unavailable — fail closed in production');
+    }
     memoryStore.set(memoryId, updated);
     return updated;
   }
@@ -498,7 +533,10 @@ export class LearnerMemoryService {
       });
     }
 
-    // Non-DB fallback path: mirror the transactional behavior on the Map store.
+    // Non-DB fallback path: mirror the transactional behavior on the Map store — test only (R2.2).
+    if (!isTestFallbackAllowed()) {
+      throw new Error('Prisma unavailable — fail closed in production');
+    }
     const event = await learningEventService.createLearningEvent(identity, input);
     const candidates = learnerMemoryReducer.reduceLearningEventToMemoryCandidates(event);
     const memoryCreated: LearnerMemoryItem[] = [];

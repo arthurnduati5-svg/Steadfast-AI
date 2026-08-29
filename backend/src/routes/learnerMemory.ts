@@ -1,11 +1,10 @@
 // ─────────────────────────────────────────────────────────────
 // Steadfast AI — Durable Learner Memory Routes v1
 // Endpoints: GET, POST events, POST resolve, PATCH, DELETE
-// Mounted at /api/copilot/learner-memory (requireVerifiedSchoolContext applied)
+// Mounted at /api/copilot/learner-memory (schoolAuthMiddleware → requireVerifiedSchoolContext applied at index.ts)
 // ─────────────────────────────────────────────────────────────
 
 import { Router, Response } from 'express';
-import { requireVerifiedSchoolContext } from '../middleware/schoolContextGuardMiddleware';
 import type { AuthedRequest } from './ai/ai-middleware';
 import type { ResolvedTutorIdentity } from '../services/tutorStateContracts';
 
@@ -45,7 +44,8 @@ function sendError(res: Response, status: number, code: string, message: string)
 
 // ── GET /api/copilot/learner-memory ──
 // Return active durable memory for the authenticated learner.
-router.get('/', requireVerifiedSchoolContext, async (req: AuthedRequest, res: Response) => {
+// Auth chain: schoolAuthMiddleware → requireVerifiedSchoolContext (index mount). Handler consumes verified req.schoolId/req.user.
+router.get('/', async (req: AuthedRequest, res: Response) => {
   try {
     const identity = resolveIdentity(req);
     if (!identity) { sendError(res, 401, 'UNAUTHENTICATED', 'Authentication required.'); return; }
@@ -73,7 +73,7 @@ router.get('/', requireVerifiedSchoolContext, async (req: AuthedRequest, res: Re
 
 // ── POST /api/copilot/learner-memory/events ──
 // Record a learning event and optionally reduce it into durable memory.
-router.post('/events', requireVerifiedSchoolContext, async (req: AuthedRequest, res: Response) => {
+router.post('/events', async (req: AuthedRequest, res: Response) => {
   try {
     const identity = resolveIdentity(req);
     if (!identity) { sendError(res, 401, 'UNAUTHENTICATED', 'Authentication required.'); return; }
@@ -103,7 +103,7 @@ router.post('/events', requireVerifiedSchoolContext, async (req: AuthedRequest, 
 
 // ── POST /api/copilot/learner-memory/resolve ──
 // Resolve learner memory context for TutorTurnContext.
-router.post('/resolve', requireVerifiedSchoolContext, async (req: AuthedRequest, res: Response) => {
+router.post('/resolve', async (req: AuthedRequest, res: Response) => {
   try {
     const identity = resolveIdentity(req);
     if (!identity) { sendError(res, 401, 'UNAUTHENTICATED', 'Authentication required.'); return; }
@@ -124,7 +124,7 @@ router.post('/resolve', requireVerifiedSchoolContext, async (req: AuthedRequest,
 
 // ── PATCH /api/copilot/learner-memory/:memoryId ──
 // Update safe fields of a memory record.
-router.patch('/:memoryId', requireVerifiedSchoolContext, async (req: AuthedRequest, res: Response) => {
+router.patch('/:memoryId', async (req: AuthedRequest, res: Response) => {
   try {
     const identity = resolveIdentity(req);
     if (!identity) { sendError(res, 401, 'UNAUTHENTICATED', 'Authentication required.'); return; }
@@ -155,7 +155,7 @@ router.patch('/:memoryId', requireVerifiedSchoolContext, async (req: AuthedReque
 
 // ── DELETE /api/copilot/learner-memory/:memoryId ──
 // Soft-delete a memory item.
-router.delete('/:memoryId', requireVerifiedSchoolContext, async (req: AuthedRequest, res: Response) => {
+router.delete('/:memoryId', async (req: AuthedRequest, res: Response) => {
   try {
     const identity = resolveIdentity(req);
     if (!identity) { sendError(res, 401, 'UNAUTHENTICATED', 'Authentication required.'); return; }

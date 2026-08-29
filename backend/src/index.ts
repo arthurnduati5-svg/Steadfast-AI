@@ -176,7 +176,7 @@ app.use('/api/copilot/anomalies', schoolAuthMiddleware, anomalyRoutes);
 app.use('/api/copilot/tutor-state', schoolAuthMiddleware, tutorStateRoutes);
 app.use('/api/copilot/tutor-state', schoolAuthMiddleware, tutorStateV2Routes);
 app.use('/api/copilot/artifacts', schoolAuthMiddleware, artifactRoutes);
-app.use('/api/copilot/learner-memory', requireVerifiedSchoolContext, learnerMemoryRoutes);
+app.use('/api/copilot/learner-memory', schoolAuthMiddleware, requireVerifiedSchoolContext, learnerMemoryRoutes);
 app.use('/api/copilot/practice-mastery', schoolAuthMiddleware, practiceMasteryRoutes);
 app.use('/api/copilot/intent', schoolAuthMiddleware, intentResolverRoutes);
 app.use('/api/copilot/chat-pipeline', schoolAuthMiddleware, chatPipelineRoutes);

@@ -8,7 +8,9 @@ declare global {
       user?: {
         id: string;
         role?: string;
+        schoolId?: string;
       };
+      schoolId?: string;
     }
   }
 }
@@ -39,6 +41,16 @@ const extractUserId = (decoded: string | JwtPayload): string => {
   return typeof candidate === 'string' ? candidate.trim() : '';
 };
 
+const extractSchoolId = (decoded: string | JwtPayload): string | undefined => {
+  if (!decoded || typeof decoded === 'string') return undefined;
+  const candidate =
+    (decoded as any).schoolId ||
+    (decoded as any).school_id ||
+    (decoded as any).orgId ||
+    (decoded as any).organizationId;
+  return typeof candidate === 'string' ? candidate.trim() : undefined;
+};
+
 const extractRole = (decoded: string | JwtPayload): string | undefined => {
   if (!decoded || typeof decoded === 'string') return undefined;
 
@@ -47,6 +59,9 @@ const extractRole = (decoded: string | JwtPayload): string | undefined => {
     const normalized = direct.trim().toLowerCase();
     if (normalized === 'admin') return 'admin';
     if (normalized === 'counselor' || normalized === 'counsellor') return 'counselor';
+    if (normalized === 'student' || normalized === 'learner') return 'student';
+    if (normalized === 'teacher') return 'teacher';
+    if (normalized === 'school_admin') return 'school_admin';
   }
 
   const roleList = decoded.roles;
@@ -54,14 +69,17 @@ const extractRole = (decoded: string | JwtPayload): string | undefined => {
     const normalizedList = roleList.map((entry) => String(entry || '').trim().toLowerCase());
     if (normalizedList.includes('admin')) return 'admin';
     if (normalizedList.includes('counselor') || normalizedList.includes('counsellor')) return 'counselor';
+    if (normalizedList.includes('student') || normalizedList.includes('learner')) return 'student';
+    if (normalizedList.includes('teacher')) return 'teacher';
   }
 
-  return undefined;
+  return typeof direct === 'string' ? direct.trim().toLowerCase() : undefined;
 };
 
 type VerifiedClaims = {
   userId: string;
   role?: string;
+  schoolId?: string;
 };
 
 const verifyToken = (token: string): VerifiedClaims | null => {
@@ -72,7 +90,7 @@ const verifyToken = (token: string): VerifiedClaims | null => {
       const decoded = jwt.verify(token, SESSION_JWT_SECRET);
       const userId = extractUserId(decoded);
       if (!userId) return null;
-      return { userId, role: extractRole(decoded) };
+      return { userId, role: extractRole(decoded), schoolId: extractSchoolId(decoded) };
     });
   }
 
@@ -81,7 +99,7 @@ const verifyToken = (token: string): VerifiedClaims | null => {
       const decoded = jwt.verify(token, COPILOT_JWT_SECRET);
       const userId = extractUserId(decoded);
       if (!userId) return null;
-      return { userId, role: extractRole(decoded) };
+      return { userId, role: extractRole(decoded), schoolId: extractSchoolId(decoded) };
     });
   }
 
@@ -90,7 +108,7 @@ const verifyToken = (token: string): VerifiedClaims | null => {
       const decoded = jwt.verify(token, COPILOT_PUBLIC_KEY, { algorithms: ['RS256'] });
       const userId = extractUserId(decoded);
       if (!userId) return null;
-      return { userId, role: extractRole(decoded) };
+      return { userId, role: extractRole(decoded), schoolId: extractSchoolId(decoded) };
     });
   }
 
@@ -124,6 +142,10 @@ export const schoolAuthMiddleware = async (req: Request, res: Response, next: Ne
     });
   }
 
-  req.user = claims.role ? { id: claims.userId, role: claims.role } : { id: claims.userId };
+  const user: { id: string; role?: string; schoolId?: string } = { id: claims.userId };
+  if (claims.role) user.role = claims.role;
+  if (claims.schoolId) user.schoolId = claims.schoolId;
+  req.user = user;
+  if (claims.schoolId) (req as any).schoolId = claims.schoolId;
   return next();
 };
