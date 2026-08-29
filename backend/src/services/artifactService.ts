@@ -46,6 +46,75 @@ async function isPrismaAvailable(): Promise<boolean> {
   return _prismaAvailable;
 }
 
+/**
+ * Production MUST use Prisma as the authoritative artifact/structure store.
+ * In-memory Maps are only an authoritative fixture store in isolated test runs
+ * (NODE_ENV === 'test') and an optional non-authoritative cache in production
+ * AFTER successful durable persistence. A general ephemeral-production flag is
+ * intentionally NOT provided — production durability is fail-closed.
+ */
+export function isTestFallbackAllowed(): boolean {
+  return process.env.NODE_ENV === 'test';
+}
+
+/** Raised when a required durable persistence operation cannot complete. */
+export class ArtifactPersistenceError extends Error {
+  public code: string;
+  constructor(message: string, code = 'PERSISTENCE_FAILED') {
+    super(message);
+    this.code = code;
+    this.name = 'ArtifactPersistenceError';
+  }
+}
+
+/** Reset cached Prisma availability probe (test isolation only). */
+export function _resetArtifactServicePrismaAvailability(): void {
+  _prismaAvailable = null;
+}
+
+/**
+ * Resolve and authorize a canonical MediaAsset before any artifact may anchor
+ * to it. mediaAssetId is only an untrusted locator until the server proves the
+ * actual MediaAsset exists and the verified actor owns it. Fails closed.
+ */
+export async function resolveAuthorizedMediaAsset(
+  identity: ResolvedTutorIdentity,
+  mediaAssetId: string | null | undefined,
+): Promise<{ id: string; userId: string }> {
+  if (!mediaAssetId || !mediaAssetId.trim()) {
+    throw new ArtifactAccessError('MISSING_MEDIA_ASSET', 'mediaAssetId is required to anchor.', 400);
+  }
+  const targetId = mediaAssetId.trim();
+
+  const available = await isPrismaAvailable();
+  // Without a durable store we can never prove the asset — fail closed.
+  if (!available) {
+    throw new ArtifactAccessError('MEDIA_ASSET_UNVERIFIABLE', 'Cannot verify MediaAsset without persistent store.', 404);
+  }
+
+  const asset = await (prisma as any).mediaAsset?.findUnique?.({ where: { id: targetId } });
+  if (!asset) {
+    // 404 (not 403) to avoid leaking cross-user existence.
+    throw new ArtifactAccessError('MEDIA_ASSET_NOT_FOUND', 'MediaAsset not found.', 404);
+  }
+
+  const role = (identity.role || '').toLowerCase();
+  if (role === 'student' || role === 'learner') {
+    const ownerId = identity.studentId || identity.userId;
+    if (asset.userId !== ownerId) {
+      throw new ArtifactAccessError('MEDIA_ASSET_FORBIDDEN', 'Not authorized for this MediaAsset.', 404);
+    }
+  } else if (role === 'teacher' || role === 'admin') {
+    // No teacher MediaAsset ownership model may be invented. A teacher role alone
+    // must NOT authorize an arbitrary learner's MediaAsset. Fail closed.
+    throw new ArtifactAccessError('MEDIA_ASSET_FORBIDDEN', 'Teacher linkage to a learner MediaAsset is not proven.', 404);
+  } else {
+    throw new ArtifactAccessError('MEDIA_ASSET_FORBIDDEN', 'Unauthorized role for MediaAsset linkage.', 404);
+  }
+
+  return { id: asset.id, userId: asset.userId };
+}
+
 function nowISO(): string {
   return new Date().toISOString();
 }
@@ -197,13 +266,27 @@ export class ArtifactService {
     const contentText = [input.textContent || '', input.transcriptText || '', input.title || ''].join(' ');
     const fingerprint = computeFingerprint(contentText);
 
+    // Defect C: mediaAssetId is an untrusted locator until canonical resolution.
+    // In production it MUST be verified against the actual MediaAsset + ownership
+    // BEFORE the artifact relationship is persisted. Test mode keeps deterministic
+    // fixtures without forcing a DB round-trip.
+    let resolvedMediaAssetId: string | null = null;
+    if (input.mediaAssetId?.trim()) {
+      if (isTestFallbackAllowed()) {
+        resolvedMediaAssetId = input.mediaAssetId.trim();
+      } else {
+        const asset = await resolveAuthorizedMediaAsset(identity, input.mediaAssetId.trim());
+        resolvedMediaAssetId = asset.id;
+      }
+    }
+
     const artifact: LearningArtifact = {
       artifactId: generateId(),
       schoolId: identity.schoolId,
       ownerStudentId: identity.studentId || null,
       ownerTeacherId: identity.role === 'teacher' ? identity.userId || identity.studentId : null,
       classId: input.classId || null,
-      mediaAssetId: input.mediaAssetId?.trim() || null,
+      mediaAssetId: resolvedMediaAssetId,
       kind: input.kind || 'unknown',
       accessScope: input.accessScope || 'student_private',
       title: input.title?.trim() || 'Untitled Artifact',
@@ -229,13 +312,32 @@ export class ArtifactService {
       warnings: [],
     };
 
-    // Persist to in-memory store
-    const storeEntry = { ...artifact, _blocks: [], _questions: [], _answerKeys: [], _workedExamples: [], _diagrams: [] };
-    artifactMemoryStore.set(artifact.artifactId, storeEntry);
-    artifactLookupByKey.set(`${identity.schoolId}:${identity.studentId}:${artifact.artifactId}`, artifact.artifactId);
+    const testFallback = isTestFallbackAllowed();
+    const available = await isPrismaAvailable();
 
-    // Try Prisma persistence
-    await this._upsertPrismaArtifact(artifact);
+    // Production fail-closed: without a durable store there is no success.
+    if (!available && !testFallback) {
+      throw new ArtifactPersistenceError('Prisma persistence unavailable; artifact creation refused in production.');
+    }
+
+    // Defect A: production must NOT write an authoritative Map entry first.
+    // In test mode the Map is the authoritative fixture store.
+    if (testFallback) {
+      const storeEntry = { ...artifact, _blocks: [], _questions: [], _answerKeys: [], _workedExamples: [], _diagrams: [] };
+      artifactMemoryStore.set(artifact.artifactId, storeEntry);
+      artifactLookupByKey.set(`${identity.schoolId}:${identity.studentId}:${artifact.artifactId}`, artifact.artifactId);
+    }
+
+    // Durable persistence FIRST. Production failures propagate (no success).
+    if (available) {
+      await this._upsertPrismaArtifact(artifact, { failClosed: !testFallback });
+      // Only after successful durable persistence may an optional cache be updated.
+      if (!testFallback) {
+        const storeEntry = { ...artifact, _blocks: [], _questions: [], _answerKeys: [], _workedExamples: [], _diagrams: [] };
+        artifactMemoryStore.set(artifact.artifactId, storeEntry);
+        artifactLookupByKey.set(`${identity.schoolId}:${identity.studentId}:${artifact.artifactId}`, artifact.artifactId);
+      }
+    }
 
     return artifact;
   }
@@ -247,14 +349,25 @@ export class ArtifactService {
     identity: ResolvedTutorIdentity,
     artifactId: string,
   ): Promise<LearningArtifact | null> {
-    // Try in-memory first
+    const testFallback = isTestFallbackAllowed();
+
+    // Production: Prisma is authoritative. Do not prefer Map before the database.
+    if (!testFallback) {
+      const fromDb = await this._getPrismaArtifact(artifactId);
+      if (fromDb) {
+        await assertArtifactAccess(fromDb, identity);
+        return fromDb;
+      }
+      return null;
+    }
+
+    // Test mode: deterministic Map fixtures remain authoritative for isolated runs.
     const memEntry = artifactMemoryStore.get(artifactId);
     if (memEntry) {
       await assertArtifactAccess(memEntry, identity);
       return this._toPublicArtifact(memEntry);
     }
 
-    // Try Prisma
     const fromDb = await this._getPrismaArtifact(artifactId);
     if (fromDb) {
       await assertArtifactAccess(fromDb, identity);
@@ -339,10 +452,17 @@ export class ArtifactService {
    * List blocks for an artifact.
    */
   async listArtifactBlocks(artifactId: string): Promise<ArtifactBlock[]> {
+    const testFallback = isTestFallbackAllowed();
+
+    // Production: canonical persistent blocks are authoritative.
+    if (!testFallback) {
+      const fromDb = await this._getPrismaBlocks(artifactId);
+      return fromDb || [];
+    }
+
     const memEntry = artifactMemoryStore.get(artifactId);
     if (memEntry) return memEntry._blocks;
 
-    // Try Prisma
     const fromDb = await this._getPrismaBlocks(artifactId);
     return fromDb || [];
   }
@@ -382,132 +502,179 @@ export class ArtifactService {
     options?: { allowOverwriteOnFailure?: boolean },
   ): Promise<LearningArtifact> {
     const now = nowISO();
-    const memEntry = artifactMemoryStore.get(artifactId);
-    if (!memEntry) {
-      throw new Error(`Artifact ${artifactId} not found in memory store`);
+    const testFallback = isTestFallbackAllowed();
+    const available = await isPrismaAvailable();
+
+    // 1. Obtain the current authoritative artifact.
+    //    Test mode uses the Map fixture; production may load from durable
+    //    Prisma even when all Maps are empty (restart/empty-memory durability).
+    let current: (LearningArtifact & { _blocks?: ArtifactBlock[]; _questions?: ExtractedQuestion[]; _answerKeys?: AnswerKeyBlock[]; _workedExamples?: WorkedExampleBlock[]; _diagrams?: DiagramBlock[] }) | null =
+      artifactMemoryStore.get(artifactId) || null;
+    if (!current && !testFallback) {
+      current = await this._getPrismaArtifact(artifactId);
+    }
+    if (!current) {
+      throw new Error(`Artifact ${artifactId} not found`);
     }
 
-    // R3.14: Failed reparse must not destroy a previously valid projection.
-    // If the new result is a failure and a previous parsed projection exists,
-    // keep the previous blocks and only append failure warnings.
-    const previousWasUsable =
-      memEntry.parseStatus === 'parsed' || memEntry.parseStatus === 'partial';
-    const newIsFailure = result.parseStatus === 'failed' || result.parseStatus === 'unsupported';
-    const shouldPreservePrevious = previousWasUsable && newIsFailure && !options?.allowOverwriteOnFailure;
-
-    if (shouldPreservePrevious) {
-      const preserved: LearningArtifact = {
-        artifactId: memEntry.artifactId,
-        schoolId: memEntry.schoolId,
-        ownerStudentId: memEntry.ownerStudentId,
-        ownerTeacherId: memEntry.ownerTeacherId,
-        classId: memEntry.classId,
-        mediaAssetId: memEntry.mediaAssetId,
-        kind: memEntry.kind,
-        accessScope: memEntry.accessScope,
-        title: memEntry.title,
-        description: memEntry.description,
-        originalFileName: memEntry.originalFileName,
-        mimeType: memEntry.mimeType,
-        sizeBytes: memEntry.sizeBytes,
-        source: memEntry.source,
-        parseStatus: memEntry.parseStatus,
-        structureQuality: memEntry.structureQuality,
-        blockCount: memEntry.blockCount,
-        questionCount: memEntry.questionCount,
-        diagramCount: memEntry.diagramCount,
-        answerKeyCount: memEntry.answerKeyCount,
-        tableCount: memEntry.tableCount,
-        transcriptCount: memEntry.transcriptCount,
-        restrictedCount: memEntry.restrictedCount,
-        contentFingerprint: memEntry.contentFingerprint,
-        curriculumRefs: memEntry.curriculumRefs,
-        createdAt: memEntry.createdAt,
-        updatedAt: nowISO(),
-        parsedAt: memEntry.parsedAt,
-        warnings: [...memEntry.warnings, ...result.warnings, 'Reparse failed: previous valid projection preserved.'],
-      };
-      // Preserve in-memory but do not overwrite durable blocks
-      memEntry.warnings = preserved.warnings;
-      memEntry.updatedAt = preserved.updatedAt;
-      return preserved;
-    }
-
+    // 2. Compute the candidate result WITHOUT mutating authoritative state.
     const tableCount = result.blocks.filter((b) => b.kind === 'table').length;
     const transcriptCount = result.blocks.filter(
       (b) => b.kind === 'transcript' || b.kind === 'transcript_segment',
     ).length;
     const restrictedCount = result.blocks.filter((b) => b.visibility === 'teacher_only').length;
 
-    // Recompute content fingerprint from the new blocks' text so replay can be detected.
     const incomingContent = result.blocks.map((b) => b.text || '').join('\n');
-    const derivedFingerprint = incomingContent ? computeFingerprint(incomingContent) : memEntry.contentFingerprint;
+    const derivedFingerprint = incomingContent ? computeFingerprint(incomingContent) : current.contentFingerprint;
 
-    // Update the artifact level fields
-    memEntry.parseStatus = result.parseStatus;
-    memEntry.structureQuality = result.structureQuality;
-    memEntry.blockCount = result.blocks.length;
-    memEntry.questionCount = result.questions.length;
-    memEntry.diagramCount = result.diagrams.length;
-    memEntry.answerKeyCount = result.answerKeys.length;
-    memEntry.tableCount = tableCount;
-    memEntry.transcriptCount = transcriptCount;
-    memEntry.restrictedCount = restrictedCount;
-    memEntry.contentFingerprint = derivedFingerprint;
-    memEntry.parsedAt = now;
-    memEntry.updatedAt = now;
-    memEntry.warnings = result.warnings;
-    if (curriculumRefs && Object.keys(curriculumRefs).length > 0) {
-      memEntry.curriculumRefs = {
-        ...(memEntry.curriculumRefs || {}),
-        ...curriculumRefs,
-        verified: false,
-        candidate: true,
+    // R3.14: Failed reparse must not destroy a previously valid projection.
+    const previousWasUsable =
+      current.parseStatus === 'parsed' || current.parseStatus === 'partial';
+    const newIsFailure = result.parseStatus === 'failed' || result.parseStatus === 'unsupported';
+    const shouldPreservePrevious = previousWasUsable && newIsFailure && !options?.allowOverwriteOnFailure;
+
+    if (shouldPreservePrevious) {
+      const preserved: LearningArtifact = {
+        artifactId: current.artifactId,
+        schoolId: current.schoolId,
+        ownerStudentId: current.ownerStudentId,
+        ownerTeacherId: current.ownerTeacherId,
+        classId: current.classId,
+        mediaAssetId: current.mediaAssetId,
+        kind: current.kind,
+        accessScope: current.accessScope,
+        title: current.title,
+        description: current.description,
+        originalFileName: current.originalFileName,
+        mimeType: current.mimeType,
+        sizeBytes: current.sizeBytes,
+        source: current.source,
+        parseStatus: current.parseStatus,
+        structureQuality: current.structureQuality,
+        blockCount: current.blockCount,
+        questionCount: current.questionCount,
+        diagramCount: current.diagramCount,
+        answerKeyCount: current.answerKeyCount,
+        tableCount: current.tableCount,
+        transcriptCount: current.transcriptCount,
+        restrictedCount: current.restrictedCount,
+        contentFingerprint: current.contentFingerprint,
+        curriculumRefs: current.curriculumRefs,
+        createdAt: current.createdAt,
+        updatedAt: nowISO(),
+        parsedAt: current.parsedAt,
+        warnings: [...(current.warnings || []), ...result.warnings, 'Reparse failed: previous valid projection preserved.'],
       };
+      // Old durable blocks are intentionally NOT replaced. Only a non-destructive
+      // warning update is persisted; failure here in production propagates.
+      if (available) {
+        try {
+          if (typeof (prisma as any).learningArtifact?.update === 'function') {
+            await (prisma as any).learningArtifact.update({
+              where: { id: artifactId },
+              data: { warnings: preserved.warnings as any, updatedAt: new Date(preserved.updatedAt) },
+            });
+          }
+        } catch (e) {
+          if (!testFallback) throw new ArtifactPersistenceError('Failed to persist reparse-preservation warning.', (e as Error)?.message);
+        }
+      }
+      // Update optional cache (test or after durable write).
+      const memEntry = artifactMemoryStore.get(artifactId);
+      if (memEntry) {
+        memEntry.warnings = preserved.warnings;
+        memEntry.updatedAt = preserved.updatedAt;
+      }
+      return preserved;
     }
 
-    // Update the extended fields (blocks, questions, etc.)
-    memEntry._blocks = result.blocks;
-    memEntry._questions = result.questions;
-    memEntry._answerKeys = result.answerKeys;
-    memEntry._workedExamples = result.workedExamples;
-    memEntry._diagrams = result.diagrams;
+    const mergedCurriculumRefs: ArtifactCurriculumRefs = { ...(current.curriculumRefs || {}) };
+    if (curriculumRefs && Object.keys(curriculumRefs).length > 0) {
+      Object.assign(mergedCurriculumRefs, curriculumRefs, { verified: false, candidate: true });
+    }
 
-    // Build return value
     const updated: LearningArtifact = {
-      artifactId: memEntry.artifactId,
-      schoolId: memEntry.schoolId,
-      ownerStudentId: memEntry.ownerStudentId,
-      ownerTeacherId: memEntry.ownerTeacherId,
-      classId: memEntry.classId,
-      mediaAssetId: memEntry.mediaAssetId,
-      kind: memEntry.kind,
-      accessScope: memEntry.accessScope,
-      title: memEntry.title,
-      description: memEntry.description,
-      originalFileName: memEntry.originalFileName,
-      mimeType: memEntry.mimeType,
-      sizeBytes: memEntry.sizeBytes,
-      source: memEntry.source,
-      parseStatus: memEntry.parseStatus,
-      structureQuality: memEntry.structureQuality,
-      blockCount: memEntry.blockCount,
-      questionCount: memEntry.questionCount,
-      diagramCount: memEntry.diagramCount,
-      answerKeyCount: memEntry.answerKeyCount,
-      tableCount: memEntry.tableCount,
-      transcriptCount: memEntry.transcriptCount,
-      restrictedCount: memEntry.restrictedCount,
-      contentFingerprint: memEntry.contentFingerprint,
-      curriculumRefs: memEntry.curriculumRefs,
-      createdAt: memEntry.createdAt,
-      updatedAt: memEntry.updatedAt,
-      parsedAt: memEntry.parsedAt,
-      warnings: memEntry.warnings,
+      artifactId: current.artifactId,
+      schoolId: current.schoolId,
+      ownerStudentId: current.ownerStudentId,
+      ownerTeacherId: current.ownerTeacherId,
+      classId: current.classId,
+      mediaAssetId: current.mediaAssetId,
+      kind: current.kind,
+      accessScope: current.accessScope,
+      title: current.title,
+      description: current.description,
+      originalFileName: current.originalFileName,
+      mimeType: current.mimeType,
+      sizeBytes: current.sizeBytes,
+      source: current.source,
+      parseStatus: result.parseStatus,
+      structureQuality: result.structureQuality,
+      blockCount: result.blocks.length,
+      questionCount: result.questions.length,
+      diagramCount: result.diagrams.length,
+      answerKeyCount: result.answerKeys.length,
+      tableCount,
+      transcriptCount,
+      restrictedCount,
+      contentFingerprint: derivedFingerprint,
+      curriculumRefs: mergedCurriculumRefs,
+      createdAt: current.createdAt,
+      updatedAt: now,
+      parsedAt: now,
+      warnings: result.warnings,
     };
 
-    // Try Prisma persistence (atomic within a single transaction when available)
-    await this._persistParseResult(updated, result.blocks, result.questions, result.answerKeys, result.workedExamples, result.diagrams);
+    // Production: without a durable store, no successful structured mutation.
+    if (!available && !testFallback) {
+      throw new ArtifactPersistenceError('Prisma persistence unavailable; parse result not persisted in production.');
+    }
+
+    // 3-5. Execute one atomic durable transaction, then update the optional cache.
+    if (available) {
+      await this._persistParseResult(
+        updated,
+        result.blocks,
+        result.questions,
+        result.answerKeys,
+        result.workedExamples,
+        result.diagrams,
+        { failClosed: !testFallback },
+      );
+    }
+
+    // Only after successful durable persistence may the optional cache be updated.
+    const memEntry = artifactMemoryStore.get(artifactId);
+    if (memEntry) {
+      memEntry.parseStatus = updated.parseStatus;
+      memEntry.structureQuality = updated.structureQuality;
+      memEntry.blockCount = updated.blockCount;
+      memEntry.questionCount = updated.questionCount;
+      memEntry.diagramCount = updated.diagramCount;
+      memEntry.answerKeyCount = updated.answerKeyCount;
+      memEntry.tableCount = updated.tableCount;
+      memEntry.transcriptCount = updated.transcriptCount;
+      memEntry.restrictedCount = updated.restrictedCount;
+      memEntry.contentFingerprint = updated.contentFingerprint;
+      memEntry.parsedAt = updated.parsedAt;
+      memEntry.updatedAt = updated.updatedAt;
+      memEntry.warnings = updated.warnings;
+      memEntry.curriculumRefs = updated.curriculumRefs;
+      memEntry._blocks = result.blocks;
+      memEntry._questions = result.questions;
+      memEntry._answerKeys = result.answerKeys;
+      memEntry._workedExamples = result.workedExamples;
+      memEntry._diagrams = result.diagrams;
+    } else if (available) {
+      artifactMemoryStore.set(artifactId, {
+        ...updated,
+        _blocks: result.blocks,
+        _questions: result.questions,
+        _answerKeys: result.answerKeys,
+        _workedExamples: result.workedExamples,
+        _diagrams: result.diagrams,
+      });
+    }
 
     return updated;
   }
@@ -524,28 +691,46 @@ export class ArtifactService {
     const artifact = await this.getArtifactForUser(identity, artifactId);
     if (!artifact) return null;
 
-    const memEntry = artifactMemoryStore.get(artifactId);
-    if (memEntry) {
-      memEntry.mediaAssetId = mediaAssetId;
-      memEntry.updatedAt = nowISO();
+    const testFallback = isTestFallbackAllowed();
+    const available = await isPrismaAvailable();
+
+    // Defect C: resolve + authorize the canonical MediaAsset BEFORE mutating.
+    let resolvedMediaId: string;
+    if (testFallback) {
+      resolvedMediaId = mediaAssetId; // deterministic fixture; no DB round-trip
+    } else {
+      const asset = await resolveAuthorizedMediaAsset(identity, mediaAssetId);
+      resolvedMediaId = asset.id;
     }
 
-    const available = await isPrismaAvailable();
-    if (available) {
-      try {
-        await prisma.learningArtifact.update({
-          where: { id: artifactId },
-          data: { mediaAssetId },
-        });
-      } catch {
-        // Prisma unavailable, keep in-memory anchor
+    // Production fail-closed: without durable store, no successful anchor.
+    if (!available && !testFallback) {
+      throw new ArtifactPersistenceError('Prisma persistence unavailable; media anchor refused in production.');
+    }
+
+    if (!testFallback) {
+      await prisma.learningArtifact.update({
+        where: { id: artifactId },
+        data: { mediaAssetId: resolvedMediaId },
+      });
+      // Update optional cache only after successful durable write.
+      const memEntry = artifactMemoryStore.get(artifactId);
+      if (memEntry) {
+        memEntry.mediaAssetId = resolvedMediaId;
+        memEntry.updatedAt = nowISO();
+      }
+    } else {
+      const memEntry = artifactMemoryStore.get(artifactId);
+      if (memEntry) {
+        memEntry.mediaAssetId = resolvedMediaId;
+        memEntry.updatedAt = nowISO();
       }
     }
 
     return {
       ...artifact,
-      mediaAssetId,
-      updatedAt: memEntry?.updatedAt || artifact.updatedAt,
+      mediaAssetId: resolvedMediaId,
+      updatedAt: nowISO(),
     };
   }
 
@@ -628,7 +813,7 @@ export class ArtifactService {
 
   // ── Prisma helpers ──
 
-  private async _upsertPrismaArtifact(artifact: LearningArtifact): Promise<void> {
+  private async _upsertPrismaArtifact(artifact: LearningArtifact, opts?: { failClosed?: boolean }): Promise<void> {
     const available = await isPrismaAvailable();
     if (!available) return;
     try {
@@ -672,8 +857,9 @@ export class ArtifactService {
           parsedAt: artifact.parsedAt ? new Date(artifact.parsedAt) : null,
         },
       });
-    } catch {
-      // Prisma unavailable, continue with in-memory
+    } catch (e) {
+      // Test mode may continue with the in-memory fixture store; production fails closed.
+      if (opts?.failClosed) throw new ArtifactPersistenceError('Failed to persist artifact.', (e as Error)?.message);
     }
   }
 
@@ -716,10 +902,12 @@ export class ArtifactService {
     answerKeys: AnswerKeyBlock[],
     workedExamples: WorkedExampleBlock[],
     diagrams: DiagramBlock[],
+    opts?: { failClosed?: boolean },
   ): Promise<void> {
     const available = await isPrismaAvailable();
     if (!available) return;
     const write = async (tx: Prisma.TransactionClient): Promise<void> => {
+      // Never delete durable old blocks before the replacement can commit.
       await tx.learningArtifact.upsert({
         where: { id: artifact.artifactId },
         create: {
@@ -796,8 +984,10 @@ export class ArtifactService {
       } else {
         await write(prisma);
       }
-    } catch {
-      // Prisma unavailable, in-memory store remains the source of truth
+    } catch (e) {
+      // Test mode may keep the in-memory fixture; production MUST propagate so a
+      // failed transaction never yields a successful { ok: true } with Map-only truth.
+      if (opts?.failClosed) throw new ArtifactPersistenceError('Failed to persist parse result transaction.', (e as Error)?.message);
     }
   }
 

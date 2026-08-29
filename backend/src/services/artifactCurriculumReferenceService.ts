@@ -6,6 +6,7 @@
 
 import prisma from '../lib/prisma';
 import { topicSkillPrerequisiteMapService } from './task022TopicSkillPrerequisiteMapService';
+import { isTestFallbackAllowed } from './artifactService';
 import type { ArtifactCurriculumRefs } from './artifactContracts';
 
 let _prismaAvailable: boolean | null = null;
@@ -19,6 +20,11 @@ async function isPrismaAvailable(): Promise<boolean> {
     _prismaAvailable = false;
   }
   return _prismaAvailable;
+}
+
+/** Test-isolation helper: reset cached availability probe. */
+export function _resetCurriculumPrismaAvailability(): void {
+  _prismaAvailable = null;
 }
 
 function safeString(v: unknown): string {
@@ -101,9 +107,12 @@ export class ArtifactCurriculumReferenceService {
       return false;
     }
 
-    // For tests without DB, allow explicitly "valid_" prefixed IDs as valid
-    // to keep focused proof deterministic without requiring full graph seed.
+    // Fake-prefix acceptance is a TEST-ONLY convenience. It MUST NOT be trusted
+    // in production: production verification accepts ONLY IDs resolved through the
+    // governed Knowledge Graph (or existing curriculum services). This keeps the
+    // R3.10/R3.11 guarantee that untrusted IDs never become governed truth.
     function isTestAllowedValid(id: string): boolean {
+      if (!isTestFallbackAllowed()) return false;
       return id.startsWith('valid_') || id.startsWith('skill_valid_') || id.startsWith('obj_valid_') || id.startsWith('topic_valid_');
     }
     function isTestKnownInvalid(id: string): boolean {
@@ -175,7 +184,8 @@ export class ArtifactCurriculumReferenceService {
         }
       }
       if (verifiedObjs.length > 0) verified.objectiveIds = verifiedObjs;
-      if (candidateObjs.length > 0) candidate.objectIds = candidateObjs;
+      // Fix obvious naming mismatch: candidate objective IDs stored under objectiveIds.
+      if (candidateObjs.length > 0) candidate.objectiveIds = candidateObjs;
     }
     if (objectiveVersionIds.length > 0) {
       candidate.objectiveVersionIds = [...objectiveVersionIds];

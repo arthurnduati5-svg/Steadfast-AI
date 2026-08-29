@@ -1,13 +1,16 @@
 // ─────────────────────────────────────────────────────────────
 // Steadfast AI — Structured Artifact Repository v1
-// Durable storage and retrieval of structured artifact blocks,
-// questions, mappings, and parse status.
-// Uses existing artifactService and Prisma models where adequate.
+// Thin adapter over the canonical durable structured storage:
+//   StructuredArtifactRepository
+//     -> canonical artifactService / Prisma
+//     -> LearningArtifact + LearningArtifactBlock
+// Production never consults a second Map authority. In-memory mirrors are
+// retained ONLY for isolated deterministic test runs (NODE_ENV === 'test').
 // ─────────────────────────────────────────────────────────────
 
 import { createHash } from 'crypto';
 import prisma from '../lib/prisma';
-import { artifactService } from './artifactService';
+import { artifactService, isTestFallbackAllowed, ArtifactPersistenceError } from './artifactService';
 import type {
   StructuredArtifactRecord,
   ArtifactStructuredBlock,
@@ -36,21 +39,34 @@ function computeFingerprint(content: string): string {
   return createHash('sha256').update(content || '').digest('hex').slice(0, 16);
 }
 
-// ── In-memory durable mirrors (fallback when Prisma unavailable) ──
+// Production Prisma availability probe (independent of artifactService cache).
+let _prismaAvailable: boolean | null = null;
+async function isPrismaAvailable(): Promise<boolean> {
+  if (_prismaAvailable !== null) return _prismaAvailable;
+  try {
+    await (prisma as any).$queryRaw`SELECT 1`;
+    _prismaAvailable = true;
+  } catch {
+    _prismaAvailable = false;
+  }
+  return _prismaAvailable;
+}
+
+/** Test-isolation helper: reset cached availability probe. */
+export function _resetStructuredRepositoryPrismaAvailability(): void {
+  _prismaAvailable = null;
+}
+
+// ── In-memory mirrors (TEST-ONLY; never a production authority) ──
 const structuredRecordMirror = new Map<string, StructuredArtifactRecord>();
 const blockMirror = new Map<string, ArtifactStructuredBlock[]>();
 const questionMirror = new Map<string, ArtifactQuestionBlock[]>();
 
-// ── StructuredArtifactRepository ──
-// This repository is the canonical durable interface for the deep artifact
-// understanding pipeline. It now delegates to the existing LearningArtifact
-// Prisma models via artifactService and a Prisma-backed mirror so consumers
-// that depend on the structured repository no longer receive empty stubs.
-
 export class StructuredArtifactRepository {
   /**
    * Upsert a structured artifact record.
-   * Durably mirrors to in-memory and, when available, to Prisma via artifactService.
+   * Production: canonical LearningArtifact via Prisma (fail closed on failure).
+   * Test mode: deterministic Map mirror.
    */
   async upsertStructuredArtifact(record: StructuredArtifactRecord): Promise<StructuredArtifactRecord> {
     const now = nowISO();
@@ -59,13 +75,16 @@ export class StructuredArtifactRepository {
       updatedAt: now,
       createdAt: record.createdAt || now,
     };
-    structuredRecordMirror.set(record.artifactId, updated);
+    const testFallback = isTestFallbackAllowed();
+    const available = await isPrismaAvailable();
 
-    // Also try to ensure a LearningArtifact row exists for consumers that query via prisma
-    try {
-      const prismaAny = prisma as any;
-      if (prismaAny?.learningArtifact?.upsert) {
-        await prismaAny.learningArtifact.upsert({
+    if (testFallback) {
+      structuredRecordMirror.set(record.artifactId, updated);
+    }
+
+    if (available) {
+      try {
+        await (prisma as any).learningArtifact.upsert({
           where: { id: record.artifactId },
           create: {
             id: record.artifactId,
@@ -88,22 +107,29 @@ export class StructuredArtifactRepository {
             diagramCount: record.diagramCount,
           },
         });
+      } catch (e) {
+        if (!testFallback) throw new ArtifactPersistenceError('Failed to upsert structured artifact.', (e as Error)?.message);
       }
-    } catch {
-      // Prisma unavailable — durable mirror is sufficient for test harness
+    } else if (!testFallback) {
+      // Production must not silently succeed from a Map mirror.
+      throw new ArtifactPersistenceError('Prisma persistence unavailable; structured artifact upsert refused in production.');
     }
     return updated;
   }
 
   /**
    * Get a structured artifact record.
-   * Prefers the durable mirror, then falls back to the canonical LearningArtifact row.
+   * Production: canonical persistent state only (never the test mirror).
+   * Test mode: mirror first, then canonical fallback.
    */
   async getStructuredArtifact(scope: ArtifactScope): Promise<StructuredArtifactRecord | null> {
     const artifactId = scope.artifactId;
+    const testFallback = isTestFallbackAllowed();
+    if (!testFallback) {
+      return this._loadFromExisting(artifactId);
+    }
     const mirrored = structuredRecordMirror.get(artifactId);
     if (mirrored) {
-      // Re-hydrate counts from real blocks when available
       const blocks = blockMirror.get(artifactId) || [];
       const questions = questionMirror.get(artifactId) || [];
       return {
@@ -112,12 +138,12 @@ export class StructuredArtifactRepository {
         questionCount: questions.length || mirrored.questionCount,
       };
     }
-    const fromPrisma = await this._loadFromExisting(artifactId);
-    return fromPrisma;
+    return this._loadFromExisting(artifactId);
   }
 
   /**
-   * Upsert artifact blocks — durable, not a stub.
+   * Upsert artifact blocks into canonical LearningArtifactBlock storage.
+   * Production: durable Prisma write (fail closed). Test mode: Map mirror.
    */
   async upsertArtifactBlocks(
     scope: ArtifactScope,
@@ -125,18 +151,20 @@ export class StructuredArtifactRepository {
   ): Promise<ArtifactStructuredBlock[]> {
     const key = scope.artifactId;
     const stored = blocks.map((b) => ({ ...b, artifactId: key }));
-    blockMirror.set(key, stored);
+    const testFallback = isTestFallbackAllowed();
+    const available = await isPrismaAvailable();
 
-    // Also mirror into canonical LearningArtifact blocks for school-scoped reads
-    // so artifactService consumers see the same truth without a second storage system.
-    try {
-      const prismaAny = prisma as any;
-      if (prismaAny?.learningArtifactBlock?.deleteMany && prismaAny?.learningArtifactBlock?.createMany) {
-        await prismaAny.$transaction(async (tx: any) => {
+    if (testFallback) {
+      blockMirror.set(key, stored);
+    }
+
+    if (available) {
+      try {
+        await (prisma as any).$transaction(async (tx: any) => {
           await tx.learningArtifactBlock.deleteMany({ where: { artifactId: key } });
           if (stored.length > 0) {
             await tx.learningArtifactBlock.createMany({
-              data: stored.slice(0, 1000).map((b) => ({
+              data: stored.map((b) => ({
                 id: b.id,
                 artifactId: key,
                 schoolId: scope.schoolId || b.provenance?.artifactId || 'unknown_school',
@@ -155,68 +183,103 @@ export class StructuredArtifactRepository {
             });
           }
         });
+      } catch (e) {
+        if (!testFallback) throw new ArtifactPersistenceError('Failed to persist artifact blocks.', (e as Error)?.message);
       }
-    } catch {
-      // fallback to mirrors
+    } else if (!testFallback) {
+      throw new ArtifactPersistenceError('Prisma persistence unavailable; block upsert refused in production.');
     }
     return stored;
   }
 
   /**
-   * List artifact blocks with options — durable, not a stub.
+   * List artifact blocks. Production reads canonical persistent blocks (through
+   * artifactService); test mode reads the mirror.
    */
   async listArtifactBlocks(
     scope: ArtifactScope,
     options?: ArtifactRepositoryListOptions,
   ): Promise<ArtifactStructuredBlock[]> {
     const key = scope.artifactId;
+    const testFallback = isTestFallbackAllowed();
+
+    if (!testFallback) {
+      const fromService = await artifactService.listArtifactBlocks(key);
+      const translated: ArtifactStructuredBlock[] = (fromService || []).map((b, idx) => ({
+        id: b.blockId,
+        artifactId: b.artifactId,
+        blockType: this._mapBlockKind(b.kind),
+        visibility: b.visibility === 'teacher_only' ? 'teacher_visible' : 'learner_visible',
+        pageNumber: b.pageNumber || null,
+        locationLabel: b.sectionTitle || null,
+        sectionPath: b.headingPath || [],
+        text: b.text || '',
+        safeText: b.visibility === 'teacher_only' ? '[REDACTED — teacher only]' : (b.text || ''),
+        rawTextRef: null,
+        orderIndex: b.order ?? idx,
+        confidence: this._mapConfidence(b.confidence),
+        safetyFlags: [],
+        provenance: {
+          artifactId: b.artifactId,
+          blockId: b.blockId,
+          fileName: null,
+          mimeType: null,
+          pageNumber: b.pageNumber || null,
+          locationLabel: b.sectionTitle || null,
+          parserSource: 'artifactService',
+          extractionMethod: (b.provenance as any)?.extractionMethod || 'unknown',
+          extractedAt: (b.provenance as any)?.extractedAt || nowISO(),
+          confidence: this._mapConfidence(b.confidence),
+          warnings: [],
+        },
+        metadata: (b.metadata as Record<string, unknown>) || {},
+      }));
+      return this._applyBlockFilters(translated, options);
+    }
+
     const stored = blockMirror.get(key);
     if (stored && stored.length > 0) {
       return this._applyBlockFilters(stored, options);
     }
-    // Fallback: translate canonical LearningArtifact blocks
-    try {
-      const fromService = await artifactService.listArtifactBlocks(key);
-      if (fromService && fromService.length > 0) {
-        const translated: ArtifactStructuredBlock[] = fromService.map((b, idx) => ({
-          id: b.blockId,
+    const fromService = await artifactService.listArtifactBlocks(key);
+    if (fromService && fromService.length > 0) {
+      const translated: ArtifactStructuredBlock[] = fromService.map((b, idx) => ({
+        id: b.blockId,
+        artifactId: b.artifactId,
+        blockType: this._mapBlockKind(b.kind),
+        visibility: b.visibility === 'teacher_only' ? 'teacher_visible' : 'learner_visible',
+        pageNumber: b.pageNumber || null,
+        locationLabel: b.sectionTitle || null,
+        sectionPath: b.headingPath || [],
+        text: b.text || '',
+        safeText: b.visibility === 'teacher_only' ? '[REDACTED — teacher only]' : (b.text || ''),
+        rawTextRef: null,
+        orderIndex: b.order ?? idx,
+        confidence: this._mapConfidence(b.confidence),
+        safetyFlags: [],
+        provenance: {
           artifactId: b.artifactId,
-          blockType: this._mapBlockKind(b.kind),
-          visibility: b.visibility === 'teacher_only' ? 'teacher_visible' : 'learner_visible',
+          blockId: b.blockId,
+          fileName: null,
+          mimeType: null,
           pageNumber: b.pageNumber || null,
           locationLabel: b.sectionTitle || null,
-          sectionPath: b.headingPath || [],
-          text: b.text || '',
-          safeText: b.visibility === 'teacher_only' ? '[REDACTED — teacher only]' : (b.text || ''),
-          rawTextRef: null,
-          orderIndex: b.order ?? idx,
+          parserSource: 'artifactService',
+          extractionMethod: (b.provenance as any)?.extractionMethod || 'unknown',
+          extractedAt: (b.provenance as any)?.extractedAt || nowISO(),
           confidence: this._mapConfidence(b.confidence),
-          safetyFlags: [],
-          provenance: {
-            artifactId: b.artifactId,
-            blockId: b.blockId,
-            fileName: null,
-            mimeType: null,
-            pageNumber: b.pageNumber || null,
-            locationLabel: b.sectionTitle || null,
-            parserSource: 'artifactService',
-            extractionMethod: (b.provenance as any)?.extractionMethod || 'unknown',
-            extractedAt: (b.provenance as any)?.extractedAt || nowISO(),
-            confidence: this._mapConfidence(b.confidence),
-            warnings: [],
-          },
-          metadata: (b.metadata as Record<string, unknown>) || {},
-        }));
-        return this._applyBlockFilters(translated, options);
-      }
-    } catch {
-      // ignore
+          warnings: [],
+        },
+        metadata: (b.metadata as Record<string, unknown>) || {},
+      }));
+      return this._applyBlockFilters(translated, options);
     }
     return stored ? this._applyBlockFilters(stored, options) : [];
   }
 
   /**
-   * Upsert artifact questions — durable.
+   * Upsert artifact questions. Production persists them as canonical question
+   * blocks (no dedicated question table is invented). Test mode: Map mirror.
    */
   async upsertArtifactQuestions(
     scope: ArtifactScope,
@@ -224,21 +287,83 @@ export class StructuredArtifactRepository {
   ): Promise<ArtifactQuestionBlock[]> {
     const key = scope.artifactId;
     const stored = questions.map((q) => ({ ...q, artifactId: key }));
-    questionMirror.set(key, stored);
+    const testFallback = isTestFallbackAllowed();
+    const available = await isPrismaAvailable();
+
+    if (testFallback) {
+      questionMirror.set(key, stored);
+    }
+
+    if (available) {
+      try {
+        await (prisma as any).$transaction(async (tx: any) => {
+          await tx.learningArtifactBlock.deleteMany({ where: { artifactId: key, kind: 'question' } });
+          if (stored.length > 0) {
+            await tx.learningArtifactBlock.createMany({
+              data: stored.map((q) => ({
+                id: q.questionId,
+                artifactId: key,
+                schoolId: scope.schoolId || 'unknown_school',
+                kind: 'question',
+                visibility: 'student',
+                order: 0,
+                text: q.questionText,
+                normalizedText: q.safeQuestionText || q.questionText,
+                confidence: q.confidence === 'high' ? 0.9 : q.confidence === 'medium' ? 0.6 : 0.3,
+                provenance: (q.metadata as any)?.provenance || {},
+                metadata: q.metadata as any,
+                contentFingerprint: computeFingerprint(q.questionText),
+              })),
+              skipDuplicates: true,
+            });
+          }
+        });
+      } catch (e) {
+        if (!testFallback) throw new ArtifactPersistenceError('Failed to persist artifact questions.', (e as Error)?.message);
+      }
+    } else if (!testFallback) {
+      throw new ArtifactPersistenceError('Prisma persistence unavailable; question upsert refused in production.');
+    }
     return stored;
   }
 
   /**
-   * List artifact questions — durable.
+   * List artifact questions. Production derives from canonical question blocks;
+   * test mode reads the mirror.
    */
   async listArtifactQuestions(
     scope: ArtifactScope,
     options?: ArtifactRepositoryListOptions,
   ): Promise<ArtifactQuestionBlock[]> {
     const key = scope.artifactId;
+    const testFallback = isTestFallbackAllowed();
+    if (!testFallback) {
+      const fromService = await artifactService.listArtifactBlocks(key);
+      const qBlocks = (fromService || []).filter((b) => b.kind === 'question');
+      return qBlocks.map((b) => ({
+        questionId: b.blockId,
+        artifactId: b.artifactId,
+        parentBlockId: null,
+        questionNumber: null,
+        questionText: b.text || '',
+        safeQuestionText: b.visibility === 'teacher_only' ? '[REDACTED — teacher only]' : (b.normalizedText || b.text || ''),
+        questionType: 'open' as any,
+        choices: [],
+        requiresDiagram: false,
+        requiresTable: false,
+        topic: ((b.educationalTags as any)?.topic as string) || null,
+        skillId: ((b.educationalTags as any)?.skillId as string) || null,
+        skillLabel: null,
+        difficulty: null,
+        answerKeyRef: null,
+        learnerCanSeeAnswer: b.visibility !== 'teacher_only',
+        confidence: this._mapConfidence(b.confidence),
+        location: b.sectionTitle || null,
+        metadata: (b.metadata as Record<string, unknown>) || {},
+      }));
+    }
     const stored = questionMirror.get(key) || [];
     if (options?.blockTypes && options.blockTypes.length > 0) {
-      // Questions are always of logical type 'question' — honour filter
       const wanted = new Set(options.blockTypes);
       if (!wanted.has('question')) return [];
     }
@@ -247,41 +372,67 @@ export class StructuredArtifactRepository {
   }
 
   /**
-   * Mark parse status.
+   * Mark parse status. Production: canonical Prisma update (fail closed).
+   * Test mode: mirror.
    */
   async markArtifactParseStatus(
     scope: ArtifactScope,
     status: ArtifactParseStatus,
     warnings: string[],
   ): Promise<void> {
-    const existing = structuredRecordMirror.get(scope.artifactId);
-    if (existing) {
-      structuredRecordMirror.set(scope.artifactId, { ...existing, parseStatus: status, parserWarnings: warnings, updatedAt: nowISO() });
+    const testFallback = isTestFallbackAllowed();
+    const available = await isPrismaAvailable();
+    if (testFallback) {
+      const existing = structuredRecordMirror.get(scope.artifactId);
+      if (existing) {
+        structuredRecordMirror.set(scope.artifactId, { ...existing, parseStatus: status, parserWarnings: warnings, updatedAt: nowISO() });
+      }
     }
-    try {
-      await (prisma as any).learningArtifact?.update?.({
-        where: { id: scope.artifactId },
-        data: { parseStatus: this._reverseMapParseStatus(status), warnings: warnings as any },
-      });
-    } catch {
-      // mirror suffices
+    if (available) {
+      try {
+        await (prisma as any).learningArtifact?.update?.({
+          where: { id: scope.artifactId },
+          data: { parseStatus: this._reverseMapParseStatus(status), warnings: warnings as any },
+        });
+      } catch (e) {
+        if (!testFallback) throw new ArtifactPersistenceError('Failed to mark parse status.', (e as Error)?.message);
+      }
+    } else if (!testFallback) {
+      throw new ArtifactPersistenceError('Prisma persistence unavailable; parse status update refused in production.');
     }
   }
 
   /**
-   * Soft delete structured artifact.
+   * Soft delete structured artifact. Production prunes canonical blocks (fail
+   * closed). Test mode clears mirrors.
    */
   async softDeleteStructuredArtifact(
     scope: ArtifactScope,
     _reason: string,
   ): Promise<void> {
-    structuredRecordMirror.delete(scope.artifactId);
-    blockMirror.delete(scope.artifactId);
-    questionMirror.delete(scope.artifactId);
+    const testFallback = isTestFallbackAllowed();
+    const available = await isPrismaAvailable();
+    if (testFallback) {
+      structuredRecordMirror.delete(scope.artifactId);
+      blockMirror.delete(scope.artifactId);
+      questionMirror.delete(scope.artifactId);
+    }
+    if (available) {
+      try {
+        await (prisma as any).$transaction(async (tx: any) => {
+          await tx.learningArtifactBlock.deleteMany({ where: { artifactId: scope.artifactId } });
+          await tx.learningArtifact.update({ where: { id: scope.artifactId }, data: { parseStatus: 'not_parsed' } });
+        });
+      } catch (e) {
+        if (!testFallback) throw new ArtifactPersistenceError('Failed to delete structured artifact.', (e as Error)?.message);
+      }
+    } else if (!testFallback) {
+      throw new ArtifactPersistenceError('Prisma persistence unavailable; delete refused in production.');
+    }
   }
 
   /**
-   * Load structured data from existing artifact service.
+   * Load structured data from existing canonical artifact storage.
    */
   private async _loadFromExisting(artifactId: string): Promise<StructuredArtifactRecord | null> {
     try {
