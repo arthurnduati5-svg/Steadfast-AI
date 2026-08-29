@@ -454,10 +454,11 @@ export class ArtifactService {
   async listArtifactBlocks(artifactId: string): Promise<ArtifactBlock[]> {
     const testFallback = isTestFallbackAllowed();
 
-    // Production: canonical persistent blocks are authoritative.
+    // Production: canonical persistent blocks are authoritative. The helper
+    // itself distinguishes a legitimate empty set from a persistence failure.
     if (!testFallback) {
       const fromDb = await this._getPrismaBlocks(artifactId);
-      return fromDb || [];
+      return fromDb;
     }
 
     const memEntry = artifactMemoryStore.get(artifactId);
@@ -506,11 +507,16 @@ export class ArtifactService {
     const available = await isPrismaAvailable();
 
     // 1. Obtain the current authoritative artifact.
-    //    Test mode uses the Map fixture; production may load from durable
-    //    Prisma even when all Maps are empty (restart/empty-memory durability).
-    let current: (LearningArtifact & { _blocks?: ArtifactBlock[]; _questions?: ExtractedQuestion[]; _answerKeys?: AnswerKeyBlock[]; _workedExamples?: WorkedExampleBlock[]; _diagrams?: DiagramBlock[] }) | null =
-      artifactMemoryStore.get(artifactId) || null;
-    if (!current && !testFallback) {
+    //    Production MUST derive the authoritative current state from canonical
+    //    Prisma. A process-local Map cache can become stale and must never
+    //    override durable truth. Test mode keeps the Map as authoritative fixture.
+    let current: (LearningArtifact & { _blocks?: ArtifactBlock[]; _questions?: ExtractedQuestion[]; _answerKeys?: AnswerKeyBlock[]; _workedExamples?: WorkedExampleBlock[]; _diagrams?: DiagramBlock[] }) | null;
+    if (testFallback) {
+      current = artifactMemoryStore.get(artifactId) || null;
+      if (!current) {
+        current = await this._getPrismaArtifact(artifactId);
+      }
+    } else {
       current = await this._getPrismaArtifact(artifactId);
     }
     if (!current) {
@@ -865,30 +871,44 @@ export class ArtifactService {
 
   private async _getPrismaArtifact(artifactId: string): Promise<LearningArtifact | null> {
     const available = await isPrismaAvailable();
-    if (!available) return null;
+    // DB outage is NOT "resource does not exist". Production fails closed.
+    if (!available) {
+      if (isTestFallbackAllowed()) return null;
+      throw new ArtifactPersistenceError('Prisma persistence unavailable during artifact read.');
+    }
     try {
       const record = await prisma.learningArtifact.findUnique({
         where: { id: artifactId },
       });
+      // Legitimate absence: query succeeded and returned nothing.
       if (!record) return null;
       return this._mapPrismaArtifact(record);
-    } catch {
-      return null;
+    } catch (error) {
+      // Query failure is NOT "resource does not exist". Production fails closed.
+      if (isTestFallbackAllowed()) return null;
+      throw new ArtifactPersistenceError('Failed to read artifact from persistence.', (error as Error)?.message);
     }
   }
 
-  private async _getPrismaBlocks(artifactId: string): Promise<ArtifactBlock[] | null> {
+  private async _getPrismaBlocks(artifactId: string): Promise<ArtifactBlock[]> {
     const available = await isPrismaAvailable();
-    if (!available) return null;
+    // DB outage is NOT "zero blocks". Production fails closed.
+    if (!available) {
+      if (isTestFallbackAllowed()) return [];
+      throw new ArtifactPersistenceError('Prisma persistence unavailable during block read.');
+    }
     try {
       const records = await prisma.learningArtifactBlock.findMany({
         where: { artifactId },
         orderBy: { order: 'asc' },
       });
-      if (!records || records.length === 0) return null;
+      // Legitimate empty block set: query succeeded and returned zero rows.
+      if (!records || records.length === 0) return [];
       return records.map((r: Prisma.LearningArtifactBlockGetPayload<{}>) => this._mapPrismaBlock(r));
-    } catch {
-      return null;
+    } catch (error) {
+      // Query failure is NOT "zero blocks". Production fails closed.
+      if (isTestFallbackAllowed()) return [];
+      throw new ArtifactPersistenceError('Failed to read artifact blocks from persistence.', (error as Error)?.message);
     }
   }
 

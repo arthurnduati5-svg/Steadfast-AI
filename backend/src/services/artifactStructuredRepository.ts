@@ -435,10 +435,17 @@ export class StructuredArtifactRepository {
    * Load structured data from existing canonical artifact storage.
    */
   private async _loadFromExisting(artifactId: string): Promise<StructuredArtifactRecord | null> {
+    const available = await isPrismaAvailable();
+    // DB outage is NOT "no record". Production fails closed.
+    if (!available) {
+      if (isTestFallbackAllowed()) return null;
+      throw new ArtifactPersistenceError('Prisma persistence unavailable during structured artifact read.');
+    }
     try {
       const existing = await (prisma as any).learningArtifact.findUnique({
         where: { id: artifactId },
       });
+      // Legitimate absence: query succeeded and returned nothing.
       if (!existing) return null;
 
       return {
@@ -469,8 +476,10 @@ export class StructuredArtifactRepository {
         createdAt: existing.createdAt?.toISOString?.() || nowISO(),
         updatedAt: existing.updatedAt?.toISOString?.() || nowISO(),
       };
-    } catch {
-      return null;
+    } catch (error) {
+      // Query failure is NOT "no record". Production fails closed.
+      if (isTestFallbackAllowed()) return null;
+      throw new ArtifactPersistenceError('Failed to read structured artifact from persistence.', (error as Error)?.message);
     }
   }
 

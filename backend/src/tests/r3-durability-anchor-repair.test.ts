@@ -78,7 +78,7 @@ function makeTeacher(schoolId: string, teacherId: string) {
   return { studentId: teacherId, schoolId, userId: teacherId, role: 'teacher' as const, grade: undefined, ageBand: undefined };
 }
 
-function artifactRow(artifactId: string, schoolId: string, ownerStudentId: string | null) {
+function artifactRow(artifactId: string, schoolId: string, ownerStudentId: string | null, title = 'Repair Artifact') {
   return {
     id: artifactId,
     schoolId,
@@ -88,7 +88,7 @@ function artifactRow(artifactId: string, schoolId: string, ownerStudentId: strin
     mediaAssetId: null,
     kind: 'worksheet',
     accessScope: 'student_private',
-    title: 'Repair Artifact',
+    title,
     description: null,
     originalFileName: null,
     mimeType: null,
@@ -156,9 +156,9 @@ describe('R3 REPAIR — Defect A: production persistence fails closed', () => {
     const student = makeStudent('school_A', 'student_A');
     const promise = artifactService.createArtifact(student, { title: 'X', kind: 'worksheet', textContent: 'hi' });
     await expect(promise).rejects.toThrow(ArtifactPersistenceError);
-    // No durable row, no memory entry, nothing to read back.
-    const fetched = await artifactService.getArtifactForUser(student, 'art_does_not_exist');
-    expect(fetched).toBeNull();
+    // DB outage is NOT "not found": a subsequent production read must also fail
+    // closed rather than silently returning null.
+    await expect(artifactService.getArtifactForUser(student, 'art_does_not_exist')).rejects.toThrow(ArtifactPersistenceError);
   });
 
   it('TEST B: production parse transaction failure does not succeed; old projection unchanged', async () => {
@@ -214,9 +214,9 @@ describe('R3 REPAIR — Defect B: structured repository production authority', (
     await expect(
       structuredArtifactRepository.upsertArtifactBlocks(scope, [{ id: 'b1', artifactId: 'art_repo_d', blockType: 'section' as any, visibility: 'learner_visible' as any, text: 'x', orderIndex: 0, confidence: 'high' as any, provenance: { artifactId: 'art_repo_d', parserSource: 't', warnings: [] } as any, safetyFlags: [], metadata: {} } as any]),
     ).rejects.toThrow(ArtifactPersistenceError);
-    // No mirror authority: reading returns null, not a fabricated record.
-    const got = await structuredArtifactRepository.getStructuredArtifact(scope);
-    expect(got).toBeNull();
+    // No mirror authority: a read during outage fails closed, it does NOT return
+    // a fabricated record or silently fall back to the test mirror.
+    await expect(structuredArtifactRepository.getStructuredArtifact(scope)).rejects.toThrow(ArtifactPersistenceError);
   });
 
   it('TEST D2: production structured read derives from canonical storage', async () => {
@@ -376,5 +376,68 @@ This is for teacher eyes only: emphasize balancing method.
     expect(u2.contentFingerprint).toBe(u1.contentFingerprint);
     expect(b2.length).toBe(b1.length);
     expect(u2.artifactId).toBe(artifact.artifactId);
+  });
+});
+
+describe('R3 HOTFIX — production read authority fail-closed (DB failure != not found)', () => {
+  it('HOTFIX 1: artifact read outage throws ArtifactPersistenceError (not null)', async () => {
+    setPrismaUnavailable();
+    const student = makeStudent('school_A', 'student_A');
+    await expect(artifactService.getArtifactForUser(student, 'art_outage_1')).rejects.toThrow(ArtifactPersistenceError);
+  });
+
+  it('HOTFIX 2a: block read outage throws ArtifactPersistenceError (not [])', async () => {
+    setPrismaUnavailable();
+    await expect(artifactService.listArtifactBlocks('art_outage_2')).rejects.toThrow(ArtifactPersistenceError);
+  });
+
+  it('HOTFIX 2b: legitimate empty block set returns []', async () => {
+    setPrismaAvailable();
+    prismaMock.learningArtifactBlock.findMany = vi.fn().mockResolvedValue([]);
+    const blocks = await artifactService.listArtifactBlocks('art_empty_blocks');
+    expect(blocks).toEqual([]);
+  });
+
+  it('HOTFIX 3a: structured repository read outage throws ArtifactPersistenceError (not null/mirror)', async () => {
+    setPrismaUnavailable();
+    const scope = { artifactId: 'art_repo_outage', schoolId: 'school_A', studentId: 'student_A' };
+    await expect(structuredArtifactRepository.getStructuredArtifact(scope)).rejects.toThrow(ArtifactPersistenceError);
+  });
+
+  it('HOTFIX 3b: structured repository legitimate not-found returns null', async () => {
+    setPrismaAvailable();
+    prismaMock.learningArtifact.findUnique = vi.fn().mockResolvedValue(null);
+    const got = await structuredArtifactRepository.getStructuredArtifact({ artifactId: 'art_repo_nf', schoolId: 'school_A', studentId: 'student_A' });
+    expect(got).toBeNull();
+  });
+
+  it('HOTFIX 4: production updateArtifactParseResult uses Prisma over a stale Map cache', async () => {
+    setPrismaAvailable();
+    const schoolId = 'school_A';
+    const student = makeStudent(schoolId, 'student_A');
+    // Legitimate path: create persists to Prisma and seeds the non-authoritative
+    // in-memory cache. The cache title deliberately differs from the canonical row.
+    prismaMock.learningArtifact.upsert = vi.fn().mockResolvedValue({});
+    const created = await artifactService.createArtifact(student, { title: 'STALE CACHE TITLE', kind: 'worksheet', textContent: 'seed' });
+    const artifactId = created.artifactId;
+
+    // Canonical persistence reports a different (authoritative) title.
+    prismaMock.learningArtifact.findUnique = vi.fn().mockResolvedValue(artifactRow(artifactId, schoolId, 'student_A', 'AUTHORITATIVE DB TITLE'));
+    prismaMock.$transaction = vi.fn().mockImplementation(async (cb: any) => cb(txRunner()));
+
+    const updated = await artifactService.updateArtifactParseResult(artifactId, {
+      parseStatus: 'parsed',
+      structureQuality: 'high',
+      blocks: [{ blockId: 'b4', artifactId, schoolId, kind: 'section', visibility: 'student', order: 0, text: 'X' } as any],
+      questions: [],
+      answerKeys: [],
+      workedExamples: [],
+      diagrams: [],
+      warnings: [],
+    } as any);
+
+    // Production must have loaded current state from Prisma, not the stale Map.
+    expect(updated.title).toBe('AUTHORITATIVE DB TITLE');
+    expect(updated.title).not.toBe('STALE CACHE TITLE');
   });
 });
