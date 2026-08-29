@@ -19,39 +19,10 @@ import { learnerMemoryService, _clearMemoryStoreForTest } from '../services/lear
 import { learningEventService, _clearEventMemoryStoreForTest } from '../services/learningEventService';
 import prisma from '../lib/prisma';
 
-// Mock verification service — established test pattern, but we exercise real middleware chain
-vi.mock('../services/task021SchoolContextVerificationService', () => ({
-  verifySchoolContext: vi.fn((context: any) => {
-    // Fail closed when schoolId missing or explicitly bad
-    if (!context.schoolId || !context.externalUserId) {
-      return { ok: false, error: 'missing_school_id', reasonCodes: ['missing_school_context'] };
-    }
-    if (context.schoolId === 'school-bad' || context.schoolId === 'invalid') {
-      return { ok: false, error: 'school_not_found', reasonCodes: ['school_not_found'] };
-    }
-    // For student role without externalStudentId, allow if caller is learner-memory test (we bypass strict check)
-    return {
-      ok: true,
-      identity: {
-        verified: true,
-        schoolId: context.schoolId,
-        externalUserId: context.externalUserId,
-        role: context.role,
-        scope: {
-          schoolId: context.schoolId,
-          classIds: [],
-          subjectIds: [],
-          teacherAssignmentIds: [],
-          enrollmentStatus: 'active' as const,
-        },
-        reasonCodes: ['school_context_verified'],
-        privacyMetadata: { verifiedAt: new Date().toISOString() },
-      },
-    };
-  }),
-}));
+// NOTE: No mock of task021SchoolContextVerificationService — the repaired tests
+// exercise the REAL verifySchoolContext → validateSchoolIntegrationContext chain.
 
-// Import routes/middleware after mock
+// Import routes/middleware
 import learnerMemoryRoutes from '../routes/learnerMemory';
 import { schoolAuthMiddleware } from '../middleware/schoolAuthMiddleware';
 import { requireVerifiedSchoolContext } from '../middleware/schoolContextGuardMiddleware';
@@ -362,21 +333,20 @@ describe('R2 Repair — Defect B: Auth / Route chain', () => {
     expect(res.body.memory[0].studentId).toBe(studentA);
   });
 
-  it('B7: Authenticated but missing/invalid school context → fails closed (401/403)', async () => {
-    // Token with missing schoolId
+  it('B7: Authenticated but invalid verified-school context → fails closed (401/403)', async () => {
+    // Token with missing schoolId → guard rejects before verification (401)
     const tokenNoSchool = signToken({ userId: studentA, role: 'student' } as any);
     const res1 = await request(app)
       .get('/api/copilot/learner-memory')
       .set('Authorization', `Bearer ${tokenNoSchool}`);
-    // Guard should fail 401 due to missing school context
-    expect([401, 403]).toContain(res1.status);
+    expect(res1.status).toBe(401);
 
-    // Token with invalid schoolId (mock will return ok:false)
-    const tokenBadSchool = signToken({ userId: studentA, schoolId: 'school-bad', role: 'student' });
+    // Token with unknown/invalid role → REAL verifySchoolContext rejects (403)
+    const tokenBadRole = signToken({ userId: studentA, schoolId: schoolA, role: 'unknown_role_xyz' });
     const res2 = await request(app)
       .get('/api/copilot/learner-memory')
-      .set('Authorization', `Bearer ${tokenBadSchool}`);
-    expect([401, 403]).toContain(res2.status);
+      .set('Authorization', `Bearer ${tokenBadRole}`);
+    expect(res2.status).toBe(403);
   });
 
   it('B8: Cross-school request cannot retrieve another school\'s memory (no leak)', async () => {

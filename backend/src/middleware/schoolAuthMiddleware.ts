@@ -147,5 +147,8 @@ export const schoolAuthMiddleware = async (req: Request, res: Response, next: Ne
   if (claims.schoolId) user.schoolId = claims.schoolId;
   req.user = user;
   if (claims.schoolId) (req as any).schoolId = claims.schoolId;
+  if (claims.role === 'student' || claims.role === 'learner') {
+    (req as any).externalStudentId = claims.userId;
+  }
   return next();
 };
