@@ -812,6 +812,7 @@ model LearningArtifact {
   ownerStudentId    String?
   ownerTeacherId    String?
   classId           String?
+  mediaAssetId      String?  @map("media_asset_id")
   kind              String
   accessScope       String
   title             String
@@ -826,7 +827,10 @@ model LearningArtifact {
   questionCount     Int      @default(0)
   diagramCount      Int      @default(0)
   answerKeyCount    Int      @default(0)
+  tableCount        Int      @default(0) @map("table_count")
+  transcriptCount   Int      @default(0) @map("transcript_count")
   contentFingerprint String
+  curriculumRefs     Json     @default("{}") @map("curriculum_refs")
   warnings          Json     @default("[]")
   parsedAt          DateTime?
   createdAt         DateTime @default(now())
@@ -837,6 +841,7 @@ model LearningArtifact {
   @@index([schoolId])
   @@index([schoolId, ownerStudentId])
   @@index([schoolId, classId])
+  @@index([mediaAssetId])
   @@index([contentFingerprint])
 }
 
@@ -845,6 +850,7 @@ model LearningArtifactBlock {
   artifactId          String
   schoolId            String
   kind                String
+  visibility          String   @default("student") @map("visibility")
   order               Int
   text                String?  @db.Text
   normalizedText      String?  @db.Text
@@ -864,6 +870,7 @@ model LearningArtifactBlock {
 
   @@index([schoolId, artifactId])
   @@index([kind])
+  @@index([visibility])
   @@index([contentFingerprint])
 }
 
