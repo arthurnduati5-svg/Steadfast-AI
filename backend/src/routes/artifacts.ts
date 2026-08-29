@@ -10,6 +10,7 @@ import { schoolAuthMiddleware } from '../middleware/schoolAuthMiddleware';
 import { requireVerifiedSchoolContext } from '../middleware/schoolContextGuardMiddleware';
 import type { AuthedRequest } from './ai/ai-middleware';
 import type { ResolvedTutorIdentity } from '../services/tutorStateContracts';
+import type { ArtifactIngestRequest, ArtifactCurriculumRefs } from '../services/artifactContracts';
 
 import {
   artifactIngestRequestSchema,
@@ -30,9 +31,9 @@ function resolveIdentity(req: AuthedRequest): ResolvedTutorIdentity | null {
   if (!req.user) return null;
   return {
     studentId: req.user.id,
-    schoolId: (req.user as any).schoolId || '',
+    schoolId: req.user.schoolId || '',
     userId: req.user.id,
-    role: (req.user as any).role || undefined,
+    role: req.user.role || undefined,
     grade: undefined,
     ageBand: undefined,
   };
@@ -54,9 +55,9 @@ router.post('/ingest', schoolAuthMiddleware, requireVerifiedSchoolContext, async
     if (!identity.schoolId) { sendError(res, 401, 'SCHOOL_CONTEXT_REQUIRED', 'Verified school context required.'); return; }
 
     // Strictly ignore any body-supplied schoolId/studentId/owner* — authority is verified context only.
-    const parsed: any = artifactIngestRequestSchema.parse(req.body || {});
+    const parsed = artifactIngestRequestSchema.parse(req.body || {}) as ArtifactIngestRequest;
     // Validate curriculum refs reference-only (never promoted to truth without KG)
-    let validatedCurriculumRefs: any = undefined;
+    let validatedCurriculumRefs: ArtifactCurriculumRefs | undefined = undefined;
     let curriculumWarnings: string[] = [];
     if (parsed.curriculumRefs) {
       const cv = await artifactCurriculumReferenceService.resolveForPersistence(parsed.curriculumRefs);
@@ -72,7 +73,7 @@ router.post('/ingest', schoolAuthMiddleware, requireVerifiedSchoolContext, async
 
     // Attach curriculum warnings if any
     if (curriculumWarnings.length > 0) {
-      (artifact as any).warnings = [...(artifact.warnings || []), ...curriculumWarnings];
+      artifact.warnings = [...(artifact.warnings || []), ...curriculumWarnings];
     }
 
     res.status(201).json({ ok: true, artifact });

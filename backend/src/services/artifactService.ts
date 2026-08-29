@@ -11,6 +11,7 @@ import type { ResolvedTutorIdentity } from './tutorStateContracts';
 import type {
   LearningArtifact,
   ArtifactBlock,
+  ArtifactBlockKind,
   ArtifactKind,
   ArtifactAccessScope,
   ArtifactParseStatus,
@@ -23,6 +24,7 @@ import type {
   AnswerKeyBlock,
   WorkedExampleBlock,
   DiagramBlock,
+  ArtifactProvenance,
   ArtifactCurriculumRefs,
 } from './artifactContracts';
 
@@ -776,7 +778,7 @@ export class ArtifactService {
             sectionTitle: block.sectionTitle,
             headingPath: block.headingPath as Prisma.InputJsonValue,
             confidence: block.confidence,
-            provenance: block.provenance as Prisma.InputJsonValue,
+            provenance: block.provenance as unknown as Prisma.InputJsonValue,
             educationalTags: block.educationalTags as Prisma.InputJsonValue,
             metadata: block.metadata as Prisma.InputJsonValue,
             contentFingerprint: computeFingerprint(block.text || ''),
@@ -829,7 +831,7 @@ export class ArtifactService {
       createdAt: record.createdAt?.toISOString?.() || nowISO(),
       updatedAt: record.updatedAt?.toISOString?.() || nowISO(),
       parsedAt: record.parsedAt?.toISOString?.() || null,
-      warnings: Array.isArray(record.warnings) ? record.warnings : [],
+      warnings: Array.isArray(record.warnings) ? (record.warnings as string[]) : [],
     };
   }
 
@@ -838,7 +840,7 @@ export class ArtifactService {
       blockId: record.id,
       artifactId: record.artifactId,
       schoolId: record.schoolId,
-      kind: record.kind,
+      kind: record.kind as ArtifactBlockKind,
       visibility: (record.visibility === 'teacher_only' ? 'teacher_only' : 'student') as ArtifactBlock['visibility'],
       order: record.order,
       text: record.text ?? null,
@@ -846,10 +848,10 @@ export class ArtifactService {
       summary: record.summary ?? null,
       pageNumber: record.pageNumber ?? null,
       sectionTitle: record.sectionTitle ?? null,
-      headingPath: Array.isArray(record.headingPath) ? record.headingPath : [],
+      headingPath: Array.isArray(record.headingPath) ? (record.headingPath as unknown as string[]) : [],
       confidence: typeof record.confidence === 'number' ? record.confidence : 0,
-      provenance: (record.provenance || {}) as Prisma.InputJsonValue,
-      educationalTags: (record.educationalTags || {}) as Prisma.InputJsonValue,
+      provenance: (record.provenance || {}) as unknown as ArtifactProvenance,
+      educationalTags: (record.educationalTags || {}) as unknown as ArtifactBlock['educationalTags'],
       metadata: (record.metadata || {}) as Record<string, unknown>,
     };
   }
