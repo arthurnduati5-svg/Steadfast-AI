@@ -12051,3 +12051,102 @@ model LearningEvidenceProjectionCheckpoint {
   @@unique([projectionName, schoolId, partitionKey])
   @@index([schoolId])
 }
+
+// ── R4 Daily Objective Check Durable State ──
+
+model DailyObjectiveCheckSessionRecord {
+  checkSessionId       String   @id
+  schoolId             String
+  studentId            String
+  classId              String?
+  subjectId            String?
+  topicId              String?
+  skillId              String?
+  objectiveId          String
+  dailySeedId          String?
+  blueprintId          String?
+  sourceTruthStatus    String
+  status               String
+  requiredSteps        Json     @default("[]")
+  completedSteps       Json     @default("[]")
+  confidenceBefore     String?
+  confidenceAfter      String?
+  safeSignalBuckets    Json     @default("[]")
+  safeEvidenceRefs     Json     @default("[]")
+  modeDestinationsUsed Json     @default("[]")
+  attemptCount         Int      @default(0)
+  hintUsageBucket      String?
+  explanationQualityBucket String?
+  recallQualityBucket  String?
+  teachBackQualityBucket String?
+  transferCheckBucket  String?
+  delayedRecallBucket  String?
+  antiCheatSignalLabels Json    @default("[]")
+  learnerSafeReason    String?  @db.Text
+  teacherSafeReason    String?  @db.Text
+  evidenceId           String?
+  masteryResult        Json?
+  weakSignalRef        String?
+  version              Int      @default(1)
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+  completedAt          DateTime?
+
+  @@index([schoolId, studentId])
+  @@index([schoolId])
+  @@index([objectiveId])
+  @@index([status])
+}
+
+model DailyObjectiveCheckAttemptRecord {
+  attemptId            String   @id @default(uuid())
+  checkSessionId       String
+  schoolId             String
+  studentId            String
+  objectiveId          String
+  attemptType          String
+  signalBucket         String
+  hintUsageBucket      String?
+  explanationQualityBucket String?
+  recallQualityBucket  String?
+  teachBackQualityBucket String?
+  transferCheckBucket  String?
+  delayedRecallBucket  String?
+  antiCheatLabels      Json     @default("[]")
+  timeSpentSeconds     Int?
+  safeEvidenceRef      String?
+  createdAt            DateTime @default(now())
+
+  @@index([checkSessionId])
+  @@index([schoolId, studentId])
+}
+
+model DailyObjectiveCheckConfidenceRecord {
+  checkpointId         String   @id @default(uuid())
+  checkSessionId       String
+  schoolId             String
+  studentId            String
+  objectiveId          String
+  checkpointType       String
+  confidenceLevel      String
+  recordedAt           DateTime @default(now())
+
+  @@index([checkSessionId])
+  @@index([schoolId, studentId])
+}
+
+model DailyObjectiveCheckCompletionIdempotencyRecord {
+  idempotencyKey       String   @id
+  checkSessionId       String   @unique
+  schoolId             String
+  studentId            String
+  evidenceId           String?
+  masteryApplied       Boolean  @default(false)
+  weakSignalCreated    Boolean  @default(false)
+  completionStatus     String?
+  result               Json?
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  @@index([schoolId, studentId])
+}
