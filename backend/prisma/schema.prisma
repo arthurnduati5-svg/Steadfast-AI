@@ -12131,6 +12131,7 @@ model DailyObjectiveCheckConfidenceRecord {
   confidenceLevel      String
   recordedAt           DateTime @default(now())
 
+  @@unique([checkSessionId, checkpointType])
   @@index([checkSessionId])
   @@index([schoolId, studentId])
 }

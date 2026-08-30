@@ -27,6 +27,25 @@ export class Phase3DailyObjectiveConfidenceService {
     return { checkpoint, session: updatedSession || session };
   }
 
+  async recordConfidenceBeforeAsync(input: { checkSessionId: string; schoolId: string; studentId: string; confidenceLevel: string; checkpointType: 'before' | 'after' }): Promise<{ error?: string; checkpoint?: any; session?: any }> {
+    const validation = validateDailyObjectiveConfidenceInput(input as any);
+    if (!(validation as any).ok) return { error: (validation as any).errors[0]?.message || 'Validation failed.' };
+    const session: any = await phase3DailyObjectiveCheckRepository.getCheckSessionByIdAsync(input.checkSessionId);
+    if (!session) return { error: 'Check session not found.' };
+    if (session.schoolId !== input.schoolId) return { error: 'Cross-school access denied.' };
+    if (session.studentId !== input.studentId) return { error: 'Cross-learner access denied.' };
+    if (session.status === 'completed' || session.status === 'expired' || session.status === 'source_required' || session.status === 'blocked' || session.status === 'COMPLETED' || session.status === 'COMPLETING') {
+      return { error: `Cannot record confidence when session is ${session.status}.` };
+    }
+    const checkpoint = await phase3DailyObjectiveCheckRepository.recordConfidenceCheckpointAsync({
+      checkSessionId: input.checkSessionId, schoolId: input.schoolId, studentId: input.studentId, objectiveId: session.objectiveId, checkpointType: 'before', confidenceLevel: input.confidenceLevel,
+    });
+    await phase3DailyObjectiveCheckRepository.markRequiredStepCompletedAsync(input.checkSessionId, 'confidence_before');
+    const updatedSession = await phase3DailyObjectiveCheckRepository.updateCheckSessionStatusAsync(input.checkSessionId, 'in_progress', { confidenceBefore: input.confidenceLevel });
+    phase3DailyObjectiveCheckAuditService.recordDailyObjectiveConfidenceBeforeRecorded(input.schoolId, input.studentId, 'learner', input.studentId, session.objectiveId, input.checkSessionId);
+    return { checkpoint, session: updatedSession || session };
+  }
+
   recordConfidenceAfter(input: { checkSessionId: string; schoolId: string; studentId: string; confidenceLevel: string; checkpointType: 'before' | 'after' }): { error?: string; checkpoint?: any; session?: any } {
     const validation = validateDailyObjectiveConfidenceInput(input as any);
     if (!(validation as any).ok) return { error: (validation as any).errors[0]?.message || 'Validation failed.' };
@@ -42,6 +61,24 @@ export class Phase3DailyObjectiveConfidenceService {
     phase3DailyObjectiveCheckRepository.markRequiredStepCompleted(input.checkSessionId, 'confidence_after');
     const newStatus = session.status === 'awaiting_confidence_after' ? 'in_progress' : session.status;
     const updatedSession = phase3DailyObjectiveCheckRepository.updateCheckSessionStatus(input.checkSessionId, newStatus, { confidenceAfter: input.confidenceLevel });
+    phase3DailyObjectiveCheckAuditService.recordDailyObjectiveConfidenceAfterRecorded(input.schoolId, input.studentId, 'learner', input.studentId, session.objectiveId, input.checkSessionId);
+    return { checkpoint, session: updatedSession || session };
+  }
+
+  async recordConfidenceAfterAsync(input: { checkSessionId: string; schoolId: string; studentId: string; confidenceLevel: string; checkpointType: 'before' | 'after' }): Promise<{ error?: string; checkpoint?: any; session?: any }> {
+    const validation = validateDailyObjectiveConfidenceInput(input as any);
+    if (!(validation as any).ok) return { error: (validation as any).errors[0]?.message || 'Validation failed.' };
+    const session: any = await phase3DailyObjectiveCheckRepository.getCheckSessionByIdAsync(input.checkSessionId);
+    if (!session) return { error: 'Check session not found.' };
+    if (session.schoolId !== input.schoolId) return { error: 'Cross-school access denied.' };
+    if (session.studentId !== input.studentId) return { error: 'Cross-learner access denied.' };
+    if (session.status === 'completed' || session.status === 'expired' || session.status === 'COMPLETED') return { error: `Cannot record confidence when session is ${session.status}.` };
+    const checkpoint = await phase3DailyObjectiveCheckRepository.recordConfidenceCheckpointAsync({
+      checkSessionId: input.checkSessionId, schoolId: input.schoolId, studentId: input.studentId, objectiveId: session.objectiveId, checkpointType: 'after', confidenceLevel: input.confidenceLevel,
+    });
+    await phase3DailyObjectiveCheckRepository.markRequiredStepCompletedAsync(input.checkSessionId, 'confidence_after');
+    const newStatus = session.status === 'awaiting_confidence_after' ? 'in_progress' : session.status;
+    const updatedSession = await phase3DailyObjectiveCheckRepository.updateCheckSessionStatusAsync(input.checkSessionId, newStatus, { confidenceAfter: input.confidenceLevel });
     phase3DailyObjectiveCheckAuditService.recordDailyObjectiveConfidenceAfterRecorded(input.schoolId, input.studentId, 'learner', input.studentId, session.objectiveId, input.checkSessionId);
     return { checkpoint, session: updatedSession || session };
   }

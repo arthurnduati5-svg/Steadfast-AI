@@ -100,24 +100,76 @@ export class Phase3DailyObjectiveCheckAttemptService {
     return signals;
   }
 
+  async recordSafeAttemptSignalAsync(input: {
+    checkSessionId: string; schoolId: string; studentId: string;
+    attemptType?: string; signalBucket: string;
+    hintUsageBucket?: string; explanationQualityBucket?: string; recallQualityBucket?: string;
+    teachBackQualityBucket?: string; transferCheckBucket?: string; delayedRecallBucket?: string;
+    antiCheatLabels?: string[]; timeSpentSeconds?: number; safeEvidenceRef?: string;
+  }): Promise<{ error?: string; attempt?: any; session?: any }> {
+    const validation = validateDailyObjectiveCheckAttemptInput(input as any);
+    if (!(validation as any).ok) return { error: (validation as any).errors[0]?.message || 'Validation failed.' };
+    const session: any = await phase3DailyObjectiveCheckRepository.getCheckSessionByIdAsync(input.checkSessionId);
+    if (!session) return { error: 'Check session not found.' };
+    if (session.schoolId !== input.schoolId) return { error: 'Cross-school access denied.' };
+    if (session.studentId !== input.studentId) return { error: 'Cross-learner access denied.' };
+    if (session.status === 'completed' || session.status === 'COMPLETED' || session.status === 'expired' || session.status === 'source_required' || session.status === 'blocked') {
+      return { error: `Cannot record attempt when session is ${session.status}.` };
+    }
+    if (!(PHASE3_DAILY_OBJECTIVE_SIGNAL_BUCKETS as readonly string[]).includes(input.signalBucket)) {
+      return { error: 'Invalid signal bucket.' };
+    }
+    const antiCheatLabels = this.deriveAntiCheatResistantLabels(input as any);
+    const attempt = await phase3DailyObjectiveCheckRepository.recordSafeAttemptSignalAsync({
+      checkSessionId: input.checkSessionId, schoolId: input.schoolId, studentId: input.studentId,
+      objectiveId: session.objectiveId, attemptType: input.attemptType || 'daily_objective_check',
+      signalBucket: input.signalBucket, hintUsageBucket: input.hintUsageBucket,
+      explanationQualityBucket: input.explanationQualityBucket, recallQualityBucket: input.recallQualityBucket,
+      teachBackQualityBucket: input.teachBackQualityBucket, transferCheckBucket: input.transferCheckBucket,
+      delayedRecallBucket: input.delayedRecallBucket, antiCheatLabels, timeSpentSeconds: input.timeSpentSeconds, safeEvidenceRef: input.safeEvidenceRef,
+    });
+    // Session already updated inside repository transaction; fetch latest
+    const updatedSession = await phase3DailyObjectiveCheckRepository.getCheckSessionByIdAsync(input.checkSessionId);
+    phase3DailyObjectiveCheckAuditService.recordDailyObjectiveAttemptSignalRecorded(input.schoolId, input.studentId, 'learner', input.studentId, session.objectiveId, input.checkSessionId);
+    return { attempt, session: updatedSession || session };
+  }
+
   // Compatibility helpers retained from previous implementation
   recordHintUsageBucket(checkSessionId: string, bucket: string): any {
     return phase3DailyObjectiveCheckRepository.updateCheckSessionStatus(checkSessionId, 'in_progress', { hintUsageBucket: bucket });
   }
+  async recordHintUsageBucketAsync(checkSessionId: string, bucket: string): Promise<any> {
+    return phase3DailyObjectiveCheckRepository.updateCheckSessionStatusAsync(checkSessionId, 'in_progress', { hintUsageBucket: bucket });
+  }
   recordExplanationQualityBucket(checkSessionId: string, bucket: string): any {
     return phase3DailyObjectiveCheckRepository.updateCheckSessionStatus(checkSessionId, 'in_progress', { explanationQualityBucket: bucket });
+  }
+  async recordExplanationQualityBucketAsync(checkSessionId: string, bucket: string): Promise<any> {
+    return phase3DailyObjectiveCheckRepository.updateCheckSessionStatusAsync(checkSessionId, 'in_progress', { explanationQualityBucket: bucket });
   }
   recordRecallQualityBucket(checkSessionId: string, bucket: string): any {
     return phase3DailyObjectiveCheckRepository.updateCheckSessionStatus(checkSessionId, 'in_progress', { recallQualityBucket: bucket });
   }
+  async recordRecallQualityBucketAsync(checkSessionId: string, bucket: string): Promise<any> {
+    return phase3DailyObjectiveCheckRepository.updateCheckSessionStatusAsync(checkSessionId, 'in_progress', { recallQualityBucket: bucket });
+  }
   recordTeachBackQualityBucket(checkSessionId: string, bucket: string): any {
     return phase3DailyObjectiveCheckRepository.updateCheckSessionStatus(checkSessionId, 'in_progress', { teachBackQualityBucket: bucket });
+  }
+  async recordTeachBackQualityBucketAsync(checkSessionId: string, bucket: string): Promise<any> {
+    return phase3DailyObjectiveCheckRepository.updateCheckSessionStatusAsync(checkSessionId, 'in_progress', { teachBackQualityBucket: bucket });
   }
   recordTransferCheckBucket(checkSessionId: string, bucket: string): any {
     return phase3DailyObjectiveCheckRepository.updateCheckSessionStatus(checkSessionId, 'in_progress', { transferCheckBucket: bucket });
   }
+  async recordTransferCheckBucketAsync(checkSessionId: string, bucket: string): Promise<any> {
+    return phase3DailyObjectiveCheckRepository.updateCheckSessionStatusAsync(checkSessionId, 'in_progress', { transferCheckBucket: bucket });
+  }
   recordDelayedRecallBucket(checkSessionId: string, bucket: string): any {
     return phase3DailyObjectiveCheckRepository.updateCheckSessionStatus(checkSessionId, 'in_progress', { delayedRecallBucket: bucket });
+  }
+  async recordDelayedRecallBucketAsync(checkSessionId: string, bucket: string): Promise<any> {
+    return phase3DailyObjectiveCheckRepository.updateCheckSessionStatusAsync(checkSessionId, 'in_progress', { delayedRecallBucket: bucket });
   }
 }
 
