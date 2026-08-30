@@ -183,9 +183,42 @@ export class Phase3DailyObjectiveCheckCompletionService {
     }
     if (session.status === 'expired') return { error: 'Session is already ' + session.status + '.' };
     if (session.status === 'COMPLETING') {
-      if (existingIdem?.result) {
-        const result = existingIdem.result;
-        return { result, learnerResponse: this.buildLearnerResponseFromResult(session, result, existingIdem.masteryResult), teacherSummary: this.buildTeacherSummaryFromResult(session, result, existingIdem.masteryResult) };
+      // R4.16: Load durable checkpoint to classify recovery state — do NOT deadlock
+      const checkpoint = idempotencyStore.get(stableKey) || null;
+
+      // CASE 5: Already completed with persisted result
+      if (session.status === 'completed' || session.status === 'COMPLETED') {
+        if (checkpoint?.result) {
+          return { result: checkpoint.result, learnerResponse: this.buildLearnerResponseFromResult(session, checkpoint.result, checkpoint.masteryResult), teacherSummary: this.buildTeacherSummaryFromResult(session, checkpoint.result, checkpoint.masteryResult) };
+        }
+      }
+
+      // CASE 1: Actively completing, no downstream checkpoint
+      if (!checkpoint || (!checkpoint.evidenceId && !checkpoint.masteryApplied)) {
+        return { error: 'Concurrent completion in progress. Please retry.' };
+      }
+
+      // CASE 2: Evidence exists, mastery not applied — recoverable
+      if (checkpoint.evidenceId && !checkpoint.masteryApplied) {
+        try {
+          const evidenceInput = this.buildObjectiveEvidenceBridgeInput(session);
+          evidenceInput.idempotencyKey = stableKey;
+          const masteryUpdate = phase3ObjectiveMasteryService.updateObjectiveMasteryFromEvidence(evidenceInput as Any);
+          const rec = idempotencyStore.get(stableKey)!;
+          rec.masteryApplied = true;
+          rec.masteryResult = masteryUpdate;
+          rec.updatedAt = nowISO();
+          idempotencyStore.set(stableKey, rec);
+          phase3DailyObjectiveCheckRepository.persistCompletionReferences(input.checkSessionId, { masteryResult: masteryUpdate });
+          return this.finalizeSyncFromCheckpoint(input, stableKey, session, rec);
+        } catch (e: any) {
+          return { error: 'Mastery recovery failed: ' + e.message };
+        }
+      }
+
+      // CASE 3 & 4: Mastery applied, or everything done
+      if (checkpoint.result) {
+        return { result: checkpoint.result, learnerResponse: this.buildLearnerResponseFromResult(session, checkpoint.result, checkpoint.masteryResult), teacherSummary: this.buildTeacherSummaryFromResult(session, checkpoint.result, checkpoint.masteryResult) };
       }
       return { error: 'Concurrent completion in progress. Please retry.' };
     }
@@ -298,7 +331,11 @@ export class Phase3DailyObjectiveCheckCompletionService {
                 if (lanes && lanes.length > 0) weakRef = lanes[0].laneId;
               }
             } catch (_e) { void _e; }
-            weakSignalRef = weakRef || 'weak_' + session.checkSessionId;
+            if (!weakRef) {
+              // R4.13: Do NOT fabricate a weak signal. If adapter returns no real signal, fail.
+              return { error: 'Weak-area signal required but adapter returned no signal' };
+            }
+            weakSignalRef = weakRef;
             const rec = idempotencyStore.get(stableKey);
             if (rec) { rec.weakSignalCreated = true; rec.weakSignalRef = weakSignalRef; rec.updatedAt = nowISO(); idempotencyStore.set(stableKey, rec); }
             phase3DailyObjectiveCheckRepository.persistCompletionReferences(input.checkSessionId, { weakSignalRef });
@@ -395,15 +432,92 @@ export class Phase3DailyObjectiveCheckCompletionService {
 
     if (session.status === 'expired') return { error: `Session is already ${session.status}.` };
     if (session.status === 'COMPLETING') {
-      // Another caller is completing; return conflict but allow retry to reconcile after completion
-      // Check if already has evidence/mastery, then reconcile
-      if (existingIdem?.result) {
-        const result = existingIdem.result;
-        const learnerResponse = this.buildLearnerResponseFromResult(session, result, existingIdem.masteryResult);
-        const teacherSummary = this.buildTeacherSummaryFromResult(session, result, existingIdem.masteryResult);
+      // R4.16: Load durable checkpoint to classify recovery state — do NOT deadlock on COMPLETING
+      const checkpoint = await getIdempotencyRecord(stableKey);
+
+      // CASE 5: Already fully completed with persisted result — return it
+      if (checkpoint?.result) {
+        const result = checkpoint.result;
+        const learnerResponse = this.buildLearnerResponseFromResult(session, result, checkpoint.masteryResult);
+        const teacherSummary = this.buildTeacherSummaryFromResult(session, result, checkpoint.masteryResult);
         return { result, learnerResponse, teacherSummary };
       }
-      return { error: 'Concurrent completion in progress. Please retry.' };
+
+      // CASE 1: Actively completing, no downstream checkpoint — legitimate concurrency conflict
+      if (!checkpoint || (!checkpoint.evidenceId && !checkpoint.masteryApplied)) {
+        return { error: 'Concurrent completion in progress. Please retry.' };
+      }
+
+      // CASE 2: Evidence exists, mastery not applied — recoverable partial completion
+      if (checkpoint.evidenceId && !checkpoint.masteryApplied) {
+        try {
+          const evidenceInput = this.buildObjectiveEvidenceBridgeInput(session);
+          evidenceInput.idempotencyKey = stableKey;
+          let masteryUpdate: any;
+          if (isTestMapsMode()) {
+            masteryUpdate = phase3ObjectiveMasteryService.updateObjectiveMasteryFromEvidence(evidenceInput as Any);
+          } else {
+            masteryUpdate = await phase3ObjectiveMasteryService.updateObjectiveMasteryFromEvidence(evidenceInput as Any);
+          }
+          await upsertIdempotencyRecord(stableKey, {
+            checkSessionId: input.checkSessionId, schoolId: input.schoolId, studentId: input.studentId,
+            evidenceId: checkpoint.evidenceId, bridgeId: checkpoint.bridgeId,
+            masteryApplied: true, masteryResult: masteryUpdate,
+          });
+          if (isTestMapsMode()) {
+            phase3DailyObjectiveCheckRepository.persistCompletionReferences(input.checkSessionId, { masteryResult: masteryUpdate });
+          } else {
+            await phase3DailyObjectiveCheckRepository.persistCompletionReferencesAsync(input.checkSessionId, { masteryResult: masteryUpdate });
+          }
+          // Fall through to finalize
+          return await this.finalizeFromCheckpoint(input, stableKey, session, { ...checkpoint, masteryApplied: true, masteryResult: masteryUpdate });
+        } catch (e: any) {
+          return { error: `Mastery recovery failed: ${e.message}` };
+        }
+      }
+
+      // CASE 3: Mastery applied, weak signal pending — retry only weak signal
+      if (checkpoint.masteryApplied && !checkpoint.weakSignalCreated && checkpoint.masteryResult) {
+        const masteryUpdate = checkpoint.masteryResult;
+        const needsWeakSignal = masteryUpdate.newStatus === 'needs_rescue' || masteryUpdate.newStatus === 'needs_teacher_support' || masteryUpdate.newStatus === 'still_learning';
+        if (needsWeakSignal) {
+          try {
+            let weakRef: string | undefined = undefined;
+            try {
+              const mod: any = awaitImportWeakTopicLane();
+              if (mod) {
+                const lanes = mod.deriveWeakTopicLaneFromDailyObjectiveChecks?.(session.schoolId, session.studentId, [{
+                  subjectId: session.subjectId, topicId: session.topicId, skillId: session.skillId, objectiveIds: [session.objectiveId],
+                  status: masteryUpdate.newStatus === 'needs_teacher_support' ? 'needs_teacher_support' : masteryUpdate.newStatus === 'needs_rescue' ? 'needs_rescue' : 'needs_recheck',
+                  safeTitle: 'Daily check needs support', safeSummary: `Weak signal from daily check ${session.checkSessionId}`, recommendedAction: 'small_group_support', priority: 'high',
+                }]);
+                if (lanes && lanes.length > 0) weakRef = lanes[0].laneId;
+              }
+            } catch (_e) { void _e; }
+            if (!weakRef) {
+              return { error: 'Weak-area signal required but adapter returned no signal' };
+            }
+            await upsertIdempotencyRecord(stableKey, {
+              checkSessionId: input.checkSessionId, schoolId: input.schoolId, studentId: input.studentId,
+              evidenceId: checkpoint.evidenceId, bridgeId: checkpoint.bridgeId,
+              masteryApplied: true, masteryResult: masteryUpdate, weakSignalRef: weakRef, weakSignalCreated: true,
+            });
+            if (isTestMapsMode()) {
+              phase3DailyObjectiveCheckRepository.persistCompletionReferences(input.checkSessionId, { weakSignalRef: weakRef });
+            } else {
+              await phase3DailyObjectiveCheckRepository.persistCompletionReferencesAsync(input.checkSessionId, { weakSignalRef: weakRef });
+            }
+            return await this.finalizeFromCheckpoint(input, stableKey, session, { ...checkpoint, weakSignalRef: weakRef, weakSignalCreated: true, masteryResult: masteryUpdate });
+          } catch (e: any) {
+            return { error: `Weak-area signal recovery failed: ${e.message}` };
+          }
+        }
+        // No weak signal needed — finalize
+        return await this.finalizeFromCheckpoint(input, stableKey, session, checkpoint);
+      }
+
+      // CASE 4: Everything done, finalize
+      return await this.finalizeFromCheckpoint(input, stableKey, session, checkpoint);
     }
     if (session.status === 'source_required' || session.status === 'blocked') return { error: `Cannot complete session when status is ${session.status}.` };
 
@@ -597,7 +711,11 @@ export class Phase3DailyObjectiveCheckCompletionService {
                 if (lanes && lanes.length > 0) weakRef = lanes[0].laneId;
               }
             } catch (_e) { void _e; }
-            weakSignalRef = weakRef || `weak_${session.checkSessionId}`;
+            if (!weakRef) {
+              // R4.13: Do NOT fabricate a weak signal. If adapter returns no real signal, fail.
+              return { error: 'Weak-area signal required but adapter returned no signal' };
+            }
+            weakSignalRef = weakRef;
             await upsertIdempotencyRecord(stableKey, {
               checkSessionId: input.checkSessionId, schoolId: input.schoolId, studentId: input.studentId,
               evidenceId: bridgeResult.evidenceRef.evidenceId, bridgeId: bridgeResult.bridgeId,
@@ -800,6 +918,115 @@ export class Phase3DailyObjectiveCheckCompletionService {
       case 'needs_teacher_support': return 'daily_objective_check_needs_teacher_support';
       default: return 'daily_objective_check_completed';
     }
+  }
+
+  // R4.16: Finalize completion from durable checkpoint (used by COMPLETING recovery cases)
+  private async finalizeFromCheckpoint(
+    input: { checkSessionId: string; schoolId: string; studentId: string },
+    stableKey: string,
+    session: any,
+    checkpoint: IdempotencyRecord,
+  ): Promise<{ error?: string; result?: any; learnerResponse?: any; teacherSummary?: any }> {
+    const completionStatus = determineCompletionStatusLabel(session);
+    const masteryUpdate = checkpoint.masteryResult;
+    const bridgeResult = { bridgeId: checkpoint.bridgeId || '', evidenceRef: { evidenceId: checkpoint.evidenceId || '' } };
+
+    // Finalize session in durable storage
+    const dailySeedUpdated = !!(session.dailySeedId && phase3DailyObjectiveSeedService.markDailyObjectiveSeedCompleted(session.dailySeedId));
+    const safeEvidenceRefs = [...(session.safeEvidenceRefs || []), ...(checkpoint.evidenceId ? [checkpoint.evidenceId] : [])];
+    const learnerSafeMessage = this.buildLearnerSafeCompletionMessage(completionStatus);
+    const teacherSafeReason = this.buildTeacherSafeCompletionReason(completionStatus, session);
+
+    let completedSession: any;
+    if (isTestMapsMode()) {
+      completedSession = phase3DailyObjectiveCheckRepository.completeCheckSession(input.checkSessionId, {
+        status: completionStatus, learnerSafeReason: learnerSafeMessage, teacherSafeReason, safeEvidenceRefs,
+        evidenceId: checkpoint.evidenceId, masteryResult: masteryUpdate, weakSignalRef: checkpoint.weakSignalRef,
+      });
+    } else {
+      completedSession = await phase3DailyObjectiveCheckRepository.completeCheckSessionAsync(input.checkSessionId, {
+        status: completionStatus, learnerSafeReason: learnerSafeMessage, teacherSafeReason, safeEvidenceRefs,
+        evidenceId: checkpoint.evidenceId, masteryResult: masteryUpdate, weakSignalRef: checkpoint.weakSignalRef,
+      });
+    }
+
+    const result = {
+      checkSessionId: session.checkSessionId, objectiveId: session.objectiveId, schoolId: session.schoolId, studentId: session.studentId,
+      previousStatus: session.status, completionStatus, missingRequiredSteps: [], evidenceBridgeResultId: bridgeResult.bridgeId,
+      masteryUpdated: masteryUpdate?.changed ?? false, newMasteryStatus: masteryUpdate?.newStatus || 'still_learning', dailySeedUpdated, safeEvidenceRefs, learnerSafeResponse: learnerSafeMessage, teacherSafeReason, completedAt: nowISO(),
+    };
+
+    const finalResult = { ...result, masteryResult: masteryUpdate, weakSignalRef: checkpoint.weakSignalRef };
+    await upsertIdempotencyRecord(stableKey, {
+      checkSessionId: input.checkSessionId, schoolId: input.schoolId, studentId: input.studentId,
+      evidenceId: checkpoint.evidenceId, bridgeId: checkpoint.bridgeId,
+      masteryApplied: true, weakSignalCreated: !!checkpoint.weakSignalRef, completionStatus, result: finalResult, masteryResult: masteryUpdate, weakSignalRef: checkpoint.weakSignalRef,
+    });
+
+    phase3DailyObjectiveCheckAuditService.recordDailyObjectiveCheckCompleted(input.schoolId, input.studentId, 'learner', input.studentId, session.objectiveId, input.checkSessionId);
+
+    const learnerResponse = {
+      checkSessionId: session.checkSessionId, objectiveId: session.objectiveId, dailySeedId: session.dailySeedId, status: completionStatus, safeTitle: 'Daily Objective Check',
+      safeMessage: learnerSafeMessage, nextStep: this.getLearnerNextStep(completionStatus, masteryUpdate?.newStatus || 'still_learning'), modeDestination: masteryUpdate?.newStatus === 'confident' ? 'revision' : 'focus',
+      masteryStatus: masteryUpdate?.newStatus || 'still_learning', safeEvidenceRefs, createdAt: session.createdAt, updatedAt: nowISO(),
+    };
+    const teacherSummary = {
+      checkSessionId: session.checkSessionId, objectiveId: session.objectiveId, classId: session.classId, subjectId: session.subjectId, topicId: session.topicId, skillId: session.skillId, studentId: session.studentId,
+      status: completionStatus, masteryStatus: masteryUpdate?.newStatus || 'still_learning', safePatternSummary: teacherSafeReason,
+      hintDependencyBucket: session.hintUsageBucket, explanationQualityBucket: session.explanationQualityBucket, recallQualityBucket: session.recallQualityBucket,
+      teachBackQualityBucket: session.teachBackQualityBucket, transferCheckStatus: session.transferCheckBucket, delayedRecallStatus: session.delayedRecallBucket,
+      safeReasonCodes: masteryUpdate?.reasonCodes || [], recommendedTeacherAction: this.getRecommendedTeacherAction(completionStatus), safeEvidenceRefs, updatedAt: nowISO(),
+    };
+    return { result: finalResult, learnerResponse, teacherSummary };
+  }
+
+  // Sync finalize from checkpoint (used by sync COMPLETING recovery)
+  private finalizeSyncFromCheckpoint(
+    input: { checkSessionId: string; schoolId: string; studentId: string },
+    stableKey: string,
+    session: any,
+    checkpoint: IdempotencyRecord,
+  ): { error?: string; result?: any; learnerResponse?: any; teacherSummary?: any } {
+    const completionStatus = determineCompletionStatusLabel(session);
+    const masteryUpdate = checkpoint.masteryResult;
+    const dailySeedUpdated = !!(session.dailySeedId && phase3DailyObjectiveSeedService.markDailyObjectiveSeedCompleted(session.dailySeedId));
+    const safeEvidenceRefs = [...(session.safeEvidenceRefs || []), ...(checkpoint.evidenceId ? [checkpoint.evidenceId] : [])];
+    const learnerSafeMessage = this.buildLearnerSafeCompletionMessage(completionStatus);
+    const teacherSafeReason = this.buildTeacherSafeCompletionReason(completionStatus, session);
+
+    phase3DailyObjectiveCheckRepository.completeCheckSession(input.checkSessionId, {
+      status: completionStatus, learnerSafeReason: learnerSafeMessage, teacherSafeReason, safeEvidenceRefs,
+      evidenceId: checkpoint.evidenceId, masteryResult: masteryUpdate, weakSignalRef: checkpoint.weakSignalRef,
+    });
+
+    const result = {
+      checkSessionId: session.checkSessionId, objectiveId: session.objectiveId, schoolId: session.schoolId, studentId: session.studentId,
+      previousStatus: session.status, completionStatus, missingRequiredSteps: [], evidenceBridgeResultId: checkpoint.bridgeId || '',
+      masteryUpdated: masteryUpdate?.changed ?? false, newMasteryStatus: masteryUpdate?.newStatus || 'still_learning', dailySeedUpdated, safeEvidenceRefs, learnerSafeResponse: learnerSafeMessage, teacherSafeReason, completedAt: nowISO(),
+    };
+
+    const finalResult = { ...result, masteryResult: masteryUpdate, weakSignalRef: checkpoint.weakSignalRef };
+    const finalIdem: IdempotencyRecord = {
+      checkSessionId: input.checkSessionId, schoolId: input.schoolId, studentId: input.studentId,
+      evidenceId: checkpoint.evidenceId, bridgeId: checkpoint.bridgeId,
+      masteryApplied: true, weakSignalCreated: !!checkpoint.weakSignalRef, completionStatus, result: finalResult, masteryResult: masteryUpdate, weakSignalRef: checkpoint.weakSignalRef, updatedAt: nowISO(),
+    };
+    idempotencyStore.set(stableKey, finalIdem);
+    phase3DailyObjectiveCheckAuditService.recordDailyObjectiveCheckCompleted(input.schoolId, input.studentId, 'learner', input.studentId, session.objectiveId, input.checkSessionId);
+
+    const learnerResponse = {
+      checkSessionId: session.checkSessionId, objectiveId: session.objectiveId, dailySeedId: session.dailySeedId, status: completionStatus, safeTitle: 'Daily Objective Check',
+      safeMessage: learnerSafeMessage, nextStep: this.getLearnerNextStep(completionStatus, masteryUpdate?.newStatus || 'still_learning'), modeDestination: masteryUpdate?.newStatus === 'confident' ? 'revision' : 'focus',
+      masteryStatus: masteryUpdate?.newStatus || 'still_learning', safeEvidenceRefs, createdAt: session.createdAt, updatedAt: nowISO(),
+    };
+    const teacherSummary = {
+      checkSessionId: session.checkSessionId, objectiveId: session.objectiveId, classId: session.classId, subjectId: session.subjectId, topicId: session.topicId, skillId: session.skillId, studentId: session.studentId,
+      status: completionStatus, masteryStatus: masteryUpdate?.newStatus || 'still_learning', safePatternSummary: teacherSafeReason,
+      hintDependencyBucket: session.hintUsageBucket, explanationQualityBucket: session.explanationQualityBucket, recallQualityBucket: session.recallQualityBucket,
+      teachBackQualityBucket: session.teachBackQualityBucket, transferCheckStatus: session.transferCheckBucket, delayedRecallStatus: session.delayedRecallBucket,
+      safeReasonCodes: masteryUpdate?.reasonCodes || [], recommendedTeacherAction: this.getRecommendedTeacherAction(completionStatus), safeEvidenceRefs, updatedAt: nowISO(),
+    };
+    return { result: finalResult, learnerResponse, teacherSummary };
   }
 }
 

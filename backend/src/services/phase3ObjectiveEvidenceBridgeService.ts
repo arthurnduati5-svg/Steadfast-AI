@@ -153,8 +153,6 @@ export class Phase3ObjectiveEvidenceBridgeService {
     if (input.idempotencyKey.startsWith('daily_obj_check_')) {
       const existingByKey = evidenceIdempotencyStore.get(input.idempotencyKey);
       if (existingByKey) {
-        // Verify canonical evidence exists; if not, we will recreate
-        // For now return existing but ensure canonical exists via check
         const canonicalExists = await this.checkCanonicalEvidenceExists(input);
         if (canonicalExists) return existingByKey;
       }
@@ -167,9 +165,8 @@ export class Phase3ObjectiveEvidenceBridgeService {
 
     const signals = this.detectSafeObjectiveSignals(input);
     const antiCheatSignals = this.detectAntiCheatResistantSignals(input);
-    const { signalStrength } = this.normalizeModeEvidenceForObjective(input.sourceMode, input.evidenceType);
 
-    // Create bridge result with canonical evidenceId
+    // Create bridge result with canonical evidenceId — NO mastery calculation here
     const bridgeId = generateBridgeId();
     const now = nowISO();
     const evidenceRef: Phase3SafeEvidenceRef = {
@@ -198,18 +195,8 @@ export class Phase3ObjectiveEvidenceBridgeService {
 
     phase3ObjectiveRepository.recordObjectiveEvidenceLink(result);
 
-    const existing = phase3ObjectiveRepository.getObjectiveMasterySnapshot(input.objectiveId, input.learnerId);
-    const snapshot = this.buildOrUpdateMasterySnapshot(input, existing, signalStrength);
-    const updatedSnapshot = phase3ObjectiveRepository.upsertObjectiveMasterySnapshot(snapshot);
-
-    const masteryUpdated = existing !== null && existing.status !== updatedSnapshot.status;
-
-    const finalResult: Phase3ObjectiveEvidenceBridgeResult = {
-      ...result,
-      antiCheatSignals,
-      masteryUpdated,
-      newMasteryStatus: updatedSnapshot.status,
-    };
+    // R4.12: Evidence bridge does NOT interpret mastery. Mastery belongs to phase3ObjectiveMasteryService.
+    // Do NOT call buildOrUpdateMasterySnapshot or upsertObjectiveMasterySnapshot here.
 
     this.emitObjectiveAuditEvent(
       input.schoolId,
@@ -221,10 +208,10 @@ export class Phase3ObjectiveEvidenceBridgeService {
     );
 
     if (input.idempotencyKey.startsWith('daily_obj_check_')) {
-      evidenceIdempotencyStore.set(input.idempotencyKey, finalResult);
+      evidenceIdempotencyStore.set(input.idempotencyKey, result);
     }
 
-    return finalResult;
+    return result;
   }
 
   private async checkCanonicalEvidenceExists(input: Phase3ObjectiveEvidenceBridgeInput): Promise<boolean> {

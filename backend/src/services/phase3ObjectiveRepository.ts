@@ -111,15 +111,11 @@ export class Phase3ObjectiveRepository {
     estimatedMinutes: number;
   }): Phase3Objective {
     if (!IS_TEST) {
-      // Production create must delegate to approved Knowledge Graph authoring service if exists, else fail closed
-      // Check if task022 governance service owns creation — for now fail closed to avoid independent Phase-3 truth
-      // Allow creation only if explicitly in test or via canonical import path
-      // For R4, we fail closed rather than creating independent curriculum truth
-      // But to allow tests that use this repository in non-test mode with Prisma, we still create via Map for now
-      // This is technically a compatibility method; production should use curriculum import
-      // We log and fail closed for unknown production creates
-      // To avoid breaking existing flows that rely on this in dev, we allow but mark as compatibility
+      // Production: fail closed — Phase3 objective creation is not an authoritative curriculum authoring path.
+      // Canonical objectives must be created via the accepted Knowledge Graph / curriculum governance service.
+      throw new Error('Phase3 objective creation is not an authoritative curriculum authoring path. Use the canonical Knowledge Graph authoring service.');
     }
+    // Test-only: create in local Map stores for legacy test fixtures
     const objectiveId = generateId('obj');
     const now = nowISO();
     const obj: Phase3Objective = {
@@ -158,18 +154,17 @@ export class Phase3ObjectiveRepository {
       if (!objectivesByTeacher.has(tk)) objectivesByTeacher.set(tk, new Set());
       objectivesByTeacher.get(tk)!.add(objectiveId);
     }
-    // Also register in canonical map for production delegate
+    // Register in canonical map for test-mode delegation
     try {
       const { topicSkillPrerequisiteMapService } = require('./task022TopicSkillPrerequisiteMapService');
       const { learningObjectiveGovernanceService } = require('./task022LearningObjectiveGovernanceService');
-      topicSkillPrerequisiteMapService.registerObjective({ objectiveId, curriculumSkillId: input.skillId || 'skill-r4', title: input.title, status: 'active' } as Any);
-      learningObjectiveGovernanceService.registerObjective({ objectiveId, curriculumSkillId: input.skillId || 'skill-r4', title: input.title, status: 'active' } as Any);
-      // Also register skill/topic if needed for KG resolution
+      topicSkillPrerequisiteMapService.registerObjective({ objectiveId, curriculumSkillId: input.skillId, title: input.title, status: 'active' } as Any);
+      learningObjectiveGovernanceService.registerObjective({ objectiveId, curriculumSkillId: input.skillId, title: input.title, status: 'active' } as Any);
       if (input.skillId) {
-        topicSkillPrerequisiteMapService.registerSkill({ skillId: input.skillId, curriculumTopicId: input.topicId || 'topic-r4', title: input.skillId } as Any);
+        topicSkillPrerequisiteMapService.registerSkill({ skillId: input.skillId, curriculumTopicId: input.topicId, title: input.skillId } as Any);
       }
       if (input.topicId) {
-        topicSkillPrerequisiteMapService.registerTopic({ topicId: input.topicId, curriculumVersionId: 'v1', subject: input.subjectId || 'sub-r4', title: input.topicId } as Any);
+        topicSkillPrerequisiteMapService.registerTopic({ topicId: input.topicId, curriculumVersionId: input.topicId, subject: input.subjectId, title: input.topicId } as Any);
       }
     } catch (_e) { void _e; }
     return obj;
@@ -188,11 +183,10 @@ export class Phase3ObjectiveRepository {
   }
 
   getObjectiveById(objectiveId: string): Phase3Objective | null {
-    // Test-only Map lookup; production should use getObjectiveByIdAsync
     if (IS_TEST) {
+      // Test-only: check local Map stores, then canonical map
       const fromStore = objectiveStore.get(objectiveId);
       if (fromStore) return fromStore;
-      // Also check canonical map in test
       try {
         const { topicSkillPrerequisiteMapService } = require('./task022TopicSkillPrerequisiteMapService');
         const canon = topicSkillPrerequisiteMapService.getObjective(objectiveId);
@@ -200,49 +194,57 @@ export class Phase3ObjectiveRepository {
       } catch (_e) { void _e; }
       return null;
     }
-    // In production, this sync method is deprecated; try canonical map synchronously
-    const fromStore = objectiveStore.get(objectiveId);
-    if (fromStore) return fromStore;
-    try {
-      const { topicSkillPrerequisiteMapService } = require('./task022TopicSkillPrerequisiteMapService');
-      const canon = topicSkillPrerequisiteMapService.getObjective(objectiveId);
-      if (canon) return mapCanonicalToPhase3(canon);
-      const { learningObjectiveGovernanceService } = require('./task022LearningObjectiveGovernanceService');
-      const gov = learningObjectiveGovernanceService.getObjective(objectiveId);
-      if (gov) return mapCanonicalToPhase3(gov);
-    } catch (_e) { void _e; }
-    return null;
+    // Production: sync method is deprecated. Fail closed — callers must use getObjectiveByIdAsync.
+    throw new Error('Synchronous objective lookup is not available in production. Use getObjectiveByIdAsync for canonical resolution.');
   }
 
   async getObjectiveByIdAsync(objectiveId: string): Promise<Phase3Objective | null> {
-    // Canonical production path
-    const fromStore = objectiveStore.get(objectiveId);
-    if (fromStore) return fromStore;
-    try {
-      const { topicSkillPrerequisiteMapService } = require('./task022TopicSkillPrerequisiteMapService');
-      const canon = topicSkillPrerequisiteMapService.getObjective(objectiveId);
-      if (canon) return mapCanonicalToPhase3(canon);
-    } catch (_e) { void _e; }
-    try {
-      const { learningObjectiveGovernanceService } = require('./task022LearningObjectiveGovernanceService');
-      const gov = learningObjectiveGovernanceService.getObjective(objectiveId);
-      if (gov) return mapCanonicalToPhase3(gov);
-    } catch (_e) { void _e; }
-    // Try Prisma
-    try {
-      const prisma = (await import('../lib/prisma')).default;
-      const row: any = await prisma.learningObjectiveRecord.findUnique({ where: { id: objectiveId } });
-      if (!row) return null;
-      let skill: any = null;
-      let topic: any = null;
+    if (IS_TEST) {
+      // Test-only: check local stores, then canonical maps
+      const fromStore = objectiveStore.get(objectiveId);
+      if (fromStore) return fromStore;
       try {
-        skill = await prisma.curriculumSkillRecord.findUnique({ where: { id: row.curriculumSkillId } });
-        if (skill) topic = await prisma.curriculumTopicRecord.findUnique({ where: { id: skill.curriculumTopicId } });
+        const { topicSkillPrerequisiteMapService } = require('./task022TopicSkillPrerequisiteMapService');
+        const canon = topicSkillPrerequisiteMapService.getObjective(objectiveId);
+        if (canon) return mapCanonicalToPhase3(canon);
       } catch (_e) { void _e; }
-      return mapCanonicalToPhase3({ ...row, objectiveId: row.id, skillId: row.curriculumSkillId, topicId: skill?.curriculumTopicId, subjectId: topic?.subject, status: row.status }, row.schoolId);
-    } catch {
+      try {
+        const { learningObjectiveGovernanceService } = require('./task022LearningObjectiveGovernanceService');
+        const gov = learningObjectiveGovernanceService.getObjective(objectiveId);
+        if (gov) return mapCanonicalToPhase3(gov);
+      } catch (_e) { void _e; }
+      // Try Prisma in test too if R4_USE_PRISMA is set
+      if (process.env.R4_USE_PRISMA === 'true') {
+        return this.resolveFromPrisma(objectiveId);
+      }
       return null;
     }
+
+    // Production: Prisma is the only authoritative source. Do NOT check objectiveStore or Map services first.
+    return this.resolveFromPrisma(objectiveId);
+  }
+
+  private async resolveFromPrisma(objectiveId: string): Promise<Phase3Objective | null> {
+    const prisma = (await import('../lib/prisma')).default;
+    const row: any = await prisma.learningObjectiveRecord.findUnique({ where: { id: objectiveId } });
+    if (!row) return null; // Not found in canonical KG is a legitimate null
+    let skill: any = null;
+    let topic: any = null;
+    try {
+      skill = await prisma.curriculumSkillRecord.findUnique({ where: { id: row.curriculumSkillId } });
+      if (skill) topic = await prisma.curriculumTopicRecord.findUnique({ where: { id: skill.curriculumTopicId } });
+    } catch (e: any) {
+      // Prisma failure must be thrown, not swallowed as null — caller needs to distinguish "not found" from "unavailable"
+      throw new Error(`Canonical KG persistence failure: ${e?.message || 'unknown'}`);
+    }
+    return mapCanonicalToPhase3({
+      ...row,
+      objectiveId: row.id,
+      skillId: row.curriculumSkillId,
+      topicId: skill?.curriculumTopicId,
+      subjectId: topic?.subject,
+      status: row.status,
+    }, row.schoolId);
   }
 
   // Alias for compatibility

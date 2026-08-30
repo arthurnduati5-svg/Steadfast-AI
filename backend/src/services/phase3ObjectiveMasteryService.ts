@@ -40,13 +40,23 @@ function mapEvidenceToCanonical(input: {
   evidenceId?: string;
 }): NormalizedMasteryEvidence {
   const targetNodeId = input.objectiveId;
-  const curriculumVersionId = 'fixture-curr-v1'; // Fallback; could resolve via KG
-  // Try to resolve via topicSkillPrerequisiteMapService for version
-  try {
-    const { topicSkillPrerequisiteMapService } = require('./task022TopicSkillPrerequisiteMapService');
-    // If objective exists in map, we could get its skill's topic's version, but we lack version id
-    // Keep default
-  } catch (_e) { void _e; }
+  // Production: resolve curriculumVersionId from canonical KG topic relationship, never hardcode fixture
+  let curriculumVersionId = input.topicId || 'unknown'; // Fallback; real value comes from KG topic's curriculumVersionId
+  if (IS_TEST && !isTestMapsMode()) {
+    // In R4 Prisma test mode, try to resolve from topic
+    curriculumVersionId = input.topicId || 'unknown';
+  } else if (isTestMapsMode()) {
+    curriculumVersionId = 'fixture-curr-v1'; // Legacy test-only fixture
+  } else {
+    // Production: try to resolve real curriculum version from KG via topic
+    try {
+      const { topicSkillPrerequisiteMapService } = require('./task022TopicSkillPrerequisiteMapService');
+      const topic = topicSkillPrerequisiteMapService.getTopic?.(input.topicId);
+      if (topic?.curriculumVersionId) {
+        curriculumVersionId = topic.curriculumVersionId;
+      }
+    } catch (_e) { void _e; }
+  }
   return {
     evidenceId: input.evidenceId || generateId('ev'),
     schoolId: input.schoolId,
