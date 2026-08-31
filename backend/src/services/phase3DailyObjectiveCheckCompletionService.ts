@@ -15,6 +15,13 @@ function isTestMapsMode(): boolean {
 
 function nowISO(): string { return new Date().toISOString(); }
 
+export class PersistenceError extends Error {
+  constructor(message: string, public readonly cause?: unknown) {
+    super(message);
+    this.name = 'PersistenceError';
+  }
+}
+
 interface IdempotencyRecord {
   checkSessionId: string;
   schoolId: string;
@@ -53,26 +60,22 @@ async function getIdempotencyRecord(key: string): Promise<IdempotencyRecord | nu
   if (isTestMapsMode()) {
     return idempotencyStore.get(key) || null;
   }
-  try {
-    const row: any = await prisma.dailyObjectiveCheckCompletionIdempotencyRecord.findUnique({ where: { idempotencyKey: key } });
-    if (!row) return null;
-    return {
-      checkSessionId: row.checkSessionId,
-      schoolId: row.schoolId,
-      studentId: row.studentId,
-      evidenceId: row.evidenceId || undefined,
-      bridgeId: (row.result as Any as Record<string, unknown>)?.evidenceBridgeResultId as string | undefined,
-      masteryApplied: row.masteryApplied,
-      weakSignalCreated: row.weakSignalCreated,
-      completionStatus: row.completionStatus || undefined,
-      result: row.result as Any as Record<string, unknown>,
-      masteryResult: (row.result as Any as Record<string, unknown>)?.masteryResult as Any,
-      weakSignalRef: (row.result as Any as Record<string, unknown>)?.weakSignalRef as string | undefined,
-      updatedAt: row.updatedAt.toISOString(),
-    };
-  } catch {
-    return null;
-  }
+  const row: any = await prisma.dailyObjectiveCheckCompletionIdempotencyRecord.findUnique({ where: { idempotencyKey: key } });
+  if (!row) return null;
+  return {
+    checkSessionId: row.checkSessionId,
+    schoolId: row.schoolId,
+    studentId: row.studentId,
+    evidenceId: row.evidenceId || undefined,
+    bridgeId: (row.result as Any as Record<string, unknown>)?.evidenceBridgeResultId as string | undefined,
+    masteryApplied: row.masteryApplied,
+    weakSignalCreated: row.weakSignalCreated,
+    completionStatus: row.completionStatus || undefined,
+    result: row.result as Any as Record<string, unknown>,
+    masteryResult: (row.result as Any as Record<string, unknown>)?.masteryResult as Any,
+    weakSignalRef: (row.result as Any as Record<string, unknown>)?.weakSignalRef as string | undefined,
+    updatedAt: row.updatedAt.toISOString(),
+  };
 }
 
 async function upsertIdempotencyRecord(key: string, record: Partial<IdempotencyRecord> & { checkSessionId: string; schoolId: string; studentId: string }): Promise<void> {
@@ -131,20 +134,18 @@ async function upsertIdempotencyRecord(key: string, record: Partial<IdempotencyR
       },
     });
   } catch (e) {
-    // If upsert fails due to race, try update
-    try {
-      await prisma.dailyObjectiveCheckCompletionIdempotencyRecord.update({
-        where: { idempotencyKey: key },
-        data: {
-          evidenceId: record.evidenceId || undefined,
-          masteryApplied: record.masteryApplied,
-          weakSignalCreated: record.weakSignalCreated,
-          completionStatus: record.completionStatus || undefined,
-          result: record.result as Any,
-          updatedAt: new Date(),
-        },
-      });
-    } catch (_e) { void _e; }
+    // If upsert fails due to race, try update — if update also fails, propagate
+    await prisma.dailyObjectiveCheckCompletionIdempotencyRecord.update({
+      where: { idempotencyKey: key },
+      data: {
+        evidenceId: record.evidenceId || undefined,
+        masteryApplied: record.masteryApplied,
+        weakSignalCreated: record.weakSignalCreated,
+        completionStatus: record.completionStatus || undefined,
+        result: record.result as Any,
+        updatedAt: new Date(),
+      },
+    });
   }
 }
 
@@ -203,6 +204,7 @@ export class Phase3DailyObjectiveCheckCompletionService {
         try {
           const evidenceInput = this.buildObjectiveEvidenceBridgeInput(session);
           evidenceInput.idempotencyKey = stableKey;
+          evidenceInput.evidenceId = checkpoint.evidenceId;
           const masteryUpdate = phase3ObjectiveMasteryService.updateObjectiveMasteryFromEvidence(evidenceInput as Any);
           const rec = idempotencyStore.get(stableKey)!;
           rec.masteryApplied = true;
@@ -413,7 +415,12 @@ export class Phase3DailyObjectiveCheckCompletionService {
 
     // Handle already completed — idempotent retry must return same result without duplication
     const stableKey = idempotencyKeyForSession(input.checkSessionId);
-    const existingIdem = await getIdempotencyRecord(stableKey);
+    let existingIdem: IdempotencyRecord | null = null;
+    try {
+      existingIdem = await getIdempotencyRecord(stableKey);
+    } catch (e: any) {
+      return { error: `Persistence failure reading checkpoint: ${e.message}` };
+    }
     if (session.status === 'completed' || session.status === 'COMPLETED') {
       if (existingIdem?.result) {
         const result = existingIdem.result;
@@ -433,7 +440,12 @@ export class Phase3DailyObjectiveCheckCompletionService {
     if (session.status === 'expired') return { error: `Session is already ${session.status}.` };
     if (session.status === 'COMPLETING') {
       // R4.16: Load durable checkpoint to classify recovery state — do NOT deadlock on COMPLETING
-      const checkpoint = await getIdempotencyRecord(stableKey);
+      let checkpoint: IdempotencyRecord | null = null;
+      try {
+        checkpoint = await getIdempotencyRecord(stableKey);
+      } catch (e: any) {
+        return { error: `Persistence failure reading checkpoint: ${e.message}` };
+      }
 
       // CASE 5: Already fully completed with persisted result — return it
       if (checkpoint?.result) {
@@ -453,6 +465,7 @@ export class Phase3DailyObjectiveCheckCompletionService {
         try {
           const evidenceInput = this.buildObjectiveEvidenceBridgeInput(session);
           evidenceInput.idempotencyKey = stableKey;
+          evidenceInput.evidenceId = checkpoint.evidenceId;
           let masteryUpdate: any;
           if (isTestMapsMode()) {
             masteryUpdate = phase3ObjectiveMasteryService.updateObjectiveMasteryFromEvidence(evidenceInput as Any);
@@ -558,7 +571,12 @@ export class Phase3DailyObjectiveCheckCompletionService {
     }
 
     // Check idempotency before acquiring ownership: if we already have a record for this session, reuse
-    const prior = await getIdempotencyRecord(stableKey);
+    let prior: IdempotencyRecord | null = null;
+    try {
+      prior = await getIdempotencyRecord(stableKey);
+    } catch (e: any) {
+      return { error: `Persistence failure reading checkpoint: ${e.message}` };
+    }
     // 3. Acquire completion ownership: ACTIVE -> COMPLETING using version
     const expectedVersion = session.version;
     let acquired = false;
@@ -576,7 +594,12 @@ export class Phase3DailyObjectiveCheckCompletionService {
         reloaded = await phase3DailyObjectiveCheckRepository.getCheckSessionByIdAsync(input.checkSessionId);
       }
       if (reloaded?.status === 'completed' || reloaded?.status === 'COMPLETED') {
-        const rec = await getIdempotencyRecord(stableKey);
+        let rec: IdempotencyRecord | null = null;
+        try {
+          rec = await getIdempotencyRecord(stableKey);
+        } catch (e: any) {
+          return { error: `Persistence failure reading checkpoint: ${e.message}` };
+        }
         if (rec?.result) {
           return { result: rec.result, learnerResponse: this.buildLearnerResponseFromResult(reloaded, rec.result, rec.masteryResult), teacherSummary: this.buildTeacherSummaryFromResult(reloaded, rec.result, rec.masteryResult) };
         }
@@ -637,7 +660,8 @@ export class Phase3DailyObjectiveCheckCompletionService {
           await phase3DailyObjectiveCheckRepository.persistCompletionReferencesAsync(input.checkSessionId, { evidenceId: bridgeResult.evidenceRef.evidenceId });
         }
 
-        // 6. Hand canonical evidence to Mastery
+        // 6. Hand canonical evidence to Mastery — use committed evidence ID, never generate a new one
+        evidenceInput.evidenceId = bridgeResult.evidenceRef.evidenceId;
         try {
           if (isTestMapsMode()) {
             masteryUpdate = await phase3ObjectiveMasteryService.updateObjectiveMasteryFromEvidence(evidenceInput as Any);
@@ -669,10 +693,11 @@ export class Phase3DailyObjectiveCheckCompletionService {
         }
       }
 
-      // If mastery was not yet applied (retry case), apply now
+      // If mastery was not yet applied (retry case), apply now using committed evidence ID
       if (!masteryUpdate) {
         const evidenceInputRetry = this.buildObjectiveEvidenceBridgeInput(session);
         evidenceInputRetry.idempotencyKey = stableKey;
+        evidenceInputRetry.evidenceId = bridgeResult.evidenceRef.evidenceId;
         if (isTestMapsMode()) {
           masteryUpdate = await phase3ObjectiveMasteryService.updateObjectiveMasteryFromEvidence(evidenceInputRetry as Any);
           if (masteryUpdate && typeof masteryUpdate.then === 'function') masteryUpdate = await masteryUpdate;

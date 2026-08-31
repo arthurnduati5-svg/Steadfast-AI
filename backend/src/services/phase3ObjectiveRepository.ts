@@ -225,19 +225,19 @@ export class Phase3ObjectiveRepository {
   }
 
   private async resolveFromPrisma(objectiveId: string): Promise<Phase3Objective | null> {
-    const prisma = (await import('../lib/prisma')).default;
-    const row: any = await prisma.learningObjectiveRecord.findUnique({ where: { id: objectiveId } });
+    const { default: prismaClient } = await import('../lib/prisma');
+    const row: any = await prismaClient.learningObjectiveRecord.findUnique({ where: { id: objectiveId } });
     if (!row) return null; // Not found in canonical KG is a legitimate null
     let skill: any = null;
     let topic: any = null;
     try {
-      skill = await prisma.curriculumSkillRecord.findUnique({ where: { id: row.curriculumSkillId } });
-      if (skill) topic = await prisma.curriculumTopicRecord.findUnique({ where: { id: skill.curriculumTopicId } });
+      skill = await prismaClient.curriculumSkillRecord.findUnique({ where: { id: row.curriculumSkillId } });
+      if (skill) topic = await prismaClient.curriculumTopicRecord.findUnique({ where: { id: skill.curriculumTopicId } });
     } catch (e: any) {
       // Prisma failure must be thrown, not swallowed as null — caller needs to distinguish "not found" from "unavailable"
       throw new Error(`Canonical KG persistence failure: ${e?.message || 'unknown'}`);
     }
-    return mapCanonicalToPhase3({
+    const mapped = mapCanonicalToPhase3({
       ...row,
       objectiveId: row.id,
       skillId: row.curriculumSkillId,
@@ -245,6 +245,9 @@ export class Phase3ObjectiveRepository {
       subjectId: topic?.subject,
       status: row.status,
     }, row.schoolId);
+    // Cache in local store so sync callers (e.g. blueprint service) can find it
+    objectiveStore.set(objectiveId, mapped);
+    return mapped;
   }
 
   // Alias for compatibility

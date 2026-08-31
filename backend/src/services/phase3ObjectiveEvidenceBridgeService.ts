@@ -320,7 +320,6 @@ export class Phase3ObjectiveEvidenceBridgeService {
     streamId: string,
     idempotencyKey: string,
   ): Promise<string> {
-    const prisma = (await import('../lib/prisma')).default;
     const crypto = await import('crypto');
     const schoolId = input.schoolId;
     const learnerId = input.learnerId;
