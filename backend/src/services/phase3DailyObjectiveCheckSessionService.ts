@@ -181,7 +181,12 @@ export class Phase3DailyObjectiveCheckSessionService {
 
     let blueprint = phase3ObjectiveCheckBlueprintService.getObjectiveCheckBlueprint(input.objectiveId);
     if (!blueprint) {
-      const created: any = phase3ObjectiveCheckBlueprintService.createObjectiveCheckBlueprint(input.objectiveId, input.schoolId, 'learner');
+      const created: any = phase3ObjectiveCheckBlueprintService
+        .createObjectiveCheckBlueprintFromResolvedObjective(
+          objective,
+          input.schoolId,
+          'learner',
+        );
       if (created && 'error' in created) return { error: created.error };
       blueprint = created as any;
     }

@@ -245,8 +245,6 @@ export class Phase3ObjectiveRepository {
       subjectId: topic?.subject,
       status: row.status,
     }, row.schoolId);
-    // Cache in local store so sync callers (e.g. blueprint service) can find it
-    objectiveStore.set(objectiveId, mapped);
     return mapped;
   }
 
