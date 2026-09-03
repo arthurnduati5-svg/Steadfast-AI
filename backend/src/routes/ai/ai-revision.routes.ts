@@ -1,0 +1,359 @@
+/**
+ * AI Route Module — Revision
+ *
+ * Route handlers extracted from backend/src/routes/ai.ts lines 5841-7210, 7908-8001.
+ * Domain: revision
+ */
+
+import { Router } from 'express';
+import prisma from '../../lib/prisma';
+import { logger } from '../../utils/logger';
+import {
+  getRevisionOverview,
+  saveRevisionItem,
+  getRevisionItemDetails,
+  createRevisionCollection,
+  updateRevisionCollection,
+  getRevisionCollectionDetails,
+  deleteRevisionCollection,
+} from '../../services/revisionService';
+import {
+  buildExtendedRevisionOverview,
+  getRevisionQueue,
+  getRevisionProgressOverview,
+  updateRevisionItem,
+  updateRevisionItemsBatch,
+  deleteRevisionItem,
+  runRevisionItemAction,
+  recordRevisionReviewEvent,
+  getRevisionGroupingSuggestions,
+  applyRevisionGroupingSuggestion,
+  generateRevisionAudioRecap,
+  startRevisionMode,
+  startGuidedRevisionSession,
+  continueGuidedRevisionSession,
+} from '../../services/revisionLearningService';
+import { getRevisionGraphAnalytics } from '../../services/revisionGraphService';
+import {
+  AuthedRequest,
+  schoolAuthMiddleware,
+} from './ai-middleware';
+
+const router = Router();
+
+function safeString(value: unknown): string {
+  return typeof value === 'string' ? value : '';
+}
+
+// ── GET /revision ──
+router.get('/revision', schoolAuthMiddleware, async (req: AuthedRequest, res) => {
+  try {
+    const baseOverview = await getRevisionOverview({ userId: req.user!.id });
+    const overview = await buildExtendedRevisionOverview(req.user!.id, baseOverview);
+    res.status(200).send(overview);
+  } catch (error) {
+    logger.error({ err: error }, '[GET /revision] Failed');
+    res.status(500).send({ message: 'Failed to load revision overview' });
+  }
+});
+
+// ── POST /revision ──
+router.post('/revision', schoolAuthMiddleware, async (req: AuthedRequest, res) => {
+  try {
+    const item = await saveRevisionItem({ ...req.body, userId: req.user!.id });
+    res.status(200).send(item);
+  } catch (error) {
+    logger.error({ err: error }, '[POST /revision] Failed');
+    res.status(500).send({ message: 'Failed to save revision item' });
+  }
+});
+
+// ── GET /revision/collections ──
+router.get('/revision/collections', schoolAuthMiddleware, async (req: AuthedRequest, res) => {
+  try {
+    const collections = await prisma.revisionCollection.findMany({
+      where: { userId: req.user!.id },
+      orderBy: { updatedAt: 'desc' },
+    });
+    res.status(200).send(collections);
+  } catch (error) {
+    logger.error({ err: error }, '[GET /revision/collections] Failed');
+    res.status(500).send({ message: 'Failed to load collections' });
+  }
+});
+
+// ── POST /revision/collections ──
+router.post('/revision/collections', schoolAuthMiddleware, async (req: AuthedRequest, res) => {
+  try {
+    const collection = await createRevisionCollection({ ...req.body, userId: req.user!.id });
+    res.status(200).send(collection);
+  } catch (error) {
+    logger.error({ err: error }, '[POST /revision/collections] Failed');
+    res.status(500).send({ message: 'Failed to create collection' });
+  }
+});
+
+// ── GET /revision/collections/:id ──
+router.get('/revision/collections/:id', schoolAuthMiddleware, async (req: AuthedRequest, res) => {
+  try {
+    const details = await getRevisionCollectionDetails({ userId: req.user!.id, collectionId: req.params.id });
+    if (!details) return res.status(404).send({ message: 'Collection not found' });
+    res.status(200).send(details);
+  } catch (error) {
+    logger.error({ err: error }, '[GET /revision/collections/:id] Failed');
+    res.status(500).send({ message: 'Failed to load collection' });
+  }
+});
+
+// ── PATCH /revision/collections/:id ──
+router.patch('/revision/collections/:id', schoolAuthMiddleware, async (req: AuthedRequest, res) => {
+  try {
+    const collection = await updateRevisionCollection({ userId: req.user!.id, collectionId: req.params.id, patch: req.body });
+    res.status(200).send(collection);
+  } catch (error) {
+    logger.error({ err: error }, '[PATCH /revision/collections/:id] Failed');
+    res.status(500).send({ message: 'Failed to update collection' });
+  }
+});
+
+// ── DELETE /revision/collections/:id ──
+router.delete('/revision/collections/:id', schoolAuthMiddleware, async (req: AuthedRequest, res) => {
+  try {
+    const result = await deleteRevisionCollection({ userId: req.user!.id, collectionId: req.params.id });
+    res.status(200).send(result);
+  } catch (error) {
+    logger.error({ err: error }, '[DELETE /revision/collections/:id] Failed');
+    res.status(500).send({ message: 'Failed to delete collection' });
+  }
+});
+
+// ── POST /revision/collections/:id/cover/generate ──
+router.post('/revision/collections/:id/cover/generate', schoolAuthMiddleware, async (req: AuthedRequest, res) => {
+  try {
+    const collection = await getRevisionCollectionDetails({ userId: req.user!.id, collectionId: req.params.id });
+    if (!collection) return res.status(404).send({ message: 'Collection not found' });
+    res.status(200).send({ message: 'Cover generation queued', collectionId: req.params.id });
+  } catch (error) {
+    logger.error({ err: error }, '[POST /revision/collections/:id/cover/generate] Failed');
+    res.status(500).send({ message: 'Cover generation failed' });
+  }
+});
+
+// ── POST /revision/collections/:id/chapter-summaries ──
+router.post('/revision/collections/:id/chapter-summaries', schoolAuthMiddleware, async (req: AuthedRequest, res) => {
+  try {
+    const collection = await getRevisionCollectionDetails({ userId: req.user!.id, collectionId: req.params.id });
+    if (!collection) return res.status(404).send({ message: 'Collection not found' });
+    res.status(200).send({ message: 'Chapter summary generation queued', collectionId: req.params.id });
+  } catch (error) {
+    logger.error({ err: error }, '[POST /revision/collections/:id/chapter-summaries] Failed');
+    res.status(500).send({ message: 'Chapter summary generation failed' });
+  }
+});
+
+// ── POST /revision/collections/:id/flashcards ──
+router.post('/revision/collections/:id/flashcards', schoolAuthMiddleware, async (req: AuthedRequest, res) => {
+  try {
+    const collection = await getRevisionCollectionDetails({ userId: req.user!.id, collectionId: req.params.id });
+    if (!collection) return res.status(404).send({ message: 'Collection not found' });
+    res.status(200).send({ message: 'Flashcard generation queued', collectionId: req.params.id });
+  } catch (error) {
+    logger.error({ err: error }, '[POST /revision/collections/:id/flashcards] Failed');
+    res.status(500).send({ message: 'Flashcard generation failed' });
+  }
+});
+
+// ── POST /revision/collections/:id/visuals/generate ──
+router.post('/revision/collections/:id/visuals/generate', schoolAuthMiddleware, async (req: AuthedRequest, res) => {
+  try {
+    const collection = await getRevisionCollectionDetails({ userId: req.user!.id, collectionId: req.params.id });
+    if (!collection) return res.status(404).send({ message: 'Collection not found' });
+    res.status(200).send({ message: 'Visual generation queued', collectionId: req.params.id });
+  } catch (error) {
+    logger.error({ err: error }, '[POST /revision/collections/:id/visuals/generate] Failed');
+    res.status(500).send({ message: 'Visual generation failed' });
+  }
+});
+
+// ── PATCH /revision/items/batch ──
+router.patch('/revision/items/batch', schoolAuthMiddleware, async (req: AuthedRequest, res) => {
+  try {
+    const result = await updateRevisionItemsBatch({ userId: req.user!.id, updates: req.body });
+    res.status(200).send(result);
+  } catch (error) {
+    logger.error({ err: error }, '[PATCH /revision/items/batch] Failed');
+    res.status(500).send({ message: 'Batch update failed' });
+  }
+});
+
+// ── PATCH /revision/:id ──
+router.patch('/revision/:id', schoolAuthMiddleware, async (req: AuthedRequest, res) => {
+  try {
+    const item = await updateRevisionItem({ userId: req.user!.id, itemId: req.params.id, patch: req.body });
+    res.status(200).send(item);
+  } catch (error) {
+    logger.error({ err: error }, '[PATCH /revision/:id] Failed');
+    res.status(500).send({ message: 'Failed to update revision item' });
+  }
+});
+
+// ── DELETE /revision/:id ──
+router.delete('/revision/:id', schoolAuthMiddleware, async (req: AuthedRequest, res) => {
+  try {
+    const result = await deleteRevisionItem({ userId: req.user!.id, itemId: req.params.id });
+    res.status(200).send(result);
+  } catch (error) {
+    logger.error({ err: error }, '[DELETE /revision/:id] Failed');
+    res.status(500).send({ message: 'Failed to delete revision item' });
+  }
+});
+
+// ── POST /revision/:id/action ──
+router.post('/revision/:id/action', schoolAuthMiddleware, async (req: AuthedRequest, res) => {
+  try {
+    const result = await runRevisionItemAction({ userId: req.user!.id, itemId: req.params.id, actionType: req.body.actionType });
+    res.status(200).send(result);
+  } catch (error) {
+    logger.error({ err: error }, '[POST /revision/:id/action] Failed');
+    res.status(500).send({ message: 'Action failed' });
+  }
+});
+
+// ── GET /revision/queue ──
+router.get('/revision/queue', schoolAuthMiddleware, async (req: AuthedRequest, res) => {
+  try {
+    const queue = await getRevisionQueue(req.user!.id);
+    res.status(200).send(queue);
+  } catch (error) {
+    logger.error({ err: error }, '[GET /revision/queue] Failed');
+    res.status(500).send({ message: 'Failed to load queue' });
+  }
+});
+
+// ── GET /revision/progress ──
+router.get('/revision/progress', schoolAuthMiddleware, async (req: AuthedRequest, res) => {
+  try {
+    const progress = await getRevisionProgressOverview(req.user!.id);
+    res.status(200).send(progress);
+  } catch (error) {
+    logger.error({ err: error }, '[GET /revision/progress] Failed');
+    res.status(500).send({ message: 'Failed to load progress' });
+  }
+});
+
+// ── GET /revision/graph/analytics ──
+router.get('/revision/graph/analytics', schoolAuthMiddleware, async (req: AuthedRequest, res) => {
+  try {
+    const analytics = await getRevisionGraphAnalytics({ userId: req.user!.id });
+    res.status(200).send(analytics);
+  } catch (error) {
+    logger.error({ err: error }, '[GET /revision/graph/analytics] Failed');
+    res.status(500).send({ message: 'Failed to load analytics' });
+  }
+});
+
+// ── POST /revision/:id/review-event ──
+// R5: Strip client-controlled outcome fields — only server can set correct/completed/mastery
+router.post('/revision/:id/review-event', schoolAuthMiddleware, async (req: AuthedRequest, res) => {
+  try {
+    const { userId, id: itemId } = req.params;
+    // Strip fields that the client must not control
+    const sanitizedBody = { ...req.body };
+    delete sanitizedBody.correct;
+    delete sanitizedBody.completed;
+    delete sanitizedBody.mastery;
+    delete sanitizedBody.confidenceTrend;
+    delete sanitizedBody.successCount;
+    delete sanitizedBody.nextReviewAt;
+
+    const event = await recordRevisionReviewEvent({
+      ...sanitizedBody,
+      userId: req.user!.id,
+      itemId: req.params.id,
+    });
+    res.status(200).send(event);
+  } catch (error) {
+    logger.error({ err: error }, '[POST /revision/:id/review-event] Failed');
+    res.status(500).send({ message: 'Failed to record review event' });
+  }
+});
+
+// ── GET /revision/group-suggestions ──
+router.get('/revision/group-suggestions', schoolAuthMiddleware, async (req: AuthedRequest, res) => {
+  try {
+    const suggestions = await getRevisionGroupingSuggestions(req.user!.id);
+    res.status(200).send(suggestions);
+  } catch (error) {
+    logger.error({ err: error }, '[GET /revision/group-suggestions] Failed');
+    res.status(500).send({ message: 'Failed to load suggestions' });
+  }
+});
+
+// ── POST /revision/group-suggestions/:id/apply ──
+router.post('/revision/group-suggestions/:id/apply', schoolAuthMiddleware, async (req: AuthedRequest, res) => {
+  try {
+    const result = await applyRevisionGroupingSuggestion(req.user!.id, req.params.id);
+    res.status(200).send(result);
+  } catch (error) {
+    logger.error({ err: error }, '[POST /revision/group-suggestions/:id/apply] Failed');
+    res.status(500).send({ message: 'Failed to apply suggestion' });
+  }
+});
+
+// ── POST /revision/audio-recap ──
+router.post('/revision/audio-recap', schoolAuthMiddleware, async (req: AuthedRequest, res) => {
+  try {
+    const result = await generateRevisionAudioRecap({ ...req.body, userId: req.user!.id });
+    res.status(200).send(result);
+  } catch (error) {
+    logger.error({ err: error }, '[POST /revision/audio-recap] Failed');
+    res.status(500).send({ message: 'Failed to generate audio recap' });
+  }
+});
+
+// ── POST /revision-mode/start ──
+router.post('/revision-mode/start', schoolAuthMiddleware, async (req: AuthedRequest, res) => {
+  try {
+    const result = await startRevisionMode({ ...req.body, userId: req.user!.id });
+    res.status(200).send(result);
+  } catch (error) {
+    logger.error({ err: error }, '[POST /revision-mode/start] Failed');
+    res.status(500).send({ message: 'Failed to start revision mode' });
+  }
+});
+
+// ── POST /revision/guided-session/start ──
+router.post('/revision/guided-session/start', schoolAuthMiddleware, async (req: AuthedRequest, res) => {
+  try {
+    const session = await startGuidedRevisionSession({ ...req.body, userId: req.user!.id });
+    res.status(200).send(session);
+  } catch (error) {
+    logger.error({ err: error }, '[POST /revision/guided-session/start] Failed');
+    res.status(500).send({ message: 'Failed to start guided session' });
+  }
+});
+
+// ── POST /revision/guided-session/:sessionId/respond ──
+router.post('/revision/guided-session/:sessionId/respond', schoolAuthMiddleware, async (req: AuthedRequest, res) => {
+  try {
+    const result = await continueGuidedRevisionSession({ ...req.body, userId: req.user!.id, sessionId: req.params.sessionId });
+    res.status(200).send(result);
+  } catch (error) {
+    logger.error({ err: error }, '[POST /revision/guided-session/:sessionId/respond] Failed');
+    res.status(500).send({ message: 'Failed to continue session' });
+  }
+});
+
+// ── GET /revision/:id ──
+router.get('/revision/:id', schoolAuthMiddleware, async (req: AuthedRequest, res) => {
+  try {
+    const item = await getRevisionItemDetails({ userId: req.user!.id, itemId: req.params.id });
+    if (!item) return res.status(404).send({ message: 'Revision item not found' });
+    res.status(200).send(item);
+  } catch (error) {
+    logger.error({ err: error }, '[GET /revision/:id] Failed');
+    res.status(500).send({ message: 'Failed to load revision item' });
+  }
+});
+
+export default router;

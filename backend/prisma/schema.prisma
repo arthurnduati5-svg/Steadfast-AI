@@ -98,6 +98,7 @@ model StudentProfile {
   latencyMetrics       TurnLatencyMetric[]
   revisionCollections  RevisionCollection[]
   revisionItems        RevisionItem[]
+  guidedRevisionSessions RevisionGuidedSessionRecord[]
   mediaAssets          MediaAsset[]
 }
 
@@ -178,8 +179,19 @@ model RevisionItem {
   sourceRefs      Json?
   mediaRefs       Json?
   metadata        Json?
+
+  // R5: canonical curriculum references
+  curriculumObjectiveId String?
+  curriculumTopicId     String?
+  curriculumSkillId     String?
+  originType            String?
+  originRef             String?
+  dedupeKey             String?
+
   createdAt       DateTime           @default(now())
   updatedAt       DateTime           @updatedAt
+
+  guidedSessions  RevisionGuidedSessionRecord[]
 
   @@index([userId, updatedAt])
   @@index([userId, collectionId, updatedAt])
@@ -190,6 +202,7 @@ model RevisionItem {
   @@index([contentType, updatedAt])
   @@index([userId, isPinned, updatedAt])
   @@index([userId, reviewStatus, nextReviewAt])
+  @@unique([userId, dedupeKey])
 }
 
 model MediaAsset {
@@ -12150,4 +12163,105 @@ model DailyObjectiveCheckCompletionIdempotencyRecord {
   updatedAt            DateTime @updatedAt
 
   @@index([schoolId, studentId])
+}
+
+// ── R5: Revision Runtime Completion ──
+
+model RevisionGuidedSessionRecord {
+  id                String   @id @default(uuid())
+  userId            String
+  student           StudentProfile @relation(fields: [userId], references: [userId], onDelete: Cascade)
+  revisionItemId    String
+  revisionItem      RevisionItem @relation(fields: [revisionItemId], references: [id], onDelete: Cascade)
+
+  sourceType        String
+  examFocus         Boolean  @default(false)
+
+  status            String   @default("active")
+  currentStage      String   @default("recall")
+  lastCompletedStage String?
+
+  version           Int      @default(1)
+
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  completedAt       DateTime?
+
+  lastResult        Json?
+
+  steps             RevisionGuidedStepRecord[]
+
+  @@index([userId, status])
+  @@index([userId, revisionItemId])
+  @@index([status])
+}
+
+model RevisionGuidedStepRecord {
+  id                String   @id @default(uuid())
+  sessionId         String
+  session           RevisionGuidedSessionRecord @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  stage             String
+  idempotencyKey    String
+
+  status            String   @default("claimed")
+
+  supportAction     String?
+  safeResponseSignal String?
+
+  evidenceId        String?
+  masteryApplied    Boolean  @default(false)
+
+  result            Json?
+
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  completedAt       DateTime?
+
+  @@unique([sessionId, stage])
+  @@unique([sessionId, idempotencyKey])
+  @@index([sessionId])
+  @@index([idempotencyKey])
+}
+
+model RevisionSourceSignalReceipt {
+  id                String   @id @default(uuid())
+  userId            String
+  sourceType        String
+  sourceRef         String
+  revisionItemId    String
+
+  curriculumObjectiveId String?
+  curriculumTopicId     String?
+  curriculumSkillId     String?
+
+  metadata          Json?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@unique([userId, sourceType, sourceRef])
+  @@index([userId])
+  @@index([revisionItemId])
+}
+
+model RevisionNoteLink {
+  id                String   @id @default(uuid())
+  userId            String
+  sourceItemId      String
+  targetItemId      String
+  score             Int
+  category          String
+  strength          String
+  whyConnected      String
+  whySignals        Json     @default("[]")
+  sharedTags        String[] @default([])
+  explainability    Json     @default("{}")
+  actionStep        String
+  metadata          Json?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@unique([userId, sourceItemId, targetItemId])
+  @@index([userId, sourceItemId, score, updatedAt])
+  @@index([userId, targetItemId])
 }

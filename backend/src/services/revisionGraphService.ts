@@ -1,5 +1,5 @@
 import { randomUUID } from 'crypto';
-import prisma from '../utils/prismaClient';
+import prisma from '../lib/prisma';
 import type {
   RevisionConnectedNoteGraph,
   RevisionConnectedNoteLink,
@@ -138,8 +138,6 @@ const TITLE_STOP_WORDS = new Set([
   'with',
   'your',
 ]);
-
-let ensureRevisionGraphTablesPromise: Promise<void> | null = null;
 
 function safeString(value: unknown): string {
   return typeof value === 'string' ? value : '';
@@ -525,52 +523,8 @@ function mapGraphItemRow(row: any): GraphItem {
 }
 
 export async function ensureRevisionGraphTables(): Promise<void> {
-  if (!ensureRevisionGraphTablesPromise) {
-    ensureRevisionGraphTablesPromise = (async () => {
-      await prisma.$executeRawUnsafe(`
-        CREATE TABLE IF NOT EXISTS "RevisionNoteLink" (
-          "id" TEXT PRIMARY KEY,
-          "userId" TEXT NOT NULL,
-          "sourceItemId" TEXT NOT NULL,
-          "targetItemId" TEXT NOT NULL,
-          "score" INTEGER NOT NULL,
-          "category" TEXT NOT NULL,
-          "strength" TEXT NOT NULL,
-          "whyConnected" TEXT NOT NULL,
-          "whySignals" JSONB NOT NULL DEFAULT '[]'::jsonb,
-          "sharedTags" TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
-          "explainability" JSONB NOT NULL DEFAULT '{}'::jsonb,
-          "actionStep" TEXT NOT NULL,
-          "metadata" JSONB NULL,
-          "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-          "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-          CONSTRAINT "RevisionNoteLink_userId_fkey"
-            FOREIGN KEY ("userId") REFERENCES "StudentProfile"("userId")
-            ON DELETE CASCADE ON UPDATE CASCADE,
-          CONSTRAINT "RevisionNoteLink_sourceItemId_fkey"
-            FOREIGN KEY ("sourceItemId") REFERENCES "RevisionItem"("id")
-            ON DELETE CASCADE ON UPDATE CASCADE,
-          CONSTRAINT "RevisionNoteLink_targetItemId_fkey"
-            FOREIGN KEY ("targetItemId") REFERENCES "RevisionItem"("id")
-            ON DELETE CASCADE ON UPDATE CASCADE
-        );
-      `);
-      await prisma.$executeRawUnsafe(
-        `CREATE UNIQUE INDEX IF NOT EXISTS "RevisionNoteLink_user_source_target_uidx" ON "RevisionNoteLink" ("userId", "sourceItemId", "targetItemId");`
-      );
-      await prisma.$executeRawUnsafe(
-        `CREATE INDEX IF NOT EXISTS "RevisionNoteLink_user_source_score_idx" ON "RevisionNoteLink" ("userId", "sourceItemId", "score" DESC, "updatedAt" DESC);`
-      );
-      await prisma.$executeRawUnsafe(
-        `CREATE INDEX IF NOT EXISTS "RevisionNoteLink_user_target_idx" ON "RevisionNoteLink" ("userId", "targetItemId");`
-      );
-    })().catch((error) => {
-      ensureRevisionGraphTablesPromise = null;
-      throw error;
-    });
-  }
-
-  return ensureRevisionGraphTablesPromise;
+  // R5: RevisionNoteLink now managed by Prisma schema. No request-time DDL.
+  return Promise.resolve();
 }
 
 export async function refreshRevisionGraphForUser(userId: string): Promise<{ itemCount: number; linkCount: number }> {

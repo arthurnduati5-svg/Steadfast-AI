@@ -1,5 +1,5 @@
 import { randomUUID } from 'crypto';
-import prisma from '../utils/prismaClient';
+import prisma from '../lib/prisma';
 import type {
   MetacognitiveStateSnapshot,
   RevisionCollection,
@@ -122,8 +122,6 @@ export type DeleteRevisionCollectionResult = {
   dissolvedItemCount: number;
   deletedItemCount: number;
 };
-
-let ensureRevisionTablesPromise: Promise<void> | null = null;
 
 const REVISION_OVERVIEW_LIMIT = 12;
 const REVISION_PREVIEW_ITEMS_PER_COLLECTION = 3;
@@ -527,115 +525,8 @@ function mapRevisionItemRow(row: any): RevisionItem {
 }
 
 async function ensureRevisionTables() {
-  if (!ensureRevisionTablesPromise) {
-    ensureRevisionTablesPromise = (async () => {
-      await prisma.$executeRawUnsafe(`
-        CREATE TABLE IF NOT EXISTS "RevisionCollection" (
-          "id" TEXT PRIMARY KEY,
-          "userId" TEXT NOT NULL,
-          "title" TEXT NOT NULL,
-          "subject" TEXT NULL,
-          "topic" TEXT NULL,
-          "description" TEXT NULL,
-          "metadata" JSONB NULL,
-          "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-          "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-          CONSTRAINT "RevisionCollection_userId_fkey"
-            FOREIGN KEY ("userId") REFERENCES "StudentProfile"("userId")
-            ON DELETE CASCADE ON UPDATE CASCADE
-        );
-      `);
-      await prisma.$executeRawUnsafe(`
-        CREATE TABLE IF NOT EXISTS "RevisionItem" (
-          "id" TEXT PRIMARY KEY,
-          "userId" TEXT NOT NULL,
-          "sessionId" TEXT NULL,
-          "sourceMessageId" TEXT NULL,
-          "collectionId" TEXT NULL,
-          "title" TEXT NOT NULL,
-          "summary" TEXT NOT NULL,
-          "content" TEXT NOT NULL,
-          "contentType" TEXT NOT NULL,
-          "subject" TEXT NULL,
-          "topic" TEXT NULL,
-          "tags" TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
-          "artifactLabels" TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
-          "selectedText" TEXT NULL,
-          "sourceRefs" JSONB NULL,
-          "mediaRefs" JSONB NULL,
-          "metadata" JSONB NULL,
-          "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-          "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-          CONSTRAINT "RevisionItem_userId_fkey"
-            FOREIGN KEY ("userId") REFERENCES "StudentProfile"("userId")
-            ON DELETE CASCADE ON UPDATE CASCADE,
-          CONSTRAINT "RevisionItem_sessionId_fkey"
-            FOREIGN KEY ("sessionId") REFERENCES "ChatSession"("id")
-            ON DELETE SET NULL ON UPDATE CASCADE,
-          CONSTRAINT "RevisionItem_sourceMessageId_fkey"
-            FOREIGN KEY ("sourceMessageId") REFERENCES "ChatMessage"("id")
-            ON DELETE SET NULL ON UPDATE CASCADE,
-          CONSTRAINT "RevisionItem_collectionId_fkey"
-            FOREIGN KEY ("collectionId") REFERENCES "RevisionCollection"("id")
-            ON DELETE SET NULL ON UPDATE CASCADE
-        );
-      `);
-      await prisma.$executeRawUnsafe(`ALTER TABLE "RevisionCollection" ADD COLUMN IF NOT EXISTS "kind" TEXT NULL;`);
-      await prisma.$executeRawUnsafe(`ALTER TABLE "RevisionCollection" ADD COLUMN IF NOT EXISTS "bundleSummary" TEXT NULL;`);
-      await prisma.$executeRawUnsafe(`ALTER TABLE "RevisionCollection" ADD COLUMN IF NOT EXISTS "featuredItemIds" JSONB NULL;`);
-      await prisma.$executeRawUnsafe(`ALTER TABLE "RevisionCollection" ADD COLUMN IF NOT EXISTS "coverRef" JSONB NULL;`);
-      await prisma.$executeRawUnsafe(`ALTER TABLE "RevisionCollection" ADD COLUMN IF NOT EXISTS "examFocus" BOOLEAN NOT NULL DEFAULT false;`);
-      await prisma.$executeRawUnsafe(`ALTER TABLE "RevisionCollection" ADD COLUMN IF NOT EXISTS "pinned" BOOLEAN NOT NULL DEFAULT false;`);
-      await prisma.$executeRawUnsafe(`ALTER TABLE "RevisionCollection" ADD COLUMN IF NOT EXISTS "sourceSessionId" TEXT NULL;`);
-      await prisma.$executeRawUnsafe(`ALTER TABLE "RevisionItem" ADD COLUMN IF NOT EXISTS "studentNote" TEXT NULL;`);
-      await prisma.$executeRawUnsafe(`ALTER TABLE "RevisionItem" ADD COLUMN IF NOT EXISTS "isPinned" BOOLEAN NOT NULL DEFAULT false;`);
-      await prisma.$executeRawUnsafe(`ALTER TABLE "RevisionItem" ADD COLUMN IF NOT EXISTS "mastery" TEXT NULL;`);
-      await prisma.$executeRawUnsafe(`ALTER TABLE "RevisionItem" ADD COLUMN IF NOT EXISTS "needsPractice" BOOLEAN NOT NULL DEFAULT false;`);
-      await prisma.$executeRawUnsafe(`ALTER TABLE "RevisionItem" ADD COLUMN IF NOT EXISTS "isMistakeBased" BOOLEAN NOT NULL DEFAULT false;`);
-      await prisma.$executeRawUnsafe(`ALTER TABLE "RevisionItem" ADD COLUMN IF NOT EXISTS "saveMode" TEXT NULL;`);
-      await prisma.$executeRawUnsafe(`ALTER TABLE "RevisionItem" ADD COLUMN IF NOT EXISTS "saveType" TEXT NULL;`);
-      await prisma.$executeRawUnsafe(`ALTER TABLE "RevisionItem" ADD COLUMN IF NOT EXISTS "mediaType" TEXT NULL;`);
-      await prisma.$executeRawUnsafe(`ALTER TABLE "RevisionItem" ADD COLUMN IF NOT EXISTS "subtopic" TEXT NULL;`);
-      await prisma.$executeRawUnsafe(`ALTER TABLE "RevisionItem" ADD COLUMN IF NOT EXISTS "sourceType" TEXT NULL;`);
-      await prisma.$executeRawUnsafe(`ALTER TABLE "RevisionItem" ADD COLUMN IF NOT EXISTS "sourceUrl" TEXT NULL;`);
-      await prisma.$executeRawUnsafe(`ALTER TABLE "RevisionItem" ADD COLUMN IF NOT EXISTS "imageUrl" TEXT NULL;`);
-      await prisma.$executeRawUnsafe(`ALTER TABLE "RevisionItem" ADD COLUMN IF NOT EXISTS "audioUrl" TEXT NULL;`);
-      await prisma.$executeRawUnsafe(`ALTER TABLE "RevisionItem" ADD COLUMN IF NOT EXISTS "videoId" TEXT NULL;`);
-      await prisma.$executeRawUnsafe(`ALTER TABLE "RevisionItem" ADD COLUMN IF NOT EXISTS "videoTitle" TEXT NULL;`);
-      await prisma.$executeRawUnsafe(`ALTER TABLE "RevisionItem" ADD COLUMN IF NOT EXISTS "transcriptSnippet" TEXT NULL;`);
-      await prisma.$executeRawUnsafe(`ALTER TABLE "RevisionItem" ADD COLUMN IF NOT EXISTS "lastPracticedAt" TIMESTAMP(3) NULL;`);
-      await prisma.$executeRawUnsafe(`ALTER TABLE "RevisionItem" ADD COLUMN IF NOT EXISTS "practiceCount" INTEGER NOT NULL DEFAULT 0;`);
-      await prisma.$executeRawUnsafe(`ALTER TABLE "RevisionItem" ADD COLUMN IF NOT EXISTS "reviewStatus" TEXT NULL;`);
-      await prisma.$executeRawUnsafe(`ALTER TABLE "RevisionItem" ADD COLUMN IF NOT EXISTS "lastReviewedAt" TIMESTAMP(3) NULL;`);
-      await prisma.$executeRawUnsafe(`ALTER TABLE "RevisionItem" ADD COLUMN IF NOT EXISTS "nextReviewAt" TIMESTAMP(3) NULL;`);
-      await prisma.$executeRawUnsafe(`ALTER TABLE "RevisionItem" ADD COLUMN IF NOT EXISTS "reviewCount" INTEGER NOT NULL DEFAULT 0;`);
-      await prisma.$executeRawUnsafe(`ALTER TABLE "RevisionItem" ADD COLUMN IF NOT EXISTS "successCount" INTEGER NOT NULL DEFAULT 0;`);
-      await prisma.$executeRawUnsafe(`ALTER TABLE "RevisionItem" ADD COLUMN IF NOT EXISTS "struggleCount" INTEGER NOT NULL DEFAULT 0;`);
-      await prisma.$executeRawUnsafe(`ALTER TABLE "RevisionItem" ADD COLUMN IF NOT EXISTS "recentOutcome" TEXT NULL;`);
-      await prisma.$executeRawUnsafe(`ALTER TABLE "RevisionItem" ADD COLUMN IF NOT EXISTS "confidenceTrend" TEXT NULL;`);
-      await prisma.$executeRawUnsafe(`ALTER TABLE "RevisionItem" ADD COLUMN IF NOT EXISTS "examPriority" BOOLEAN NOT NULL DEFAULT false;`);
-      await prisma.$executeRawUnsafe(`ALTER TABLE "RevisionItem" ADD COLUMN IF NOT EXISTS "audioRecapRef" JSONB NULL;`);
-      await prisma.$executeRawUnsafe(`ALTER TABLE "RevisionItem" ADD COLUMN IF NOT EXISTS "featuredRank" INTEGER NULL;`);
-      await prisma.$executeRawUnsafe(`ALTER TABLE "RevisionItem" ADD COLUMN IF NOT EXISTS "bundleRole" TEXT NULL;`);
-      await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "RevisionCollection_userId_updatedAt_idx" ON "RevisionCollection" ("userId", "updatedAt" DESC);`);
-      await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "RevisionCollection_userId_title_idx" ON "RevisionCollection" ("userId", "title");`);
-      await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "RevisionCollection_userId_topic_idx" ON "RevisionCollection" ("userId", "topic");`);
-      await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "RevisionItem_userId_updatedAt_idx" ON "RevisionItem" ("userId", "updatedAt" DESC);`);
-      await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "RevisionItem_userId_collectionId_updatedAt_idx" ON "RevisionItem" ("userId", "collectionId", "updatedAt" DESC);`);
-      await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "RevisionItem_userId_subject_updatedAt_idx" ON "RevisionItem" ("userId", "subject", "updatedAt" DESC);`);
-      await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "RevisionItem_userId_saveType_updatedAt_idx" ON "RevisionItem" ("userId", "saveType", "updatedAt" DESC);`);
-      await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "RevisionItem_sessionId_idx" ON "RevisionItem" ("sessionId");`);
-      await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "RevisionItem_sourceMessageId_idx" ON "RevisionItem" ("sourceMessageId");`);
-      await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "RevisionItem_userId_isPinned_updatedAt_idx" ON "RevisionItem" ("userId", "isPinned", "updatedAt" DESC);`);
-      await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "RevisionItem_userId_reviewStatus_idx" ON "RevisionItem" ("userId", "reviewStatus", "nextReviewAt");`);
-      await ensureRevisionGraphTables();
-    })().catch((error) => {
-      ensureRevisionTablesPromise = null;
-      throw error;
-    });
-  }
-
-  return ensureRevisionTablesPromise;
+  // R5: All tables now managed by Prisma schema. No request-time DDL.
+  return Promise.resolve();
 }
 
 async function findSuggestedCollection(args: {

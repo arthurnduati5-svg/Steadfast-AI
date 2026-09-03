@@ -1,5 +1,5 @@
 import { randomUUID } from 'crypto';
-import prisma from '../utils/prismaClient';
+import prisma from '../lib/prisma';
 import { createRevisionCollection } from './revisionService';
 import type {
   Message,
@@ -29,7 +29,6 @@ import { ensureLearningEffectEventTable } from './learningEffectivenessService';
 import {
   attachConnectedGraphToRevisionItem,
   attachConnectedGraphToRevisionItems,
-  ensureRevisionGraphTables,
   refreshRevisionGraphForUser,
 } from './revisionGraphService';
 
@@ -144,7 +143,6 @@ export type GuidedRevisionSessionProgressResult = {
   saveSuggestion?: string | null;
 };
 
-let ensureLearningTablesPromise: Promise<void> | null = null;
 const DAY_MS = 24 * 60 * 60 * 1000;
 const DEFAULT_QUEUE_LIMIT = 8;
 
@@ -477,61 +475,8 @@ function progressionSummaryForQuality(quality: GuidedResponseQuality): string {
 }
 
 export async function ensureLearningTables() {
-  if (!ensureLearningTablesPromise) {
-    ensureLearningTablesPromise = (async () => {
-      const alterStatements = [
-        `ALTER TABLE "RevisionCollection" ADD COLUMN IF NOT EXISTS "kind" TEXT NULL;`,
-        `ALTER TABLE "RevisionCollection" ADD COLUMN IF NOT EXISTS "bundleSummary" TEXT NULL;`,
-        `ALTER TABLE "RevisionCollection" ADD COLUMN IF NOT EXISTS "featuredItemIds" JSONB NULL;`,
-        `ALTER TABLE "RevisionCollection" ADD COLUMN IF NOT EXISTS "coverRef" JSONB NULL;`,
-        `ALTER TABLE "RevisionCollection" ADD COLUMN IF NOT EXISTS "examFocus" BOOLEAN NOT NULL DEFAULT false;`,
-        `ALTER TABLE "RevisionItem" ADD COLUMN IF NOT EXISTS "studentNote" TEXT NULL;`,
-        `ALTER TABLE "RevisionItem" ADD COLUMN IF NOT EXISTS "isPinned" BOOLEAN NOT NULL DEFAULT false;`,
-        `ALTER TABLE "RevisionItem" ADD COLUMN IF NOT EXISTS "mastery" TEXT NULL;`,
-        `ALTER TABLE "RevisionItem" ADD COLUMN IF NOT EXISTS "needsPractice" BOOLEAN NOT NULL DEFAULT false;`,
-        `ALTER TABLE "RevisionItem" ADD COLUMN IF NOT EXISTS "isMistakeBased" BOOLEAN NOT NULL DEFAULT false;`,
-        `ALTER TABLE "RevisionItem" ADD COLUMN IF NOT EXISTS "saveMode" TEXT NULL;`,
-        `ALTER TABLE "RevisionItem" ADD COLUMN IF NOT EXISTS "lastPracticedAt" TIMESTAMP(3) NULL;`,
-        `ALTER TABLE "RevisionItem" ADD COLUMN IF NOT EXISTS "practiceCount" INTEGER NOT NULL DEFAULT 0;`,
-        `ALTER TABLE "RevisionItem" ADD COLUMN IF NOT EXISTS "reviewStatus" TEXT NULL;`,
-        `ALTER TABLE "RevisionItem" ADD COLUMN IF NOT EXISTS "lastReviewedAt" TIMESTAMP(3) NULL;`,
-        `ALTER TABLE "RevisionItem" ADD COLUMN IF NOT EXISTS "nextReviewAt" TIMESTAMP(3) NULL;`,
-        `ALTER TABLE "RevisionItem" ADD COLUMN IF NOT EXISTS "reviewCount" INTEGER NOT NULL DEFAULT 0;`,
-        `ALTER TABLE "RevisionItem" ADD COLUMN IF NOT EXISTS "successCount" INTEGER NOT NULL DEFAULT 0;`,
-        `ALTER TABLE "RevisionItem" ADD COLUMN IF NOT EXISTS "struggleCount" INTEGER NOT NULL DEFAULT 0;`,
-        `ALTER TABLE "RevisionItem" ADD COLUMN IF NOT EXISTS "recentOutcome" TEXT NULL;`,
-        `ALTER TABLE "RevisionItem" ADD COLUMN IF NOT EXISTS "confidenceTrend" TEXT NULL;`,
-        `ALTER TABLE "RevisionItem" ADD COLUMN IF NOT EXISTS "examPriority" BOOLEAN NOT NULL DEFAULT false;`,
-        `ALTER TABLE "RevisionItem" ADD COLUMN IF NOT EXISTS "audioRecapRef" JSONB NULL;`,
-        `ALTER TABLE "RevisionItem" ADD COLUMN IF NOT EXISTS "featuredRank" INTEGER NULL;`,
-        `ALTER TABLE "RevisionItem" ADD COLUMN IF NOT EXISTS "bundleRole" TEXT NULL;`,
-      ];
-      for (const sql of alterStatements) {
-        await prisma.$executeRawUnsafe(sql);
-      }
-      await prisma.$executeRawUnsafe(`
-        CREATE TABLE IF NOT EXISTS "RevisionReviewEvent" (
-          "id" TEXT PRIMARY KEY,
-          "userId" TEXT NOT NULL,
-          "revisionItemId" TEXT NOT NULL,
-          "sessionId" TEXT NULL,
-          "eventType" TEXT NOT NULL,
-          "outcome" TEXT NULL,
-          "metadata" JSONB NULL,
-          "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
-        );
-      `);
-      await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "RevisionReviewEvent_userId_createdAt_idx" ON "RevisionReviewEvent" ("userId", "createdAt" DESC);`);
-      await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "RevisionReviewEvent_item_createdAt_idx" ON "RevisionReviewEvent" ("revisionItemId", "createdAt" DESC);`);
-      await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "RevisionItem_userId_isPinned_updatedAt_idx" ON "RevisionItem" ("userId", "isPinned", "updatedAt" DESC);`);
-      await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "RevisionItem_userId_reviewStatus_idx" ON "RevisionItem" ("userId", "reviewStatus", "nextReviewAt");`);
-      await ensureRevisionGraphTables();
-    })().catch((error) => {
-      ensureLearningTablesPromise = null;
-      throw error;
-    });
-  }
-  return ensureLearningTablesPromise;
+  // R5: All tables now managed by Prisma schema. No request-time DDL.
+  return Promise.resolve();
 }
 
 function mapRevisionCollectionRow(row: any): RevisionCollection {
@@ -1509,7 +1454,6 @@ export async function startGuidedRevisionSession(
   }
   if (!item) return null;
 
-  const sessionId = randomUUID();
   const blueprint = buildGuidedRevisionBlueprint(item);
   const topic = safeString(item.topic || item.title).trim() || item.title;
   const subject = safeString(item.subject).trim() || null;
@@ -1525,6 +1469,33 @@ export async function startGuidedRevisionSession(
   });
   const masteryLabel = learnerLoopState.topicMastery?.label || item.mastery || null;
 
+  // R5: Persist session to durable DB state
+  const sessionId = randomUUID();
+  const sourceType = args.sourceType || 'item';
+  const examFocus = Boolean(args.examFocus);
+
+  try {
+    await prisma.$executeRawUnsafe(
+      `
+        INSERT INTO "RevisionGuidedSessionRecord" (
+          "id", "userId", "revisionItemId", "sourceType", "examFocus",
+          "status", "currentStage", "version", "createdAt", "updatedAt"
+        ) VALUES ($1, $2, $3, $4, $5, 'active', 'recall', 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+      `,
+      sessionId,
+      args.userId,
+      item.id,
+      sourceType,
+      examFocus
+    );
+  } catch (error: any) {
+    // If insert fails (e.g. concurrent race), abort gracefully
+    if (error?.code === 'P2002' || String(error?.message || '').includes('unique')) {
+      throw new Error('A guided session is already active for this item');
+    }
+    throw error;
+  }
+
   await recordRevisionReviewEvent({
     userId: args.userId,
     itemId: item.id,
@@ -1533,8 +1504,8 @@ export async function startGuidedRevisionSession(
     metadata: {
       mode: 'guided_revision',
       stage: 'recall',
-      sourceType: args.sourceType || 'item',
-      examFocus: Boolean(args.examFocus),
+      sourceType,
+      examFocus,
     },
   });
 
@@ -1565,9 +1536,41 @@ export async function continueGuidedRevisionSession(
   const item = await getOwnedRevisionItem(args.userId, args.itemId);
   if (!item) return null;
 
+  // R5: Load session from durable DB state
+  const [sessionRow] = await prisma.$queryRawUnsafe<any[]>(
+    `
+      SELECT * FROM "RevisionGuidedSessionRecord"
+      WHERE "id" = $1 AND "userId" = $2 AND "status" = 'active'
+      LIMIT 1
+    `,
+    args.sessionId,
+    args.userId
+  );
+
+  if (!sessionRow) {
+    return {
+      sessionId: args.sessionId,
+      itemId: item.id,
+      stage: 'completed',
+      feedbackText: 'This revision session is no longer active. Start a new session when ready.',
+      currentStep: null,
+      masteryLabel: item.mastery || null,
+      progressSummary: 'Session ended.',
+      nextMoveText: 'Open another saved item or start a new guided session.',
+      saveSuggestion: null,
+    };
+  }
+
   const blueprint = buildGuidedRevisionBlueprint(item);
   const validStages: GuidedRevisionSessionStage[] = ['recall', 'quick_check', 'similar', 'wrap', 'completed'];
   const stage = validStages.includes(args.stage) ? args.stage : 'recall';
+
+  // R5: Server-owned stage progression — client stage must equal server currentStage
+  const serverCurrentStage = (sessionRow.currentStage || 'recall') as GuidedRevisionSessionStage;
+  if (stage !== serverCurrentStage) {
+    throw new Error(`Stage mismatch: expected ${serverCurrentStage}, got ${stage}`);
+  }
+
   if (stage === 'completed') {
     return {
       sessionId: args.sessionId,
@@ -1686,6 +1689,8 @@ export async function continueGuidedRevisionSession(
           : 'support_strategy_failed';
   }
 
+  // R5: Demote heuristic-as-mastery — these cannot independently prove correct/mastered
+  // Record as attempt evidence only, not correctness proof
   const masteryState = await recordMasteryEvidenceSignal({
     userId: args.userId,
     signal: {
@@ -1699,6 +1704,7 @@ export async function continueGuidedRevisionSession(
       quality,
       responseText: responseText || null,
       itemId: item.id,
+      isHeuristicEvaluation: true, // Demoted: cannot produce canonical mastery
     },
   }).catch(() => null);
 
@@ -1718,24 +1724,149 @@ export async function continueGuidedRevisionSession(
     }).catch(() => undefined);
   }
 
-  await recordRevisionReviewEvent({
-    userId: args.userId,
-    itemId: item.id,
-    sessionId: args.sessionId,
-    eventType:
-      stage === 'similar'
-        ? 'similar_question_practised'
-        : nextStage === 'completed'
-          ? 'review_completed'
-          : 'quiz_answered',
-    outcome: outcomeByQuality[quality],
-    metadata: {
-      mode: 'guided_revision',
+  // R5: Durable step checkpoint — persist before marking complete
+  const idempotencyKey = `${args.sessionId}:${stage}:${normalizeKey(args.supportAction || 'auto')}:${normalizeKey(responseText || '')}`;
+  const stepStatuses = ['claimed', 'attempt_recorded', 'evidence_committed', 'mastery_applied', 'review_event_recorded', 'completed'];
+  let currentStepStatusIndex = 0;
+
+  try {
+    // claim step
+    await prisma.$executeRawUnsafe(
+      `
+        INSERT INTO "RevisionGuidedStepRecord" (
+          "id", "sessionId", "stage", "idempotencyKey", "status",
+          "createdAt", "updatedAt"
+        ) VALUES ($1, $2, $3, $4, 'claimed', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+        ON CONFLICT ("sessionId", "idempotencyKey") DO NOTHING
+      `,
+      randomUUID(),
+      args.sessionId,
+      stage,
+      idempotencyKey
+    );
+    currentStepStatusIndex = 1; // attempt_recorded
+
+    // evidence_committed
+    await prisma.$executeRawUnsafe(
+      `
+        UPDATE "RevisionGuidedStepRecord"
+        SET "status" = 'attempt_recorded',
+            "safeResponseSignal" = $3,
+            "updatedAt" = CURRENT_TIMESTAMP
+        WHERE "sessionId" = $1 AND "stage" = $2
+      `,
+      args.sessionId,
+      stage,
+      evidenceType
+    );
+    currentStepStatusIndex = 2;
+
+    // mastery_applied
+    await prisma.$executeRawUnsafe(
+      `
+        UPDATE "RevisionGuidedStepRecord"
+        SET "status" = 'evidence_committed',
+            "evidenceId" = $3,
+            "masteryApplied" = $4,
+            "updatedAt" = CURRENT_TIMESTAMP
+        WHERE "sessionId" = $1 AND "stage" = $2
+      `,
+      args.sessionId,
+      stage,
+      masteryState?.label || null,
+      Boolean(masteryState)
+    );
+    currentStepStatusIndex = 3;
+
+    // review_event_recorded
+    await prisma.$executeRawUnsafe(
+      `
+        UPDATE "RevisionGuidedStepRecord"
+        SET "status" = 'mastery_applied',
+            "result" = CAST($3 AS JSONB),
+            "updatedAt" = CURRENT_TIMESTAMP
+        WHERE "sessionId" = $1 AND "stage" = $2
+      `,
+      args.sessionId,
+      stage,
+      JSON.stringify({ quality, nextStage, outcome: outcomeByQuality[quality] })
+    );
+    currentStepStatusIndex = 4;
+
+    await recordRevisionReviewEvent({
+      userId: args.userId,
+      itemId: item.id,
+      sessionId: args.sessionId,
+      eventType:
+        stage === 'similar'
+          ? 'similar_question_practised'
+          : nextStage === 'completed'
+            ? 'review_completed'
+            : 'quiz_answered',
+      outcome: outcomeByQuality[quality],
+      metadata: {
+        mode: 'guided_revision',
+        stage,
+        nextStage,
+        quality,
+      },
+    });
+    currentStepStatusIndex = 5;
+
+    // completed
+    await prisma.$executeRawUnsafe(
+      `
+        UPDATE "RevisionGuidedStepRecord"
+        SET "status" = 'completed', "completedAt" = CURRENT_TIMESTAMP, "updatedAt" = CURRENT_TIMESTAMP
+        WHERE "sessionId" = $1 AND "stage" = $2
+      `,
+      args.sessionId,
+      stage
+    );
+
+    // CAS: advance session version atomically
+    const updated = await prisma.$executeRawUnsafe(
+      `
+        UPDATE "RevisionGuidedSessionRecord"
+        SET "currentStage" = $3,
+            "lastCompletedStage" = $2,
+            "version" = "version" + 1,
+            "status" = CASE WHEN $3 = 'completed' THEN 'completed' ELSE "status" END,
+            "completedAt" = CASE WHEN $3 = 'completed' THEN CURRENT_TIMESTAMP ELSE "completedAt" END,
+            "updatedAt" = CURRENT_TIMESTAMP
+        WHERE "id" = $1
+          AND "version" = $4
+          AND "status" = 'active'
+      `,
+      args.sessionId,
       stage,
       nextStage,
-      quality,
-    },
-  });
+      Number(sessionRow.version || 1)
+    );
+
+    if (updated === 0) {
+      // CAS failed — concurrent modification detected
+      throw new Error('Session version conflict: another update modified this session concurrently');
+    }
+  } catch (error: any) {
+    // R5: Partial-failure checkpoint — record where we stopped for recovery
+    try {
+      const stepStatus = stepStatuses[currentStepStatusIndex] || 'claimed';
+      await prisma.$executeRawUnsafe(
+        `
+          UPDATE "RevisionGuidedStepRecord"
+          SET "status" = $3, "updatedAt" = CURRENT_TIMESTAMP
+          WHERE "sessionId" = $1 AND "stage" = $2
+        `,
+        args.sessionId,
+        stage,
+        stepStatus
+      );
+    } catch {
+      // Best-effort recovery log
+    }
+    throw error;
+  }
 
   const learnerLoopState = await buildLearnerLoopState({
     userId: args.userId,
