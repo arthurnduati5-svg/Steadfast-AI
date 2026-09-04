@@ -20,7 +20,7 @@ function sanitizeTitle(value: string): string {
   return clean.slice(0, 90) || 'Saved revision note';
 }
 
-// R5 Defect L: Validate curriculum references against canonical data
+// R5 Final: Validate curriculum references against canonical hierarchy LearningObjective -> Skill -> Topic -> Version
 async function validateCurriculumReferences(args: {
   curriculumObjectiveId?: string | null;
   curriculumTopicId?: string | null;
@@ -30,40 +30,76 @@ async function validateCurriculumReferences(args: {
   const topicId = safeString(args.curriculumTopicId).trim();
   const skillId = safeString(args.curriculumSkillId).trim();
 
-  // Manual items with NO canonical references are allowed
   if (!objectiveId && !topicId && !skillId) {
     return { valid: true };
   }
 
-  // Validate topic exists
-  if (topicId) {
-    const [row] = await prisma.$queryRawUnsafe<any[]>(
-      `SELECT "id" FROM "CurriculumTopicRecord" WHERE "id" = $1 LIMIT 1`,
-      topicId
+  if (objectiveId) {
+    const [obj] = await prisma.$queryRawUnsafe<any[]>(
+      `SELECT "id", "curriculumSkillId" FROM "LearningObjectiveRecord" WHERE "id" = $1 LIMIT 1`,
+      objectiveId
     );
-    if (!row) return { valid: false, reason: `Invalid curriculumTopicId: ${topicId}` };
+    if (!obj) return { valid: false, reason: `Invalid curriculumObjectiveId: ${objectiveId}` };
+    const resolvedSkillId = safeString(obj.curriculumSkillId).trim();
+    const [skill] = await prisma.$queryRawUnsafe<any[]>(
+      `SELECT "id", "curriculumTopicId" FROM "CurriculumSkillRecord" WHERE "id" = $1 LIMIT 1`,
+      resolvedSkillId
+    );
+    if (!skill) return { valid: false, reason: `Invalid curriculumSkillId: ${resolvedSkillId} for objective ${objectiveId}` };
+    const resolvedTopicId = safeString(skill.curriculumTopicId).trim();
+    const [topic] = await prisma.$queryRawUnsafe<any[]>(
+      `SELECT "id", "curriculumVersionId" FROM "CurriculumTopicRecord" WHERE "id" = $1 LIMIT 1`,
+      resolvedTopicId
+    );
+    if (!topic) return { valid: false, reason: `Invalid curriculumTopicId: ${resolvedTopicId} for skill ${resolvedSkillId}` };
+    const versionId = safeString(topic.curriculumVersionId).trim();
+    const [version] = await prisma.$queryRawUnsafe<any[]>(
+      `SELECT "id" FROM "CurriculumVersionRecord" WHERE "id" = $1 LIMIT 1`,
+      versionId
+    );
+    if (!version) return { valid: false, reason: `Invalid curriculumVersionId: ${versionId} for topic ${resolvedTopicId}` };
+    if (skillId && skillId !== resolvedSkillId) return { valid: false, reason: `curriculumSkillId ${skillId} does not match objective's skill ${resolvedSkillId}` };
+    if (topicId && topicId !== resolvedTopicId) return { valid: false, reason: `curriculumTopicId ${topicId} does not match skill's topic ${resolvedTopicId}` };
+    return { valid: true };
   }
 
-  // Validate skill exists
   if (skillId) {
-    const [row] = await prisma.$queryRawUnsafe<any[]>(
-      `SELECT "id" FROM "CurriculumSkillRecord" WHERE "id" = $1 LIMIT 1`,
+    const [skill] = await prisma.$queryRawUnsafe<any[]>(
+      `SELECT "id", "curriculumTopicId" FROM "CurriculumSkillRecord" WHERE "id" = $1 LIMIT 1`,
       skillId
     );
-    if (!row) return { valid: false, reason: `Invalid curriculumSkillId: ${skillId}` };
+    if (!skill) return { valid: false, reason: `Invalid curriculumSkillId: ${skillId}` };
+    const resolvedTopicId = safeString(skill.curriculumTopicId).trim();
+    if (topicId && topicId !== resolvedTopicId) return { valid: false, reason: `curriculumTopicId ${topicId} does not match skill's topic ${resolvedTopicId}` };
+    const [topic] = await prisma.$queryRawUnsafe<any[]>(
+      `SELECT "id", "curriculumVersionId" FROM "CurriculumTopicRecord" WHERE "id" = $1 LIMIT 1`,
+      resolvedTopicId
+    );
+    if (!topic) return { valid: false, reason: `Invalid curriculumTopicId: ${resolvedTopicId} for skill ${skillId}` };
+    const versionId = safeString(topic.curriculumVersionId).trim();
+    const [version] = await prisma.$queryRawUnsafe<any[]>(
+      `SELECT "id" FROM "CurriculumVersionRecord" WHERE "id" = $1 LIMIT 1`,
+      versionId
+    );
+    if (!version) return { valid: false, reason: `Invalid curriculumVersionId: ${versionId} for topic ${resolvedTopicId}` };
+    return { valid: true };
   }
 
-  // Validate skill belongs to topic
-  if (skillId && topicId) {
-    const [rel] = await prisma.$queryRawUnsafe<any[]>(
-      `SELECT "id" FROM "CurriculumSkillRecord" WHERE "id" = $1 AND "curriculumTopicId" = $2 LIMIT 1`,
-      skillId,
+  if (topicId) {
+    const [topic] = await prisma.$queryRawUnsafe<any[]>(
+      `SELECT "id", "curriculumVersionId" FROM "CurriculumTopicRecord" WHERE "id" = $1 LIMIT 1`,
       topicId
     );
-    if (!rel) return { valid: false, reason: `Skill ${skillId} does not belong to topic ${topicId}` };
+    if (!topic) return { valid: false, reason: `Invalid curriculumTopicId: ${topicId}` };
+    const versionId = safeString(topic.curriculumVersionId).trim();
+    const [version] = await prisma.$queryRawUnsafe<any[]>(
+      `SELECT "id" FROM "CurriculumVersionRecord" WHERE "id" = $1 LIMIT 1`,
+      versionId
+    );
+    if (!version) return { valid: false, reason: `Invalid curriculumVersionId: ${versionId} for topic ${topicId}` };
+    return { valid: true };
   }
 
-  // objectiveId is stored but no canonical objective table exists yet — accept if present
   return { valid: true };
 }
 
@@ -320,6 +356,9 @@ function mapRevisionItemRow(row: any): RevisionItem {
     sourceRefs: [],
     mediaRefs: [],
     metadata,
+    curriculumObjectiveId: safeString(row.curriculumObjectiveId).trim() || null,
+    curriculumTopicId: safeString(row.curriculumTopicId).trim() || null,
+    curriculumSkillId: safeString(row.curriculumSkillId).trim() || null,
     createdAt: new Date(row.createdAt).toISOString(),
     updatedAt: new Date(row.updatedAt).toISOString(),
   };

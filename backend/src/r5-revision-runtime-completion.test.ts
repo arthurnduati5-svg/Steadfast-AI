@@ -429,7 +429,7 @@ describe('R5: Revision Runtime Completion — Real PostgreSQL', () => {
 
       // Stage 1: recall
       const r1 = await continueGuidedRevisionSession({
-        userId, sessionId: start!.sessionId, itemId, stage: 'recall',
+        userId, schoolId: 'r5_test_school', sessionId: start!.sessionId, itemId, stage: 'recall',
         responseText: 'I remember that algebra uses variables to represent unknown values in equations.',
       });
       expect(r1).toBeTruthy();
@@ -437,7 +437,7 @@ describe('R5: Revision Runtime Completion — Real PostgreSQL', () => {
 
       // Stage 2: quick_check
       const r2 = await continueGuidedRevisionSession({
-        userId, sessionId: start!.sessionId, itemId, stage: 'quick_check',
+        userId, schoolId: 'r5_test_school', sessionId: start!.sessionId, itemId, stage: 'quick_check',
         responseText: 'The key rule is to isolate the variable on one side of the equation.',
       });
       expect(r2).toBeTruthy();
@@ -445,7 +445,7 @@ describe('R5: Revision Runtime Completion — Real PostgreSQL', () => {
 
       // Stage 3: similar
       const r3 = await continueGuidedRevisionSession({
-        userId, sessionId: start!.sessionId, itemId, stage: 'similar',
+        userId, schoolId: 'r5_test_school', sessionId: start!.sessionId, itemId, stage: 'similar',
         responseText: 'For 2x + 3 = 7, I would subtract 3 from both sides, then divide by 2 to get x = 2.',
       });
       expect(r3).toBeTruthy();
@@ -453,7 +453,7 @@ describe('R5: Revision Runtime Completion — Real PostgreSQL', () => {
 
       // Stage 4: wrap
       const r4 = await continueGuidedRevisionSession({
-        userId, sessionId: start!.sessionId, itemId, stage: 'wrap',
+        userId, schoolId: 'r5_test_school', sessionId: start!.sessionId, itemId, stage: 'wrap',
         responseText: 'Remember to always isolate the variable step by step.',
       });
       expect(r4).toBeTruthy();
@@ -486,7 +486,7 @@ describe('R5: Revision Runtime Completion — Real PostgreSQL', () => {
 
       // First stage
       await continueGuidedRevisionSession({
-        userId, sessionId: start!.sessionId, itemId, stage: 'recall',
+        userId, schoolId: 'r5_test_school', sessionId: start!.sessionId, itemId, stage: 'recall',
         responseText: 'I recall the basic concepts.',
       });
 
@@ -503,7 +503,7 @@ describe('R5: Revision Runtime Completion — Real PostgreSQL', () => {
 
       // Continue from persisted stage (quick_check)
       const r2 = await continue2({
-        userId, sessionId: start!.sessionId, itemId, stage: 'quick_check',
+        userId, schoolId: 'r5_test_school', sessionId: start!.sessionId, itemId, stage: 'quick_check',
         responseText: 'The key rule is important.',
       });
       expect(r2).toBeTruthy();
@@ -590,10 +590,10 @@ describe('R5: Revision Runtime Completion — Real PostgreSQL', () => {
       const start = await startGuidedRevisionSession({ userId, itemId });
 
       // Complete all stages
-      await continueGuidedRevisionSession({ userId, sessionId: start!.sessionId, itemId, stage: 'recall', responseText: 'recall' });
-      await continueGuidedRevisionSession({ userId, sessionId: start!.sessionId, itemId, stage: 'quick_check', responseText: 'check' });
-      await continueGuidedRevisionSession({ userId, sessionId: start!.sessionId, itemId, stage: 'similar', responseText: 'similar' });
-      await continueGuidedRevisionSession({ userId, sessionId: start!.sessionId, itemId, stage: 'wrap', responseText: 'wrap' });
+      await continueGuidedRevisionSession({ userId, schoolId: 'r5_test_school', sessionId: start!.sessionId, itemId, stage: 'recall', responseText: 'recall' });
+      await continueGuidedRevisionSession({ userId, schoolId: 'r5_test_school', sessionId: start!.sessionId, itemId, stage: 'quick_check', responseText: 'check' });
+      await continueGuidedRevisionSession({ userId, schoolId: 'r5_test_school', sessionId: start!.sessionId, itemId, stage: 'similar', responseText: 'similar' });
+      await continueGuidedRevisionSession({ userId, schoolId: 'r5_test_school', sessionId: start!.sessionId, itemId, stage: 'wrap', responseText: 'wrap' });
 
       // Retry completed session
       const retry = await continueGuidedRevisionSession({

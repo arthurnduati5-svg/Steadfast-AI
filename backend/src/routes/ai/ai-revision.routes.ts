@@ -343,9 +343,15 @@ router.post('/revision-mode/start', schoolAuthMiddleware, async (req: AuthedRequ
 });
 
 // ── POST /revision/guided-session/start ──
+// R5 Final: allowlisted fields only — client must not provide schoolId, evidenceId, etc.
 router.post('/revision/guided-session/start', schoolAuthMiddleware, async (req: AuthedRequest, res) => {
   try {
-    const session = await startGuidedRevisionSession({ ...req.body, userId: req.user!.id });
+    const body: any = req.body || {};
+    const itemId = typeof body.itemId === 'string' ? body.itemId.trim() : undefined;
+    const collectionId = typeof body.collectionId === 'string' ? body.collectionId.trim() : undefined;
+    const sourceType = body.sourceType === 'collection' || body.sourceType === 'queue' ? body.sourceType : 'item';
+    const examFocus = Boolean(body.examFocus);
+    const session = await startGuidedRevisionSession({ userId: req.user!.id, itemId, collectionId, sourceType, examFocus });
     res.status(200).send(session);
   } catch (error) {
     logger.error({ err: error }, '[POST /revision/guided-session/start] Failed');
@@ -354,9 +360,24 @@ router.post('/revision/guided-session/start', schoolAuthMiddleware, async (req: 
 });
 
 // ── POST /revision/guided-session/:sessionId/respond ──
+// R5 Final: verified school context + allowlisted fields; trusted evaluation never from client
 router.post('/revision/guided-session/:sessionId/respond', schoolAuthMiddleware, async (req: AuthedRequest, res) => {
   try {
-    const result = await continueGuidedRevisionSession({ ...req.body, userId: req.user!.id, sessionId: req.params.sessionId });
+    const body: any = req.body || {};
+    const itemId = typeof body.itemId === 'string' ? body.itemId.trim() : '';
+    const stage = typeof body.stage === 'string' ? body.stage.trim() : '';
+    const responseText = typeof body.responseText === 'string' ? body.responseText : typeof body.response === 'string' ? body.response : '';
+    const supportAction = typeof body.supportAction === 'string' ? body.supportAction.trim() : undefined;
+    const verifiedSchoolId = (req as any).schoolId || (req.user as any)?.schoolId || '';
+    const result = await continueGuidedRevisionSession({
+      userId: req.user!.id,
+      schoolId: verifiedSchoolId,
+      sessionId: req.params.sessionId,
+      itemId,
+      stage: stage as any,
+      responseText,
+      supportAction: supportAction as any,
+    });
     res.status(200).send(result);
   } catch (error) {
     logger.error({ err: error }, '[POST /revision/guided-session/:sessionId/respond] Failed');

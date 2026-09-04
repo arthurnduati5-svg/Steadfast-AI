@@ -784,6 +784,9 @@ export const RevisionItemSchema = z.object({
   connectedGraph: RevisionConnectedNoteGraphSchema.nullable().optional(),
   reflection: MetacognitiveStateSnapshotSchema.nullable().optional(),
   metadata: z.record(z.any()).nullable().optional(),
+  curriculumObjectiveId: z.string().nullable().optional(),
+  curriculumTopicId: z.string().nullable().optional(),
+  curriculumSkillId: z.string().nullable().optional(),
   createdAt: z.string(),
   updatedAt: z.string(),
 });
