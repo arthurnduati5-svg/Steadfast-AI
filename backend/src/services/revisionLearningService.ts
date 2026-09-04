@@ -1,4 +1,4 @@
-import { randomUUID } from 'crypto';
+import { randomUUID, createHash } from 'crypto';
 import prisma from '../lib/prisma';
 import { createRevisionCollection } from './revisionService';
 import type {
@@ -22,7 +22,6 @@ import type {
   RevisionMastery,
   WeakTopicRecoveryState,
 } from '../lib/types';
-import { recordMasteryEvidenceSignal } from './masteryInferenceService';
 import { buildLearnerLoopState } from './learnerLoopService';
 import { ensureMetacognitionTables } from './metacognitionService';
 import { ensureLearningEffectEventTable } from './learningEffectivenessService';
@@ -1536,11 +1535,11 @@ export async function continueGuidedRevisionSession(
   const item = await getOwnedRevisionItem(args.userId, args.itemId);
   if (!item) return null;
 
-  // R5: Load session from durable DB state
+  // R5: Load session from durable DB state — regardless of active/completed status
   const [sessionRow] = await prisma.$queryRawUnsafe<any[]>(
     `
       SELECT * FROM "RevisionGuidedSessionRecord"
-      WHERE "id" = $1 AND "userId" = $2 AND "status" = 'active'
+      WHERE "id" = $1 AND "userId" = $2
       LIMIT 1
     `,
     args.sessionId,
@@ -1559,6 +1558,26 @@ export async function continueGuidedRevisionSession(
       nextMoveText: 'Open another saved item or start a new guided session.',
       saveSuggestion: null,
     };
+  }
+
+  // R5 Defect J: Completed session returns persisted result for identical retry
+  if (sessionRow.status === 'completed') {
+    return {
+      sessionId: args.sessionId,
+      itemId: item.id,
+      stage: 'completed',
+      feedbackText: 'This revision session is already complete. Choose another item when you are ready.',
+      currentStep: null,
+      masteryLabel: item.mastery || null,
+      progressSummary: 'Session completed.',
+      nextMoveText: 'Open another saved item or run one short practice.',
+      saveSuggestion: 'Save one short reminder if you want to revisit this later.',
+    };
+  }
+
+  // R5 Defect B: Verify session belongs to the claimed revision item
+  if (sessionRow.revisionItemId !== args.itemId) {
+    throw new Error('Session does not belong to this revision item');
   }
 
   const blueprint = buildGuidedRevisionBlueprint(item);
@@ -1642,11 +1661,6 @@ export async function continueGuidedRevisionSession(
       ? 'partial'
       : evaluateGuidedResponse(responseText, anchors);
   const nextStage = nextGuidedStage(stage);
-  const outcomeByQuality: Record<GuidedResponseQuality, RevisionEventOutcome> = {
-    strong: 'correct',
-    partial: 'partial',
-    struggling: 'struggled',
-  };
 
   let evidenceType:
     | 'attempted_after_prompt'
@@ -1689,33 +1703,12 @@ export async function continueGuidedRevisionSession(
           : 'support_strategy_failed';
   }
 
-  // R5: Demote heuristic-as-mastery — these cannot independently prove correct/mastered
-  // Record as attempt evidence only, not correctness proof
-  const masteryState = await recordMasteryEvidenceSignal({
-    userId: args.userId,
-    signal: {
-      topic,
-      subject,
-      evidenceType,
-    },
-    metadata: {
-      mode: 'guided_revision',
-      stage,
-      quality,
-      responseText: responseText || null,
-      itemId: item.id,
-      isHeuristicEvaluation: true, // Demoted: cannot produce canonical mastery
-    },
-  }).catch(() => null);
-
-  const masteryLabel = masteryState?.label || item.mastery || null;
-  if (masteryLabel && masteryLabel !== item.mastery) {
-    await updateRevisionItem({
-      userId: args.userId,
-      itemId: item.id,
-      patch: { mastery: masteryLabel },
-    }).catch(() => undefined);
-  }
+  // R5 Defect C: Heuristic quality is PEDAGOGICAL ONLY — it determines feedback/hints, NOT mastery.
+  // No canonical mastery mutation from heuristic text analysis.
+  // The quality variable drives: feedback wording, hint level, next pedagogical scaffold.
+  const masteryLabel = item.mastery || null;
+  // R5 Defect C: Heuristic does NOT update mastery — only feedback/scaffolding.
+  // masteryLabel is read-only from existing item state.
   if (quality === 'struggling') {
     await updateRevisionItem({
       userId: args.userId,
@@ -1724,107 +1717,166 @@ export async function continueGuidedRevisionSession(
     }).catch(() => undefined);
   }
 
-  // R5: Durable step checkpoint — persist before marking complete
-  const idempotencyKey = `${args.sessionId}:${stage}:${normalizeKey(args.supportAction || 'auto')}:${normalizeKey(responseText || '')}`;
+  // R5 Defect H: SHA-256 idempotency key — never use raw learner response as identity
+  const rawFingerprint = `${args.sessionId}:${stage}:${args.supportAction || 'auto'}:${responseText || ''}`;
+  const idempotencyKey = createHash('sha256').update(rawFingerprint).digest('hex');
+
+  // R5 Defect I: Load existing step checkpoint before executing downstream work
+  const [existingStep] = await prisma.$queryRawUnsafe<any[]>(
+    `
+      SELECT * FROM "RevisionGuidedStepRecord"
+      WHERE "sessionId" = $1 AND "idempotencyKey" = $2
+      LIMIT 1
+    `,
+    args.sessionId,
+    idempotencyKey
+  );
+
+  // R5 Defect I: If step already completed, return persisted result — do not restart
+  if (existingStep && existingStep.status === 'completed' && existingStep.result) {
+    const persistedResult = parseJsonValue<any>(existingStep.result, null);
+    return {
+      sessionId: args.sessionId,
+      itemId: item.id,
+      stage: nextStage,
+      feedbackText: feedbackForStage({ stage, quality }),
+      currentStep: buildGuidedStepFromBlueprint(nextStage, blueprint),
+      masteryLabel: item.mastery || null,
+      weakTopicRecovery: null,
+      progressSummary: progressionSummaryForQuality(quality),
+      nextMoveText:
+        nextStage === 'completed'
+          ? 'Choose one next item to keep revision momentum.'
+          : buildGuidedStepFromBlueprint(nextStage, blueprint)?.helperText || 'Continue to the next guided step.',
+      saveSuggestion:
+        nextStage === 'wrap' || nextStage === 'completed'
+          ? 'Save one short reminder if this correction helped.'
+          : null,
+    };
+  }
+
+  // R5 Defect I: Resume from checkpoint — skip already-completed phases
+  const evidenceId = existingStep?.evidenceId || null;
+  const masteryApplied = existingStep?.masteryApplied || false;
   const stepStatuses = ['claimed', 'attempt_recorded', 'evidence_committed', 'mastery_applied', 'review_event_recorded', 'completed'];
   let currentStepStatusIndex = 0;
 
+  // Determine where to resume from
+  if (existingStep) {
+    const resumeFrom = stepStatuses.indexOf(existingStep.status);
+    if (resumeFrom >= 0) currentStepStatusIndex = resumeFrom;
+  }
+
   try {
-    // claim step
-    await prisma.$executeRawUnsafe(
-      `
-        INSERT INTO "RevisionGuidedStepRecord" (
-          "id", "sessionId", "stage", "idempotencyKey", "status",
-          "createdAt", "updatedAt"
-        ) VALUES ($1, $2, $3, $4, 'claimed', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-        ON CONFLICT ("sessionId", "idempotencyKey") DO NOTHING
-      `,
-      randomUUID(),
-      args.sessionId,
-      stage,
-      idempotencyKey
-    );
-    currentStepStatusIndex = 1; // attempt_recorded
-
-    // evidence_committed
-    await prisma.$executeRawUnsafe(
-      `
-        UPDATE "RevisionGuidedStepRecord"
-        SET "status" = 'attempt_recorded',
-            "safeResponseSignal" = $3,
-            "updatedAt" = CURRENT_TIMESTAMP
-        WHERE "sessionId" = $1 AND "stage" = $2
-      `,
-      args.sessionId,
-      stage,
-      evidenceType
-    );
-    currentStepStatusIndex = 2;
-
-    // mastery_applied
-    await prisma.$executeRawUnsafe(
-      `
-        UPDATE "RevisionGuidedStepRecord"
-        SET "status" = 'evidence_committed',
-            "evidenceId" = $3,
-            "masteryApplied" = $4,
-            "updatedAt" = CURRENT_TIMESTAMP
-        WHERE "sessionId" = $1 AND "stage" = $2
-      `,
-      args.sessionId,
-      stage,
-      masteryState?.label || null,
-      Boolean(masteryState)
-    );
-    currentStepStatusIndex = 3;
-
-    // review_event_recorded
-    await prisma.$executeRawUnsafe(
-      `
-        UPDATE "RevisionGuidedStepRecord"
-        SET "status" = 'mastery_applied',
-            "result" = CAST($3 AS JSONB),
-            "updatedAt" = CURRENT_TIMESTAMP
-        WHERE "sessionId" = $1 AND "stage" = $2
-      `,
-      args.sessionId,
-      stage,
-      JSON.stringify({ quality, nextStage, outcome: outcomeByQuality[quality] })
-    );
-    currentStepStatusIndex = 4;
-
-    await recordRevisionReviewEvent({
-      userId: args.userId,
-      itemId: item.id,
-      sessionId: args.sessionId,
-      eventType:
-        stage === 'similar'
-          ? 'similar_question_practised'
-          : nextStage === 'completed'
-            ? 'review_completed'
-            : 'quiz_answered',
-      outcome: outcomeByQuality[quality],
-      metadata: {
-        mode: 'guided_revision',
+    // R5 Defect G: ATOMIC CAS CLAIM — must happen BEFORE any downstream mutations
+    if (currentStepStatusIndex === 0) {
+      await prisma.$executeRawUnsafe(
+        `
+          INSERT INTO "RevisionGuidedStepRecord" (
+            "id", "sessionId", "stage", "idempotencyKey", "status",
+            "createdAt", "updatedAt"
+          ) VALUES ($1, $2, $3, $4, 'claimed', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+          ON CONFLICT ("sessionId", "idempotencyKey") DO NOTHING
+        `,
+        randomUUID(),
+        args.sessionId,
         stage,
-        nextStage,
-        quality,
-      },
-    });
-    currentStepStatusIndex = 5;
+        idempotencyKey
+      );
+      currentStepStatusIndex = 1; // attempt_recorded
+    }
+
+    // attempt_recorded
+    if (currentStepStatusIndex <= 1) {
+      await prisma.$executeRawUnsafe(
+        `
+          UPDATE "RevisionGuidedStepRecord"
+          SET "status" = 'attempt_recorded',
+              "safeResponseSignal" = $3,
+              "updatedAt" = CURRENT_TIMESTAMP
+          WHERE "sessionId" = $1 AND "idempotencyKey" = $2
+        `,
+        args.sessionId,
+        idempotencyKey,
+        evidenceType
+      );
+      currentStepStatusIndex = 2;
+    }
+
+    // evidence_committed (R5 Defect C: no canonical evidence from heuristic — record participation only)
+    if (currentStepStatusIndex <= 2) {
+      await prisma.$executeRawUnsafe(
+        `
+          UPDATE "RevisionGuidedStepRecord"
+          SET "status" = 'evidence_committed',
+              "evidenceId" = $3,
+              "masteryApplied" = $4,
+              "updatedAt" = CURRENT_TIMESTAMP
+          WHERE "sessionId" = $1 AND "idempotencyKey" = $2
+        `,
+        args.sessionId,
+        idempotencyKey,
+        evidenceId || null,
+        false // R5 Defect C: heuristic never produces canonical mastery
+      );
+      currentStepStatusIndex = 3;
+    }
+
+    // mastery_applied (R5 Defect E: no canonical mastery from heuristic)
+    if (currentStepStatusIndex <= 3) {
+      await prisma.$executeRawUnsafe(
+        `
+          UPDATE "RevisionGuidedStepRecord"
+          SET "status" = 'mastery_applied',
+              "result" = CAST($3 AS JSONB),
+              "updatedAt" = CURRENT_TIMESTAMP
+          WHERE "sessionId" = $1 AND "idempotencyKey" = $2
+        `,
+        args.sessionId,
+        idempotencyKey,
+        JSON.stringify({ quality, nextStage, outcome: 'interaction' }) // R5 Defect K: server-owned — no positive scheduling from heuristic
+      );
+      currentStepStatusIndex = 4;
+    }
+
+    // R5 Defect K: Review event — use 'interaction' for untrusted heuristic, NOT positive scheduling
+    if (currentStepStatusIndex <= 4) {
+      await recordRevisionReviewEvent({
+        userId: args.userId,
+        itemId: item.id,
+        sessionId: args.sessionId,
+        eventType:
+          stage === 'similar'
+            ? 'similar_question_practised'
+            : nextStage === 'completed'
+              ? 'review_completed'
+              : 'quiz_answered',
+        outcome: null, // R5 Defect K: heuristic does not produce trusted scheduling outcomes
+        metadata: {
+          mode: 'guided_revision',
+          stage,
+          nextStage,
+          quality,
+          isHeuristicEvaluation: true,
+        },
+      });
+      currentStepStatusIndex = 5;
+    }
 
     // completed
-    await prisma.$executeRawUnsafe(
-      `
-        UPDATE "RevisionGuidedStepRecord"
-        SET "status" = 'completed', "completedAt" = CURRENT_TIMESTAMP, "updatedAt" = CURRENT_TIMESTAMP
-        WHERE "sessionId" = $1 AND "stage" = $2
-      `,
-      args.sessionId,
-      stage
-    );
+    if (currentStepStatusIndex <= 5) {
+      await prisma.$executeRawUnsafe(
+        `
+          UPDATE "RevisionGuidedStepRecord"
+          SET "status" = 'completed', "completedAt" = CURRENT_TIMESTAMP, "updatedAt" = CURRENT_TIMESTAMP
+          WHERE "sessionId" = $1 AND "idempotencyKey" = $2
+        `,
+        args.sessionId,
+        idempotencyKey
+      );
+    }
 
-    // CAS: advance session version atomically
+    // R5 Defect G: CAS session advance — AFTER all step mutations succeed
     const updated = await prisma.$executeRawUnsafe(
       `
         UPDATE "RevisionGuidedSessionRecord"
@@ -1845,7 +1897,6 @@ export async function continueGuidedRevisionSession(
     );
 
     if (updated === 0) {
-      // CAS failed — concurrent modification detected
       throw new Error('Session version conflict: another update modified this session concurrently');
     }
   } catch (error: any) {
@@ -1856,10 +1907,10 @@ export async function continueGuidedRevisionSession(
         `
           UPDATE "RevisionGuidedStepRecord"
           SET "status" = $3, "updatedAt" = CURRENT_TIMESTAMP
-          WHERE "sessionId" = $1 AND "stage" = $2
+          WHERE "sessionId" = $1 AND "idempotencyKey" = $2
         `,
         args.sessionId,
-        stage,
+        idempotencyKey,
         stepStatus
       );
     } catch {

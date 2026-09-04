@@ -20,6 +20,53 @@ function sanitizeTitle(value: string): string {
   return clean.slice(0, 90) || 'Saved revision note';
 }
 
+// R5 Defect L: Validate curriculum references against canonical data
+async function validateCurriculumReferences(args: {
+  curriculumObjectiveId?: string | null;
+  curriculumTopicId?: string | null;
+  curriculumSkillId?: string | null;
+}): Promise<{ valid: boolean; reason?: string }> {
+  const objectiveId = safeString(args.curriculumObjectiveId).trim();
+  const topicId = safeString(args.curriculumTopicId).trim();
+  const skillId = safeString(args.curriculumSkillId).trim();
+
+  // Manual items with NO canonical references are allowed
+  if (!objectiveId && !topicId && !skillId) {
+    return { valid: true };
+  }
+
+  // Validate topic exists
+  if (topicId) {
+    const [row] = await prisma.$queryRawUnsafe<any[]>(
+      `SELECT "id" FROM "CurriculumTopicRecord" WHERE "id" = $1 LIMIT 1`,
+      topicId
+    );
+    if (!row) return { valid: false, reason: `Invalid curriculumTopicId: ${topicId}` };
+  }
+
+  // Validate skill exists
+  if (skillId) {
+    const [row] = await prisma.$queryRawUnsafe<any[]>(
+      `SELECT "id" FROM "CurriculumSkillRecord" WHERE "id" = $1 LIMIT 1`,
+      skillId
+    );
+    if (!row) return { valid: false, reason: `Invalid curriculumSkillId: ${skillId}` };
+  }
+
+  // Validate skill belongs to topic
+  if (skillId && topicId) {
+    const [rel] = await prisma.$queryRawUnsafe<any[]>(
+      `SELECT "id" FROM "CurriculumSkillRecord" WHERE "id" = $1 AND "curriculumTopicId" = $2 LIMIT 1`,
+      skillId,
+      topicId
+    );
+    if (!rel) return { valid: false, reason: `Skill ${skillId} does not belong to topic ${topicId}` };
+  }
+
+  // objectiveId is stored but no canonical objective table exists yet — accept if present
+  return { valid: true };
+}
+
 export type ReconcileWeakSignalArgs = {
   userId: string;
   sourceType: string;
@@ -69,7 +116,6 @@ export async function reconcileWeakSignal(
 
   if (existingReceipt.length > 0) {
     const receipt = existingReceipt[0];
-    // Load the existing revision item
     const [itemRow] = await prisma.$queryRawUnsafe<any[]>(
       `
         SELECT i.*, c."title" AS "collectionTitle"
@@ -88,6 +134,16 @@ export async function reconcileWeakSignal(
         item: mapRevisionItemRow(itemRow),
       };
     }
+  }
+
+  // R5 Defect L: Validate curriculum references before creating item — fail closed
+  const curriculumValidation = await validateCurriculumReferences({
+    curriculumObjectiveId: args.curriculumObjectiveId,
+    curriculumTopicId: args.curriculumTopicId,
+    curriculumSkillId: args.curriculumSkillId,
+  });
+  if (!curriculumValidation.valid) {
+    throw new Error(`Invalid curriculum references: ${curriculumValidation.reason}`);
   }
 
   // Create new revision item + receipt in transaction

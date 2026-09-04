@@ -187,9 +187,24 @@ router.patch('/revision/items/batch', schoolAuthMiddleware, async (req: AuthedRe
 });
 
 // ── PATCH /revision/:id ──
+// R5: Mastery/review truth is server-owned. Caller may edit content/presentation only.
 router.patch('/revision/:id', schoolAuthMiddleware, async (req: AuthedRequest, res) => {
   try {
-    const item = await updateRevisionItem({ userId: req.user!.id, itemId: req.params.id, patch: req.body });
+    const patch = { ...req.body };
+    // Strip server-owned mastery/review fields — learner must not bypass scheduling truth
+    delete patch.mastery;
+    delete patch.reviewStatus;
+    delete patch.successCount;
+    delete patch.struggleCount;
+    delete patch.confidenceTrend;
+    delete patch.nextReviewAt;
+    delete patch.recentOutcome;
+    delete patch.practiceCount;
+    delete patch.lastPracticedAt;
+    delete patch.lastReviewedAt;
+    delete patch.reviewCount;
+
+    const item = await updateRevisionItem({ userId: req.user!.id, itemId: req.params.id, patch });
     res.status(200).send(item);
   } catch (error) {
     logger.error({ err: error }, '[PATCH /revision/:id] Failed');
@@ -253,18 +268,23 @@ router.get('/revision/graph/analytics', schoolAuthMiddleware, async (req: Authed
 });
 
 // ── POST /revision/:id/review-event ──
-// R5: Strip client-controlled outcome fields — only server can set correct/completed/mastery
+// R5: External learner route must NOT supply trusted scheduling/mastery outcomes.
+// outcome is ALWAYS null for external interaction events — server owns scheduling truth.
 router.post('/revision/:id/review-event', schoolAuthMiddleware, async (req: AuthedRequest, res) => {
   try {
-    const { userId, id: itemId } = req.params;
-    // Strip fields that the client must not control
     const sanitizedBody = { ...req.body };
+    // Strip ALL server-owned fields — caller must never control mastery truth
     delete sanitizedBody.correct;
     delete sanitizedBody.completed;
     delete sanitizedBody.mastery;
     delete sanitizedBody.confidenceTrend;
     delete sanitizedBody.successCount;
+    delete sanitizedBody.struggleCount;
     delete sanitizedBody.nextReviewAt;
+    delete sanitizedBody.recentOutcome;
+    delete sanitizedBody.reviewStatus;
+    // Force outcome to null for external learner route — no trusted correctness claim
+    sanitizedBody.outcome = null;
 
     const event = await recordRevisionReviewEvent({
       ...sanitizedBody,

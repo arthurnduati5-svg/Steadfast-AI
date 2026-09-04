@@ -79,7 +79,8 @@ CREATE INDEX "RevisionSourceSignalReceipt_userId_idx" ON "RevisionSourceSignalRe
 CREATE INDEX "RevisionSourceSignalReceipt_revisionItemId_idx" ON "RevisionSourceSignalReceipt"("revisionItemId");
 
 -- Revision note link (moved from runtime DDL to schema)
-CREATE TABLE "RevisionNoteLink" (
+-- R5 Defect N: Use IF NOT EXISTS for legacy databases where runtime DDL already created this table
+CREATE TABLE IF NOT EXISTS "RevisionNoteLink" (
     "id" TEXT NOT NULL,
     "userId" TEXT NOT NULL,
     "sourceItemId" TEXT NOT NULL,
@@ -102,9 +103,9 @@ CREATE TABLE "RevisionNoteLink" (
     CONSTRAINT "RevisionNoteLink_targetItemId_fkey" FOREIGN KEY ("targetItemId") REFERENCES "RevisionItem"("id") ON DELETE CASCADE ON UPDATE CASCADE
 );
 
-CREATE UNIQUE INDEX "RevisionNoteLink_user_source_target_uidx" ON "RevisionNoteLink"("userId", "sourceItemId", "targetItemId");
-CREATE INDEX "RevisionNoteLink_user_source_score_idx" ON "RevisionNoteLink"("userId", "sourceItemId", "score" DESC, "updatedAt" DESC);
-CREATE INDEX "RevisionNoteLink_user_target_idx" ON "RevisionNoteLink"("userId", "targetItemId");
+CREATE UNIQUE INDEX IF NOT EXISTS "RevisionNoteLink_user_source_target_uidx" ON "RevisionNoteLink"("userId", "sourceItemId", "targetItemId");
+CREATE INDEX IF NOT EXISTS "RevisionNoteLink_user_source_score_idx" ON "RevisionNoteLink"("userId", "sourceItemId", "score" DESC, "updatedAt" DESC);
+CREATE INDEX IF NOT EXISTS "RevisionNoteLink_user_target_idx" ON "RevisionNoteLink"("userId", "targetItemId");
 
 -- Add foreign keys for guided session
 ALTER TABLE "RevisionGuidedSessionRecord" ADD CONSTRAINT "RevisionGuidedSessionRecord_userId_fkey" FOREIGN KEY ("userId") REFERENCES "StudentProfile"("userId") ON DELETE CASCADE ON UPDATE CASCADE;
