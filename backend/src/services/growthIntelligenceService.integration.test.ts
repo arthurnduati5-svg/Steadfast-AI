@@ -21,7 +21,7 @@ const getStudyPlans = vi.fn();
 const getWeakTopics = vi.fn();
 const listLearningEffectEvents = vi.fn();
 
-vi.mock('../utils/prismaClient', () => ({
+vi.mock('../lib/prisma', () => ({
   default: prismaMock,
 }));
 
@@ -244,7 +244,8 @@ describe('growthIntelligenceService integration', () => {
 
     await vi.waitFor(() => {
       const queries = prismaMock.$executeRawUnsafe.mock.calls.map((call) => String(call[0] || ''));
-      expect(queries.some((query) => query.includes('CREATE TABLE IF NOT EXISTS "GrowthWeakTopicState"'))).toBe(true);
+      // R6-A closed growth runtime DDL: growth persists via INSERT only,
+      // and never issues CREATE/ALTER TABLE at request time.
       expect(queries.some((query) => query.includes('INSERT INTO "GrowthWeakTopicState"'))).toBe(true);
       expect(queries.some((query) => query.includes('INSERT INTO "GrowthMistakePatternState"'))).toBe(true);
       expect(queries.some((query) => query.includes('INSERT INTO "GrowthMasteryTrendState"'))).toBe(true);
@@ -262,7 +263,11 @@ describe('growthIntelligenceService integration', () => {
     const firstModule = await import('./growthIntelligenceService');
     await firstModule.getGrowthOverview('student-1');
 
-    expect(fetchUserRevisionItems).toHaveBeenCalledTimes(1);
+    // R6: growth composes the canonical learning snapshot, which performs its
+    // own bounded revision read — so the baseline is whatever the first full
+    // build consumed. The cache contract is that a warm cache rebuilds nothing.
+    const baselineReads = (fetchUserRevisionItems as any).mock.calls.length;
+    expect(baselineReads).toBeGreaterThan(0);
     expect(redisSet).toHaveBeenCalled();
 
     vi.resetModules();
@@ -271,6 +276,6 @@ describe('growthIntelligenceService integration', () => {
     await secondModule.getGrowthOverview('student-1');
 
     expect(redisGet).toHaveBeenCalled();
-    expect(fetchUserRevisionItems).toHaveBeenCalledTimes(1);
+    expect((fetchUserRevisionItems as any).mock.calls.length).toBe(baselineReads);
   });
 });

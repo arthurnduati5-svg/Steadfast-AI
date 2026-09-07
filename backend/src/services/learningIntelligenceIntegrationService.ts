@@ -56,6 +56,32 @@ function clamp(value: number, min: number, max: number): number {
 
 // ── Public read-only contract (R6-A production route needs this) ──
 
+// One durable committed-evidence row in the bounded evidence window.
+export type EvidenceWindowItem = {
+  evidenceId: SafeString;
+  sourceType: SafeString;
+  outcome: SafeString;
+  occurredAt: SafeString;
+  topic: SafeString | null;
+  subject: SafeString | null;
+  usable: boolean;
+};
+
+// Canonical mastery view for one target. When canonical mastery is not
+// available (process-local), available=false and no legacy score substitutes.
+export type CanonicalMasteryView = {
+  targetNodeId: SafeString;
+  targetNodeType: 'learning_objective' | 'skill' | 'topic';
+  probabilityOfMastery: number | null;
+  confidence: number;
+  evidenceCount: number;
+  available: boolean;
+  visibleLabel: SafeString | null;
+  lastUpdatedAt: SafeString | null;
+  lastEvidenceAt: SafeString | null;
+  reason: SafeString;
+};
+
 export type LearningIntelligenceSnapshot = {
   learner: { learnerId: SafeString };
   school: { schoolId: SafeString | null };
@@ -68,10 +94,10 @@ export type LearningIntelligenceSnapshot = {
   } | null;
   mastery: {
     available: boolean;
-    states: Array<{ targetNodeId: SafeString; targetNodeType: 'learning_objective' | 'skill' | 'topic'; score: number; lastUpdatedAt: SafeString | null; reason: SafeString }>;
+    states: CanonicalMasteryView[];
   };
   evidence: {
-    recent: Array<{ evidenceId: SafeString; sourceType: SafeString; outcome: SafeString; occurredAt: SafeString; topic: SafeString | null; subject: SafeString | null; usable: boolean }>;
+    recent: EvidenceWindowItem[];
     count: number;
     lastEvidenceAt: SafeString | null;
   };
@@ -188,32 +214,45 @@ export async function getLearningIntelligenceSnapshot(args: {
   // mastery when the existing probabilistic mastery machinery is available and
   // durable. Otherwise it reports mastery unavailable and still prioritizes from
   // durable Evidence + Revision state.
-  const masteryStates: LearningIntelligenceSnapshot['mastery']['states'] = [];
+  const masteryStates: CanonicalMasteryView[] = [];
 
   if (curriculumTarget?.skillId || curriculumTarget?.topicId) {
     try {
-      // Canonical mastery is best-effort for the R6-A production route.
-      // If probabilistic mastery is available and durable, surface it; otherwise
-      // report mastery unavailable and still prioritize from durable Evidence + Revision.
-      try {
-      const { readCanonicalMasteryForTargets } = await import('./probabilisticMasteryContracts');
-      const targets: Array<{ targetNodeId: string; targetNodeType: 'skill' | 'topic' }> = [];
+      // Canonical mastery is process-local (R7 will make it durable). Surface it
+      // when the existing probabilistic mastery machinery holds state in this
+      // process; otherwise report mastery unavailable and still prioritize from
+      // durable Evidence + Revision.
+      const { revisionMasteryRepository } = await import('./revisionCanonicalLearningService');
+      const targets: Array<{ targetNodeId: string; targetNodeType: 'learning_objective' | 'skill' }> = [];
       if (curriculumTarget.skillId) targets.push({ targetNodeId: curriculumTarget.skillId, targetNodeType: 'skill' });
-      if (curriculumTarget.topicId) targets.push({ targetNodeId: curriculumTarget.topicId, targetNodeType: 'topic' });
-      const canonicalStates = await readCanonicalMasteryForTargets({ schoolId, learnerId, targets });
-      for (const state of canonicalStates) {
+      // Canonical mastery is keyed by objective/skill nodes; topic-level nodes
+      // do not carry canonical mastery state in the current repository.
+      for (const target of targets) {
+        const state = revisionMasteryRepository.readState({
+          schoolId: schoolId || '',
+          learnerId,
+          targetNodeId: target.targetNodeId,
+          targetNodeType: target.targetNodeType,
+          curriculumVersionId: curriculumTarget.curriculumVersionId || '',
+        });
+        if (!state) continue;
         masteryStates.push({
           targetNodeId: safeString(state.targetNodeId),
-          targetNodeType: state.targetNodeType,
-          score: clamp(Number(state.score) || 0, 0, 1),
-          lastUpdatedAt: toIso(state.lastUpdatedAt) || null,
-          reason: safeString(state.reason),
+          targetNodeType: target.targetNodeType,
+          probabilityOfMastery: clamp(Number(state.probabilityOfMastery) || 0, 0, 1),
+          confidence: clamp(Number(state.confidence) || 0, 0, 1),
+          evidenceCount: Math.max(0, Number(state.evidenceCount) || 0),
+          available: true,
+          visibleLabel: safeString(state.visibleLabel).trim() || null,
+          lastUpdatedAt: toIso(state.updatedAt) || null,
+          lastEvidenceAt: toIso(state.lastEvidenceAt) || null,
+          reason: 'canonical_mastery_state',
         });
       }
-      } catch {
-        // Probabilistic mastery contracts unavailable in this process/context.
-        // Report mastery unavailable but keep durable evidence + revision as priority inputs.
-      }
+    } catch {
+      // Probabilistic mastery machinery unavailable in this process/context.
+      // Report mastery unavailable but keep durable evidence + revision as priority inputs.
+    }
   }
 
   // Revision queue (R5 canonical).
@@ -240,8 +279,8 @@ export async function getLearningIntelligenceSnapshot(args: {
     const dueItems = ((queue as any)?.dueNow || []).map(mapItem);
     const attentionItems = ((queue as any)?.needsAttention || []).map(mapItem);
     revisionWindow = {
-      due: subjectFilter ? dueItems.filter((i) => normalizeKey(i.subject) === subjectFilter || i.subject === 'General') : dueItems,
-      needsAttention: subjectFilter ? attentionItems.filter((i) => normalizeKey(i.subject) === subjectFilter || i.subject === 'General') : attentionItems,
+      due: subjectFilter ? dueItems.filter((i: any) => normalizeKey(i.subject) === subjectFilter || i.subject === 'General') : dueItems,
+      needsAttention: subjectFilter ? attentionItems.filter((i: any) => normalizeKey(i.subject) === subjectFilter || i.subject === 'General') : attentionItems,
       revisionItemRefs: items.slice(0, 40).map((item: any) => safeString(item.id)).filter(Boolean),
     };
   } catch {
@@ -370,7 +409,7 @@ function computePriority(args: {
   }
 
   // Canonical negative/partial evidence.
-  const evidenceByTopic = new Map<string, Array<LearningIntelligenceSnapshot['evidence']['recent']>>();
+  const evidenceByTopic = new Map<string, EvidenceWindowItem[]>();
   for (const item of args.evidenceWindow) {
     if (!item.usable) continue;
     const key = normalizeKey(item.topic || 'General');
@@ -401,7 +440,7 @@ function computePriority(args: {
   for (const state of args.masteryStates) {
     const key = normalizeKey(state.targetNodeId);
     const existing = candidates.get(key);
-    const lowMastery = state.score < 0.5;
+    const lowMastery = state.available && (state.probabilityOfMastery ?? 0) < 0.5;
     const priorityDelta = lowMastery ? 6 : 0;
     if (priorityDelta === 0 && !existing) continue;
     candidates.set(key, {
@@ -410,7 +449,7 @@ function computePriority(args: {
       topic: candidateTopicLabel(state.targetNodeId),
       subject: existing?.subject || null,
       priority: Math.min(100, (existing?.priority || 0) + priorityDelta),
-      reasonCodes: [...new Set([...(existing?.reasonCodes || []), lowMastery ? 'canonical_masteries_below_threshold' : 'canonical_masteries_weak'])].slice(0, 6),
+      reasonCodes: [...new Set([...(existing?.reasonCodes || []), lowMastery ? 'canonical_mastery_below_threshold' : 'canonical_mastery_weak'])].slice(0, 6),
     });
   }
 

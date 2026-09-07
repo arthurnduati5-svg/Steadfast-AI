@@ -534,6 +534,12 @@ function buildStudyPlanMetadata(args: {
   };
 }
 
+function safeIso(value: unknown): string | null {
+  if (value === null || value === undefined || value === '') return null;
+  const date = value instanceof Date ? value : new Date(value as any);
+  return Number.isNaN(date.getTime()) ? null : date.toISOString();
+}
+
 function mapStudyPlanRow(row: any): StudyPlan {
   return {
     id: safeString(row.id),
@@ -543,16 +549,16 @@ function mapStudyPlanRow(row: any): StudyPlan {
     subject: safeString(row.subject).trim() || null,
     topic: safeString(row.topic).trim() || null,
     subjects: parseJsonValue<string[] | null>(row.subjects, null),
-    dateRangeStart: row.dateRangeStart ? new Date(row.dateRangeStart).toISOString() : null,
-    dateRangeEnd: row.dateRangeEnd ? new Date(row.dateRangeEnd).toISOString() : null,
+    dateRangeStart: safeIso(row.dateRangeStart),
+    dateRangeEnd: safeIso(row.dateRangeEnd),
     summary: safeString(row.summary).trim() || null,
     focusAreas: parseJsonValue<string[] | null>(row.focusAreas, null),
     recommendedBlocks: parseJsonValue<string[] | null>(row.recommendedBlocks, null),
     suggestedCollectionIds: parseJsonValue<string[] | null>(row.suggestedCollectionIds, null),
     suggestedItemIds: parseJsonValue<string[] | null>(row.suggestedItemIds, null),
     metadata: parseJsonValue<Record<string, unknown> | null>(row.metadata, null),
-    createdAt: new Date(row.createdAt).toISOString(),
-    updatedAt: new Date(row.updatedAt).toISOString(),
+    createdAt: safeIso(row.createdAt) || new Date().toISOString(),
+    updatedAt: safeIso(row.updatedAt) || new Date().toISOString(),
   };
 }
 
@@ -569,10 +575,10 @@ function mapStudyGoalRow(row: any): StudyGoal {
     status: safeString(row.status) as StudyGoalStatus,
     subject: safeString(row.subject).trim() || null,
     topic: safeString(row.topic).trim() || null,
-    dueAt: row.dueAt ? new Date(row.dueAt).toISOString() : null,
+    dueAt: safeIso(row.dueAt),
     metadata: parseJsonValue<Record<string, unknown> | null>(row.metadata, null),
-    createdAt: new Date(row.createdAt).toISOString(),
-    updatedAt: new Date(row.updatedAt).toISOString(),
+    createdAt: safeIso(row.createdAt) || new Date().toISOString(),
+    updatedAt: safeIso(row.updatedAt) || new Date().toISOString(),
   };
 }
 

@@ -60,6 +60,21 @@ const mocks = vi.hoisted(() => {
       tables[deleteMatch[1]] = [];
       return 1;
     }
+    const updateMatch = normalized.match(/^UPDATE "PracticeCanonicalIdempotency"/i);
+    if (updateMatch) {
+      // params: [schoolId, learnerId, requestHash, committedEvidenceId, masteryApplied]
+      const target = (tables['PracticeCanonicalIdempotency'] || []).find(
+        (existing: Row) =>
+          existing.schoolId === params[0] &&
+          existing.learnerId === params[1] &&
+          existing.requestHash === params[2],
+      );
+      if (target) {
+        target.committedEvidenceId = params[3] ?? null;
+        target.masteryApplied = Boolean(params[4]);
+      }
+      return 1;
+    }
     return 1;
   });
 
@@ -304,7 +319,9 @@ describe('T2 — legacy Progress.mastery cannot make Growth report canonical str
     expect(overview.metrics.masteryCoveragePercent).toBe(0);
 
     // No recommendation may claim strong/confident mastery off legacy Progress.
-    const allRecommendations = [...overview.dueNowQueue, overview.recommendedNextMove].filter(Boolean);
+    const allRecommendations = [...overview.dueNowQueue, overview.recommendedNextMove].filter(
+      (entry): entry is NonNullable<typeof entry> => Boolean(entry),
+    );
     for (const rec of allRecommendations) {
       expect(String(rec.reason || '').toLowerCase()).not.toContain('mastered');
       expect(String(rec.title || '').toLowerCase()).not.toContain('strong');
@@ -533,6 +550,7 @@ describe('Practice canonical chain', () => {
   }
 
   it('T8 — eligible trusted practice creates one canonical evidence with sourceType practice_attempt', async () => {
+    seedCurriculumObjective('obj-trusted', 'skill-trusted', 'topic-trusted', 'v-trusted');
     const result = await commitPracticeLearningEvidence(
       baseInput({
         attemptId: 'att_trusted_1',
@@ -552,7 +570,13 @@ describe('Practice canonical chain', () => {
     const events = await repo.getEventsForLearner(SCHOOL, LEARNER);
     const committed = events.filter((event: any) => event.committedEvidenceId === result.committedEvidenceId);
     expect(committed.length).toBeGreaterThanOrEqual(1);
-    const lineage = committed.find((event: any) => event.sourceLineage?.sourceType)?.sourceLineage;
+    // Events carry flat source lineage fields for this practice attempt.
+    const lineage = events.find(
+      (event: any) =>
+        event.sourceType &&
+        event.sourceRecordId === 'practice-attempt:att_trusted_1',
+    );
+    expect(lineage).toBeDefined();
     expect(lineage.sourceType).toBe('practice_attempt');
   });
 
