@@ -1,6 +1,6 @@
 import { randomUUID } from 'crypto';
 import { OpenAI } from 'openai';
-import prisma from '../utils/prismaClient';
+import prisma from '../lib/prisma';
 import {
   fetchUserRevisionItems,
   getRevisionProgressOverview,
@@ -211,7 +211,6 @@ type MasteryPathwayNode = {
   prerequisites?: string[];
 };
 
-let ensureStudySupportTablesPromise: Promise<void> | null = null;
 const DAY_MS = 24 * 60 * 60 * 1000;
 const semanticScoringClient = process.env.OPENAI_API_KEY
   ? new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
@@ -577,98 +576,15 @@ function mapStudyGoalRow(row: any): StudyGoal {
   };
 }
 
-export async function ensureStudySupportTables() {
-  if (!ensureStudySupportTablesPromise) {
-    ensureStudySupportTablesPromise = (async () => {
-      await prisma.$executeRawUnsafe(`
-        CREATE TABLE IF NOT EXISTS "StudyPlan" (
-          "id" TEXT PRIMARY KEY,
-          "userId" TEXT NOT NULL,
-          "title" TEXT NOT NULL,
-          "scope" TEXT NOT NULL,
-          "subject" TEXT NULL,
-          "topic" TEXT NULL,
-          "subjects" JSONB NULL,
-          "dateRangeStart" TIMESTAMP(3) NULL,
-          "dateRangeEnd" TIMESTAMP(3) NULL,
-          "summary" TEXT NULL,
-          "focusAreas" JSONB NULL,
-          "recommendedBlocks" JSONB NULL,
-          "suggestedCollectionIds" JSONB NULL,
-          "suggestedItemIds" JSONB NULL,
-          "metadata" JSONB NULL,
-          "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-          "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
-        );
-      `);
-      await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "StudyPlan_userId_updatedAt_idx" ON "StudyPlan" ("userId", "updatedAt" DESC);`);
-      await prisma.$executeRawUnsafe(`
-        CREATE TABLE IF NOT EXISTS "StudyGoal" (
-          "id" TEXT PRIMARY KEY,
-          "userId" TEXT NOT NULL,
-          "studyPlanId" TEXT NULL,
-          "title" TEXT NOT NULL,
-          "description" TEXT NULL,
-          "goalType" TEXT NOT NULL,
-          "targetCount" INTEGER NULL,
-          "currentCount" INTEGER NOT NULL DEFAULT 0,
-          "status" TEXT NOT NULL DEFAULT 'not_started',
-          "subject" TEXT NULL,
-          "topic" TEXT NULL,
-          "dueAt" TIMESTAMP(3) NULL,
-          "metadata" JSONB NULL,
-          "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-          "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
-        );
-      `);
-      await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "StudyGoal_userId_updatedAt_idx" ON "StudyGoal" ("userId", "updatedAt" DESC);`);
-      await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "StudyGoal_studyPlanId_idx" ON "StudyGoal" ("studyPlanId");`);
-      await prisma.$executeRawUnsafe(`
-        CREATE TABLE IF NOT EXISTS "DailyFeedProgress" (
-          "id" TEXT PRIMARY KEY,
-          "userId" TEXT NOT NULL,
-          "feedDate" DATE NOT NULL,
-          "feedItemId" TEXT NOT NULL,
-          "itemType" TEXT NOT NULL,
-          "status" TEXT NOT NULL DEFAULT 'pending',
-          "actionCount" INTEGER NOT NULL DEFAULT 0,
-          "completionCount" INTEGER NOT NULL DEFAULT 0,
-          "rapidGuessCount" INTEGER NOT NULL DEFAULT 0,
-          "lastResponseSec" DOUBLE PRECISION NULL,
-          "evidenceScore" DOUBLE PRECISION NULL,
-          "metadata" JSONB NULL,
-          "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-          "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
-        );
-      `);
-      await prisma.$executeRawUnsafe(
-        `CREATE UNIQUE INDEX IF NOT EXISTS "DailyFeedProgress_userId_feedDate_feedItemId_uidx" ON "DailyFeedProgress" ("userId", "feedDate", "feedItemId");`
-      );
-      await prisma.$executeRawUnsafe(
-        `CREATE INDEX IF NOT EXISTS "DailyFeedProgress_userId_feedDate_idx" ON "DailyFeedProgress" ("userId", "feedDate");`
-      );
-      await prisma.$executeRawUnsafe(`
-        CREATE TABLE IF NOT EXISTS "InterventionEffectEvent" (
-          "id" TEXT PRIMARY KEY,
-          "userId" TEXT NOT NULL,
-          "sessionId" TEXT NULL,
-          "subject" TEXT NULL,
-          "topic" TEXT NULL,
-          "interventionType" TEXT NOT NULL,
-          "relatedRevisionItemId" TEXT NULL,
-          "outcome" TEXT NULL,
-          "metadata" JSONB NULL,
-          "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
-        );
-      `);
-      await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "InterventionEffectEvent_userId_createdAt_idx" ON "InterventionEffectEvent" ("userId", "createdAt" DESC);`);
-    })().catch((error) => {
-      ensureStudySupportTablesPromise = null;
-      throw error;
-    });
-  }
-  return ensureStudySupportTablesPromise;
+// ─────────────────────────────────────────────────────────────
+// R6: ensureStudySupportTables is a compatibility no-op.
+// StudyPlan, StudyGoal, DailyFeedProgress and InterventionEffectEvent exist
+// under the accepted Prisma schema. Request-time DDL is forbidden in R6.
+// ─────────────────────────────────────────────────────────────
+export async function ensureStudySupportTables(): Promise<void> {
+  return Promise.resolve();
 }
+
 
 async function fetchStudyPlanGoals(userId: string, studyPlanId: string): Promise<StudyGoal[]> {
   const rows = await prisma.$queryRawUnsafe<any[]>(
@@ -1183,10 +1099,27 @@ export async function generateAdaptiveStudyPlan(args: GenerateAdaptiveStudyPlanA
   const effectiveWeakAreas = (args.weakAreas || [])
     .map((entry) => safeString(entry).trim())
     .filter(Boolean);
+  // R6: canonical learning intelligence is the primary priority source.
+  // Self-reported weakAreas are learner preference — they only fill gaps and
+  // can never override canonical contradictory evidence.
+  let canonicalPriorities: Array<{ topic: string; score: number; reasonCodes: string[] }> = [];
+  try {
+    const { getLearningIntelligenceSnapshot } = await import('./learningIntelligenceIntegrationService');
+    const snapshot = await getLearningIntelligenceSnapshot({ learnerId: args.userId, subject: args.subject || null });
+    canonicalPriorities = snapshot.priority
+      .filter((entry) => safeString(entry.topic).trim())
+      .map((entry) => ({ topic: safeString(entry.topic).trim(), score: entry.score, reasonCodes: entry.reasonCodes }));
+  } catch {
+    canonicalPriorities = [];
+  }
+  const canonicalTopicKeys = new Set(canonicalPriorities.map((entry) => normalizeKey(entry.topic)));
   const focusAreas =
-    effectiveWeakAreas.length > 0
-      ? effectiveWeakAreas.slice(0, 5)
-      : weakTopics.slice(0, 5).map((entry) => entry.topic);
+    canonicalPriorities.length > 0
+      ? [...canonicalPriorities.map((entry) => entry.topic), ...effectiveWeakAreas.filter((area) => !canonicalTopicKeys.has(normalizeKey(area)))]
+          .slice(0, 5)
+      : effectiveWeakAreas.length > 0
+        ? effectiveWeakAreas.slice(0, 5)
+        : weakTopics.slice(0, 5).map((entry) => entry.topic);
   const preferredSupportStyle = safeString(args.preferredSupportStyle || '').trim() || null;
   const strengths = (args.strengths || []).map((entry) => safeString(entry).trim()).filter(Boolean).slice(0, 5);
   const minutesPerDay = clampNumber(Math.round(Number(args.availableMinutesPerDay || 35) || 35), 15, 240);

@@ -1,5 +1,5 @@
 import { randomUUID } from 'crypto';
-import prisma from '../utils/prismaClient';
+import prisma from '../lib/prisma';
 import type {
   LearningEffectEvent,
   RevisionItem,
@@ -13,6 +13,11 @@ import { listMediaAssets, type MediaAsset } from './mediaAssetService';
 import { getStudyGoals, getStudyPlans, getWeakTopics } from './studySupportService';
 import { listLearningEffectEvents } from './learningEffectivenessService';
 import { getRedisClient } from '../lib/redis';
+import {
+  getLearningIntelligenceSnapshot,
+  type CanonicalMasteryView,
+  type EvidenceWindowItem,
+} from './learningIntelligenceIntegrationService';
 
 type GrowthWeakTopicStatus = 'active' | 'improving' | 'stable' | 'recovered';
 type GrowthMistakePatternStatus = 'active' | 'improving' | 'resolved_recently';
@@ -238,7 +243,10 @@ type GrowthSignalSnapshot = {
   studyGoals: StudyGoal[];
   learningEvents: LearningEffectEvent[];
   mediaAssets: MediaAsset[];
-  progressRows: Array<{ subject: string; topic: string; mastery: number; updatedAt: string }>;
+  // R6: canonical inputs from the learning intelligence integration adapter.
+  // Legacy Progress.mastery is intentionally NOT part of the snapshot.
+  canonicalEvidence: EvidenceWindowItem[];
+  canonicalMastery: { available: boolean; states: CanonicalMasteryView[] };
   mistakeRows: Array<{ topic: string; error: string; attempts: number; lastSeen: string }>;
 };
 
@@ -247,7 +255,6 @@ const snapshotCache = new Map<string, { expiresAt: number; payload: Promise<Grow
 const GROWTH_REDIS_KEY_PREFIX = 'growth:snapshot:v1';
 const PERSIST_ENTITY_INTERVAL_MS = 60_000;
 const persistTracker = new Map<string, number>();
-let ensureGrowthIntelligenceTablesPromise: Promise<void> | null = null;
 
 function safeString(value: unknown): string {
   return typeof value === 'string' ? value : '';
@@ -369,121 +376,14 @@ function createPrimaryAction(args: {
   };
 }
 
-async function ensureGrowthIntelligenceTables() {
-  if (!ensureGrowthIntelligenceTablesPromise) {
-    ensureGrowthIntelligenceTablesPromise = (async () => {
-      await prisma.$executeRawUnsafe(`
-        CREATE TABLE IF NOT EXISTS "GrowthWeakTopicState" (
-          "id" TEXT PRIMARY KEY,
-          "userId" TEXT NOT NULL,
-          "subject" TEXT NOT NULL,
-          "topic" TEXT NOT NULL,
-          "subtopic" TEXT NULL,
-          "weaknessScore" DOUBLE PRECISION NOT NULL,
-          "microMasteryLabel" TEXT NOT NULL,
-          "status" TEXT NOT NULL,
-          "weaknessReasonSummary" TEXT NOT NULL,
-          "triggers" JSONB NULL,
-          "lastStruggledAt" TIMESTAMP(3) NULL,
-          "lastReviewedAt" TIMESTAMP(3) NULL,
-          "nextReviewAt" TIMESTAMP(3) NULL,
-          "linkedRevisionIds" JSONB NULL,
-          "linkedMediaIds" JSONB NULL,
-          "linkedMistakePatternIds" JSONB NULL,
-          "recommendedAction" TEXT NOT NULL,
-          "snapshotDate" DATE NOT NULL,
-          "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-          "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
-        );
-      `);
-      await prisma.$executeRawUnsafe(
-        `CREATE UNIQUE INDEX IF NOT EXISTS "GrowthWeakTopicState_userId_subject_topic_snapshotDate_uidx" ON "GrowthWeakTopicState" ("userId", "subject", "topic", "snapshotDate");`
-      );
-      await prisma.$executeRawUnsafe(
-        `CREATE INDEX IF NOT EXISTS "GrowthWeakTopicState_userId_snapshotDate_idx" ON "GrowthWeakTopicState" ("userId", "snapshotDate" DESC);`
-      );
-      await prisma.$executeRawUnsafe(`
-        CREATE TABLE IF NOT EXISTS "GrowthMistakePatternState" (
-          "id" TEXT PRIMARY KEY,
-          "userId" TEXT NOT NULL,
-          "subject" TEXT NOT NULL,
-          "patternKey" TEXT NOT NULL,
-          "title" TEXT NOT NULL,
-          "description" TEXT NOT NULL,
-          "examples" JSONB NULL,
-          "recurrenceScore" DOUBLE PRECISION NOT NULL,
-          "status" TEXT NOT NULL,
-          "commonContext" TEXT NOT NULL,
-          "fixReminder" TEXT NOT NULL,
-          "linkedTopics" JSONB NULL,
-          "linkedRevisionIds" JSONB NULL,
-          "lastSeenAt" TIMESTAMP(3) NULL,
-          "lastImprovedAt" TIMESTAMP(3) NULL,
-          "snapshotDate" DATE NOT NULL,
-          "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-          "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
-        );
-      `);
-      await prisma.$executeRawUnsafe(
-        `CREATE UNIQUE INDEX IF NOT EXISTS "GrowthMistakePatternState_userId_patternKey_snapshotDate_uidx" ON "GrowthMistakePatternState" ("userId", "patternKey", "snapshotDate");`
-      );
-      await prisma.$executeRawUnsafe(
-        `CREATE INDEX IF NOT EXISTS "GrowthMistakePatternState_userId_snapshotDate_idx" ON "GrowthMistakePatternState" ("userId", "snapshotDate" DESC);`
-      );
-      await prisma.$executeRawUnsafe(`
-        CREATE TABLE IF NOT EXISTS "GrowthMasteryTrendState" (
-          "id" TEXT PRIMARY KEY,
-          "userId" TEXT NOT NULL,
-          "subject" TEXT NOT NULL,
-          "topic" TEXT NOT NULL,
-          "subtopic" TEXT NULL,
-          "trendStatus" TEXT NOT NULL,
-          "microMasteryLabel" TEXT NOT NULL,
-          "confidenceScore" DOUBLE PRECISION NOT NULL,
-          "evidenceScore" DOUBLE PRECISION NOT NULL,
-          "trendSummary" TEXT NOT NULL,
-          "delta" DOUBLE PRECISION NULL,
-          "lastSeenAt" TIMESTAMP(3) NULL,
-          "snapshotDate" DATE NOT NULL,
-          "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-          "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
-        );
-      `);
-      await prisma.$executeRawUnsafe(
-        `CREATE UNIQUE INDEX IF NOT EXISTS "GrowthMasteryTrendState_userId_subject_topic_snapshotDate_uidx" ON "GrowthMasteryTrendState" ("userId", "subject", "topic", "snapshotDate");`
-      );
-      await prisma.$executeRawUnsafe(
-        `CREATE INDEX IF NOT EXISTS "GrowthMasteryTrendState_userId_snapshotDate_idx" ON "GrowthMasteryTrendState" ("userId", "snapshotDate" DESC);`
-      );
-      await prisma.$executeRawUnsafe(`
-        CREATE TABLE IF NOT EXISTS "GrowthRecommendationState" (
-          "id" TEXT PRIMARY KEY,
-          "userId" TEXT NOT NULL,
-          "recommendationType" TEXT NOT NULL,
-          "priorityScore" DOUBLE PRECISION NOT NULL,
-          "sourceType" TEXT NOT NULL,
-          "title" TEXT NOT NULL,
-          "reason" TEXT NOT NULL,
-          "primaryAction" JSONB NOT NULL,
-          "secondaryAction" JSONB NULL,
-          "linkedTopic" TEXT NULL,
-          "linkedRevisionId" TEXT NULL,
-          "linkedMediaId" TEXT NULL,
-          "expiresAt" TIMESTAMP(3) NULL,
-          "snapshotDate" DATE NOT NULL,
-          "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-          "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
-        );
-      `);
-      await prisma.$executeRawUnsafe(
-        `CREATE INDEX IF NOT EXISTS "GrowthRecommendationState_userId_snapshotDate_idx" ON "GrowthRecommendationState" ("userId", "snapshotDate" DESC);`
-      );
-    })().catch((error) => {
-      ensureGrowthIntelligenceTablesPromise = null;
-      throw error;
-    });
-  }
-  return ensureGrowthIntelligenceTablesPromise;
+// ─────────────────────────────────────────────────────────────
+// R6: ensureGrowthIntelligenceTables is a compatibility no-op.
+// All Growth projection tables (GrowthWeakTopicState, GrowthMistakePatternState,
+// GrowthMasteryTrendState, GrowthRecommendationState) exist under the accepted
+// Prisma schema. Request-time DDL is forbidden in R6.
+// ─────────────────────────────────────────────────────────────
+async function ensureGrowthIntelligenceTables(): Promise<void> {
+  return Promise.resolve();
 }
 
 async function readSnapshotFromRedis(cacheKey: string): Promise<GrowthSignalSnapshot | null> {
@@ -514,7 +414,7 @@ async function writeSnapshotToRedis(cacheKey: string, payload: GrowthSignalSnaps
 
 async function buildGrowthSignalSnapshot(userId: string, subject?: string | null): Promise<GrowthSignalSnapshot> {
   const subjectFilter = normalizeKey(subject || '');
-  const [revisionItemsRaw, queueRaw, weakSignalsRaw, studyPlans, studyGoals, learningEvents, mediaAssets, progressRowsRaw, mistakeRowsRaw] =
+  const [revisionItemsRaw, queueRaw, weakSignalsRaw, studyPlans, studyGoals, learningEvents, mediaAssets, mistakeRowsRaw, canonicalSnapshot] =
     await Promise.all([
       fetchUserRevisionItems(userId, 260),
       getRevisionQueue(userId, 36),
@@ -523,16 +423,13 @@ async function buildGrowthSignalSnapshot(userId: string, subject?: string | null
       getStudyGoals(userId),
       listLearningEffectEvents({ userId, days: 45, limit: 800 }).catch(() => []),
       listMediaAssets({ userId, limit: 48, sortBy: 'recommended' }).catch(() => []),
-      prisma.progress.findMany({
-        where: { studentId: userId },
-        orderBy: { updatedAt: 'desc' },
-        take: 220,
-      }),
       prisma.mistake.findMany({
         where: { studentId: userId },
         orderBy: { lastSeen: 'desc' },
         take: 220,
       }),
+      // R6: canonical learning intelligence inputs (evidence + mastery when available).
+      getLearningIntelligenceSnapshot({ learnerId: userId, subject }).catch(() => null),
     ]);
 
   const revisionItems = subjectFilter
@@ -553,14 +450,14 @@ async function buildGrowthSignalSnapshot(userId: string, subject?: string | null
   const mediaAssetsFiltered = subjectFilter
     ? mediaAssets.filter((asset) => normalizeKey(safeString(asset.subject)) === subjectFilter)
     : mediaAssets;
-  const progressRows = progressRowsRaw
-    .filter((row) => !subjectFilter || normalizeKey(safeString(row.subject)) === subjectFilter)
-    .map((row) => ({
-      subject: safeString(row.subject).trim() || 'General',
-      topic: safeString(row.topic).trim() || 'General',
-      mastery: clamp(Number(row.mastery || 0), 0, 100),
-      updatedAt: row.updatedAt.toISOString(),
-    }));
+  const canonicalEvidence = canonicalSnapshot
+    ? canonicalSnapshot.evidence.recent.filter(
+        (item) => !subjectFilter || normalizeKey(safeString(item.subject || '')) === subjectFilter,
+      )
+    : [];
+  const canonicalMastery = canonicalSnapshot
+    ? canonicalSnapshot.mastery
+    : { available: false, states: [] as CanonicalMasteryView[] };
   const mistakeRows = mistakeRowsRaw.map((row) => ({
     topic: safeString(row.topic).trim() || 'General',
     error: safeString(row.error).trim() || 'Repeated misconception',
@@ -577,7 +474,8 @@ async function buildGrowthSignalSnapshot(userId: string, subject?: string | null
     studyGoals,
     learningEvents,
     mediaAssets: mediaAssetsFiltered,
-    progressRows,
+    canonicalEvidence,
+    canonicalMastery,
     mistakeRows,
   };
 }
@@ -776,6 +674,25 @@ function buildMistakePatterns(snapshot: GrowthSignalSnapshot): GrowthMistakePatt
 
 function groupWeakTopics(snapshot: GrowthSignalSnapshot, mistakePatterns: GrowthMistakePattern[]): GrowthWeakTopic[] {
   const now = new Date();
+
+  // R6: canonical evidence and mastery maps keyed by normalized topic.
+  const canonicalNegativeEvidenceByTopic = new Map<string, number>();
+  const canonicalPositiveEvidenceByTopic = new Map<string, number>();
+  for (const item of snapshot.canonicalEvidence) {
+    const key = normalizeKey(item.topic || '');
+    if (!key) continue;
+    if (item.outcome === 'incorrect') {
+      canonicalNegativeEvidenceByTopic.set(key, (canonicalNegativeEvidenceByTopic.get(key) || 0) + 1);
+    } else if (item.outcome === 'correct') {
+      canonicalPositiveEvidenceByTopic.set(key, (canonicalPositiveEvidenceByTopic.get(key) || 0) + 1);
+    }
+  }
+  const canonicalMasteryByTopic = new Map<string, CanonicalMasteryView>();
+  for (const mastery of snapshot.canonicalMastery.states) {
+    if (!mastery.available) continue;
+    canonicalMasteryByTopic.set(normalizeKey(mastery.targetNodeId || ''), mastery);
+  }
+
   const byTopic = new Map<
     string,
     {
@@ -850,11 +767,19 @@ function groupWeakTopics(snapshot: GrowthSignalSnapshot, mistakePatterns: Growth
       const struggleCount = entry.items.reduce((sum, item) => sum + Math.max(0, Number(item.struggleCount || 0)), 0);
       const successCount = entry.items.reduce((sum, item) => sum + Math.max(0, Number(item.successCount || 0)), 0);
       const mistakeBasedCount = entry.items.filter((item) => item.isMistakeBased).length;
-      const stillLearningCount = entry.items.filter((item) => (item.mastery || 'still_learning') === 'still_learning').length;
-      const masteryScore =
-        entry.items.length > 0
-          ? entry.items.reduce((sum, item) => sum + masteryToScore(item.mastery), 0) / entry.items.length
-          : 46;
+      // R6: canonical mastery (when available) replaces RevisionItem.mastery as
+      // the mastery input. Without canonical mastery the score stays neutral;
+      // legacy labels never raise the topic's apparent strength.
+      const canonicalForTopic = canonicalMasteryByTopic.get(normalizeKey(entry.topic));
+      const canonicalProbability = canonicalForTopic?.probabilityOfMastery ?? null;
+      const canonicalConfidence = canonicalForTopic?.confidence ?? 0;
+      const canonicalMasteryScore =
+        canonicalProbability !== null && canonicalConfidence >= 0.3
+          ? clamp(canonicalProbability * 100, 0, 100)
+          : null;
+      const masteryScore = canonicalMasteryScore ?? 46;
+      const canonicalNegativeEvidence = canonicalNegativeEvidenceByTopic.get(normalizeKey(entry.topic)) || 0;
+      const canonicalPositiveEvidence = canonicalPositiveEvidenceByTopic.get(normalizeKey(entry.topic)) || 0;
       const signalScore = Number(entry.weakSignal?.weaknessScore || 0);
       const reviewGapDays = Math.min(
         ...entry.items
@@ -867,7 +792,8 @@ function groupWeakTopics(snapshot: GrowthSignalSnapshot, mistakePatterns: Growth
           dueCount * 5 +
           needsAttentionCount * 8 +
           struggleCount * 3.8 +
-          stillLearningCount * 4 +
+          canonicalNegativeEvidence * 7 -
+          canonicalPositiveEvidence * 2.5 +
           recurrencePenalty +
           Math.min(18, reviewGapDays * 0.6) -
           successCount * 2.1 -
@@ -941,19 +867,40 @@ function groupWeakTopics(snapshot: GrowthSignalSnapshot, mistakePatterns: Growth
 
 function buildMasterySignals(snapshot: GrowthSignalSnapshot): GrowthMasterySignal[] {
   const signals: GrowthMasterySignal[] = [];
-  for (const row of snapshot.progressRows) {
+  // R6: canonical mastery (when available) is the only mastery source.
+  // Legacy Progress.mastery is deliberately NOT consumed here.
+  for (const mastery of snapshot.canonicalMastery.states) {
+    if (!mastery.available || mastery.probabilityOfMastery === null) continue;
+    const probabilityPercent = clamp(mastery.probabilityOfMastery * 100, 0, 100);
     signals.push({
-      id: `progress-${createCompactId(`${row.subject}-${row.topic}-${row.updatedAt}`)}`,
+      id: `canonical-mastery-${createCompactId(`${mastery.targetNodeId}-${mastery.lastEvidenceAt || 'none'}`)}`,
       userId: '',
-      subject: row.subject,
-      topic: row.topic,
+      subject: 'General',
+      topic: mastery.targetNodeId || 'General',
       subtopic: null,
-      signalType: 'progress_snapshot',
-      confidenceScore: clamp(row.mastery / 100, 0, 1),
-      evidenceScore: clamp((row.mastery + 8) / 100, 0, 1),
-      sourceType: 'progress',
-      outcome: row.mastery >= 70 ? 'improved' : row.mastery <= 45 ? 'struggled' : 'no_change',
-      createdAt: row.updatedAt,
+      signalType: 'canonical_mastery',
+      confidenceScore: clamp(mastery.confidence ?? 0.5, 0, 1),
+      evidenceScore: clamp(probabilityPercent / 100, 0, 1),
+      sourceType: 'canonical_mastery',
+      outcome: probabilityPercent >= 70 ? 'improved' : probabilityPercent <= 45 ? 'struggled' : 'no_change',
+      createdAt: mastery.lastEvidenceAt || nowIso(),
+    });
+  }
+
+  // Canonical evidence outcomes (durable committed evidence) feed trend projections.
+  for (const item of snapshot.canonicalEvidence.slice(0, 120)) {
+    signals.push({
+      id: `canonical-evidence-${createCompactId(`${item.evidenceId}`)}`,
+      userId: '',
+      subject: item.subject || 'General',
+      topic: item.topic || 'General',
+      subtopic: null,
+      signalType: `canonical_evidence:${item.sourceType}`,
+      confidenceScore: item.usable ? 0.72 : 0.35,
+      evidenceScore: item.outcome === 'correct' ? 0.85 : item.outcome === 'partially_correct' ? 0.55 : item.outcome === 'incorrect' ? 0.25 : 0.45,
+      sourceType: 'canonical_evidence',
+      outcome: item.outcome === 'correct' ? 'improved' : item.outcome === 'incorrect' ? 'struggled' : 'no_change',
+      createdAt: item.occurredAt,
     });
   }
 
@@ -1817,6 +1764,13 @@ async function persistMasteryTrends(userId: string, snapshotDate: string, respon
       snapshotDate
     );
   }
+}
+
+// Test seam: clear process-level growth caches so the projection can be
+// rebuilt from durable inputs (R6 T5 rebuild proof).
+export function __resetGrowthCachesForTest(): void {
+  snapshotCache.clear();
+  persistTracker.clear();
 }
 
 export async function getGrowthOverview(userId: string, subject?: string | null): Promise<GrowthOverviewResponse> {
