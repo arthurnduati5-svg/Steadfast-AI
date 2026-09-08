@@ -146,14 +146,22 @@ export class Phase3ObjectiveMasteryService {
     throw new Error('calculateObjectiveMasteryStatus is test-only; use canonical mastery');
   }
 
-  async updateObjectiveMasteryFromEvidence(input: {
+  /**
+   * R7.2 test-only sync entry for the test-maps (`isTestMapsMode`) completion path.
+   * The async canonical method delegates here under test maps; the synchronous
+   * daily-objective completion path calls this directly because it cannot await.
+   * Throws outside test-maps mode — production must use the async canonical path.
+   */
+  updateObjectiveMasteryFromEvidenceSync(input: {
     objectiveId: string; schoolId: string; learnerId: string; classId?: string; subjectId?: string; topicId?: string; skillId?: string;
     evidenceStrength: string; hintUsed: boolean; attemptNumber?: number; reasonCodes: string[]; confidenceLabel?: string;
     evidenceId?: string;
-  }): Promise<{ objectiveId: string; schoolId: string; learnerId: string; previousStatus: string; newStatus: string; reasonCodes: string[]; changed: boolean; updatedAt: string }> {
-    if (isTestMapsMode()) {
-      // Legacy test-only path
-      const existing = this.getMasteryStatus(input.objectiveId, input.schoolId, input.learnerId);
+  }): { objectiveId: string; schoolId: string; learnerId: string; previousStatus: string; newStatus: string; reasonCodes: string[]; changed: boolean; updatedAt: string } {
+    if (!isTestMapsMode()) {
+      throw new Error('updateObjectiveMasteryFromEvidenceSync is test-only; use async canonical mastery');
+    }
+    // Legacy test-only path
+    const existing = this.getMasteryStatus(input.objectiveId, input.schoolId, input.learnerId);
       const previousStatus = existing?.status || 'not_started';
       const newStatus = this.calculateObjectiveMasteryStatus({
         evidenceStrength: input.evidenceStrength, hintUsed: input.hintUsed,
@@ -186,6 +194,15 @@ export class Phase3ObjectiveMasteryService {
       };
       phase3ObjectiveRepository.upsertObjectiveMasterySnapshot(snapshot as Any);
       return { objectiveId: input.objectiveId, schoolId: input.schoolId, learnerId: input.learnerId, previousStatus, newStatus, reasonCodes: uniqueReasons, changed: previousStatus !== newStatus, updatedAt: nowISO() };
+  }
+
+  async updateObjectiveMasteryFromEvidence(input: {
+    objectiveId: string; schoolId: string; learnerId: string; classId?: string; subjectId?: string; topicId?: string; skillId?: string;
+    evidenceStrength: string; hintUsed: boolean; attemptNumber?: number; reasonCodes: string[]; confidenceLabel?: string;
+    evidenceId?: string;
+  }): Promise<{ objectiveId: string; schoolId: string; learnerId: string; previousStatus: string; newStatus: string; reasonCodes: string[]; changed: boolean; updatedAt: string }> {
+    if (isTestMapsMode()) {
+      return this.updateObjectiveMasteryFromEvidenceSync(input);
     }
 
     // Canonical production path

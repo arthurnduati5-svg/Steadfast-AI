@@ -205,7 +205,7 @@ export class Phase3DailyObjectiveCheckCompletionService {
           const evidenceInput = this.buildObjectiveEvidenceBridgeInput(session);
           evidenceInput.idempotencyKey = stableKey;
           evidenceInput.evidenceId = checkpoint.evidenceId;
-          const masteryUpdate = phase3ObjectiveMasteryService.updateObjectiveMasteryFromEvidence(evidenceInput as Any);
+          const masteryUpdate = phase3ObjectiveMasteryService.updateObjectiveMasteryFromEvidenceSync(evidenceInput as Any);
           const rec = idempotencyStore.get(stableKey)!;
           rec.masteryApplied = true;
           rec.masteryResult = masteryUpdate;
@@ -286,7 +286,7 @@ export class Phase3DailyObjectiveCheckCompletionService {
         });
         phase3DailyObjectiveCheckRepository.persistCompletionReferences(input.checkSessionId, { evidenceId: bridgeResult.evidenceRef.evidenceId });
         try {
-          masteryUpdate = phase3ObjectiveMasteryService.updateObjectiveMasteryFromEvidence(evidenceInput as Any);
+          masteryUpdate = phase3ObjectiveMasteryService.updateObjectiveMasteryFromEvidenceSync(evidenceInput as Any);
         } catch (e: any) {
           const rec = idempotencyStore.get(stableKey)!;
           rec.masteryResult = null;
@@ -304,7 +304,7 @@ export class Phase3DailyObjectiveCheckCompletionService {
       if (!masteryUpdate) {
         const evidenceInputRetry = this.buildObjectiveEvidenceBridgeInput(session);
         evidenceInputRetry.idempotencyKey = stableKey;
-        masteryUpdate = phase3ObjectiveMasteryService.updateObjectiveMasteryFromEvidence(evidenceInputRetry as Any);
+        masteryUpdate = phase3ObjectiveMasteryService.updateObjectiveMasteryFromEvidenceSync(evidenceInputRetry as Any);
         const rec = idempotencyStore.get(stableKey);
         if (rec) {
           rec.masteryApplied = true;
@@ -468,7 +468,7 @@ export class Phase3DailyObjectiveCheckCompletionService {
           evidenceInput.evidenceId = checkpoint.evidenceId;
           let masteryUpdate: any;
           if (isTestMapsMode()) {
-            masteryUpdate = phase3ObjectiveMasteryService.updateObjectiveMasteryFromEvidence(evidenceInput as Any);
+            masteryUpdate = await phase3ObjectiveMasteryService.updateObjectiveMasteryFromEvidence(evidenceInput as Any);
           } else {
             masteryUpdate = await phase3ObjectiveMasteryService.updateObjectiveMasteryFromEvidence(evidenceInput as Any);
           }

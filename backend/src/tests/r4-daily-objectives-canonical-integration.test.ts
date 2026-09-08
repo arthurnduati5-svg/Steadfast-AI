@@ -50,7 +50,7 @@ describe('R4 Daily Objectives Canonical Integration', () => {
   let learnerResponseService: Phase3DailyObjectiveLearnerResponseService;
   let teacherSummaryService: Phase3DailyObjectiveTeacherSummaryService;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     objRepo = new Phase3ObjectiveRepository();
     checkRepo = new Phase3DailyObjectiveCheckRepository();
     // Reset all stores
@@ -58,7 +58,7 @@ describe('R4 Daily Objectives Canonical Integration', () => {
     checkRepo.resetPhase3DailyObjectiveCheckRepositoryForTests();
     (completionService as any)?.resetIdempotencyForTests?.();
     try { (phase3ObjectiveEvidenceBridgeService as any).resetIdempotencyForTests?.(); } catch {}
-    try { (phase3ObjectiveMasteryService as any).resetForTests?.(); } catch {}
+    try { await (phase3ObjectiveMasteryService as any).resetForTests?.(); } catch {}
     safeLearningEvidenceRepository['evidenceStore']?.clear?.();
     // @ts-ignore
     if ((safeLearningEvidenceRepository as any).resetForTests) (safeLearningEvidenceRepository as any).resetForTests();
@@ -470,10 +470,10 @@ describe('R4 Daily Objectives Canonical Integration', () => {
       }
     }
 
-    // Monkey-patch mastery to fail first time
-    const original = (phase3ObjectiveMasteryService as any).updateObjectiveMasteryFromEvidence;
+    // Monkey-patch mastery to fail first time (sync test-maps seam used by the sync completion path)
+    const original = (phase3ObjectiveMasteryService as any).updateObjectiveMasteryFromEvidenceSync;
     let callCount = 0;
-    (phase3ObjectiveMasteryService as any).updateObjectiveMasteryFromEvidence = (input: any) => {
+    (phase3ObjectiveMasteryService as any).updateObjectiveMasteryFromEvidenceSync = (input: any) => {
       callCount++;
       if (callCount === 1) throw new Error('Simulated mastery failure');
       return original.call(phase3ObjectiveMasteryService, input);
@@ -491,7 +491,7 @@ describe('R4 Daily Objectives Canonical Integration', () => {
     const evidenceIdFirst = (evidenceAfterFirst as any)?.id || firstBridgeId;
 
     // Restore mastery and retry — should reuse same evidence, not create duplicate
-    (phase3ObjectiveMasteryService as any).updateObjectiveMasteryFromEvidence = original;
+    (phase3ObjectiveMasteryService as any).updateObjectiveMasteryFromEvidenceSync = original;
     const reloaded: any = checkRepo.getCheckSessionById(sessionId);
     if (reloaded.status === 'COMPLETING') {
       checkRepo.updateCheckSessionStatus(sessionId, 'in_progress');
