@@ -33,6 +33,7 @@ import type {
   RouteMountRecord,
   RuntimeCollectionRecord,
   RuntimeDdlRecord,
+  RouteCompositionRecord,
   RuntimeReachability,
   ScanModel,
   TestRecord,
@@ -229,6 +230,7 @@ interface SourceAnalysis {
   declarations: DeclarationRecord[];
   endpoints: RouteEndpointRecord[];
   mounts: RouteMountRecord[];
+  unresolvedCompositions: RouteCompositionRecord[];
   prismaAccesses: PrismaAccessRecord[];
   rawSql: RawSqlRecord[];
   runtimeDdl: RuntimeDdlRecord[];
@@ -277,13 +279,44 @@ export function analyzeSourceFile(
   const PROVIDERS = ['openai', '@pinecone-database/pinecone', 'redis', 'ioredis', 'axios', 'node-fetch'];
   const CACHE_SIGNALS = /cache|ttl|expires|memo|inflight|store|singleton/i;
   const DDL_RE = /\b(CREATE\s+TABLE|ALTER\s+TABLE|DROP\s+TABLE|CREATE\s+(UNIQUE\s+)?INDEX|DROP\s+INDEX|TRUNCATE)\b/i;
-  const RAW_TABLE_RE = /\b(?:FROM|JOIN|INTO|UPDATE|TABLE)\s+"?([A-Za-z_][A-Za-z0-9_]*)"?/gi;    const recordImport = (specifier: string, node: ts.Node, kind: ImportRecord['importKind']) => {
+  const RAW_TABLE_RE = /\b(?:FROM|JOIN|INTO|UPDATE|TABLE)\s+"?([A-Za-z_][A-Za-z0-9_]*)"?/gi;
+  const ROUTE_MODULE_RE = /(^|\/)(routes?|routers?)\/|(Route|Routes|Router)\.tsx?$/;
+  const ROUTER_NAME_RE = /router|routes/i;
+
+  // Pre-collect locally created router bindings and factory-result bindings so
+  // mount classification below is deterministic regardless of statement order.
+  const localRouterSymbols = new Set<string>();
+  const factoryRouterSymbols = new Set<string>();
+  {
+    const collect = (n: ts.Node): void => {
+      if (ts.isVariableDeclaration(n) && ts.isIdentifier(n.name) && n.initializer && ts.isCallExpression(n.initializer)) {
+        const varName = n.name.text;
+        const callee = n.initializer.expression;
+        const calleeText = callee.getText(source);
+        const isRouterCtor =
+          (ts.isIdentifier(callee) && callee.text === 'Router') ||
+          (ts.isPropertyAccessExpression(callee) && callee.name.text === 'Router');
+        if (isRouterCtor) {
+          localRouterSymbols.add(varName);
+        } else if (ROUTER_NAME_RE.test(varName) || ROUTER_NAME_RE.test(calleeText)) {
+          factoryRouterSymbols.add(varName);
+        }
+      }
+      ts.forEachChild(n, collect);
+    };
+    collect(source);
+  }
+
+  const isRouteModulePath = (p: string | null): boolean => !!p && ROUTE_MODULE_RE.test(p);
+
+  const recordImport = (
+    specifier: string,
+    node: ts.Node,
+    kind: ImportRecord['importKind'],
+    symbols?: Array<string | undefined>,
+  ) => {
       const line = source.getLineAndCharacterOfPosition(node.getStart(source)).line + 1;
       const col = source.getLineAndCharacterOfPosition(node.getStart(source)).character + 1;
-      let symbol: string | undefined;
-      if (ts.isImportDeclaration(node) && node.importClause && node.importClause.name) {
-        symbol = node.importClause.name.text;
-      }
     let resolution: ImportRecord['resolution'];
     let resolvedPath: string | null = null;
     if (kind === 'non_literal_dynamic') {
@@ -293,33 +326,72 @@ export function analyzeSourceFile(
       resolution = r.resolution;
       resolvedPath = r.resolvedPath;
     }
-    imports.push({
-      path: relPath,
-      line,
-      column: col,
-      symbol,
-      excerpt: specifier.length > 120 ? specifier.slice(0, 120) + '…' : specifier,
-      specifier,
-      importKind: kind,
-      resolution,
-      resolvedPath,
-    });
+    const toEmit: Array<string | undefined> = symbols && symbols.length > 0 ? symbols : [undefined];
+    // Emit one ImportRecord per imported binding (default, named, namespace).
+    const seen = new Set<string>();
+    for (const symbol of toEmit) {
+      const key = symbol ?? '<side-effect>';
+      if (seen.has(key)) continue;
+      seen.add(key);
+      imports.push({
+        path: relPath,
+        line,
+        column: col,
+        symbol,
+        excerpt: specifier.length > 120 ? specifier.slice(0, 120) + '…' : specifier,
+        specifier,
+        importKind: kind,
+        resolution,
+        resolvedPath,
+      });
+    }
   };
+
+  const recordImportDeclaration = (node: ts.ImportDeclaration, specifier: string): void => {
+    const clause = node.importClause;
+    if (!clause) {
+      recordImport(specifier, node, 'static', [undefined]);
+      return;
+    }
+    const symbols: Array<string | undefined> = [];
+    if (clause.name) symbols.push(clause.name.text);
+    const bindings = clause.namedBindings;
+    if (bindings) {
+      if (ts.isNamespaceImport(bindings)) {
+        symbols.push(bindings.name.text);
+      } else if (ts.isNamedImports(bindings)) {
+        for (const el of bindings.elements) {
+          // Local binding name (handles `import { a as b }` -> `b`).
+          symbols.push(el.name.text);
+        }
+      }
+    }
+    if (symbols.length === 0) symbols.push(undefined);
+    recordImport(specifier, node, 'static', symbols);
+  };
+
+  interface PendingUseCall {
+    line: number;
+    mountPath: string;
+    candidateArgs: ts.Node[];
+    node: ts.CallExpression;
+  }
+  const pendingUseCalls: PendingUseCall[] = [];
 
   const visit = (node: ts.Node): void => {
     // ---- imports ----
     if (ts.isImportDeclaration(node) && ts.isStringLiteral(node.moduleSpecifier)) {
-      recordImport((node.moduleSpecifier as ts.StringLiteral).text, node, 'static');
+      recordImportDeclaration(node, (node.moduleSpecifier as ts.StringLiteral).text);
     } else if (ts.isExportDeclaration(node) && node.moduleSpecifier && ts.isStringLiteral(node.moduleSpecifier)) {
-      recordImport((node.moduleSpecifier as ts.StringLiteral).text, node, 'export_from');
+      recordImport((node.moduleSpecifier as ts.StringLiteral).text, node, 'export_from', [undefined]);
     } else if (ts.isCallExpression(node)) {
       const exprText = node.expression.getText(source);
       if (node.expression.kind === ts.SyntaxKind.ImportKeyword && node.arguments.length === 1 && ts.isStringLiteral(node.arguments[0])) {
-        recordImport((node.arguments[0] as ts.StringLiteral).text, node, 'dynamic');
+        recordImport((node.arguments[0] as ts.StringLiteral).text, node, 'dynamic', [undefined]);
       } else if (node.expression.kind === ts.SyntaxKind.ImportKeyword) {
-        recordImport('<non-literal>', node, 'non_literal_dynamic');
+        recordImport('<non-literal>', node, 'non_literal_dynamic', [undefined]);
       } else if (exprText === 'require' && node.arguments.length === 1 && ts.isStringLiteral(node.arguments[0])) {
-        recordImport((node.arguments[0] as ts.StringLiteral).text, node, 'require');
+        recordImport((node.arguments[0] as ts.StringLiteral).text, node, 'require', [undefined]);
       }
     }
 
@@ -373,32 +445,16 @@ export function analyzeSourceFile(
           .map((a) => (ts.isIdentifier(a) ? a.text : ts.isPropertyAccessExpression(a) ? a.getText(source) : null))
           .filter((x): x is string => !!x);
         if (method === 'use') {
-          // Composition mount: app.use(...) or router.use(...).
-          // First string-literal argument is the mount path (may be absent -> '').
+          // Defer mount classification until all imports are known (see
+          // pendingUseCalls processing after traversal).
           const mountPath = localPath === '<dynamic>' ? '' : localPath;
-          const routerArgs = node.arguments.slice(mountPath !== '' || (firstArg && ts.isStringLiteral(firstArg)) ? 1 : 0).filter(
-            (a) => ts.isIdentifier(a) || (ts.isCallExpression(a) && /Router\s*\(\s*\)$/.test(a.expression.getText(source))),
-          );
-          for (const routerArg of routerArgs) {
-            const routerSymbol = ts.isIdentifier(routerArg) ? routerArg.text : (routerArg as ts.CallExpression).expression.getText(source);
-            const isFactory = !ts.isIdentifier(routerArg);
-            let importOrigin: string | null = null;
-            const imported = imports.find((im) => im.symbol === routerSymbol || im.specifier.endsWith('/' + routerSymbol));
-            if (imported) importOrigin = imported.resolvedPath;
-            mounts.push({
-              path: relPath, line, mountPath,
-              routerSymbol, middleware, importOrigin,
-              resolution: isFactory ? 'factory' : importOrigin ? 'direct' : 'unknown',
-            });
-          }
-          // A bare use() with no identifiable router argument still records composition evidence.
-          if (routerArgs.length === 0 && (mountPath !== '' || node.arguments.length > 0)) {
-            mounts.push({
-              path: relPath, line, mountPath,
-              routerSymbol: '<unknown>', middleware, importOrigin: null,
-              resolution: 'unknown',
-            });
-          }
+          const startIdx = mountPath !== '' || (firstArg && ts.isStringLiteral(firstArg)) ? 1 : 0;
+          pendingUseCalls.push({
+            line,
+            mountPath,
+            candidateArgs: Array.from(node.arguments).slice(startIdx),
+            node,
+          });
         } else {
           endpoints.push({ path: relPath, line, routerSymbol: sym, method, localPath, middleware });
         }
@@ -569,6 +625,131 @@ export function analyzeSourceFile(
   };
   visit(source);
 
+  const unresolvedCompositions: RouteCompositionRecord[] = [];
+
+  // ---- Structural router/middleware classification (DEFECT 2 repair) ----
+  // Exactly one mount per use() composition: the single router-like argument
+  // becomes the router; all other identifier arguments become middleware.
+  // Middleware is never emitted as a router mount. Unknown/ambiguous
+  // composition remains unknown via unresolvedCompositions.
+  {
+    const importOriginOf = (symbol: string): string | null => {
+      const hit = imports.find((im) => im.symbol === symbol && im.resolvedPath);
+      return hit ? (hit.resolvedPath as string) : null;
+    };
+    for (const pending of pendingUseCalls) {
+      const { line, mountPath, candidateArgs } = pending;
+      const textOf = (a: ts.Node): string | null => {
+        if (ts.isIdentifier(a)) return a.text;
+        if (ts.isPropertyAccessExpression(a)) return a.getText(source);
+        return null;
+      };
+      interface Candidate {
+        node: ts.Node;
+        kind: 'identifier' | 'router_call' | 'other';
+        symbol: string;
+        isRouter: boolean;
+        isFactoryCall: boolean;
+        importOrigin: string | null;
+      }
+      const candidates: Candidate[] = [];
+      for (const arg of candidateArgs) {
+        if (ts.isIdentifier(arg)) {
+          const symbol = arg.text;
+          const origin = importOriginOf(symbol);
+          const isLocal = localRouterSymbols.has(symbol);
+          const isFactorySym = factoryRouterSymbols.has(symbol);
+          const isRouteImport = !!origin && isRouteModulePath(origin);
+          const isRouter = isLocal || isFactorySym || isRouteImport;
+          candidates.push({
+            node: arg, kind: 'identifier', symbol,
+            isRouter, isFactoryCall: false,
+            importOrigin: origin,
+          });
+        } else if (ts.isCallExpression(arg)) {
+          const calleeText = arg.expression.getText(source);
+          const isRouterCall = ROUTER_NAME_RE.test(calleeText);
+          if (isRouterCall) {
+            candidates.push({
+              node: arg, kind: 'router_call', symbol: calleeText,
+              isRouter: true, isFactoryCall: true, importOrigin: null,
+            });
+          } else {
+            // e.g. express.json(...) — global middleware shape, never a router.
+            candidates.push({
+              node: arg, kind: 'other', symbol: calleeText,
+              isRouter: false, isFactoryCall: false, importOrigin: null,
+            });
+          }
+        } else {
+          candidates.push({
+            node: arg, kind: 'other', symbol: arg.getText(source),
+            isRouter: false, isFactoryCall: false, importOrigin: null,
+          });
+        }
+      }
+      const routerHits = candidates.filter((c) => c.isRouter);
+      const middleware = candidates
+        .filter((c) => !c.isRouter && (c.kind === 'identifier' || (c.node as ts.Node) && ts.isPropertyAccessExpression(c.node as ts.Node)))
+        .map((c) => c.symbol)
+        .filter((s) => !!s);
+      // Also collect plain identifier middleware texts (identifiers already
+      // covered above via kind check; keep deterministic order).
+      const middlewareOrdered: string[] = [];
+      for (const c of candidates) {
+        if (c.isRouter) continue;
+        if (ts.isIdentifier(c.node)) {
+          if (!middlewareOrdered.includes(c.symbol)) middlewareOrdered.push(c.symbol);
+        } else if (ts.isPropertyAccessExpression(c.node as ts.Node)) {
+          if (!middlewareOrdered.includes(c.symbol)) middlewareOrdered.push(c.symbol);
+        }
+      }
+      if (routerHits.length === 1) {
+        const hit = routerHits[0];
+        let routerSymbol = hit.symbol;
+        let importOrigin = hit.importOrigin;
+        let resolution: RouteMountRecord['resolution'];
+        if (hit.kind === 'router_call') {
+          routerSymbol = hit.symbol;
+          importOrigin = null;
+          resolution = 'factory';
+        } else if (factoryRouterSymbols.has(routerSymbol)) {
+          resolution = 'factory';
+        } else if (localRouterSymbols.has(routerSymbol)) {
+          if (!importOrigin) importOrigin = relPath;
+          resolution = 'direct';
+        } else if (importOrigin) {
+          resolution = 'direct';
+        } else {
+          resolution = 'unknown';
+        }
+        // Local Router() bindings and direct imports compose; factory calls
+        // and unknown origins do not fabricate endpoints.
+        mounts.push({
+          path: relPath, line, mountPath,
+          routerSymbol, middleware: middlewareOrdered, importOrigin,
+          resolution,
+        });
+      } else if (routerHits.length === 0) {
+        if (mountPath !== '') {
+          unresolvedCompositions.push({
+            path: relPath, line, mountPath,
+            routerSymbol: '<unknown>',
+            reason: 'no statically identifiable router argument; middleware-only composition remains unresolved',
+          });
+        }
+        // Global middleware (no mount path) emits no mount at all.
+      } else {
+        unresolvedCompositions.push({
+          path: relPath, line, mountPath,
+          routerSymbol: routerHits.map((h) => h.symbol).sort().join(','),
+          reason: 'ambiguous router composition; multiple router-like arguments remain unresolved',
+        });
+      }
+      void middleware;
+    }
+  }
+
   // legacy/compat signals in comments and identifiers
   const LEGACY_RE = /\blegacy\b|\bcompat(ibility)?\b|\bdeprecated\b|\bfallback\b|\bv1\b|\bv2\b/i;
   const lines = content.split(/\r?\n/);
@@ -597,7 +778,7 @@ export function analyzeSourceFile(
   if (/(^|\/)r[1-9][a-z]?[-._]/i.test(relPath)) testSignals.push('milestone_prefixed_path');
 
   return {
-    imports, declarations, endpoints, mounts, prismaAccesses, rawSql, runtimeDdl,
+    imports, declarations, endpoints, mounts, unresolvedCompositions, prismaAccesses, rawSql, runtimeDdl,
     unbounded, mapSets, cacheCandidates, catchSignals, aiCalls, testSignals,
     legacySignals, externalProviderImports,
   };
@@ -1158,6 +1339,7 @@ export function runScan(opts: ScannerOptions): ScanResult {
   const tests: TestRecord[] = [];
   const providerImports: ExternalProviderRecord[] = [];
   const legacyFiles = new Map<string, string[]>();
+  const fileUnresolved: RouteCompositionRecord[] = [];
 
   const tsFiles = relFiles.filter((f) => /\.tsx?$/.test(f));
 
@@ -1193,6 +1375,7 @@ export function runScan(opts: ScannerOptions): ScanResult {
       catchSignals.push(...sourceAnalysis.catchSignals);
       aiCalls.push(...sourceAnalysis.aiCalls);
       providerImports.push(...sourceAnalysis.externalProviderImports);
+      fileUnresolved.push(...sourceAnalysis.unresolvedCompositions);
       if (sourceAnalysis.testSignals.length > 0 && (roleTags.includes('test') || roleTags.includes('proof_candidate'))) {
         tests.push({ path: rel, line: 1, kind: roleTags.includes('test') ? 'test_file' : 'proof_candidate', signals: sourceAnalysis.testSignals });
       }
@@ -1237,19 +1420,21 @@ export function runScan(opts: ScannerOptions): ScanResult {
   }
 
   // prisma schema + migrations
+  // DEFECT 1 repair: the canonical model source is exactly
+  // `prisma/schema.prisma`. Other .prisma files remain inventoried files but
+  // must never silently become authoritative model truth.
   let schemaPath: string | null = null;
   let prismaModels: PrismaModelRecord[] = [];
-  const schemaFile = relFiles.find((f) => f.startsWith('prisma/') && f.endsWith('.prisma') && !f.includes('test')) ?? null;
-  if (schemaFile) {
-    schemaPath = schemaFile;
+  if (relFiles.includes('prisma/schema.prisma')) {
+    schemaPath = 'prisma/schema.prisma';
     try {
-      prismaModels = parsePrismaSchema(fs.readFileSync(path.join(opts.backendRoot, schemaFile), 'utf8'));
+      prismaModels = parsePrismaSchema(fs.readFileSync(path.join(opts.backendRoot, 'prisma/schema.prisma'), 'utf8'));
     } catch { /* parser must not kill the scan */ }
   }
 
   // route composition
   const effectiveRoutes: EffectiveRouteRecord[] = [];
-  const unresolvedCompositions: ScanModel['routes']['unresolvedCompositions'] = [];
+  const unresolvedCompositions: ScanModel['routes']['unresolvedCompositions'] = [...fileUnresolved];
   const routerFileBySymbol = new Map<string, string>();
   for (const m of mounts) {
     if (m.importOrigin) routerFileBySymbol.set(m.routerSymbol, m.importOrigin);

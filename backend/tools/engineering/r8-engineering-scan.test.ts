@@ -295,4 +295,111 @@ describe('r8 engineering scanner (synthetic fixture)', () => {
     ]);
     expect(cycles).toHaveLength(0);
   });
+
+  it('uses prisma/schema.prisma as the canonical model source (DEFECT 1)', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'r8-prisma-'));
+    writeFile(root, 'package.json', JSON.stringify({ name: 'fixture', scripts: {} }, null, 2));
+    writeFile(
+      root,
+      'tsconfig.json',
+      JSON.stringify({ compilerOptions: { target: 'es2020', module: 'commonjs', moduleResolution: 'node', esModuleInterop: true, strict: true } }),
+    );
+    // Snippet sorts before schema.prisma and must NOT become canonical truth.
+    writeFile(root, 'prisma/ai_chat_schema_snippet.prisma', 'model SnippetModel {\n  id String @id\n}\n');
+    writeFile(
+      root,
+      'prisma/schema.prisma',
+      'model Alpha {\n  id String @id\n}\n\nmodel Beta {\n  id String @id\n}\n\nmodel Gamma {\n  id String @id\n}\n',
+    );
+    writeFile(root, 'prisma/schema.test.sqlite.prisma', 'model TestOnlyModel {\n  id String @id\n}\n');
+    writeFile(root, 'src/index.ts', `export const x = 1;\n`);
+    const { model, inventory } = runScan({ ...DEFAULT_OPTIONS, repositoryRoot: path.dirname(root), backendRoot: root });
+    expect(inventory.prisma.schemaPath).toBe('prisma/schema.prisma');
+    const names = inventory.prisma.models.map((m) => m.name).sort();
+    expect(names).toEqual(['Alpha', 'Beta', 'Gamma']);
+    expect(names).not.toContain('SnippetModel');
+    expect(names).not.toContain('TestOnlyModel');
+    expect(inventory.summary.prismaModels).toBe(3);
+    expect(model.summary.prismaModels).toBe(3);
+  });
+
+  it('separates Express middleware from routers (DEFECT 2)', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'r8-mw-'));
+    writeFile(root, 'package.json', JSON.stringify({ name: 'fixture', scripts: {} }, null, 2));
+    writeFile(
+      root,
+      'tsconfig.json',
+      JSON.stringify({ compilerOptions: { target: 'es2020', module: 'commonjs', moduleResolution: 'node', esModuleInterop: true, strict: true } }),
+    );
+    writeFile(root, 'prisma/schema.prisma', 'model User {\n  id String @id\n}\n');
+    writeFile(
+      root,
+      'src/routes/direct.ts',
+      `import { Router } from 'express';\nconst directRoutes = Router();\ndirectRoutes.get('/list', () => {});\nexport default directRoutes;\n`,
+    );
+    writeFile(
+      root,
+      'src/routes/protected.ts',
+      `import { Router } from 'express';\nconst protectedRoutes = Router();\nprotectedRoutes.get('/view', () => {});\nexport default protectedRoutes;\n`,
+    );
+    writeFile(
+      root,
+      'src/routes/named.ts',
+      `import { Router } from 'express';\nexport const namedRouter = Router();\nnamedRouter.get('/info', () => {});\n`,
+    );
+    writeFile(
+      root,
+      'src/index.ts',
+      `import express from 'express';\n` +
+        `import { Router } from 'express';\n` +
+        `import directRoutes from './routes/direct';\n` +
+        `import protectedRoutes from './routes/protected';\n` +
+        `import { namedRouter } from './routes/named';\n` +
+        `const authMiddleware = (_req: unknown, _res: unknown, next: () => void): void => { next(); };\n` +
+        `const contextMiddleware = (_req: unknown, _res: unknown, next: () => void): void => { next(); };\n` +
+        `const globalLimiter = (_req: unknown, _res: unknown, next: () => void): void => { next(); };\n` +
+        `const app = express();\n` +
+        `app.use('/api/direct', directRoutes);\n` +
+        `app.use('/api/protected', authMiddleware, contextMiddleware, protectedRoutes);\n` +
+        `app.use(globalLimiter);\n` +
+        `app.use(express.json());\n` +
+        `app.use('/api/named', namedRouter);\n` +
+        `const localRouter = Router();\n` +
+        `app.use('/api/local', localRouter);\n` +
+        `export default app;\n`,
+    );
+    const { model } = runScan({ ...DEFAULT_OPTIONS, repositoryRoot: path.dirname(root), backendRoot: root });
+    const mounts = model.routes.mounts;
+    const direct = mounts.filter((m) => m.mountPath === '/api/direct');
+    expect(direct).toHaveLength(1);
+    expect(direct[0].routerSymbol).toBe('directRoutes');
+    expect(direct[0].middleware).toEqual([]);
+    const prot = mounts.filter((m) => m.mountPath === '/api/protected');
+    expect(prot).toHaveLength(1);
+    expect(prot[0].routerSymbol).toBe('protectedRoutes');
+    expect(prot[0].middleware).toEqual(['authMiddleware', 'contextMiddleware']);
+    // No mounts for either middleware.
+    expect(mounts.some((m) => m.routerSymbol === 'authMiddleware')).toBe(false);
+    expect(mounts.some((m) => m.routerSymbol === 'contextMiddleware')).toBe(false);
+    expect(mounts.some((m) => m.routerSymbol === 'globalLimiter')).toBe(false);
+    // Global middleware shapes produce no route-module mount.
+    expect(mounts.some((m) => m.mountPath === '' )).toBe(false);
+    // Named import router resolves to its route module.
+    const named = mounts.filter((m) => m.mountPath === '/api/named');
+    expect(named).toHaveLength(1);
+    expect(named[0].routerSymbol).toBe('namedRouter');
+    expect(named[0].importOrigin).toBe('src/routes/named.ts');
+    // Local Router() is recognized as a router.
+    const local = mounts.filter((m) => m.mountPath === '/api/local');
+    expect(local).toHaveLength(1);
+    expect(local[0].routerSymbol).toBe('localRouter');
+    // Markdown contains no middleware-only rows.
+    const map = renderRouteMap(model);
+    expect(map).not.toMatch(/\| authMiddleware \|/);
+    expect(map).not.toMatch(/\| contextMiddleware \|/);
+    expect(map).not.toMatch(/\| globalLimiter \|/);
+    // Middleware appears in the middleware column for the protected mount.
+    expect(map).toContain('protectedRoutes');
+    expect(map).toMatch(/authMiddleware, contextMiddleware/);
+  });
 });
