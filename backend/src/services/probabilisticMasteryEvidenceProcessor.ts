@@ -576,7 +576,7 @@ function createFallbackIdGenerator(): MasteryIdGenerator {
   return { nextId: () => { counter++; return `pm_${counter}`; } };
 }
 
-export function applyEvidenceWithRepository(
+export async function applyEvidenceWithRepository(
   currentState: MasteryState | null,
   evidence: NormalizedMasteryEvidence,
   actor: MasteryActorContext,
@@ -588,13 +588,13 @@ export function applyEvidenceWithRepository(
   idGenerator: MasteryIdGenerator,
   repository: MasteryRepository,
   correlationId: string,
-): (EvidenceApplicationResult & { rejected: boolean; rejectReason: string | null; committed: boolean }) | AuthorizationError {
+): Promise<(EvidenceApplicationResult & { rejected: boolean; rejectReason: string | null; committed: boolean }) | AuthorizationError> {
   const authError = authorizeMutation(actor, target);
   if (authError) return authError;
 
-  if (repository.hasEvidenceBeenApplied(evidence.evidenceId)) {
-    const priorState = repository.readState(target);
-    const priorLogs = repository.listChangeLogs(target.schoolId, target.learnerId, target.targetNodeId);
+  if (await repository.hasEvidenceBeenApplied(evidence.evidenceId)) {
+    const priorState = await repository.readState(target);
+    const priorLogs = await repository.listChangeLogs(target.schoolId, target.learnerId, target.targetNodeId);
     const priorLog = priorLogs.length > 0 ? priorLogs[priorLogs.length - 1] : null;
     return {
       state: priorState || createInitialState(target, policy, clock),
@@ -629,7 +629,7 @@ export function applyEvidenceWithRepository(
     evidenceId: evidence.evidenceId,
   };
 
-  const committed = repository.applyEvidenceAtomically(atomicUpdate);
+  const committed = await repository.applyEvidenceAtomically(atomicUpdate);
   if (!committed) {
     return {
       ...result,
