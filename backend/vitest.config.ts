@@ -10,7 +10,7 @@ export default defineConfig({
     root: path.resolve(__dirname),
     globals: true,
     environment: 'node',
-    include: ['src/**/*.test.ts', 'src/**/*.spec.ts'],
+    include: ['src/**/*.test.ts', 'src/**/*.spec.ts', 'tools/engineering/**/*.test.ts'],
     exclude: [
 
       'src/tests/task-026-*',
