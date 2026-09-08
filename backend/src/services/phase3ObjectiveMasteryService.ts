@@ -1,5 +1,5 @@
 import { phase3ObjectiveRepository } from './phase3ObjectiveRepository';
-import { InMemoryMasteryRepository } from './probabilisticMasteryRepository';
+import { canonicalMasteryRepository } from './probabilisticMasteryRepository';
 import { applyEvidenceWithRepository } from './probabilisticMasteryEvidenceProcessor';
 import { createFixturePolicy } from './probabilisticMasteryPolicy';
 import { EvidenceWeightedStrategy } from './probabilisticMasteryStrategy';
@@ -23,7 +23,9 @@ function key(schoolId: string, learnerId: string, objectiveId: string): string {
 const masteryStatusStore = new Map<string, any>();
 const statusByContext = new Map<string, string>();
 
-const canonicalRepo = new InMemoryMasteryRepository();
+// R7.2: production default is the shared durable canonical repository.
+// Tests needing isolation must inject their own InMemoryMasteryRepository.
+const canonicalRepo = canonicalMasteryRepository;
 const policy = createFixturePolicy();
 const strategy = new EvidenceWeightedStrategy();
 
@@ -144,11 +146,11 @@ export class Phase3ObjectiveMasteryService {
     throw new Error('calculateObjectiveMasteryStatus is test-only; use canonical mastery');
   }
 
-  updateObjectiveMasteryFromEvidence(input: {
+  async updateObjectiveMasteryFromEvidence(input: {
     objectiveId: string; schoolId: string; learnerId: string; classId?: string; subjectId?: string; topicId?: string; skillId?: string;
     evidenceStrength: string; hintUsed: boolean; attemptNumber?: number; reasonCodes: string[]; confidenceLabel?: string;
     evidenceId?: string;
-  }): { objectiveId: string; schoolId: string; learnerId: string; previousStatus: string; newStatus: string; reasonCodes: string[]; changed: boolean; updatedAt: string } {
+  }): Promise<{ objectiveId: string; schoolId: string; learnerId: string; previousStatus: string; newStatus: string; reasonCodes: string[]; changed: boolean; updatedAt: string }> {
     if (isTestMapsMode()) {
       // Legacy test-only path
       const existing = this.getMasteryStatus(input.objectiveId, input.schoolId, input.learnerId);
@@ -205,17 +207,17 @@ export class Phase3ObjectiveMasteryService {
     };
     const clock = { now: () => new Date() };
     const idGen = { nextId: (kind: any) => generateId(`mid-${kind}`) };
-    const currentState = canonicalRepo.readState(target);
+    const currentState = await canonicalRepo.readState(target);
     const previousStatus = currentState ? mapCanonicalLabelToPhase3(currentState.visibleLabel) : 'not_started';
 
-    const result: any = applyEvidenceWithRepository(currentState, evidence, actor, target, policy, strategy, null, clock, idGen, canonicalRepo, `r4-${input.objectiveId}`);
+    const result: any = await applyEvidenceWithRepository(currentState, evidence, actor, target, policy, strategy, null, clock, idGen, canonicalRepo, `r4-${input.objectiveId}`);
     if (result && typeof result === 'object' && 'code' in result) {
       throw new Error(`Mastery authorization failed: ${result.message}`);
     }
     if (result.rejected) {
       // If rejected due to already applied, treat as not changed but return same status
       if (result.rejectReason === 'evidence already applied') {
-        const state = canonicalRepo.readState(target) || currentState;
+        const state = (await canonicalRepo.readState(target)) || currentState;
         const newStatus = state ? mapCanonicalLabelToPhase3(state.visibleLabel) : previousStatus;
         return { objectiveId: input.objectiveId, schoolId: input.schoolId, learnerId: input.learnerId, previousStatus, newStatus, reasonCodes: input.reasonCodes, changed: false, updatedAt: nowISO() };
       }
@@ -281,9 +283,9 @@ export class Phase3ObjectiveMasteryService {
     const rescueCount = (row?.studentsNeedingRescueCount || 0) + (row?.studentsNeedingTeacherSupportCount || 0);
     return { objectiveId, title: objective?.title || 'Objective', classId: classId || (objective as Any)?.classId || '', subjectId: (objective as Any)?.subjectId, topicId: (objective as Any)?.topicId, totalStudents, confidentCount, rescueCount, teacherSupportCount: row?.studentsNeedingTeacherSupportCount || 0, safeSummary: `${confidentCount}/${totalStudents} students confident, ${rescueCount}/${totalStudents} needing intervention.`, recommendedAction: rescueCount > 0 ? 'Review struggling students and provide targeted support.' : 'Continue monitoring progress.', safeEvidenceRefs: [], updatedAt: nowISO() };
   }
-  resetForTests(): void {
+  async resetForTests(): Promise<void> {
     masteryStatusStore.clear(); statusByContext.clear(); statusIdCounter = 0;
-    try { canonicalRepo.resetForTest(); } catch (_e) { void _e; }
+    try { await canonicalRepo.resetForTest?.(); } catch (_e) { void _e; }
   }
   getStatusReason(status: string): string {
     switch (status) {

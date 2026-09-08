@@ -218,17 +218,16 @@ export async function getLearningIntelligenceSnapshot(args: {
 
   if (curriculumTarget?.skillId || curriculumTarget?.topicId) {
     try {
-      // Canonical mastery is process-local (R7 will make it durable). Surface it
-      // when the existing probabilistic mastery machinery holds state in this
-      // process; otherwise report mastery unavailable and still prioritize from
-      // durable Evidence + Revision.
-      const { revisionMasteryRepository } = await import('./revisionCanonicalLearningService');
+      // R7.2: read durable canonical mastery owner. Learning Intelligence is a
+      // reader, never an owner; unavailable -> report unavailable, never
+      // substitute Progress.mastery or any legacy score.
+      const { canonicalMasteryRepository } = await import('./probabilisticMasteryRepository');
       const targets: Array<{ targetNodeId: string; targetNodeType: 'learning_objective' | 'skill' }> = [];
       if (curriculumTarget.skillId) targets.push({ targetNodeId: curriculumTarget.skillId, targetNodeType: 'skill' });
       // Canonical mastery is keyed by objective/skill nodes; topic-level nodes
       // do not carry canonical mastery state in the current repository.
       for (const target of targets) {
-        const state = revisionMasteryRepository.readState({
+        const state = await canonicalMasteryRepository.readState({
           schoolId: schoolId || '',
           learnerId,
           targetNodeId: target.targetNodeId,

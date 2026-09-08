@@ -6,8 +6,8 @@
 
 import { randomUUID } from 'crypto';
 import {
-  revisionMasteryRepository,
-} from './revisionCanonicalLearningService';
+  canonicalMasteryRepository,
+} from './probabilisticMasteryRepository';
 import { applyEvidenceWithRepository } from './probabilisticMasteryEvidenceProcessor';
 import { createFixturePolicy } from './probabilisticMasteryPolicy';
 import { EvidenceWeightedStrategy } from './probabilisticMasteryStrategy';
@@ -86,8 +86,8 @@ export async function applyPracticeEvidenceToCanonicalMastery(
   const clock = { now: () => new Date() };
   const idGen = { nextId: (kind: string) => `${kind}_${randomUUID().slice(0, 8)}` };
 
-  const currentState = revisionMasteryRepository.readState(target);
-  const result: any = applyEvidenceWithRepository(
+  const currentState = await canonicalMasteryRepository.readState(target);
+  const result: any = await applyEvidenceWithRepository(
     currentState,
     evidence,
     actor,
@@ -97,7 +97,7 @@ export async function applyPracticeEvidenceToCanonicalMastery(
     null as any,
     clock as any,
     idGen as any,
-    revisionMasteryRepository as any,
+    canonicalMasteryRepository as any,
     `prac-mastery-${input.committedEvidenceId}`,
   );
 

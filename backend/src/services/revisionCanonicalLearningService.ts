@@ -7,7 +7,7 @@ import { PrismaLearningEvidenceEventStoreRepository } from '../domains/learning-
 import { LearningEvidenceCommandService } from '../domains/learning-evidence/services/learningEvidenceCommandService';
 import { LearningEvidencePrivacyGuard } from '../domains/learning-evidence/services/learningEvidencePrivacyGuard';
 import type { EvidenceOutcome, EvidenceIndependence, EvidenceMode, ConfidenceState, IntegrityState, FinalizationState } from '../domains/learning-evidence/contracts/learningEvidenceEventStoreContracts';
-import { InMemoryMasteryRepository } from './probabilisticMasteryRepository';
+import { canonicalMasteryRepository } from './probabilisticMasteryRepository';
 import { applyEvidenceWithRepository } from './probabilisticMasteryEvidenceProcessor';
 import { createFixturePolicy } from './probabilisticMasteryPolicy';
 import { EvidenceWeightedStrategy } from './probabilisticMasteryStrategy';
@@ -35,16 +35,17 @@ export interface CommitResult {
   sourceType: string;
 }
 
-// Singleton mastery repo for revision (shared across requests, test-resettable)
-export const revisionMasteryRepository = new InMemoryMasteryRepository();
+// Singleton canonical mastery owner (R7.1 durable repository; R7.2 wiring).
+// revisionMasteryRepository remains as a compatibility alias resolving to the exact singleton object.
+export const revisionMasteryRepository = canonicalMasteryRepository;
 const masteryPolicy = createFixturePolicy();
 const masteryStrategy = new EvidenceWeightedStrategy();
 
 // Test seam: deterministic mastery failure injection (C4)
 let _forceMasteryFailure = false;
 export function __setForceMasteryFailure(v: boolean) { _forceMasteryFailure = v; }
-export function __resetMasteryForTests() {
-  try { revisionMasteryRepository.resetForTest(); } catch {}
+export async function __resetMasteryForTests(): Promise<void> {
+  try { await revisionMasteryRepository.resetForTest?.(); } catch {}
   _forceMasteryFailure = false;
 }
 
@@ -418,8 +419,8 @@ export async function applyRevisionEvidenceToCanonicalMastery(input: ApplyMaster
   const idGen = { nextId: (kind: string) => `${kind}_${randomUUID().slice(0, 8)}` };
   const correlationId = `rev-mastery-${input.committedEvidenceId}`;
 
-  const currentState = revisionMasteryRepository.readState(target);
-  const result: any = applyEvidenceWithRepository(currentState, evidence as any, actor as any, target as any, masteryPolicy as any, masteryStrategy as any, null as any, clock as any, idGen as any, revisionMasteryRepository as any, correlationId as any);
+  const currentState = await canonicalMasteryRepository.readState(target);
+  const result: any = await applyEvidenceWithRepository(currentState, evidence as any, actor as any, target as any, masteryPolicy as any, masteryStrategy as any, null as any, clock as any, idGen as any, canonicalMasteryRepository as any, correlationId as any);
 
   // result may be AuthorizationError
   if (result && typeof result === 'object' && 'code' in result) {
