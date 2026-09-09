@@ -8,7 +8,8 @@
     "dev": "nodemon --watch src --watch ../AI/ai --watch ../scripts --ext ts,tsx,js,mjs,cjs,json --exec node ../scripts/dev-backend.mjs",
     "test": "cd .. && npx vitest run --reporter=verbose",
     "seed": "ts-node prisma/seed.ts",
-    "engineering:scan": "tsx tools/engineering/r8-engineering-scan.ts --repo-root .."
+    "engineering:scan": "tsx tools/engineering/r8-engineering-scan.ts --repo-root ..",
+    "engineering:register": "tsx tools/engineering/r8-b-engineering-register.ts --repo-root .."
   },
   "keywords": [],
   "author": "",
