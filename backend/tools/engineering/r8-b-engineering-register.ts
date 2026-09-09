@@ -527,9 +527,27 @@ function rollupStatus(verdicts: WriterVerdict[]): { status: OwnershipStatus; con
 
 export function buildRegisterContext(inv: InventoryLike, graph: GraphLike): RegisterContext {
   const grouped = groupModelsByFamily(inv.prisma.models);
-  const writerByModel = new Map<string, WriterVerdict>();
+  // R8-A keys writer groups and accesses by model name in a different case
+  // convention than prisma.models[] (camelCase vs PascalCase). Join
+  // case-insensitively so production writer evidence actually resolves.
+  const canonicalByLower = buildCanonicalIndex(inv.prisma.models);
+  const toCanonical = (raw: string): string => canonicalByLower.get(raw.toLowerCase()) ?? raw;
+
+  const mergedWriters = new Map<string, WriterLike[]>();
   for (const g of inv.prisma.modelWriterGroups) {
-    writerByModel.set(g.model, classifyWriterGroup(g));
+    const key = toCanonical(g.model);
+    const arr = mergedWriters.get(key) ?? [];
+    arr.push(...g.writers);
+    mergedWriters.set(key, arr);
+  }
+  const writerByModel = new Map<string, WriterVerdict>();
+  for (const [key, writers] of mergedWriters) {
+    const verdict = classifyWriterGroup({ model: key, writers });
+    if (!canonicalByLower.has(key.toLowerCase())) {
+      verdict.note = `${verdict.note} Writer-group key matches no canonical Prisma model (naming drift); carried as an orphan for later review.`;
+      if (verdict.status === 'CLEAR') { verdict.status = 'AMBIGUOUS'; verdict.confidence = 'low'; }
+    }
+    writerByModel.set(key, verdict);
   }
   // Deterministic fallback for models with zero writer-group evidence.
   for (const m of inv.prisma.models) {
@@ -551,8 +569,9 @@ export function buildRegisterContext(inv: InventoryLike, graph: GraphLike): Regi
   for (const a of inv.prisma.accesses) {
     if (!a.model || !isProductionPath(a.path)) continue;
     const bucket = a.readWrite === 'write' ? prodWrites : prodReads;
-    if (!bucket.has(a.model)) bucket.set(a.model, new Set());
-    bucket.get(a.model)?.add(a.path);
+    const key = toCanonical(a.model);
+    if (!bucket.has(key)) bucket.set(key, new Set());
+    bucket.get(key)?.add(a.path);
   }
 
   const families: FamilyOwnership[] = [];
@@ -601,6 +620,9 @@ export function buildRegisterContext(inv: InventoryLike, graph: GraphLike): Regi
     return { path: f.path, klass, evidence: `01 files[] roleTags=route` };
   }).sort((a, b) => a.path.localeCompare(b.path));
 
+  const renderedGroups = inv.prisma.modelWriterGroups.filter((g) =>
+    writerByModel.has(canonicalByLower.get(g.model.toLowerCase()) ?? g.model),
+  ).length;
   const completeness = { L0: 0, L1: 0, L2: 0, L3: 0, L4: 0, L5: 0, L6: 0, L7: 0 } as Record<Completeness, number>;
   for (const c of capabilities) {
     completeness[completenessFor(c, inv)] += 1;
@@ -618,7 +640,7 @@ export function buildRegisterContext(inv: InventoryLike, graph: GraphLike): Regi
       modelsTotal: inv.prisma.models.length,
       modelsAccounted: modelToFamily.size,
       writerGroupsTotal: inv.prisma.modelWriterGroups.length,
-      writerGroupsAccounted: [...writerByModel.keys()].filter((k) => inv.prisma.modelWriterGroups.some((g) => g.model === k)).length,
+      writerGroupsAccounted: renderedGroups,
       routeModulesTotal: routeFiles.length,
       routeModulesRepresented: routeModuleRows.length,
       unresolvedImports: graph.unresolvedImports.length,
@@ -681,8 +703,24 @@ export function requiredRegisterSections(): string[] {
   return [...REQUIRED_REGISTER_SECTIONS];
 }
 
-function baselineBlock(ctx: RegisterContext): string {
-  const s = ctx.inv.scan;
+export function buildCanonicalIndex(models: ModelLike[]): Map<string, string> {
+  const idx = new Map<string, string>();
+  for (const m of models) {
+    if (!idx.has(m.name.toLowerCase())) idx.set(m.name.toLowerCase(), m.name);
+  }
+  return idx;
+}
+
+function ctxNoGroupModels(inv: InventoryLike, canonicalByLower: Map<string, string>): string[] {
+  const grouped = new Set<string>();
+  for (const g of inv.prisma.modelWriterGroups) {
+    const canon = canonicalByLower.get(g.model.toLowerCase());
+    if (canon) grouped.add(canon);
+  }
+  return inv.prisma.models.map((m) => m.name).filter((n) => !grouped.has(n)).sort((a, b) => a.localeCompare(b));
+}
+
+function baselineBlock(ctx: RegisterContext): string {  const s = ctx.inv.scan;
   return [
     `- Scanner version: ${s.scannerVersion}`,
     `- Source fingerprint: ${s.sourceFingerprint}`,
@@ -800,8 +838,8 @@ export function renderOwnershipMatrix(ctx: RegisterContext): string {
     L.push(`  - \`${model}\`: ${v.note} Evidence: \`01 prisma.modelWriterGroups[${model}]\``);
   }
   if (unresolvedModels.length > 80) L.push(`  - _… ${unresolvedModels.length - 80} further models; full list in Canonical Writers table above._`);
-  const noGroup = ctx.inv.prisma.models.filter((m) => !ctx.inv.prisma.modelWriterGroups.some((g) => g.model === m.name));
-  L.push(`- Models with no writer-group entry at all: ${noGroup.length} (${noGroup.slice(0, 20).map((m) => `\`${m.name}\``).join(', ')}${noGroup.length > 20 ? ', …' : ''})`);
+  const noGroup = ctxNoGroupModels(ctx.inv, buildCanonicalIndex(ctx.inv.prisma.models));
+  L.push(`- Models with no writer-group entry at all: ${noGroup.length} (${noGroup.slice(0, 20).map((m) => `\`${m}\``).join(', ')}${noGroup.length > 20 ? ', …' : ''})`);
   L.push('');
   L.push('## R8-A Findings Requiring Later Engineering Review');
   L.push('');

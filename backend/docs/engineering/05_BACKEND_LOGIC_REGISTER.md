@@ -56,7 +56,7 @@ Enforcement observed on production mounts (`src/index.ts` mount middleware, R8-A
 - AUTHORIZATION / ROLE SCOPE: UNRESOLVED — no school-context middleware on these mounts; service-level role checks not statically extracted
 - CORE DECISION LOGIC: UNRESOLVED statically — decision internals live in service/domain source; route→service linkage above is the proven frame
 - STATE TRANSITIONS: UNRESOLVED statically except where linked families carry state models (see matrix family rows)
-- PERSISTENCE EFFECT: `chat-session`: UNRESOLVED; `student-identity-context`: UNRESOLVED
+- PERSISTENCE EFFECT: `chat-session`: AMBIGUOUS; `student-identity-context`: DUPLICATE_WRITER_CANDIDATE
 - EXTERNAL DEPENDENCIES: UNRESOLVED — none proven statically for this group
 - FAILURE SEMANTICS: UNRESOLVED statically — error shapes live in service/route bodies not extracted by R8-A; where equivalent paths diverge, ERROR_SEMANTICS_REVIEW_REQUIRED applies as a later-review flag, not a verdict
 - IDEMPOTENCY / DUPLICATE BEHAVIOR: UNRESOLVED — no idempotency record linked to this group
@@ -82,7 +82,7 @@ Enforcement observed on production mounts (`src/index.ts` mount middleware, R8-A
 - AUTHORIZATION / ROLE SCOPE: UNRESOLVED — no school-context middleware on these mounts; service-level role checks not statically extracted
 - CORE DECISION LOGIC: UNRESOLVED statically — decision internals live in service/domain source; route→service linkage above is the proven frame
 - STATE TRANSITIONS: UNRESOLVED statically except where linked families carry state models (see matrix family rows)
-- PERSISTENCE EFFECT: `chat-session`: UNRESOLVED; `question-bank`: UNRESOLVED; `student-identity-context`: UNRESOLVED
+- PERSISTENCE EFFECT: `chat-session`: AMBIGUOUS; `question-bank`: AMBIGUOUS; `student-identity-context`: DUPLICATE_WRITER_CANDIDATE
 - EXTERNAL DEPENDENCIES: UNRESOLVED — none proven statically for this group
 - FAILURE SEMANTICS: UNRESOLVED statically — error shapes live in service/route bodies not extracted by R8-A; where equivalent paths diverge, ERROR_SEMANTICS_REVIEW_REQUIRED applies as a later-review flag, not a verdict
 - IDEMPOTENCY / DUPLICATE BEHAVIOR: idempotency records present in a linked family; exact key behavior UNRESOLVED statically
@@ -108,7 +108,7 @@ Enforcement observed on production mounts (`src/index.ts` mount middleware, R8-A
 - AUTHORIZATION / ROLE SCOPE: `requireVerifiedSchoolContext` school-context enforcement (mount evidence); role checks UNRESOLVED statically
 - CORE DECISION LOGIC: UNRESOLVED statically — decision internals live in service/domain source; route→service linkage above is the proven frame
 - STATE TRANSITIONS: UNRESOLVED statically except where linked families carry state models (see matrix family rows)
-- PERSISTENCE EFFECT: `chat-session`: UNRESOLVED; `question-bank`: UNRESOLVED; `student-identity-context`: UNRESOLVED; `unclassified`: UNRESOLVED
+- PERSISTENCE EFFECT: `chat-session`: AMBIGUOUS; `question-bank`: AMBIGUOUS; `student-identity-context`: DUPLICATE_WRITER_CANDIDATE; `unclassified`: UNRESOLVED
 - EXTERNAL DEPENDENCIES: UNRESOLVED — none proven statically for this group
 - FAILURE SEMANTICS: UNRESOLVED statically — error shapes live in service/route bodies not extracted by R8-A; where equivalent paths diverge, ERROR_SEMANTICS_REVIEW_REQUIRED applies as a later-review flag, not a verdict
 - IDEMPOTENCY / DUPLICATE BEHAVIOR: idempotency records present in a linked family; exact key behavior UNRESOLVED statically
@@ -134,7 +134,7 @@ Enforcement observed on production mounts (`src/index.ts` mount middleware, R8-A
 - AUTHORIZATION / ROLE SCOPE: UNRESOLVED — no school-context middleware on these mounts; service-level role checks not statically extracted
 - CORE DECISION LOGIC: UNRESOLVED statically — decision internals live in service/domain source; route→service linkage above is the proven frame
 - STATE TRANSITIONS: UNRESOLVED statically except where linked families carry state models (see matrix family rows)
-- PERSISTENCE EFFECT: `chat-session`: UNRESOLVED; `mastery`: UNRESOLVED; `objectives`: UNRESOLVED; `question-bank`: UNRESOLVED; `student-identity-context`: UNRESOLVED; `unclassified`: UNRESOLVED
+- PERSISTENCE EFFECT: `chat-session`: AMBIGUOUS; `mastery`: AMBIGUOUS; `objectives`: DUPLICATE_WRITER_CANDIDATE; `question-bank`: AMBIGUOUS; `student-identity-context`: DUPLICATE_WRITER_CANDIDATE; `unclassified`: UNRESOLVED
 - EXTERNAL DEPENDENCIES: UNRESOLVED — none proven statically for this group
 - FAILURE SEMANTICS: UNRESOLVED statically — error shapes live in service/route bodies not extracted by R8-A; where equivalent paths diverge, ERROR_SEMANTICS_REVIEW_REQUIRED applies as a later-review flag, not a verdict
 - IDEMPOTENCY / DUPLICATE BEHAVIOR: idempotency records present in a linked family; exact key behavior UNRESOLVED statically
@@ -160,7 +160,7 @@ Enforcement observed on production mounts (`src/index.ts` mount middleware, R8-A
 - AUTHORIZATION / ROLE SCOPE: `requireVerifiedSchoolContext` school-context enforcement (mount evidence); role checks UNRESOLVED statically
 - CORE DECISION LOGIC: UNRESOLVED statically — decision internals live in service/domain source; route→service linkage above is the proven frame
 - STATE TRANSITIONS: UNRESOLVED statically except where linked families carry state models (see matrix family rows)
-- PERSISTENCE EFFECT: `chat-session`: UNRESOLVED; `operations-readiness`: UNRESOLVED; `student-identity-context`: UNRESOLVED; `unclassified`: UNRESOLVED
+- PERSISTENCE EFFECT: `chat-session`: AMBIGUOUS; `operations-readiness`: AMBIGUOUS; `student-identity-context`: DUPLICATE_WRITER_CANDIDATE; `unclassified`: UNRESOLVED
 - EXTERNAL DEPENDENCIES: UNRESOLVED — none proven statically for this group
 - FAILURE SEMANTICS: UNRESOLVED statically — error shapes live in service/route bodies not extracted by R8-A; where equivalent paths diverge, ERROR_SEMANTICS_REVIEW_REQUIRED applies as a later-review flag, not a verdict
 - IDEMPOTENCY / DUPLICATE BEHAVIOR: UNRESOLVED — no idempotency record linked to this group
@@ -186,7 +186,7 @@ Enforcement observed on production mounts (`src/index.ts` mount middleware, R8-A
 - AUTHORIZATION / ROLE SCOPE: `requireVerifiedSchoolContext` school-context enforcement (mount evidence); role checks UNRESOLVED statically
 - CORE DECISION LOGIC: UNRESOLVED statically — decision internals live in service/domain source; route→service linkage above is the proven frame
 - STATE TRANSITIONS: UNRESOLVED statically except where linked families carry state models (see matrix family rows)
-- PERSISTENCE EFFECT: `chat-session`: UNRESOLVED; `unclassified`: UNRESOLVED
+- PERSISTENCE EFFECT: `chat-session`: AMBIGUOUS; `unclassified`: UNRESOLVED
 - EXTERNAL DEPENDENCIES: UNRESOLVED — none proven statically for this group
 - FAILURE SEMANTICS: UNRESOLVED statically — error shapes live in service/route bodies not extracted by R8-A; where equivalent paths diverge, ERROR_SEMANTICS_REVIEW_REQUIRED applies as a later-review flag, not a verdict
 - IDEMPOTENCY / DUPLICATE BEHAVIOR: UNRESOLVED — no idempotency record linked to this group
@@ -214,7 +214,7 @@ Enforcement observed on production mounts (`src/index.ts` mount middleware, R8-A
 - AUTHORIZATION / ROLE SCOPE: `requireVerifiedSchoolContext` school-context enforcement (mount evidence); role checks UNRESOLVED statically
 - CORE DECISION LOGIC: UNRESOLVED statically — decision internals live in service/domain source; route→service linkage above is the proven frame
 - STATE TRANSITIONS: UNRESOLVED statically except where linked families carry state models (see matrix family rows)
-- PERSISTENCE EFFECT: `learning-evidence`: UNRESOLVED; `student-identity-context`: UNRESOLVED
+- PERSISTENCE EFFECT: `learning-evidence`: AMBIGUOUS; `student-identity-context`: DUPLICATE_WRITER_CANDIDATE
 - EXTERNAL DEPENDENCIES: UNRESOLVED — none proven statically for this group
 - FAILURE SEMANTICS: UNRESOLVED statically — error shapes live in service/route bodies not extracted by R8-A; where equivalent paths diverge, ERROR_SEMANTICS_REVIEW_REQUIRED applies as a later-review flag, not a verdict
 - IDEMPOTENCY / DUPLICATE BEHAVIOR: idempotency records present in a linked family; exact key behavior UNRESOLVED statically
@@ -240,7 +240,7 @@ Enforcement observed on production mounts (`src/index.ts` mount middleware, R8-A
 - AUTHORIZATION / ROLE SCOPE: `requireVerifiedSchoolContext` school-context enforcement (mount evidence); role checks UNRESOLVED statically
 - CORE DECISION LOGIC: UNRESOLVED statically — decision internals live in service/domain source; route→service linkage above is the proven frame
 - STATE TRANSITIONS: UNRESOLVED statically except where linked families carry state models (see matrix family rows)
-- PERSISTENCE EFFECT: `learner-memory`: UNRESOLVED; `student-identity-context`: UNRESOLVED; `unclassified`: UNRESOLVED
+- PERSISTENCE EFFECT: `learner-memory`: DUPLICATE_WRITER_CANDIDATE; `student-identity-context`: DUPLICATE_WRITER_CANDIDATE; `unclassified`: UNRESOLVED
 - EXTERNAL DEPENDENCIES: UNRESOLVED — none proven statically for this group
 - FAILURE SEMANTICS: UNRESOLVED statically — error shapes live in service/route bodies not extracted by R8-A; where equivalent paths diverge, ERROR_SEMANTICS_REVIEW_REQUIRED applies as a later-review flag, not a verdict
 - IDEMPOTENCY / DUPLICATE BEHAVIOR: UNRESOLVED — no idempotency record linked to this group
@@ -266,7 +266,7 @@ Enforcement observed on production mounts (`src/index.ts` mount middleware, R8-A
 - AUTHORIZATION / ROLE SCOPE: `requireVerifiedSchoolContext` school-context enforcement (mount evidence); role checks UNRESOLVED statically
 - CORE DECISION LOGIC: UNRESOLVED statically — decision internals live in service/domain source; route→service linkage above is the proven frame
 - STATE TRANSITIONS: UNRESOLVED statically except where linked families carry state models (see matrix family rows)
-- PERSISTENCE EFFECT: `learner-memory`: UNRESOLVED; `student-identity-context`: UNRESOLVED; `unclassified`: UNRESOLVED
+- PERSISTENCE EFFECT: `learner-memory`: DUPLICATE_WRITER_CANDIDATE; `student-identity-context`: DUPLICATE_WRITER_CANDIDATE; `unclassified`: UNRESOLVED
 - EXTERNAL DEPENDENCIES: UNRESOLVED — none proven statically for this group
 - FAILURE SEMANTICS: UNRESOLVED statically — error shapes live in service/route bodies not extracted by R8-A; where equivalent paths diverge, ERROR_SEMANTICS_REVIEW_REQUIRED applies as a later-review flag, not a verdict
 - IDEMPOTENCY / DUPLICATE BEHAVIOR: UNRESOLVED — no idempotency record linked to this group
@@ -292,7 +292,7 @@ Enforcement observed on production mounts (`src/index.ts` mount middleware, R8-A
 - AUTHORIZATION / ROLE SCOPE: `requireVerifiedSchoolContext` school-context enforcement (mount evidence); role checks UNRESOLVED statically
 - CORE DECISION LOGIC: UNRESOLVED statically — decision internals live in service/domain source; route→service linkage above is the proven frame
 - STATE TRANSITIONS: UNRESOLVED statically except where linked families carry state models (see matrix family rows)
-- PERSISTENCE EFFECT: `artifacts-media`: UNRESOLVED; `chat-session`: UNRESOLVED; `learning-evidence`: UNRESOLVED; `objectives`: UNRESOLVED; `student-identity-context`: UNRESOLVED; `unclassified`: UNRESOLVED
+- PERSISTENCE EFFECT: `artifacts-media`: AMBIGUOUS; `chat-session`: AMBIGUOUS; `learning-evidence`: AMBIGUOUS; `objectives`: DUPLICATE_WRITER_CANDIDATE; `student-identity-context`: DUPLICATE_WRITER_CANDIDATE; `unclassified`: UNRESOLVED
 - EXTERNAL DEPENDENCIES: UNRESOLVED — none proven statically for this group
 - FAILURE SEMANTICS: UNRESOLVED statically — error shapes live in service/route bodies not extracted by R8-A; where equivalent paths diverge, ERROR_SEMANTICS_REVIEW_REQUIRED applies as a later-review flag, not a verdict
 - IDEMPOTENCY / DUPLICATE BEHAVIOR: idempotency records present in a linked family; exact key behavior UNRESOLVED statically
@@ -318,7 +318,7 @@ Enforcement observed on production mounts (`src/index.ts` mount middleware, R8-A
 - AUTHORIZATION / ROLE SCOPE: `requireVerifiedSchoolContext` school-context enforcement (mount evidence); role checks UNRESOLVED statically
 - CORE DECISION LOGIC: UNRESOLVED statically — decision internals live in service/domain source; route→service linkage above is the proven frame
 - STATE TRANSITIONS: UNRESOLVED statically except where linked families carry state models (see matrix family rows)
-- PERSISTENCE EFFECT: `question-bank`: UNRESOLVED; `safeguarding-privacy`: UNRESOLVED; `school-integration`: UNRESOLVED; `student-identity-context`: UNRESOLVED
+- PERSISTENCE EFFECT: `question-bank`: AMBIGUOUS; `safeguarding-privacy`: DUPLICATE_WRITER_CANDIDATE; `school-integration`: AMBIGUOUS; `student-identity-context`: DUPLICATE_WRITER_CANDIDATE
 - EXTERNAL DEPENDENCIES: UNRESOLVED — none proven statically for this group
 - FAILURE SEMANTICS: UNRESOLVED statically — error shapes live in service/route bodies not extracted by R8-A; where equivalent paths diverge, ERROR_SEMANTICS_REVIEW_REQUIRED applies as a later-review flag, not a verdict
 - IDEMPOTENCY / DUPLICATE BEHAVIOR: idempotency records present in a linked family; exact key behavior UNRESOLVED statically
@@ -344,7 +344,7 @@ Enforcement observed on production mounts (`src/index.ts` mount middleware, R8-A
 - AUTHORIZATION / ROLE SCOPE: `requireVerifiedSchoolContext` school-context enforcement (mount evidence); role checks UNRESOLVED statically
 - CORE DECISION LOGIC: UNRESOLVED statically — decision internals live in service/domain source; route→service linkage above is the proven frame
 - STATE TRANSITIONS: UNRESOLVED statically except where linked families carry state models (see matrix family rows)
-- PERSISTENCE EFFECT: `artifacts-media`: UNRESOLVED; `chat-session`: UNRESOLVED; `curriculum-content`: UNRESOLVED; `learning-evidence`: UNRESOLVED; `mastery`: UNRESOLVED; `objectives`: UNRESOLVED; `practice`: UNRESOLVED; `question-bank`: UNRESOLVED; `revision`: UNRESOLVED; `unclassified`: UNRESOLVED
+- PERSISTENCE EFFECT: `artifacts-media`: AMBIGUOUS; `chat-session`: AMBIGUOUS; `curriculum-content`: AMBIGUOUS; `learning-evidence`: AMBIGUOUS; `mastery`: AMBIGUOUS; `objectives`: DUPLICATE_WRITER_CANDIDATE; `practice`: AMBIGUOUS; `question-bank`: AMBIGUOUS; `revision`: AMBIGUOUS; `unclassified`: UNRESOLVED
 - EXTERNAL DEPENDENCIES: UNRESOLVED — none proven statically for this group
 - FAILURE SEMANTICS: UNRESOLVED statically — error shapes live in service/route bodies not extracted by R8-A; where equivalent paths diverge, ERROR_SEMANTICS_REVIEW_REQUIRED applies as a later-review flag, not a verdict
 - IDEMPOTENCY / DUPLICATE BEHAVIOR: idempotency records present in a linked family; exact key behavior UNRESOLVED statically
@@ -372,7 +372,7 @@ Enforcement observed on production mounts (`src/index.ts` mount middleware, R8-A
 - AUTHORIZATION / ROLE SCOPE: `requireVerifiedSchoolContext` school-context enforcement (mount evidence); role checks UNRESOLVED statically
 - CORE DECISION LOGIC: UNRESOLVED statically — decision internals live in service/domain source; route→service linkage above is the proven frame
 - STATE TRANSITIONS: UNRESOLVED statically except where linked families carry state models (see matrix family rows)
-- PERSISTENCE EFFECT: `practice`: UNRESOLVED; `student-identity-context`: UNRESOLVED
+- PERSISTENCE EFFECT: `practice`: AMBIGUOUS; `student-identity-context`: DUPLICATE_WRITER_CANDIDATE
 - EXTERNAL DEPENDENCIES: UNRESOLVED — none proven statically for this group
 - FAILURE SEMANTICS: UNRESOLVED statically — error shapes live in service/route bodies not extracted by R8-A; where equivalent paths diverge, ERROR_SEMANTICS_REVIEW_REQUIRED applies as a later-review flag, not a verdict
 - IDEMPOTENCY / DUPLICATE BEHAVIOR: UNRESOLVED — no idempotency record linked to this group
@@ -398,7 +398,7 @@ Enforcement observed on production mounts (`src/index.ts` mount middleware, R8-A
 - AUTHORIZATION / ROLE SCOPE: `requireVerifiedSchoolContext` school-context enforcement (mount evidence); role checks UNRESOLVED statically
 - CORE DECISION LOGIC: UNRESOLVED statically — decision internals live in service/domain source; route→service linkage above is the proven frame
 - STATE TRANSITIONS: UNRESOLVED statically except where linked families carry state models (see matrix family rows)
-- PERSISTENCE EFFECT: `mastery`: UNRESOLVED; `practice`: UNRESOLVED; `student-identity-context`: UNRESOLVED
+- PERSISTENCE EFFECT: `mastery`: AMBIGUOUS; `practice`: AMBIGUOUS; `student-identity-context`: DUPLICATE_WRITER_CANDIDATE
 - EXTERNAL DEPENDENCIES: UNRESOLVED — none proven statically for this group
 - FAILURE SEMANTICS: UNRESOLVED statically — error shapes live in service/route bodies not extracted by R8-A; where equivalent paths diverge, ERROR_SEMANTICS_REVIEW_REQUIRED applies as a later-review flag, not a verdict
 - IDEMPOTENCY / DUPLICATE BEHAVIOR: UNRESOLVED — no idempotency record linked to this group
@@ -424,7 +424,7 @@ Enforcement observed on production mounts (`src/index.ts` mount middleware, R8-A
 - AUTHORIZATION / ROLE SCOPE: `requireVerifiedSchoolContext` school-context enforcement (mount evidence); role checks UNRESOLVED statically
 - CORE DECISION LOGIC: UNRESOLVED statically — decision internals live in service/domain source; route→service linkage above is the proven frame
 - STATE TRANSITIONS: UNRESOLVED statically except where linked families carry state models (see matrix family rows)
-- PERSISTENCE EFFECT: `assessment`: UNRESOLVED; `objectives`: UNRESOLVED; `question-bank`: UNRESOLVED; `student-identity-context`: UNRESOLVED; `unclassified`: UNRESOLVED
+- PERSISTENCE EFFECT: `assessment`: UNRESOLVED; `objectives`: DUPLICATE_WRITER_CANDIDATE; `question-bank`: AMBIGUOUS; `student-identity-context`: DUPLICATE_WRITER_CANDIDATE; `unclassified`: UNRESOLVED
 - EXTERNAL DEPENDENCIES: UNRESOLVED — none proven statically for this group
 - FAILURE SEMANTICS: UNRESOLVED statically — error shapes live in service/route bodies not extracted by R8-A; where equivalent paths diverge, ERROR_SEMANTICS_REVIEW_REQUIRED applies as a later-review flag, not a verdict
 - IDEMPOTENCY / DUPLICATE BEHAVIOR: idempotency records present in a linked family; exact key behavior UNRESOLVED statically
@@ -450,7 +450,7 @@ Enforcement observed on production mounts (`src/index.ts` mount middleware, R8-A
 - AUTHORIZATION / ROLE SCOPE: `requireVerifiedSchoolContext` school-context enforcement (mount evidence); role checks UNRESOLVED statically
 - CORE DECISION LOGIC: UNRESOLVED statically — decision internals live in service/domain source; route→service linkage above is the proven frame
 - STATE TRANSITIONS: UNRESOLVED statically except where linked families carry state models (see matrix family rows)
-- PERSISTENCE EFFECT: `objectives`: UNRESOLVED; `student-identity-context`: UNRESOLVED; `unclassified`: UNRESOLVED
+- PERSISTENCE EFFECT: `objectives`: DUPLICATE_WRITER_CANDIDATE; `student-identity-context`: DUPLICATE_WRITER_CANDIDATE; `unclassified`: UNRESOLVED
 - EXTERNAL DEPENDENCIES: UNRESOLVED — none proven statically for this group
 - FAILURE SEMANTICS: UNRESOLVED statically — error shapes live in service/route bodies not extracted by R8-A; where equivalent paths diverge, ERROR_SEMANTICS_REVIEW_REQUIRED applies as a later-review flag, not a verdict
 - IDEMPOTENCY / DUPLICATE BEHAVIOR: UNRESOLVED — no idempotency record linked to this group
@@ -476,7 +476,7 @@ Enforcement observed on production mounts (`src/index.ts` mount middleware, R8-A
 - AUTHORIZATION / ROLE SCOPE: `requireVerifiedSchoolContext` school-context enforcement (mount evidence); role checks UNRESOLVED statically
 - CORE DECISION LOGIC: UNRESOLVED statically — decision internals live in service/domain source; route→service linkage above is the proven frame
 - STATE TRANSITIONS: UNRESOLVED statically except where linked families carry state models (see matrix family rows)
-- PERSISTENCE EFFECT: `mastery`: UNRESOLVED; `student-identity-context`: UNRESOLVED
+- PERSISTENCE EFFECT: `mastery`: AMBIGUOUS; `student-identity-context`: DUPLICATE_WRITER_CANDIDATE
 - EXTERNAL DEPENDENCIES: UNRESOLVED — none proven statically for this group
 - FAILURE SEMANTICS: UNRESOLVED statically — error shapes live in service/route bodies not extracted by R8-A; where equivalent paths diverge, ERROR_SEMANTICS_REVIEW_REQUIRED applies as a later-review flag, not a verdict
 - IDEMPOTENCY / DUPLICATE BEHAVIOR: UNRESOLVED — no idempotency record linked to this group
@@ -502,7 +502,7 @@ Enforcement observed on production mounts (`src/index.ts` mount middleware, R8-A
 - AUTHORIZATION / ROLE SCOPE: UNRESOLVED — no school-context middleware on these mounts; service-level role checks not statically extracted
 - CORE DECISION LOGIC: UNRESOLVED statically — decision internals live in service/domain source; route→service linkage above is the proven frame
 - STATE TRANSITIONS: UNRESOLVED statically except where linked families carry state models (see matrix family rows)
-- PERSISTENCE EFFECT: `learning-evidence`: UNRESOLVED; `mastery`: UNRESOLVED; `practice`: UNRESOLVED; `student-identity-context`: UNRESOLVED
+- PERSISTENCE EFFECT: `learning-evidence`: AMBIGUOUS; `mastery`: AMBIGUOUS; `practice`: AMBIGUOUS; `student-identity-context`: DUPLICATE_WRITER_CANDIDATE
 - EXTERNAL DEPENDENCIES: UNRESOLVED — none proven statically for this group
 - FAILURE SEMANTICS: UNRESOLVED statically — error shapes live in service/route bodies not extracted by R8-A; where equivalent paths diverge, ERROR_SEMANTICS_REVIEW_REQUIRED applies as a later-review flag, not a verdict
 - IDEMPOTENCY / DUPLICATE BEHAVIOR: idempotency records present in a linked family; exact key behavior UNRESOLVED statically
@@ -528,7 +528,7 @@ Enforcement observed on production mounts (`src/index.ts` mount middleware, R8-A
 - AUTHORIZATION / ROLE SCOPE: `requireVerifiedSchoolContext` school-context enforcement (mount evidence); role checks UNRESOLVED statically
 - CORE DECISION LOGIC: UNRESOLVED statically — decision internals live in service/domain source; route→service linkage above is the proven frame
 - STATE TRANSITIONS: UNRESOLVED statically except where linked families carry state models (see matrix family rows)
-- PERSISTENCE EFFECT: `objectives`: UNRESOLVED; `student-identity-context`: UNRESOLVED; `unclassified`: UNRESOLVED
+- PERSISTENCE EFFECT: `objectives`: DUPLICATE_WRITER_CANDIDATE; `student-identity-context`: DUPLICATE_WRITER_CANDIDATE; `unclassified`: UNRESOLVED
 - EXTERNAL DEPENDENCIES: UNRESOLVED — none proven statically for this group
 - FAILURE SEMANTICS: UNRESOLVED statically — error shapes live in service/route bodies not extracted by R8-A; where equivalent paths diverge, ERROR_SEMANTICS_REVIEW_REQUIRED applies as a later-review flag, not a verdict
 - IDEMPOTENCY / DUPLICATE BEHAVIOR: UNRESOLVED — no idempotency record linked to this group
@@ -554,7 +554,7 @@ Enforcement observed on production mounts (`src/index.ts` mount middleware, R8-A
 - AUTHORIZATION / ROLE SCOPE: `requireVerifiedSchoolContext` school-context enforcement (mount evidence); role checks UNRESOLVED statically
 - CORE DECISION LOGIC: UNRESOLVED statically — decision internals live in service/domain source; route→service linkage above is the proven frame
 - STATE TRANSITIONS: UNRESOLVED statically except where linked families carry state models (see matrix family rows)
-- PERSISTENCE EFFECT: `practice`: UNRESOLVED; `student-identity-context`: UNRESOLVED
+- PERSISTENCE EFFECT: `practice`: AMBIGUOUS; `student-identity-context`: DUPLICATE_WRITER_CANDIDATE
 - EXTERNAL DEPENDENCIES: UNRESOLVED — none proven statically for this group
 - FAILURE SEMANTICS: UNRESOLVED statically — error shapes live in service/route bodies not extracted by R8-A; where equivalent paths diverge, ERROR_SEMANTICS_REVIEW_REQUIRED applies as a later-review flag, not a verdict
 - IDEMPOTENCY / DUPLICATE BEHAVIOR: UNRESOLVED — no idempotency record linked to this group
@@ -580,7 +580,7 @@ Enforcement observed on production mounts (`src/index.ts` mount middleware, R8-A
 - AUTHORIZATION / ROLE SCOPE: `requireVerifiedSchoolContext` school-context enforcement (mount evidence); role checks UNRESOLVED statically
 - CORE DECISION LOGIC: UNRESOLVED statically — decision internals live in service/domain source; route→service linkage above is the proven frame
 - STATE TRANSITIONS: UNRESOLVED statically except where linked families carry state models (see matrix family rows)
-- PERSISTENCE EFFECT: `objectives`: UNRESOLVED; `revision`: UNRESOLVED; `student-identity-context`: UNRESOLVED; `unclassified`: UNRESOLVED
+- PERSISTENCE EFFECT: `objectives`: DUPLICATE_WRITER_CANDIDATE; `revision`: AMBIGUOUS; `student-identity-context`: DUPLICATE_WRITER_CANDIDATE; `unclassified`: UNRESOLVED
 - EXTERNAL DEPENDENCIES: UNRESOLVED — none proven statically for this group
 - FAILURE SEMANTICS: UNRESOLVED statically — error shapes live in service/route bodies not extracted by R8-A; where equivalent paths diverge, ERROR_SEMANTICS_REVIEW_REQUIRED applies as a later-review flag, not a verdict
 - IDEMPOTENCY / DUPLICATE BEHAVIOR: UNRESOLVED — no idempotency record linked to this group
@@ -606,7 +606,7 @@ Enforcement observed on production mounts (`src/index.ts` mount middleware, R8-A
 - AUTHORIZATION / ROLE SCOPE: `requireVerifiedSchoolContext` school-context enforcement (mount evidence); role checks UNRESOLVED statically
 - CORE DECISION LOGIC: UNRESOLVED statically — decision internals live in service/domain source; route→service linkage above is the proven frame
 - STATE TRANSITIONS: UNRESOLVED statically except where linked families carry state models (see matrix family rows)
-- PERSISTENCE EFFECT: `objectives`: UNRESOLVED; `operations-readiness`: UNRESOLVED; `question-bank`: UNRESOLVED; `safeguarding-privacy`: UNRESOLVED; `school-integration`: UNRESOLVED; `student-identity-context`: UNRESOLVED; `unclassified`: UNRESOLVED
+- PERSISTENCE EFFECT: `objectives`: DUPLICATE_WRITER_CANDIDATE; `operations-readiness`: AMBIGUOUS; `question-bank`: AMBIGUOUS; `safeguarding-privacy`: DUPLICATE_WRITER_CANDIDATE; `school-integration`: AMBIGUOUS; `student-identity-context`: DUPLICATE_WRITER_CANDIDATE; `unclassified`: UNRESOLVED
 - EXTERNAL DEPENDENCIES: UNRESOLVED — none proven statically for this group
 - FAILURE SEMANTICS: UNRESOLVED statically — error shapes live in service/route bodies not extracted by R8-A; where equivalent paths diverge, ERROR_SEMANTICS_REVIEW_REQUIRED applies as a later-review flag, not a verdict
 - IDEMPOTENCY / DUPLICATE BEHAVIOR: idempotency records present in a linked family; exact key behavior UNRESOLVED statically
@@ -632,7 +632,7 @@ Enforcement observed on production mounts (`src/index.ts` mount middleware, R8-A
 - AUTHORIZATION / ROLE SCOPE: `requireVerifiedSchoolContext` school-context enforcement (mount evidence); role checks UNRESOLVED statically
 - CORE DECISION LOGIC: UNRESOLVED statically — decision internals live in service/domain source; route→service linkage above is the proven frame
 - STATE TRANSITIONS: UNRESOLVED statically except where linked families carry state models (see matrix family rows)
-- PERSISTENCE EFFECT: `learner-memory`: UNRESOLVED; `practice`: UNRESOLVED; `student-identity-context`: UNRESOLVED; `unclassified`: UNRESOLVED
+- PERSISTENCE EFFECT: `learner-memory`: DUPLICATE_WRITER_CANDIDATE; `practice`: AMBIGUOUS; `student-identity-context`: DUPLICATE_WRITER_CANDIDATE; `unclassified`: UNRESOLVED
 - EXTERNAL DEPENDENCIES: UNRESOLVED — none proven statically for this group
 - FAILURE SEMANTICS: UNRESOLVED statically — error shapes live in service/route bodies not extracted by R8-A; where equivalent paths diverge, ERROR_SEMANTICS_REVIEW_REQUIRED applies as a later-review flag, not a verdict
 - IDEMPOTENCY / DUPLICATE BEHAVIOR: UNRESOLVED — no idempotency record linked to this group
@@ -658,7 +658,7 @@ Enforcement observed on production mounts (`src/index.ts` mount middleware, R8-A
 - AUTHORIZATION / ROLE SCOPE: `requireVerifiedSchoolContext` school-context enforcement (mount evidence); role checks UNRESOLVED statically
 - CORE DECISION LOGIC: UNRESOLVED statically — decision internals live in service/domain source; route→service linkage above is the proven frame
 - STATE TRANSITIONS: UNRESOLVED statically except where linked families carry state models (see matrix family rows)
-- PERSISTENCE EFFECT: `chat-session`: UNRESOLVED; `learning-evidence`: UNRESOLVED; `objectives`: UNRESOLVED; `practice`: UNRESOLVED; `question-bank`: UNRESOLVED
+- PERSISTENCE EFFECT: `chat-session`: AMBIGUOUS; `learning-evidence`: AMBIGUOUS; `objectives`: DUPLICATE_WRITER_CANDIDATE; `practice`: AMBIGUOUS; `question-bank`: AMBIGUOUS
 - EXTERNAL DEPENDENCIES: UNRESOLVED — none proven statically for this group
 - FAILURE SEMANTICS: UNRESOLVED statically — error shapes live in service/route bodies not extracted by R8-A; where equivalent paths diverge, ERROR_SEMANTICS_REVIEW_REQUIRED applies as a later-review flag, not a verdict
 - IDEMPOTENCY / DUPLICATE BEHAVIOR: idempotency records present in a linked family; exact key behavior UNRESOLVED statically
@@ -684,7 +684,7 @@ Enforcement observed on production mounts (`src/index.ts` mount middleware, R8-A
 - AUTHORIZATION / ROLE SCOPE: `requireVerifiedSchoolContext` school-context enforcement (mount evidence); role checks UNRESOLVED statically
 - CORE DECISION LOGIC: UNRESOLVED statically — decision internals live in service/domain source; route→service linkage above is the proven frame
 - STATE TRANSITIONS: UNRESOLVED statically except where linked families carry state models (see matrix family rows)
-- PERSISTENCE EFFECT: `artifacts-media`: UNRESOLVED; `chat-session`: UNRESOLVED; `learning-evidence`: UNRESOLVED; `objectives`: UNRESOLVED; `school-integration`: UNRESOLVED; `student-identity-context`: UNRESOLVED; `unclassified`: UNRESOLVED
+- PERSISTENCE EFFECT: `artifacts-media`: AMBIGUOUS; `chat-session`: AMBIGUOUS; `learning-evidence`: AMBIGUOUS; `objectives`: DUPLICATE_WRITER_CANDIDATE; `school-integration`: AMBIGUOUS; `student-identity-context`: DUPLICATE_WRITER_CANDIDATE; `unclassified`: UNRESOLVED
 - EXTERNAL DEPENDENCIES: UNRESOLVED — none proven statically for this group
 - FAILURE SEMANTICS: UNRESOLVED statically — error shapes live in service/route bodies not extracted by R8-A; where equivalent paths diverge, ERROR_SEMANTICS_REVIEW_REQUIRED applies as a later-review flag, not a verdict
 - IDEMPOTENCY / DUPLICATE BEHAVIOR: idempotency records present in a linked family; exact key behavior UNRESOLVED statically
@@ -710,7 +710,7 @@ Enforcement observed on production mounts (`src/index.ts` mount middleware, R8-A
 - AUTHORIZATION / ROLE SCOPE: `requireVerifiedSchoolContext` school-context enforcement (mount evidence); role checks UNRESOLVED statically
 - CORE DECISION LOGIC: UNRESOLVED statically — decision internals live in service/domain source; route→service linkage above is the proven frame
 - STATE TRANSITIONS: UNRESOLVED statically except where linked families carry state models (see matrix family rows)
-- PERSISTENCE EFFECT: `mastery`: UNRESOLVED; `objectives`: UNRESOLVED
+- PERSISTENCE EFFECT: `mastery`: AMBIGUOUS; `objectives`: DUPLICATE_WRITER_CANDIDATE
 - EXTERNAL DEPENDENCIES: UNRESOLVED — none proven statically for this group
 - FAILURE SEMANTICS: UNRESOLVED statically — error shapes live in service/route bodies not extracted by R8-A; where equivalent paths diverge, ERROR_SEMANTICS_REVIEW_REQUIRED applies as a later-review flag, not a verdict
 - IDEMPOTENCY / DUPLICATE BEHAVIOR: UNRESOLVED — no idempotency record linked to this group
@@ -736,7 +736,7 @@ Enforcement observed on production mounts (`src/index.ts` mount middleware, R8-A
 - AUTHORIZATION / ROLE SCOPE: `requireVerifiedSchoolContext` school-context enforcement (mount evidence); role checks UNRESOLVED statically
 - CORE DECISION LOGIC: UNRESOLVED statically — decision internals live in service/domain source; route→service linkage above is the proven frame
 - STATE TRANSITIONS: UNRESOLVED statically except where linked families carry state models (see matrix family rows)
-- PERSISTENCE EFFECT: `mastery`: UNRESOLVED
+- PERSISTENCE EFFECT: `mastery`: AMBIGUOUS
 - EXTERNAL DEPENDENCIES: UNRESOLVED — none proven statically for this group
 - FAILURE SEMANTICS: UNRESOLVED statically — error shapes live in service/route bodies not extracted by R8-A; where equivalent paths diverge, ERROR_SEMANTICS_REVIEW_REQUIRED applies as a later-review flag, not a verdict
 - IDEMPOTENCY / DUPLICATE BEHAVIOR: UNRESOLVED — no idempotency record linked to this group
@@ -762,7 +762,7 @@ Enforcement observed on production mounts (`src/index.ts` mount middleware, R8-A
 - AUTHORIZATION / ROLE SCOPE: `requireVerifiedSchoolContext` school-context enforcement (mount evidence); role checks UNRESOLVED statically
 - CORE DECISION LOGIC: UNRESOLVED statically — decision internals live in service/domain source; route→service linkage above is the proven frame
 - STATE TRANSITIONS: UNRESOLVED statically except where linked families carry state models (see matrix family rows)
-- PERSISTENCE EFFECT: `objectives`: UNRESOLVED; `revision`: UNRESOLVED
+- PERSISTENCE EFFECT: `objectives`: DUPLICATE_WRITER_CANDIDATE; `revision`: AMBIGUOUS
 - EXTERNAL DEPENDENCIES: UNRESOLVED — none proven statically for this group
 - FAILURE SEMANTICS: UNRESOLVED statically — error shapes live in service/route bodies not extracted by R8-A; where equivalent paths diverge, ERROR_SEMANTICS_REVIEW_REQUIRED applies as a later-review flag, not a verdict
 - IDEMPOTENCY / DUPLICATE BEHAVIOR: UNRESOLVED — no idempotency record linked to this group
@@ -788,7 +788,7 @@ Enforcement observed on production mounts (`src/index.ts` mount middleware, R8-A
 - AUTHORIZATION / ROLE SCOPE: `requireVerifiedSchoolContext` school-context enforcement (mount evidence); role checks UNRESOLVED statically
 - CORE DECISION LOGIC: UNRESOLVED statically — decision internals live in service/domain source; route→service linkage above is the proven frame
 - STATE TRANSITIONS: UNRESOLVED statically except where linked families carry state models (see matrix family rows)
-- PERSISTENCE EFFECT: `objectives`: UNRESOLVED
+- PERSISTENCE EFFECT: `objectives`: DUPLICATE_WRITER_CANDIDATE
 - EXTERNAL DEPENDENCIES: UNRESOLVED — none proven statically for this group
 - FAILURE SEMANTICS: UNRESOLVED statically — error shapes live in service/route bodies not extracted by R8-A; where equivalent paths diverge, ERROR_SEMANTICS_REVIEW_REQUIRED applies as a later-review flag, not a verdict
 - IDEMPOTENCY / DUPLICATE BEHAVIOR: UNRESOLVED — no idempotency record linked to this group
@@ -814,7 +814,7 @@ Enforcement observed on production mounts (`src/index.ts` mount middleware, R8-A
 - AUTHORIZATION / ROLE SCOPE: `requireVerifiedSchoolContext` school-context enforcement (mount evidence); role checks UNRESOLVED statically
 - CORE DECISION LOGIC: UNRESOLVED statically — decision internals live in service/domain source; route→service linkage above is the proven frame
 - STATE TRANSITIONS: UNRESOLVED statically except where linked families carry state models (see matrix family rows)
-- PERSISTENCE EFFECT: `objectives`: UNRESOLVED; `unclassified`: UNRESOLVED
+- PERSISTENCE EFFECT: `objectives`: DUPLICATE_WRITER_CANDIDATE; `unclassified`: UNRESOLVED
 - EXTERNAL DEPENDENCIES: UNRESOLVED — none proven statically for this group
 - FAILURE SEMANTICS: UNRESOLVED statically — error shapes live in service/route bodies not extracted by R8-A; where equivalent paths diverge, ERROR_SEMANTICS_REVIEW_REQUIRED applies as a later-review flag, not a verdict
 - IDEMPOTENCY / DUPLICATE BEHAVIOR: UNRESOLVED — no idempotency record linked to this group
@@ -842,7 +842,7 @@ Enforcement observed on production mounts (`src/index.ts` mount middleware, R8-A
 - AUTHORIZATION / ROLE SCOPE: UNRESOLVED — no school-context middleware on these mounts; service-level role checks not statically extracted
 - CORE DECISION LOGIC: UNRESOLVED statically — decision internals live in service/domain source; route→service linkage above is the proven frame
 - STATE TRANSITIONS: UNRESOLVED statically except where linked families carry state models (see matrix family rows)
-- PERSISTENCE EFFECT: `artifacts-media`: UNRESOLVED; `student-identity-context`: UNRESOLVED
+- PERSISTENCE EFFECT: `artifacts-media`: AMBIGUOUS; `student-identity-context`: DUPLICATE_WRITER_CANDIDATE
 - EXTERNAL DEPENDENCIES: UNRESOLVED — none proven statically for this group
 - FAILURE SEMANTICS: UNRESOLVED statically — error shapes live in service/route bodies not extracted by R8-A; where equivalent paths diverge, ERROR_SEMANTICS_REVIEW_REQUIRED applies as a later-review flag, not a verdict
 - IDEMPOTENCY / DUPLICATE BEHAVIOR: UNRESOLVED — no idempotency record linked to this group
@@ -868,7 +868,7 @@ Enforcement observed on production mounts (`src/index.ts` mount middleware, R8-A
 - AUTHORIZATION / ROLE SCOPE: UNRESOLVED — no school-context middleware on these mounts; service-level role checks not statically extracted
 - CORE DECISION LOGIC: UNRESOLVED statically — decision internals live in service/domain source; route→service linkage above is the proven frame
 - STATE TRANSITIONS: UNRESOLVED statically except where linked families carry state models (see matrix family rows)
-- PERSISTENCE EFFECT: `practice`: UNRESOLVED; `student-identity-context`: UNRESOLVED
+- PERSISTENCE EFFECT: `practice`: AMBIGUOUS; `student-identity-context`: DUPLICATE_WRITER_CANDIDATE
 - EXTERNAL DEPENDENCIES: UNRESOLVED — none proven statically for this group
 - FAILURE SEMANTICS: UNRESOLVED statically — error shapes live in service/route bodies not extracted by R8-A; where equivalent paths diverge, ERROR_SEMANTICS_REVIEW_REQUIRED applies as a later-review flag, not a verdict
 - IDEMPOTENCY / DUPLICATE BEHAVIOR: UNRESOLVED — no idempotency record linked to this group
@@ -894,7 +894,7 @@ Enforcement observed on production mounts (`src/index.ts` mount middleware, R8-A
 - AUTHORIZATION / ROLE SCOPE: UNRESOLVED — no school-context middleware on these mounts; service-level role checks not statically extracted
 - CORE DECISION LOGIC: UNRESOLVED statically — decision internals live in service/domain source; route→service linkage above is the proven frame
 - STATE TRANSITIONS: UNRESOLVED statically except where linked families carry state models (see matrix family rows)
-- PERSISTENCE EFFECT: `artifacts-media`: UNRESOLVED; `chat-session`: UNRESOLVED; `learning-evidence`: UNRESOLVED; `objectives`: UNRESOLVED; `question-bank`: UNRESOLVED; `revision`: UNRESOLVED; `student-identity-context`: UNRESOLVED; `unclassified`: UNRESOLVED; `voice`: UNRESOLVED
+- PERSISTENCE EFFECT: `artifacts-media`: AMBIGUOUS; `chat-session`: AMBIGUOUS; `learning-evidence`: AMBIGUOUS; `objectives`: DUPLICATE_WRITER_CANDIDATE; `question-bank`: AMBIGUOUS; `revision`: AMBIGUOUS; `student-identity-context`: DUPLICATE_WRITER_CANDIDATE; `unclassified`: UNRESOLVED; `voice`: CLEAR
 - EXTERNAL DEPENDENCIES: UNRESOLVED — none proven statically for this group
 - FAILURE SEMANTICS: UNRESOLVED statically — error shapes live in service/route bodies not extracted by R8-A; where equivalent paths diverge, ERROR_SEMANTICS_REVIEW_REQUIRED applies as a later-review flag, not a verdict
 - IDEMPOTENCY / DUPLICATE BEHAVIOR: idempotency records present in a linked family; exact key behavior UNRESOLVED statically
@@ -920,7 +920,7 @@ Enforcement observed on production mounts (`src/index.ts` mount middleware, R8-A
 - AUTHORIZATION / ROLE SCOPE: UNRESOLVED — no school-context middleware on these mounts; service-level role checks not statically extracted
 - CORE DECISION LOGIC: UNRESOLVED statically — decision internals live in service/domain source; route→service linkage above is the proven frame
 - STATE TRANSITIONS: UNRESOLVED statically except where linked families carry state models (see matrix family rows)
-- PERSISTENCE EFFECT: `mastery`: UNRESOLVED; `practice`: UNRESOLVED; `question-bank`: UNRESOLVED; `student-identity-context`: UNRESOLVED; `unclassified`: UNRESOLVED
+- PERSISTENCE EFFECT: `mastery`: AMBIGUOUS; `practice`: AMBIGUOUS; `question-bank`: AMBIGUOUS; `student-identity-context`: DUPLICATE_WRITER_CANDIDATE; `unclassified`: UNRESOLVED
 - EXTERNAL DEPENDENCIES: UNRESOLVED — none proven statically for this group
 - FAILURE SEMANTICS: UNRESOLVED statically — error shapes live in service/route bodies not extracted by R8-A; where equivalent paths diverge, ERROR_SEMANTICS_REVIEW_REQUIRED applies as a later-review flag, not a verdict
 - IDEMPOTENCY / DUPLICATE BEHAVIOR: idempotency records present in a linked family; exact key behavior UNRESOLVED statically
@@ -946,7 +946,7 @@ Enforcement observed on production mounts (`src/index.ts` mount middleware, R8-A
 - AUTHORIZATION / ROLE SCOPE: UNRESOLVED — no school-context middleware on these mounts; service-level role checks not statically extracted
 - CORE DECISION LOGIC: UNRESOLVED statically — decision internals live in service/domain source; route→service linkage above is the proven frame
 - STATE TRANSITIONS: UNRESOLVED statically except where linked families carry state models (see matrix family rows)
-- PERSISTENCE EFFECT: `artifacts-media`: UNRESOLVED; `chat-session`: UNRESOLVED; `learning-evidence`: UNRESOLVED; `objectives`: UNRESOLVED; `unclassified`: UNRESOLVED
+- PERSISTENCE EFFECT: `artifacts-media`: AMBIGUOUS; `chat-session`: AMBIGUOUS; `learning-evidence`: AMBIGUOUS; `objectives`: DUPLICATE_WRITER_CANDIDATE; `unclassified`: UNRESOLVED
 - EXTERNAL DEPENDENCIES: UNRESOLVED — none proven statically for this group
 - FAILURE SEMANTICS: UNRESOLVED statically — error shapes live in service/route bodies not extracted by R8-A; where equivalent paths diverge, ERROR_SEMANTICS_REVIEW_REQUIRED applies as a later-review flag, not a verdict
 - IDEMPOTENCY / DUPLICATE BEHAVIOR: idempotency records present in a linked family; exact key behavior UNRESOLVED statically
@@ -974,7 +974,7 @@ Enforcement observed on production mounts (`src/index.ts` mount middleware, R8-A
 - AUTHORIZATION / ROLE SCOPE: `requireVerifiedSchoolContext` school-context enforcement (mount evidence); role checks UNRESOLVED statically
 - CORE DECISION LOGIC: UNRESOLVED statically — decision internals live in service/domain source; route→service linkage above is the proven frame
 - STATE TRANSITIONS: UNRESOLVED statically except where linked families carry state models (see matrix family rows)
-- PERSISTENCE EFFECT: `curriculum-content`: UNRESOLVED; `question-bank`: UNRESOLVED
+- PERSISTENCE EFFECT: `curriculum-content`: AMBIGUOUS; `question-bank`: AMBIGUOUS
 - EXTERNAL DEPENDENCIES: UNRESOLVED — none proven statically for this group
 - FAILURE SEMANTICS: UNRESOLVED statically — error shapes live in service/route bodies not extracted by R8-A; where equivalent paths diverge, ERROR_SEMANTICS_REVIEW_REQUIRED applies as a later-review flag, not a verdict
 - IDEMPOTENCY / DUPLICATE BEHAVIOR: idempotency records present in a linked family; exact key behavior UNRESOLVED statically
@@ -1000,7 +1000,7 @@ Enforcement observed on production mounts (`src/index.ts` mount middleware, R8-A
 - AUTHORIZATION / ROLE SCOPE: `requireVerifiedSchoolContext` school-context enforcement (mount evidence); role checks UNRESOLVED statically
 - CORE DECISION LOGIC: UNRESOLVED statically — decision internals live in service/domain source; route→service linkage above is the proven frame
 - STATE TRANSITIONS: UNRESOLVED statically except where linked families carry state models (see matrix family rows)
-- PERSISTENCE EFFECT: `artifacts-media`: UNRESOLVED; `chat-session`: UNRESOLVED; `learning-evidence`: UNRESOLVED; `objectives`: UNRESOLVED; `unclassified`: UNRESOLVED
+- PERSISTENCE EFFECT: `artifacts-media`: AMBIGUOUS; `chat-session`: AMBIGUOUS; `learning-evidence`: AMBIGUOUS; `objectives`: DUPLICATE_WRITER_CANDIDATE; `unclassified`: UNRESOLVED
 - EXTERNAL DEPENDENCIES: UNRESOLVED — none proven statically for this group
 - FAILURE SEMANTICS: UNRESOLVED statically — error shapes live in service/route bodies not extracted by R8-A; where equivalent paths diverge, ERROR_SEMANTICS_REVIEW_REQUIRED applies as a later-review flag, not a verdict
 - IDEMPOTENCY / DUPLICATE BEHAVIOR: idempotency records present in a linked family; exact key behavior UNRESOLVED statically
@@ -1026,7 +1026,7 @@ Enforcement observed on production mounts (`src/index.ts` mount middleware, R8-A
 - AUTHORIZATION / ROLE SCOPE: `requireVerifiedSchoolContext` school-context enforcement (mount evidence); role checks UNRESOLVED statically
 - CORE DECISION LOGIC: UNRESOLVED statically — decision internals live in service/domain source; route→service linkage above is the proven frame
 - STATE TRANSITIONS: UNRESOLVED statically except where linked families carry state models (see matrix family rows)
-- PERSISTENCE EFFECT: `assessment`: UNRESOLVED; `curriculum-content`: UNRESOLVED; `objectives`: UNRESOLVED; `question-bank`: UNRESOLVED; `unclassified`: UNRESOLVED
+- PERSISTENCE EFFECT: `assessment`: UNRESOLVED; `curriculum-content`: AMBIGUOUS; `objectives`: DUPLICATE_WRITER_CANDIDATE; `question-bank`: AMBIGUOUS; `unclassified`: UNRESOLVED
 - EXTERNAL DEPENDENCIES: UNRESOLVED — none proven statically for this group
 - FAILURE SEMANTICS: UNRESOLVED statically — error shapes live in service/route bodies not extracted by R8-A; where equivalent paths diverge, ERROR_SEMANTICS_REVIEW_REQUIRED applies as a later-review flag, not a verdict
 - IDEMPOTENCY / DUPLICATE BEHAVIOR: idempotency records present in a linked family; exact key behavior UNRESOLVED statically
@@ -1052,7 +1052,7 @@ Enforcement observed on production mounts (`src/index.ts` mount middleware, R8-A
 - AUTHORIZATION / ROLE SCOPE: `requireVerifiedSchoolContext` school-context enforcement (mount evidence); role checks UNRESOLVED statically
 - CORE DECISION LOGIC: UNRESOLVED statically — decision internals live in service/domain source; route→service linkage above is the proven frame
 - STATE TRANSITIONS: UNRESOLVED statically except where linked families carry state models (see matrix family rows)
-- PERSISTENCE EFFECT: `assessment`: UNRESOLVED; `curriculum-content`: UNRESOLVED; `objectives`: UNRESOLVED; `question-bank`: UNRESOLVED; `unclassified`: UNRESOLVED
+- PERSISTENCE EFFECT: `assessment`: UNRESOLVED; `curriculum-content`: AMBIGUOUS; `objectives`: DUPLICATE_WRITER_CANDIDATE; `question-bank`: AMBIGUOUS; `unclassified`: UNRESOLVED
 - EXTERNAL DEPENDENCIES: UNRESOLVED — none proven statically for this group
 - FAILURE SEMANTICS: UNRESOLVED statically — error shapes live in service/route bodies not extracted by R8-A; where equivalent paths diverge, ERROR_SEMANTICS_REVIEW_REQUIRED applies as a later-review flag, not a verdict
 - IDEMPOTENCY / DUPLICATE BEHAVIOR: idempotency records present in a linked family; exact key behavior UNRESOLVED statically
@@ -1078,7 +1078,7 @@ Enforcement observed on production mounts (`src/index.ts` mount middleware, R8-A
 - AUTHORIZATION / ROLE SCOPE: UNRESOLVED — no school-context middleware on these mounts; service-level role checks not statically extracted
 - CORE DECISION LOGIC: UNRESOLVED statically — decision internals live in service/domain source; route→service linkage above is the proven frame
 - STATE TRANSITIONS: UNRESOLVED statically except where linked families carry state models (see matrix family rows)
-- PERSISTENCE EFFECT: `assessment`: UNRESOLVED; `curriculum-content`: UNRESOLVED; `objectives`: UNRESOLVED; `question-bank`: UNRESOLVED; `unclassified`: UNRESOLVED
+- PERSISTENCE EFFECT: `assessment`: UNRESOLVED; `curriculum-content`: AMBIGUOUS; `objectives`: DUPLICATE_WRITER_CANDIDATE; `question-bank`: AMBIGUOUS; `unclassified`: UNRESOLVED
 - EXTERNAL DEPENDENCIES: UNRESOLVED — none proven statically for this group
 - FAILURE SEMANTICS: UNRESOLVED statically — error shapes live in service/route bodies not extracted by R8-A; where equivalent paths diverge, ERROR_SEMANTICS_REVIEW_REQUIRED applies as a later-review flag, not a verdict
 - IDEMPOTENCY / DUPLICATE BEHAVIOR: idempotency records present in a linked family; exact key behavior UNRESOLVED statically
@@ -1104,7 +1104,7 @@ Enforcement observed on production mounts (`src/index.ts` mount middleware, R8-A
 - AUTHORIZATION / ROLE SCOPE: `requireVerifiedSchoolContext` school-context enforcement (mount evidence); role checks UNRESOLVED statically
 - CORE DECISION LOGIC: UNRESOLVED statically — decision internals live in service/domain source; route→service linkage above is the proven frame
 - STATE TRANSITIONS: UNRESOLVED statically except where linked families carry state models (see matrix family rows)
-- PERSISTENCE EFFECT: `curriculum-content`: UNRESOLVED; `objectives`: UNRESOLVED; `question-bank`: UNRESOLVED; `unclassified`: UNRESOLVED
+- PERSISTENCE EFFECT: `curriculum-content`: AMBIGUOUS; `objectives`: DUPLICATE_WRITER_CANDIDATE; `question-bank`: AMBIGUOUS; `unclassified`: UNRESOLVED
 - EXTERNAL DEPENDENCIES: UNRESOLVED — none proven statically for this group
 - FAILURE SEMANTICS: UNRESOLVED statically — error shapes live in service/route bodies not extracted by R8-A; where equivalent paths diverge, ERROR_SEMANTICS_REVIEW_REQUIRED applies as a later-review flag, not a verdict
 - IDEMPOTENCY / DUPLICATE BEHAVIOR: idempotency records present in a linked family; exact key behavior UNRESOLVED statically
@@ -1130,7 +1130,7 @@ Enforcement observed on production mounts (`src/index.ts` mount middleware, R8-A
 - AUTHORIZATION / ROLE SCOPE: `requireVerifiedSchoolContext` school-context enforcement (mount evidence); role checks UNRESOLVED statically
 - CORE DECISION LOGIC: UNRESOLVED statically — decision internals live in service/domain source; route→service linkage above is the proven frame
 - STATE TRANSITIONS: UNRESOLVED statically except where linked families carry state models (see matrix family rows)
-- PERSISTENCE EFFECT: `curriculum-content`: UNRESOLVED; `objectives`: UNRESOLVED; `question-bank`: UNRESOLVED; `unclassified`: UNRESOLVED
+- PERSISTENCE EFFECT: `curriculum-content`: AMBIGUOUS; `objectives`: DUPLICATE_WRITER_CANDIDATE; `question-bank`: AMBIGUOUS; `unclassified`: UNRESOLVED
 - EXTERNAL DEPENDENCIES: UNRESOLVED — none proven statically for this group
 - FAILURE SEMANTICS: UNRESOLVED statically — error shapes live in service/route bodies not extracted by R8-A; where equivalent paths diverge, ERROR_SEMANTICS_REVIEW_REQUIRED applies as a later-review flag, not a verdict
 - IDEMPOTENCY / DUPLICATE BEHAVIOR: idempotency records present in a linked family; exact key behavior UNRESOLVED statically
@@ -1156,7 +1156,7 @@ Enforcement observed on production mounts (`src/index.ts` mount middleware, R8-A
 - AUTHORIZATION / ROLE SCOPE: UNRESOLVED — no school-context middleware on these mounts; service-level role checks not statically extracted
 - CORE DECISION LOGIC: UNRESOLVED statically — decision internals live in service/domain source; route→service linkage above is the proven frame
 - STATE TRANSITIONS: UNRESOLVED statically except where linked families carry state models (see matrix family rows)
-- PERSISTENCE EFFECT: `curriculum-content`: UNRESOLVED; `objectives`: UNRESOLVED; `question-bank`: UNRESOLVED; `unclassified`: UNRESOLVED
+- PERSISTENCE EFFECT: `curriculum-content`: AMBIGUOUS; `objectives`: DUPLICATE_WRITER_CANDIDATE; `question-bank`: AMBIGUOUS; `unclassified`: UNRESOLVED
 - EXTERNAL DEPENDENCIES: UNRESOLVED — none proven statically for this group
 - FAILURE SEMANTICS: UNRESOLVED statically — error shapes live in service/route bodies not extracted by R8-A; where equivalent paths diverge, ERROR_SEMANTICS_REVIEW_REQUIRED applies as a later-review flag, not a verdict
 - IDEMPOTENCY / DUPLICATE BEHAVIOR: idempotency records present in a linked family; exact key behavior UNRESOLVED statically
@@ -1182,7 +1182,7 @@ Enforcement observed on production mounts (`src/index.ts` mount middleware, R8-A
 - AUTHORIZATION / ROLE SCOPE: `requireVerifiedSchoolContext` school-context enforcement (mount evidence); role checks UNRESOLVED statically
 - CORE DECISION LOGIC: UNRESOLVED statically — decision internals live in service/domain source; route→service linkage above is the proven frame
 - STATE TRANSITIONS: UNRESOLVED statically except where linked families carry state models (see matrix family rows)
-- PERSISTENCE EFFECT: `chat-session`: UNRESOLVED; `curriculum-content`: UNRESOLVED; `learning-evidence`: UNRESOLVED; `objectives`: UNRESOLVED; `practice`: UNRESOLVED; `question-bank`: UNRESOLVED; `unclassified`: UNRESOLVED
+- PERSISTENCE EFFECT: `chat-session`: AMBIGUOUS; `curriculum-content`: AMBIGUOUS; `learning-evidence`: AMBIGUOUS; `objectives`: DUPLICATE_WRITER_CANDIDATE; `practice`: AMBIGUOUS; `question-bank`: AMBIGUOUS; `unclassified`: UNRESOLVED
 - EXTERNAL DEPENDENCIES: UNRESOLVED — none proven statically for this group
 - FAILURE SEMANTICS: UNRESOLVED statically — error shapes live in service/route bodies not extracted by R8-A; where equivalent paths diverge, ERROR_SEMANTICS_REVIEW_REQUIRED applies as a later-review flag, not a verdict
 - IDEMPOTENCY / DUPLICATE BEHAVIOR: idempotency records present in a linked family; exact key behavior UNRESOLVED statically
@@ -1208,7 +1208,7 @@ Enforcement observed on production mounts (`src/index.ts` mount middleware, R8-A
 - AUTHORIZATION / ROLE SCOPE: `requireVerifiedSchoolContext` school-context enforcement (mount evidence); role checks UNRESOLVED statically
 - CORE DECISION LOGIC: UNRESOLVED statically — decision internals live in service/domain source; route→service linkage above is the proven frame
 - STATE TRANSITIONS: UNRESOLVED statically except where linked families carry state models (see matrix family rows)
-- PERSISTENCE EFFECT: `chat-session`: UNRESOLVED; `curriculum-content`: UNRESOLVED; `learning-evidence`: UNRESOLVED; `objectives`: UNRESOLVED; `practice`: UNRESOLVED; `question-bank`: UNRESOLVED; `unclassified`: UNRESOLVED
+- PERSISTENCE EFFECT: `chat-session`: AMBIGUOUS; `curriculum-content`: AMBIGUOUS; `learning-evidence`: AMBIGUOUS; `objectives`: DUPLICATE_WRITER_CANDIDATE; `practice`: AMBIGUOUS; `question-bank`: AMBIGUOUS; `unclassified`: UNRESOLVED
 - EXTERNAL DEPENDENCIES: UNRESOLVED — none proven statically for this group
 - FAILURE SEMANTICS: UNRESOLVED statically — error shapes live in service/route bodies not extracted by R8-A; where equivalent paths diverge, ERROR_SEMANTICS_REVIEW_REQUIRED applies as a later-review flag, not a verdict
 - IDEMPOTENCY / DUPLICATE BEHAVIOR: idempotency records present in a linked family; exact key behavior UNRESOLVED statically
@@ -1234,7 +1234,7 @@ Enforcement observed on production mounts (`src/index.ts` mount middleware, R8-A
 - AUTHORIZATION / ROLE SCOPE: `requireVerifiedSchoolContext` school-context enforcement (mount evidence); role checks UNRESOLVED statically
 - CORE DECISION LOGIC: UNRESOLVED statically — decision internals live in service/domain source; route→service linkage above is the proven frame
 - STATE TRANSITIONS: UNRESOLVED statically except where linked families carry state models (see matrix family rows)
-- PERSISTENCE EFFECT: `chat-session`: UNRESOLVED; `curriculum-content`: UNRESOLVED; `learning-evidence`: UNRESOLVED; `objectives`: UNRESOLVED; `practice`: UNRESOLVED; `question-bank`: UNRESOLVED; `safeguarding-privacy`: UNRESOLVED; `school-integration`: UNRESOLVED; `unclassified`: UNRESOLVED
+- PERSISTENCE EFFECT: `chat-session`: AMBIGUOUS; `curriculum-content`: AMBIGUOUS; `learning-evidence`: AMBIGUOUS; `objectives`: DUPLICATE_WRITER_CANDIDATE; `practice`: AMBIGUOUS; `question-bank`: AMBIGUOUS; `safeguarding-privacy`: DUPLICATE_WRITER_CANDIDATE; `school-integration`: AMBIGUOUS; `unclassified`: UNRESOLVED
 - EXTERNAL DEPENDENCIES: UNRESOLVED — none proven statically for this group
 - FAILURE SEMANTICS: UNRESOLVED statically — error shapes live in service/route bodies not extracted by R8-A; where equivalent paths diverge, ERROR_SEMANTICS_REVIEW_REQUIRED applies as a later-review flag, not a verdict
 - IDEMPOTENCY / DUPLICATE BEHAVIOR: idempotency records present in a linked family; exact key behavior UNRESOLVED statically
@@ -1260,7 +1260,7 @@ Enforcement observed on production mounts (`src/index.ts` mount middleware, R8-A
 - AUTHORIZATION / ROLE SCOPE: `requireVerifiedSchoolContext` school-context enforcement (mount evidence); role checks UNRESOLVED statically
 - CORE DECISION LOGIC: UNRESOLVED statically — decision internals live in service/domain source; route→service linkage above is the proven frame
 - STATE TRANSITIONS: UNRESOLVED statically except where linked families carry state models (see matrix family rows)
-- PERSISTENCE EFFECT: `chat-session`: UNRESOLVED; `curriculum-content`: UNRESOLVED; `learning-evidence`: UNRESOLVED; `objectives`: UNRESOLVED; `operations-readiness`: UNRESOLVED; `practice`: UNRESOLVED; `question-bank`: UNRESOLVED; `safeguarding-privacy`: UNRESOLVED; `school-integration`: UNRESOLVED; `unclassified`: UNRESOLVED
+- PERSISTENCE EFFECT: `chat-session`: AMBIGUOUS; `curriculum-content`: AMBIGUOUS; `learning-evidence`: AMBIGUOUS; `objectives`: DUPLICATE_WRITER_CANDIDATE; `operations-readiness`: AMBIGUOUS; `practice`: AMBIGUOUS; `question-bank`: AMBIGUOUS; `safeguarding-privacy`: DUPLICATE_WRITER_CANDIDATE; `school-integration`: AMBIGUOUS; `unclassified`: UNRESOLVED
 - EXTERNAL DEPENDENCIES: UNRESOLVED — none proven statically for this group
 - FAILURE SEMANTICS: UNRESOLVED statically — error shapes live in service/route bodies not extracted by R8-A; where equivalent paths diverge, ERROR_SEMANTICS_REVIEW_REQUIRED applies as a later-review flag, not a verdict
 - IDEMPOTENCY / DUPLICATE BEHAVIOR: idempotency records present in a linked family; exact key behavior UNRESOLVED statically
@@ -1286,7 +1286,7 @@ Enforcement observed on production mounts (`src/index.ts` mount middleware, R8-A
 - AUTHORIZATION / ROLE SCOPE: `requireVerifiedSchoolContext` school-context enforcement (mount evidence); role checks UNRESOLVED statically
 - CORE DECISION LOGIC: UNRESOLVED statically — decision internals live in service/domain source; route→service linkage above is the proven frame
 - STATE TRANSITIONS: UNRESOLVED statically except where linked families carry state models (see matrix family rows)
-- PERSISTENCE EFFECT: `chat-session`: UNRESOLVED; `curriculum-content`: UNRESOLVED; `learning-evidence`: UNRESOLVED; `objectives`: UNRESOLVED; `practice`: UNRESOLVED; `question-bank`: UNRESOLVED; `unclassified`: UNRESOLVED
+- PERSISTENCE EFFECT: `chat-session`: AMBIGUOUS; `curriculum-content`: AMBIGUOUS; `learning-evidence`: AMBIGUOUS; `objectives`: DUPLICATE_WRITER_CANDIDATE; `practice`: AMBIGUOUS; `question-bank`: AMBIGUOUS; `unclassified`: UNRESOLVED
 - EXTERNAL DEPENDENCIES: UNRESOLVED — none proven statically for this group
 - FAILURE SEMANTICS: UNRESOLVED statically — error shapes live in service/route bodies not extracted by R8-A; where equivalent paths diverge, ERROR_SEMANTICS_REVIEW_REQUIRED applies as a later-review flag, not a verdict
 - IDEMPOTENCY / DUPLICATE BEHAVIOR: idempotency records present in a linked family; exact key behavior UNRESOLVED statically
@@ -1312,7 +1312,7 @@ Enforcement observed on production mounts (`src/index.ts` mount middleware, R8-A
 - AUTHORIZATION / ROLE SCOPE: `requireVerifiedSchoolContext` school-context enforcement (mount evidence); role checks UNRESOLVED statically
 - CORE DECISION LOGIC: UNRESOLVED statically — decision internals live in service/domain source; route→service linkage above is the proven frame
 - STATE TRANSITIONS: UNRESOLVED statically except where linked families carry state models (see matrix family rows)
-- PERSISTENCE EFFECT: `chat-session`: UNRESOLVED; `curriculum-content`: UNRESOLVED; `learning-evidence`: UNRESOLVED; `objectives`: UNRESOLVED; `practice`: UNRESOLVED; `question-bank`: UNRESOLVED; `unclassified`: UNRESOLVED
+- PERSISTENCE EFFECT: `chat-session`: AMBIGUOUS; `curriculum-content`: AMBIGUOUS; `learning-evidence`: AMBIGUOUS; `objectives`: DUPLICATE_WRITER_CANDIDATE; `practice`: AMBIGUOUS; `question-bank`: AMBIGUOUS; `unclassified`: UNRESOLVED
 - EXTERNAL DEPENDENCIES: UNRESOLVED — none proven statically for this group
 - FAILURE SEMANTICS: UNRESOLVED statically — error shapes live in service/route bodies not extracted by R8-A; where equivalent paths diverge, ERROR_SEMANTICS_REVIEW_REQUIRED applies as a later-review flag, not a verdict
 - IDEMPOTENCY / DUPLICATE BEHAVIOR: idempotency records present in a linked family; exact key behavior UNRESOLVED statically
@@ -1338,7 +1338,7 @@ Enforcement observed on production mounts (`src/index.ts` mount middleware, R8-A
 - AUTHORIZATION / ROLE SCOPE: `requireVerifiedSchoolContext` school-context enforcement (mount evidence); role checks UNRESOLVED statically
 - CORE DECISION LOGIC: UNRESOLVED statically — decision internals live in service/domain source; route→service linkage above is the proven frame
 - STATE TRANSITIONS: UNRESOLVED statically except where linked families carry state models (see matrix family rows)
-- PERSISTENCE EFFECT: `chat-session`: UNRESOLVED; `curriculum-content`: UNRESOLVED; `learning-evidence`: UNRESOLVED; `objectives`: UNRESOLVED; `practice`: UNRESOLVED; `question-bank`: UNRESOLVED; `unclassified`: UNRESOLVED
+- PERSISTENCE EFFECT: `chat-session`: AMBIGUOUS; `curriculum-content`: AMBIGUOUS; `learning-evidence`: AMBIGUOUS; `objectives`: DUPLICATE_WRITER_CANDIDATE; `practice`: AMBIGUOUS; `question-bank`: AMBIGUOUS; `unclassified`: UNRESOLVED
 - EXTERNAL DEPENDENCIES: UNRESOLVED — none proven statically for this group
 - FAILURE SEMANTICS: UNRESOLVED statically — error shapes live in service/route bodies not extracted by R8-A; where equivalent paths diverge, ERROR_SEMANTICS_REVIEW_REQUIRED applies as a later-review flag, not a verdict
 - IDEMPOTENCY / DUPLICATE BEHAVIOR: idempotency records present in a linked family; exact key behavior UNRESOLVED statically
@@ -1364,7 +1364,7 @@ Enforcement observed on production mounts (`src/index.ts` mount middleware, R8-A
 - AUTHORIZATION / ROLE SCOPE: `requireVerifiedSchoolContext` school-context enforcement (mount evidence); role checks UNRESOLVED statically
 - CORE DECISION LOGIC: UNRESOLVED statically — decision internals live in service/domain source; route→service linkage above is the proven frame
 - STATE TRANSITIONS: UNRESOLVED statically except where linked families carry state models (see matrix family rows)
-- PERSISTENCE EFFECT: `chat-session`: UNRESOLVED; `curriculum-content`: UNRESOLVED; `learning-evidence`: UNRESOLVED; `objectives`: UNRESOLVED; `practice`: UNRESOLVED; `question-bank`: UNRESOLVED; `safeguarding-privacy`: UNRESOLVED; `school-integration`: UNRESOLVED; `unclassified`: UNRESOLVED
+- PERSISTENCE EFFECT: `chat-session`: AMBIGUOUS; `curriculum-content`: AMBIGUOUS; `learning-evidence`: AMBIGUOUS; `objectives`: DUPLICATE_WRITER_CANDIDATE; `practice`: AMBIGUOUS; `question-bank`: AMBIGUOUS; `safeguarding-privacy`: DUPLICATE_WRITER_CANDIDATE; `school-integration`: AMBIGUOUS; `unclassified`: UNRESOLVED
 - EXTERNAL DEPENDENCIES: UNRESOLVED — none proven statically for this group
 - FAILURE SEMANTICS: UNRESOLVED statically — error shapes live in service/route bodies not extracted by R8-A; where equivalent paths diverge, ERROR_SEMANTICS_REVIEW_REQUIRED applies as a later-review flag, not a verdict
 - IDEMPOTENCY / DUPLICATE BEHAVIOR: idempotency records present in a linked family; exact key behavior UNRESOLVED statically
@@ -1390,7 +1390,7 @@ Enforcement observed on production mounts (`src/index.ts` mount middleware, R8-A
 - AUTHORIZATION / ROLE SCOPE: `requireVerifiedSchoolContext` school-context enforcement (mount evidence); role checks UNRESOLVED statically
 - CORE DECISION LOGIC: UNRESOLVED statically — decision internals live in service/domain source; route→service linkage above is the proven frame
 - STATE TRANSITIONS: UNRESOLVED statically except where linked families carry state models (see matrix family rows)
-- PERSISTENCE EFFECT: `chat-session`: UNRESOLVED; `curriculum-content`: UNRESOLVED; `learning-evidence`: UNRESOLVED; `objectives`: UNRESOLVED; `practice`: UNRESOLVED; `question-bank`: UNRESOLVED; `unclassified`: UNRESOLVED
+- PERSISTENCE EFFECT: `chat-session`: AMBIGUOUS; `curriculum-content`: AMBIGUOUS; `learning-evidence`: AMBIGUOUS; `objectives`: DUPLICATE_WRITER_CANDIDATE; `practice`: AMBIGUOUS; `question-bank`: AMBIGUOUS; `unclassified`: UNRESOLVED
 - EXTERNAL DEPENDENCIES: UNRESOLVED — none proven statically for this group
 - FAILURE SEMANTICS: UNRESOLVED statically — error shapes live in service/route bodies not extracted by R8-A; where equivalent paths diverge, ERROR_SEMANTICS_REVIEW_REQUIRED applies as a later-review flag, not a verdict
 - IDEMPOTENCY / DUPLICATE BEHAVIOR: idempotency records present in a linked family; exact key behavior UNRESOLVED statically
@@ -1416,7 +1416,7 @@ Enforcement observed on production mounts (`src/index.ts` mount middleware, R8-A
 - AUTHORIZATION / ROLE SCOPE: `requireVerifiedSchoolContext` school-context enforcement (mount evidence); role checks UNRESOLVED statically
 - CORE DECISION LOGIC: UNRESOLVED statically — decision internals live in service/domain source; route→service linkage above is the proven frame
 - STATE TRANSITIONS: UNRESOLVED statically except where linked families carry state models (see matrix family rows)
-- PERSISTENCE EFFECT: `curriculum-content`: UNRESOLVED; `learning-evidence`: UNRESOLVED; `mastery`: UNRESOLVED; `objectives`: UNRESOLVED; `practice`: UNRESOLVED; `question-bank`: UNRESOLVED; `revision`: UNRESOLVED; `unclassified`: UNRESOLVED
+- PERSISTENCE EFFECT: `curriculum-content`: AMBIGUOUS; `learning-evidence`: AMBIGUOUS; `mastery`: AMBIGUOUS; `objectives`: DUPLICATE_WRITER_CANDIDATE; `practice`: AMBIGUOUS; `question-bank`: AMBIGUOUS; `revision`: AMBIGUOUS; `unclassified`: UNRESOLVED
 - EXTERNAL DEPENDENCIES: UNRESOLVED — none proven statically for this group
 - FAILURE SEMANTICS: UNRESOLVED statically — error shapes live in service/route bodies not extracted by R8-A; where equivalent paths diverge, ERROR_SEMANTICS_REVIEW_REQUIRED applies as a later-review flag, not a verdict
 - IDEMPOTENCY / DUPLICATE BEHAVIOR: idempotency records present in a linked family; exact key behavior UNRESOLVED statically
@@ -1442,7 +1442,7 @@ Enforcement observed on production mounts (`src/index.ts` mount middleware, R8-A
 - AUTHORIZATION / ROLE SCOPE: `requireVerifiedSchoolContext` school-context enforcement (mount evidence); role checks UNRESOLVED statically
 - CORE DECISION LOGIC: UNRESOLVED statically — decision internals live in service/domain source; route→service linkage above is the proven frame
 - STATE TRANSITIONS: UNRESOLVED statically except where linked families carry state models (see matrix family rows)
-- PERSISTENCE EFFECT: `curriculum-content`: UNRESOLVED; `learning-evidence`: UNRESOLVED; `mastery`: UNRESOLVED; `objectives`: UNRESOLVED; `practice`: UNRESOLVED; `question-bank`: UNRESOLVED; `revision`: UNRESOLVED; `unclassified`: UNRESOLVED
+- PERSISTENCE EFFECT: `curriculum-content`: AMBIGUOUS; `learning-evidence`: AMBIGUOUS; `mastery`: AMBIGUOUS; `objectives`: DUPLICATE_WRITER_CANDIDATE; `practice`: AMBIGUOUS; `question-bank`: AMBIGUOUS; `revision`: AMBIGUOUS; `unclassified`: UNRESOLVED
 - EXTERNAL DEPENDENCIES: UNRESOLVED — none proven statically for this group
 - FAILURE SEMANTICS: UNRESOLVED statically — error shapes live in service/route bodies not extracted by R8-A; where equivalent paths diverge, ERROR_SEMANTICS_REVIEW_REQUIRED applies as a later-review flag, not a verdict
 - IDEMPOTENCY / DUPLICATE BEHAVIOR: idempotency records present in a linked family; exact key behavior UNRESOLVED statically
@@ -1468,7 +1468,7 @@ Enforcement observed on production mounts (`src/index.ts` mount middleware, R8-A
 - AUTHORIZATION / ROLE SCOPE: `requireVerifiedSchoolContext` school-context enforcement (mount evidence); role checks UNRESOLVED statically
 - CORE DECISION LOGIC: UNRESOLVED statically — decision internals live in service/domain source; route→service linkage above is the proven frame
 - STATE TRANSITIONS: UNRESOLVED statically except where linked families carry state models (see matrix family rows)
-- PERSISTENCE EFFECT: `curriculum-content`: UNRESOLVED; `learning-evidence`: UNRESOLVED; `mastery`: UNRESOLVED; `objectives`: UNRESOLVED; `practice`: UNRESOLVED; `question-bank`: UNRESOLVED; `revision`: UNRESOLVED; `unclassified`: UNRESOLVED
+- PERSISTENCE EFFECT: `curriculum-content`: AMBIGUOUS; `learning-evidence`: AMBIGUOUS; `mastery`: AMBIGUOUS; `objectives`: DUPLICATE_WRITER_CANDIDATE; `practice`: AMBIGUOUS; `question-bank`: AMBIGUOUS; `revision`: AMBIGUOUS; `unclassified`: UNRESOLVED
 - EXTERNAL DEPENDENCIES: UNRESOLVED — none proven statically for this group
 - FAILURE SEMANTICS: UNRESOLVED statically — error shapes live in service/route bodies not extracted by R8-A; where equivalent paths diverge, ERROR_SEMANTICS_REVIEW_REQUIRED applies as a later-review flag, not a verdict
 - IDEMPOTENCY / DUPLICATE BEHAVIOR: idempotency records present in a linked family; exact key behavior UNRESOLVED statically
@@ -1494,7 +1494,7 @@ Enforcement observed on production mounts (`src/index.ts` mount middleware, R8-A
 - AUTHORIZATION / ROLE SCOPE: `requireVerifiedSchoolContext` school-context enforcement (mount evidence); role checks UNRESOLVED statically
 - CORE DECISION LOGIC: UNRESOLVED statically — decision internals live in service/domain source; route→service linkage above is the proven frame
 - STATE TRANSITIONS: UNRESOLVED statically except where linked families carry state models (see matrix family rows)
-- PERSISTENCE EFFECT: `chat-session`: UNRESOLVED; `curriculum-content`: UNRESOLVED; `learning-evidence`: UNRESOLVED; `mastery`: UNRESOLVED; `objectives`: UNRESOLVED; `practice`: UNRESOLVED; `question-bank`: UNRESOLVED; `revision`: UNRESOLVED; `unclassified`: UNRESOLVED
+- PERSISTENCE EFFECT: `chat-session`: AMBIGUOUS; `curriculum-content`: AMBIGUOUS; `learning-evidence`: AMBIGUOUS; `mastery`: AMBIGUOUS; `objectives`: DUPLICATE_WRITER_CANDIDATE; `practice`: AMBIGUOUS; `question-bank`: AMBIGUOUS; `revision`: AMBIGUOUS; `unclassified`: UNRESOLVED
 - EXTERNAL DEPENDENCIES: UNRESOLVED — none proven statically for this group
 - FAILURE SEMANTICS: UNRESOLVED statically — error shapes live in service/route bodies not extracted by R8-A; where equivalent paths diverge, ERROR_SEMANTICS_REVIEW_REQUIRED applies as a later-review flag, not a verdict
 - IDEMPOTENCY / DUPLICATE BEHAVIOR: idempotency records present in a linked family; exact key behavior UNRESOLVED statically
@@ -1520,7 +1520,7 @@ Enforcement observed on production mounts (`src/index.ts` mount middleware, R8-A
 - AUTHORIZATION / ROLE SCOPE: `requireVerifiedSchoolContext` school-context enforcement (mount evidence); role checks UNRESOLVED statically
 - CORE DECISION LOGIC: UNRESOLVED statically — decision internals live in service/domain source; route→service linkage above is the proven frame
 - STATE TRANSITIONS: UNRESOLVED statically except where linked families carry state models (see matrix family rows)
-- PERSISTENCE EFFECT: `curriculum-content`: UNRESOLVED; `learning-evidence`: UNRESOLVED; `mastery`: UNRESOLVED; `objectives`: UNRESOLVED; `practice`: UNRESOLVED; `question-bank`: UNRESOLVED; `revision`: UNRESOLVED; `unclassified`: UNRESOLVED
+- PERSISTENCE EFFECT: `curriculum-content`: AMBIGUOUS; `learning-evidence`: AMBIGUOUS; `mastery`: AMBIGUOUS; `objectives`: DUPLICATE_WRITER_CANDIDATE; `practice`: AMBIGUOUS; `question-bank`: AMBIGUOUS; `revision`: AMBIGUOUS; `unclassified`: UNRESOLVED
 - EXTERNAL DEPENDENCIES: UNRESOLVED — none proven statically for this group
 - FAILURE SEMANTICS: UNRESOLVED statically — error shapes live in service/route bodies not extracted by R8-A; where equivalent paths diverge, ERROR_SEMANTICS_REVIEW_REQUIRED applies as a later-review flag, not a verdict
 - IDEMPOTENCY / DUPLICATE BEHAVIOR: idempotency records present in a linked family; exact key behavior UNRESOLVED statically
@@ -1546,7 +1546,7 @@ Enforcement observed on production mounts (`src/index.ts` mount middleware, R8-A
 - AUTHORIZATION / ROLE SCOPE: `requireVerifiedSchoolContext` school-context enforcement (mount evidence); role checks UNRESOLVED statically
 - CORE DECISION LOGIC: UNRESOLVED statically — decision internals live in service/domain source; route→service linkage above is the proven frame
 - STATE TRANSITIONS: UNRESOLVED statically except where linked families carry state models (see matrix family rows)
-- PERSISTENCE EFFECT: `assessment`: UNRESOLVED; `curriculum-content`: UNRESOLVED; `learning-evidence`: UNRESOLVED; `mastery`: UNRESOLVED; `objectives`: UNRESOLVED; `operations-readiness`: UNRESOLVED; `practice`: UNRESOLVED; `question-bank`: UNRESOLVED; `revision`: UNRESOLVED; `school-integration`: UNRESOLVED; `unclassified`: UNRESOLVED
+- PERSISTENCE EFFECT: `assessment`: UNRESOLVED; `curriculum-content`: AMBIGUOUS; `learning-evidence`: AMBIGUOUS; `mastery`: AMBIGUOUS; `objectives`: DUPLICATE_WRITER_CANDIDATE; `operations-readiness`: AMBIGUOUS; `practice`: AMBIGUOUS; `question-bank`: AMBIGUOUS; `revision`: AMBIGUOUS; `school-integration`: AMBIGUOUS; `unclassified`: UNRESOLVED
 - EXTERNAL DEPENDENCIES: UNRESOLVED — none proven statically for this group
 - FAILURE SEMANTICS: UNRESOLVED statically — error shapes live in service/route bodies not extracted by R8-A; where equivalent paths diverge, ERROR_SEMANTICS_REVIEW_REQUIRED applies as a later-review flag, not a verdict
 - IDEMPOTENCY / DUPLICATE BEHAVIOR: idempotency records present in a linked family; exact key behavior UNRESOLVED statically
@@ -1572,7 +1572,7 @@ Enforcement observed on production mounts (`src/index.ts` mount middleware, R8-A
 - AUTHORIZATION / ROLE SCOPE: `requireVerifiedSchoolContext` school-context enforcement (mount evidence); role checks UNRESOLVED statically
 - CORE DECISION LOGIC: UNRESOLVED statically — decision internals live in service/domain source; route→service linkage above is the proven frame
 - STATE TRANSITIONS: UNRESOLVED statically except where linked families carry state models (see matrix family rows)
-- PERSISTENCE EFFECT: `curriculum-content`: UNRESOLVED; `learning-evidence`: UNRESOLVED; `mastery`: UNRESOLVED; `objectives`: UNRESOLVED; `operations-readiness`: UNRESOLVED; `practice`: UNRESOLVED; `question-bank`: UNRESOLVED; `revision`: UNRESOLVED; `school-integration`: UNRESOLVED; `unclassified`: UNRESOLVED
+- PERSISTENCE EFFECT: `curriculum-content`: AMBIGUOUS; `learning-evidence`: AMBIGUOUS; `mastery`: AMBIGUOUS; `objectives`: DUPLICATE_WRITER_CANDIDATE; `operations-readiness`: AMBIGUOUS; `practice`: AMBIGUOUS; `question-bank`: AMBIGUOUS; `revision`: AMBIGUOUS; `school-integration`: AMBIGUOUS; `unclassified`: UNRESOLVED
 - EXTERNAL DEPENDENCIES: UNRESOLVED — none proven statically for this group
 - FAILURE SEMANTICS: UNRESOLVED statically — error shapes live in service/route bodies not extracted by R8-A; where equivalent paths diverge, ERROR_SEMANTICS_REVIEW_REQUIRED applies as a later-review flag, not a verdict
 - IDEMPOTENCY / DUPLICATE BEHAVIOR: idempotency records present in a linked family; exact key behavior UNRESOLVED statically
@@ -1598,7 +1598,7 @@ Enforcement observed on production mounts (`src/index.ts` mount middleware, R8-A
 - AUTHORIZATION / ROLE SCOPE: `requireVerifiedSchoolContext` school-context enforcement (mount evidence); role checks UNRESOLVED statically
 - CORE DECISION LOGIC: UNRESOLVED statically — decision internals live in service/domain source; route→service linkage above is the proven frame
 - STATE TRANSITIONS: UNRESOLVED statically except where linked families carry state models (see matrix family rows)
-- PERSISTENCE EFFECT: `curriculum-content`: UNRESOLVED; `learning-evidence`: UNRESOLVED; `mastery`: UNRESOLVED; `objectives`: UNRESOLVED; `operations-readiness`: UNRESOLVED; `practice`: UNRESOLVED; `question-bank`: UNRESOLVED; `revision`: UNRESOLVED; `school-integration`: UNRESOLVED; `unclassified`: UNRESOLVED
+- PERSISTENCE EFFECT: `curriculum-content`: AMBIGUOUS; `learning-evidence`: AMBIGUOUS; `mastery`: AMBIGUOUS; `objectives`: DUPLICATE_WRITER_CANDIDATE; `operations-readiness`: AMBIGUOUS; `practice`: AMBIGUOUS; `question-bank`: AMBIGUOUS; `revision`: AMBIGUOUS; `school-integration`: AMBIGUOUS; `unclassified`: UNRESOLVED
 - EXTERNAL DEPENDENCIES: UNRESOLVED — none proven statically for this group
 - FAILURE SEMANTICS: UNRESOLVED statically — error shapes live in service/route bodies not extracted by R8-A; where equivalent paths diverge, ERROR_SEMANTICS_REVIEW_REQUIRED applies as a later-review flag, not a verdict
 - IDEMPOTENCY / DUPLICATE BEHAVIOR: idempotency records present in a linked family; exact key behavior UNRESOLVED statically
@@ -1624,7 +1624,7 @@ Enforcement observed on production mounts (`src/index.ts` mount middleware, R8-A
 - AUTHORIZATION / ROLE SCOPE: `requireVerifiedSchoolContext` school-context enforcement (mount evidence); role checks UNRESOLVED statically
 - CORE DECISION LOGIC: UNRESOLVED statically — decision internals live in service/domain source; route→service linkage above is the proven frame
 - STATE TRANSITIONS: UNRESOLVED statically except where linked families carry state models (see matrix family rows)
-- PERSISTENCE EFFECT: `curriculum-content`: UNRESOLVED; `question-bank`: UNRESOLVED
+- PERSISTENCE EFFECT: `curriculum-content`: AMBIGUOUS; `question-bank`: AMBIGUOUS
 - EXTERNAL DEPENDENCIES: UNRESOLVED — none proven statically for this group
 - FAILURE SEMANTICS: UNRESOLVED statically — error shapes live in service/route bodies not extracted by R8-A; where equivalent paths diverge, ERROR_SEMANTICS_REVIEW_REQUIRED applies as a later-review flag, not a verdict
 - IDEMPOTENCY / DUPLICATE BEHAVIOR: idempotency records present in a linked family; exact key behavior UNRESOLVED statically
@@ -1652,7 +1652,7 @@ Enforcement observed on production mounts (`src/index.ts` mount middleware, R8-A
 - AUTHORIZATION / ROLE SCOPE: `requireVerifiedSchoolContext` school-context enforcement (mount evidence); role checks UNRESOLVED statically
 - CORE DECISION LOGIC: UNRESOLVED statically — decision internals live in service/domain source; route→service linkage above is the proven frame
 - STATE TRANSITIONS: UNRESOLVED statically except where linked families carry state models (see matrix family rows)
-- PERSISTENCE EFFECT: `artifacts-media`: UNRESOLVED; `chat-session`: UNRESOLVED; `learning-evidence`: UNRESOLVED; `objectives`: UNRESOLVED; `question-bank`: UNRESOLVED; `student-identity-context`: UNRESOLVED; `unclassified`: UNRESOLVED
+- PERSISTENCE EFFECT: `artifacts-media`: AMBIGUOUS; `chat-session`: AMBIGUOUS; `learning-evidence`: AMBIGUOUS; `objectives`: DUPLICATE_WRITER_CANDIDATE; `question-bank`: AMBIGUOUS; `student-identity-context`: DUPLICATE_WRITER_CANDIDATE; `unclassified`: UNRESOLVED
 - EXTERNAL DEPENDENCIES: UNRESOLVED — none proven statically for this group
 - FAILURE SEMANTICS: UNRESOLVED statically — error shapes live in service/route bodies not extracted by R8-A; where equivalent paths diverge, ERROR_SEMANTICS_REVIEW_REQUIRED applies as a later-review flag, not a verdict
 - IDEMPOTENCY / DUPLICATE BEHAVIOR: idempotency records present in a linked family; exact key behavior UNRESOLVED statically
@@ -1678,7 +1678,7 @@ Enforcement observed on production mounts (`src/index.ts` mount middleware, R8-A
 - AUTHORIZATION / ROLE SCOPE: `requireVerifiedSchoolContext` school-context enforcement (mount evidence); role checks UNRESOLVED statically
 - CORE DECISION LOGIC: UNRESOLVED statically — decision internals live in service/domain source; route→service linkage above is the proven frame
 - STATE TRANSITIONS: UNRESOLVED statically except where linked families carry state models (see matrix family rows)
-- PERSISTENCE EFFECT: `artifacts-media`: UNRESOLVED; `chat-session`: UNRESOLVED; `learning-evidence`: UNRESOLVED; `objectives`: UNRESOLVED; `practice`: UNRESOLVED; `student-identity-context`: UNRESOLVED; `unclassified`: UNRESOLVED
+- PERSISTENCE EFFECT: `artifacts-media`: AMBIGUOUS; `chat-session`: AMBIGUOUS; `learning-evidence`: AMBIGUOUS; `objectives`: DUPLICATE_WRITER_CANDIDATE; `practice`: AMBIGUOUS; `student-identity-context`: DUPLICATE_WRITER_CANDIDATE; `unclassified`: UNRESOLVED
 - EXTERNAL DEPENDENCIES: UNRESOLVED — none proven statically for this group
 - FAILURE SEMANTICS: UNRESOLVED statically — error shapes live in service/route bodies not extracted by R8-A; where equivalent paths diverge, ERROR_SEMANTICS_REVIEW_REQUIRED applies as a later-review flag, not a verdict
 - IDEMPOTENCY / DUPLICATE BEHAVIOR: idempotency records present in a linked family; exact key behavior UNRESOLVED statically
@@ -1704,7 +1704,7 @@ Enforcement observed on production mounts (`src/index.ts` mount middleware, R8-A
 - AUTHORIZATION / ROLE SCOPE: UNRESOLVED — no school-context middleware on these mounts; service-level role checks not statically extracted
 - CORE DECISION LOGIC: UNRESOLVED statically — decision internals live in service/domain source; route→service linkage above is the proven frame
 - STATE TRANSITIONS: UNRESOLVED statically except where linked families carry state models (see matrix family rows)
-- PERSISTENCE EFFECT: `learner-memory`: UNRESOLVED; `student-identity-context`: UNRESOLVED; `unclassified`: UNRESOLVED
+- PERSISTENCE EFFECT: `learner-memory`: DUPLICATE_WRITER_CANDIDATE; `student-identity-context`: DUPLICATE_WRITER_CANDIDATE; `unclassified`: UNRESOLVED
 - EXTERNAL DEPENDENCIES: UNRESOLVED — none proven statically for this group
 - FAILURE SEMANTICS: UNRESOLVED statically — error shapes live in service/route bodies not extracted by R8-A; where equivalent paths diverge, ERROR_SEMANTICS_REVIEW_REQUIRED applies as a later-review flag, not a verdict
 - IDEMPOTENCY / DUPLICATE BEHAVIOR: UNRESOLVED — no idempotency record linked to this group
@@ -1730,7 +1730,7 @@ Enforcement observed on production mounts (`src/index.ts` mount middleware, R8-A
 - AUTHORIZATION / ROLE SCOPE: UNRESOLVED — no school-context middleware on these mounts; service-level role checks not statically extracted
 - CORE DECISION LOGIC: UNRESOLVED statically — decision internals live in service/domain source; route→service linkage above is the proven frame
 - STATE TRANSITIONS: UNRESOLVED statically except where linked families carry state models (see matrix family rows)
-- PERSISTENCE EFFECT: `learner-memory`: UNRESOLVED; `mastery`: UNRESOLVED; `practice`: UNRESOLVED; `question-bank`: UNRESOLVED; `student-identity-context`: UNRESOLVED; `unclassified`: UNRESOLVED
+- PERSISTENCE EFFECT: `learner-memory`: DUPLICATE_WRITER_CANDIDATE; `mastery`: AMBIGUOUS; `practice`: AMBIGUOUS; `question-bank`: AMBIGUOUS; `student-identity-context`: DUPLICATE_WRITER_CANDIDATE; `unclassified`: UNRESOLVED
 - EXTERNAL DEPENDENCIES: UNRESOLVED — none proven statically for this group
 - FAILURE SEMANTICS: UNRESOLVED statically — error shapes live in service/route bodies not extracted by R8-A; where equivalent paths diverge, ERROR_SEMANTICS_REVIEW_REQUIRED applies as a later-review flag, not a verdict
 - IDEMPOTENCY / DUPLICATE BEHAVIOR: idempotency records present in a linked family; exact key behavior UNRESOLVED statically
@@ -1756,7 +1756,7 @@ Enforcement observed on production mounts (`src/index.ts` mount middleware, R8-A
 - AUTHORIZATION / ROLE SCOPE: `requireVerifiedSchoolContext` school-context enforcement (mount evidence); role checks UNRESOLVED statically
 - CORE DECISION LOGIC: UNRESOLVED statically — decision internals live in service/domain source; route→service linkage above is the proven frame
 - STATE TRANSITIONS: UNRESOLVED statically except where linked families carry state models (see matrix family rows)
-- PERSISTENCE EFFECT: `chat-session`: UNRESOLVED; `learner-memory`: UNRESOLVED; `objectives`: UNRESOLVED; `question-bank`: UNRESOLVED; `revision`: UNRESOLVED; `student-identity-context`: UNRESOLVED; `unclassified`: UNRESOLVED; `voice`: UNRESOLVED
+- PERSISTENCE EFFECT: `chat-session`: AMBIGUOUS; `learner-memory`: DUPLICATE_WRITER_CANDIDATE; `objectives`: DUPLICATE_WRITER_CANDIDATE; `question-bank`: AMBIGUOUS; `revision`: AMBIGUOUS; `student-identity-context`: DUPLICATE_WRITER_CANDIDATE; `unclassified`: UNRESOLVED; `voice`: CLEAR
 - EXTERNAL DEPENDENCIES: UNRESOLVED — none proven statically for this group
 - FAILURE SEMANTICS: UNRESOLVED statically — error shapes live in service/route bodies not extracted by R8-A; where equivalent paths diverge, ERROR_SEMANTICS_REVIEW_REQUIRED applies as a later-review flag, not a verdict
 - IDEMPOTENCY / DUPLICATE BEHAVIOR: idempotency records present in a linked family; exact key behavior UNRESOLVED statically
@@ -1782,7 +1782,7 @@ Enforcement observed on production mounts (`src/index.ts` mount middleware, R8-A
 - AUTHORIZATION / ROLE SCOPE: `requireVerifiedSchoolContext` school-context enforcement (mount evidence); role checks UNRESOLVED statically
 - CORE DECISION LOGIC: UNRESOLVED statically — decision internals live in service/domain source; route→service linkage above is the proven frame
 - STATE TRANSITIONS: UNRESOLVED statically except where linked families carry state models (see matrix family rows)
-- PERSISTENCE EFFECT: `objectives`: UNRESOLVED; `question-bank`: UNRESOLVED; `unclassified`: UNRESOLVED
+- PERSISTENCE EFFECT: `objectives`: DUPLICATE_WRITER_CANDIDATE; `question-bank`: AMBIGUOUS; `unclassified`: UNRESOLVED
 - EXTERNAL DEPENDENCIES: UNRESOLVED — none proven statically for this group
 - FAILURE SEMANTICS: UNRESOLVED statically — error shapes live in service/route bodies not extracted by R8-A; where equivalent paths diverge, ERROR_SEMANTICS_REVIEW_REQUIRED applies as a later-review flag, not a verdict
 - IDEMPOTENCY / DUPLICATE BEHAVIOR: idempotency records present in a linked family; exact key behavior UNRESOLVED statically
@@ -1808,7 +1808,7 @@ Enforcement observed on production mounts (`src/index.ts` mount middleware, R8-A
 - AUTHORIZATION / ROLE SCOPE: `requireVerifiedSchoolContext` school-context enforcement (mount evidence); role checks UNRESOLVED statically
 - CORE DECISION LOGIC: UNRESOLVED statically — decision internals live in service/domain source; route→service linkage above is the proven frame
 - STATE TRANSITIONS: UNRESOLVED statically except where linked families carry state models (see matrix family rows)
-- PERSISTENCE EFFECT: `artifacts-media`: UNRESOLVED; `chat-session`: UNRESOLVED; `learning-evidence`: UNRESOLVED; `objectives`: UNRESOLVED; `unclassified`: UNRESOLVED
+- PERSISTENCE EFFECT: `artifacts-media`: AMBIGUOUS; `chat-session`: AMBIGUOUS; `learning-evidence`: AMBIGUOUS; `objectives`: DUPLICATE_WRITER_CANDIDATE; `unclassified`: UNRESOLVED
 - EXTERNAL DEPENDENCIES: UNRESOLVED — none proven statically for this group
 - FAILURE SEMANTICS: UNRESOLVED statically — error shapes live in service/route bodies not extracted by R8-A; where equivalent paths diverge, ERROR_SEMANTICS_REVIEW_REQUIRED applies as a later-review flag, not a verdict
 - IDEMPOTENCY / DUPLICATE BEHAVIOR: idempotency records present in a linked family; exact key behavior UNRESOLVED statically
@@ -1834,7 +1834,7 @@ Enforcement observed on production mounts (`src/index.ts` mount middleware, R8-A
 - AUTHORIZATION / ROLE SCOPE: UNRESOLVED — no school-context middleware on these mounts; service-level role checks not statically extracted
 - CORE DECISION LOGIC: UNRESOLVED statically — decision internals live in service/domain source; route→service linkage above is the proven frame
 - STATE TRANSITIONS: UNRESOLVED statically except where linked families carry state models (see matrix family rows)
-- PERSISTENCE EFFECT: `practice`: UNRESOLVED; `student-identity-context`: UNRESOLVED; `unclassified`: UNRESOLVED
+- PERSISTENCE EFFECT: `practice`: AMBIGUOUS; `student-identity-context`: DUPLICATE_WRITER_CANDIDATE; `unclassified`: UNRESOLVED
 - EXTERNAL DEPENDENCIES: UNRESOLVED — none proven statically for this group
 - FAILURE SEMANTICS: UNRESOLVED statically — error shapes live in service/route bodies not extracted by R8-A; where equivalent paths diverge, ERROR_SEMANTICS_REVIEW_REQUIRED applies as a later-review flag, not a verdict
 - IDEMPOTENCY / DUPLICATE BEHAVIOR: UNRESOLVED — no idempotency record linked to this group
@@ -1860,7 +1860,7 @@ Enforcement observed on production mounts (`src/index.ts` mount middleware, R8-A
 - AUTHORIZATION / ROLE SCOPE: UNRESOLVED — no school-context middleware on these mounts; service-level role checks not statically extracted
 - CORE DECISION LOGIC: UNRESOLVED statically — decision internals live in service/domain source; route→service linkage above is the proven frame
 - STATE TRANSITIONS: UNRESOLVED statically except where linked families carry state models (see matrix family rows)
-- PERSISTENCE EFFECT: `question-bank`: UNRESOLVED; `safeguarding-privacy`: UNRESOLVED; `school-integration`: UNRESOLVED
+- PERSISTENCE EFFECT: `question-bank`: AMBIGUOUS; `safeguarding-privacy`: DUPLICATE_WRITER_CANDIDATE; `school-integration`: AMBIGUOUS
 - EXTERNAL DEPENDENCIES: UNRESOLVED — none proven statically for this group
 - FAILURE SEMANTICS: UNRESOLVED statically — error shapes live in service/route bodies not extracted by R8-A; where equivalent paths diverge, ERROR_SEMANTICS_REVIEW_REQUIRED applies as a later-review flag, not a verdict
 - IDEMPOTENCY / DUPLICATE BEHAVIOR: idempotency records present in a linked family; exact key behavior UNRESOLVED statically
@@ -1886,7 +1886,7 @@ Enforcement observed on production mounts (`src/index.ts` mount middleware, R8-A
 - AUTHORIZATION / ROLE SCOPE: `requireVerifiedSchoolContext` school-context enforcement (mount evidence); role checks UNRESOLVED statically
 - CORE DECISION LOGIC: UNRESOLVED statically — decision internals live in service/domain source; route→service linkage above is the proven frame
 - STATE TRANSITIONS: UNRESOLVED statically except where linked families carry state models (see matrix family rows)
-- PERSISTENCE EFFECT: `question-bank`: UNRESOLVED; `safeguarding-privacy`: UNRESOLVED; `school-integration`: UNRESOLVED
+- PERSISTENCE EFFECT: `question-bank`: AMBIGUOUS; `safeguarding-privacy`: DUPLICATE_WRITER_CANDIDATE; `school-integration`: AMBIGUOUS
 - EXTERNAL DEPENDENCIES: UNRESOLVED — none proven statically for this group
 - FAILURE SEMANTICS: UNRESOLVED statically — error shapes live in service/route bodies not extracted by R8-A; where equivalent paths diverge, ERROR_SEMANTICS_REVIEW_REQUIRED applies as a later-review flag, not a verdict
 - IDEMPOTENCY / DUPLICATE BEHAVIOR: idempotency records present in a linked family; exact key behavior UNRESOLVED statically
@@ -1912,7 +1912,7 @@ Enforcement observed on production mounts (`src/index.ts` mount middleware, R8-A
 - AUTHORIZATION / ROLE SCOPE: UNRESOLVED — no school-context middleware on these mounts; service-level role checks not statically extracted
 - CORE DECISION LOGIC: UNRESOLVED statically — decision internals live in service/domain source; route→service linkage above is the proven frame
 - STATE TRANSITIONS: UNRESOLVED statically except where linked families carry state models (see matrix family rows)
-- PERSISTENCE EFFECT: `question-bank`: UNRESOLVED; `safeguarding-privacy`: UNRESOLVED; `school-integration`: UNRESOLVED
+- PERSISTENCE EFFECT: `question-bank`: AMBIGUOUS; `safeguarding-privacy`: DUPLICATE_WRITER_CANDIDATE; `school-integration`: AMBIGUOUS
 - EXTERNAL DEPENDENCIES: UNRESOLVED — none proven statically for this group
 - FAILURE SEMANTICS: UNRESOLVED statically — error shapes live in service/route bodies not extracted by R8-A; where equivalent paths diverge, ERROR_SEMANTICS_REVIEW_REQUIRED applies as a later-review flag, not a verdict
 - IDEMPOTENCY / DUPLICATE BEHAVIOR: idempotency records present in a linked family; exact key behavior UNRESOLVED statically
@@ -1938,7 +1938,7 @@ Enforcement observed on production mounts (`src/index.ts` mount middleware, R8-A
 - AUTHORIZATION / ROLE SCOPE: `requireVerifiedSchoolContext` school-context enforcement (mount evidence); role checks UNRESOLVED statically
 - CORE DECISION LOGIC: UNRESOLVED statically — decision internals live in service/domain source; route→service linkage above is the proven frame
 - STATE TRANSITIONS: UNRESOLVED statically except where linked families carry state models (see matrix family rows)
-- PERSISTENCE EFFECT: `learning-evidence`: UNRESOLVED; `operations-readiness`: UNRESOLVED; `question-bank`: UNRESOLVED; `safeguarding-privacy`: UNRESOLVED; `school-integration`: UNRESOLVED; `unclassified`: UNRESOLVED
+- PERSISTENCE EFFECT: `learning-evidence`: AMBIGUOUS; `operations-readiness`: AMBIGUOUS; `question-bank`: AMBIGUOUS; `safeguarding-privacy`: DUPLICATE_WRITER_CANDIDATE; `school-integration`: AMBIGUOUS; `unclassified`: UNRESOLVED
 - EXTERNAL DEPENDENCIES: UNRESOLVED — none proven statically for this group
 - FAILURE SEMANTICS: UNRESOLVED statically — error shapes live in service/route bodies not extracted by R8-A; where equivalent paths diverge, ERROR_SEMANTICS_REVIEW_REQUIRED applies as a later-review flag, not a verdict
 - IDEMPOTENCY / DUPLICATE BEHAVIOR: idempotency records present in a linked family; exact key behavior UNRESOLVED statically
@@ -1966,7 +1966,7 @@ Enforcement observed on production mounts (`src/index.ts` mount middleware, R8-A
 - AUTHORIZATION / ROLE SCOPE: `requireVerifiedSchoolContext` school-context enforcement (mount evidence); role checks UNRESOLVED statically
 - CORE DECISION LOGIC: UNRESOLVED statically — decision internals live in service/domain source; route→service linkage above is the proven frame
 - STATE TRANSITIONS: UNRESOLVED statically except where linked families carry state models (see matrix family rows)
-- PERSISTENCE EFFECT: `student-identity-context`: UNRESOLVED
+- PERSISTENCE EFFECT: `student-identity-context`: DUPLICATE_WRITER_CANDIDATE
 - EXTERNAL DEPENDENCIES: UNRESOLVED — none proven statically for this group
 - FAILURE SEMANTICS: UNRESOLVED statically — error shapes live in service/route bodies not extracted by R8-A; where equivalent paths diverge, ERROR_SEMANTICS_REVIEW_REQUIRED applies as a later-review flag, not a verdict
 - IDEMPOTENCY / DUPLICATE BEHAVIOR: UNRESOLVED — no idempotency record linked to this group
@@ -1992,7 +1992,7 @@ Enforcement observed on production mounts (`src/index.ts` mount middleware, R8-A
 - AUTHORIZATION / ROLE SCOPE: UNRESOLVED — no school-context middleware on these mounts; service-level role checks not statically extracted
 - CORE DECISION LOGIC: UNRESOLVED statically — decision internals live in service/domain source; route→service linkage above is the proven frame
 - STATE TRANSITIONS: UNRESOLVED statically except where linked families carry state models (see matrix family rows)
-- PERSISTENCE EFFECT: `assessment`: UNRESOLVED; `chat-session`: UNRESOLVED; `student-identity-context`: UNRESOLVED; `unclassified`: UNRESOLVED
+- PERSISTENCE EFFECT: `assessment`: UNRESOLVED; `chat-session`: AMBIGUOUS; `student-identity-context`: DUPLICATE_WRITER_CANDIDATE; `unclassified`: UNRESOLVED
 - EXTERNAL DEPENDENCIES: UNRESOLVED — none proven statically for this group
 - FAILURE SEMANTICS: UNRESOLVED statically — error shapes live in service/route bodies not extracted by R8-A; where equivalent paths diverge, ERROR_SEMANTICS_REVIEW_REQUIRED applies as a later-review flag, not a verdict
 - IDEMPOTENCY / DUPLICATE BEHAVIOR: UNRESOLVED — no idempotency record linked to this group
@@ -2018,7 +2018,7 @@ Enforcement observed on production mounts (`src/index.ts` mount middleware, R8-A
 - AUTHORIZATION / ROLE SCOPE: UNRESOLVED — no school-context middleware on these mounts; service-level role checks not statically extracted
 - CORE DECISION LOGIC: UNRESOLVED statically — decision internals live in service/domain source; route→service linkage above is the proven frame
 - STATE TRANSITIONS: UNRESOLVED statically except where linked families carry state models (see matrix family rows)
-- PERSISTENCE EFFECT: `chat-session`: UNRESOLVED; `learner-memory`: UNRESOLVED; `learning-evidence`: UNRESOLVED; `question-bank`: UNRESOLVED; `safeguarding-privacy`: UNRESOLVED; `student-identity-context`: UNRESOLVED; `unclassified`: UNRESOLVED
+- PERSISTENCE EFFECT: `chat-session`: AMBIGUOUS; `learner-memory`: DUPLICATE_WRITER_CANDIDATE; `learning-evidence`: AMBIGUOUS; `question-bank`: AMBIGUOUS; `safeguarding-privacy`: DUPLICATE_WRITER_CANDIDATE; `student-identity-context`: DUPLICATE_WRITER_CANDIDATE; `unclassified`: UNRESOLVED
 - EXTERNAL DEPENDENCIES: UNRESOLVED — none proven statically for this group
 - FAILURE SEMANTICS: UNRESOLVED statically — error shapes live in service/route bodies not extracted by R8-A; where equivalent paths diverge, ERROR_SEMANTICS_REVIEW_REQUIRED applies as a later-review flag, not a verdict
 - IDEMPOTENCY / DUPLICATE BEHAVIOR: idempotency records present in a linked family; exact key behavior UNRESOLVED statically
@@ -2044,7 +2044,7 @@ Enforcement observed on production mounts (`src/index.ts` mount middleware, R8-A
 - AUTHORIZATION / ROLE SCOPE: `requireVerifiedSchoolContext` school-context enforcement (mount evidence); role checks UNRESOLVED statically
 - CORE DECISION LOGIC: UNRESOLVED statically — decision internals live in service/domain source; route→service linkage above is the proven frame
 - STATE TRANSITIONS: UNRESOLVED statically except where linked families carry state models (see matrix family rows)
-- PERSISTENCE EFFECT: `curriculum-content`: UNRESOLVED; `question-bank`: UNRESOLVED; `safeguarding-privacy`: UNRESOLVED
+- PERSISTENCE EFFECT: `curriculum-content`: AMBIGUOUS; `question-bank`: AMBIGUOUS; `safeguarding-privacy`: DUPLICATE_WRITER_CANDIDATE
 - EXTERNAL DEPENDENCIES: UNRESOLVED — none proven statically for this group
 - FAILURE SEMANTICS: UNRESOLVED statically — error shapes live in service/route bodies not extracted by R8-A; where equivalent paths diverge, ERROR_SEMANTICS_REVIEW_REQUIRED applies as a later-review flag, not a verdict
 - IDEMPOTENCY / DUPLICATE BEHAVIOR: idempotency records present in a linked family; exact key behavior UNRESOLVED statically
@@ -2070,7 +2070,7 @@ Enforcement observed on production mounts (`src/index.ts` mount middleware, R8-A
 - AUTHORIZATION / ROLE SCOPE: `requireVerifiedSchoolContext` school-context enforcement (mount evidence); role checks UNRESOLVED statically
 - CORE DECISION LOGIC: UNRESOLVED statically — decision internals live in service/domain source; route→service linkage above is the proven frame
 - STATE TRANSITIONS: UNRESOLVED statically except where linked families carry state models (see matrix family rows)
-- PERSISTENCE EFFECT: `curriculum-content`: UNRESOLVED; `learner-memory`: UNRESOLVED; `question-bank`: UNRESOLVED; `safeguarding-privacy`: UNRESOLVED; `student-identity-context`: UNRESOLVED; `unclassified`: UNRESOLVED
+- PERSISTENCE EFFECT: `curriculum-content`: AMBIGUOUS; `learner-memory`: DUPLICATE_WRITER_CANDIDATE; `question-bank`: AMBIGUOUS; `safeguarding-privacy`: DUPLICATE_WRITER_CANDIDATE; `student-identity-context`: DUPLICATE_WRITER_CANDIDATE; `unclassified`: UNRESOLVED
 - EXTERNAL DEPENDENCIES: UNRESOLVED — none proven statically for this group
 - FAILURE SEMANTICS: UNRESOLVED statically — error shapes live in service/route bodies not extracted by R8-A; where equivalent paths diverge, ERROR_SEMANTICS_REVIEW_REQUIRED applies as a later-review flag, not a verdict
 - IDEMPOTENCY / DUPLICATE BEHAVIOR: idempotency records present in a linked family; exact key behavior UNRESOLVED statically
@@ -2096,7 +2096,7 @@ Enforcement observed on production mounts (`src/index.ts` mount middleware, R8-A
 - AUTHORIZATION / ROLE SCOPE: `requireVerifiedSchoolContext` school-context enforcement (mount evidence); role checks UNRESOLVED statically
 - CORE DECISION LOGIC: UNRESOLVED statically — decision internals live in service/domain source; route→service linkage above is the proven frame
 - STATE TRANSITIONS: UNRESOLVED statically except where linked families carry state models (see matrix family rows)
-- PERSISTENCE EFFECT: `curriculum-content`: UNRESOLVED; `question-bank`: UNRESOLVED; `safeguarding-privacy`: UNRESOLVED
+- PERSISTENCE EFFECT: `curriculum-content`: AMBIGUOUS; `question-bank`: AMBIGUOUS; `safeguarding-privacy`: DUPLICATE_WRITER_CANDIDATE
 - EXTERNAL DEPENDENCIES: UNRESOLVED — none proven statically for this group
 - FAILURE SEMANTICS: UNRESOLVED statically — error shapes live in service/route bodies not extracted by R8-A; where equivalent paths diverge, ERROR_SEMANTICS_REVIEW_REQUIRED applies as a later-review flag, not a verdict
 - IDEMPOTENCY / DUPLICATE BEHAVIOR: idempotency records present in a linked family; exact key behavior UNRESOLVED statically
@@ -2122,7 +2122,7 @@ Enforcement observed on production mounts (`src/index.ts` mount middleware, R8-A
 - AUTHORIZATION / ROLE SCOPE: `requireVerifiedSchoolContext` school-context enforcement (mount evidence); role checks UNRESOLVED statically
 - CORE DECISION LOGIC: UNRESOLVED statically — decision internals live in service/domain source; route→service linkage above is the proven frame
 - STATE TRANSITIONS: UNRESOLVED statically except where linked families carry state models (see matrix family rows)
-- PERSISTENCE EFFECT: `assessment`: UNRESOLVED; `curriculum-content`: UNRESOLVED; `learning-evidence`: UNRESOLVED; `question-bank`: UNRESOLVED; `safeguarding-privacy`: UNRESOLVED; `school-integration`: UNRESOLVED; `student-identity-context`: UNRESOLVED
+- PERSISTENCE EFFECT: `assessment`: UNRESOLVED; `curriculum-content`: AMBIGUOUS; `learning-evidence`: AMBIGUOUS; `question-bank`: AMBIGUOUS; `safeguarding-privacy`: DUPLICATE_WRITER_CANDIDATE; `school-integration`: AMBIGUOUS; `student-identity-context`: DUPLICATE_WRITER_CANDIDATE
 - EXTERNAL DEPENDENCIES: UNRESOLVED — none proven statically for this group
 - FAILURE SEMANTICS: UNRESOLVED statically — error shapes live in service/route bodies not extracted by R8-A; where equivalent paths diverge, ERROR_SEMANTICS_REVIEW_REQUIRED applies as a later-review flag, not a verdict
 - IDEMPOTENCY / DUPLICATE BEHAVIOR: idempotency records present in a linked family; exact key behavior UNRESOLVED statically
@@ -2150,7 +2150,7 @@ Enforcement observed on production mounts (`src/index.ts` mount middleware, R8-A
 - AUTHORIZATION / ROLE SCOPE: UNRESOLVED — no school-context middleware on these mounts; service-level role checks not statically extracted
 - CORE DECISION LOGIC: UNRESOLVED statically — decision internals live in service/domain source; route→service linkage above is the proven frame
 - STATE TRANSITIONS: UNRESOLVED statically except where linked families carry state models (see matrix family rows)
-- PERSISTENCE EFFECT: `operations-readiness`: UNRESOLVED; `question-bank`: UNRESOLVED; `school-integration`: UNRESOLVED
+- PERSISTENCE EFFECT: `operations-readiness`: AMBIGUOUS; `question-bank`: AMBIGUOUS; `school-integration`: AMBIGUOUS
 - EXTERNAL DEPENDENCIES: UNRESOLVED — none proven statically for this group
 - FAILURE SEMANTICS: UNRESOLVED statically — error shapes live in service/route bodies not extracted by R8-A; where equivalent paths diverge, ERROR_SEMANTICS_REVIEW_REQUIRED applies as a later-review flag, not a verdict
 - IDEMPOTENCY / DUPLICATE BEHAVIOR: idempotency records present in a linked family; exact key behavior UNRESOLVED statically
@@ -2176,7 +2176,7 @@ Enforcement observed on production mounts (`src/index.ts` mount middleware, R8-A
 - AUTHORIZATION / ROLE SCOPE: UNRESOLVED — no school-context middleware on these mounts; service-level role checks not statically extracted
 - CORE DECISION LOGIC: UNRESOLVED statically — decision internals live in service/domain source; route→service linkage above is the proven frame
 - STATE TRANSITIONS: UNRESOLVED statically except where linked families carry state models (see matrix family rows)
-- PERSISTENCE EFFECT: `school-integration`: UNRESOLVED
+- PERSISTENCE EFFECT: `school-integration`: AMBIGUOUS
 - EXTERNAL DEPENDENCIES: UNRESOLVED — none proven statically for this group
 - FAILURE SEMANTICS: UNRESOLVED statically — error shapes live in service/route bodies not extracted by R8-A; where equivalent paths diverge, ERROR_SEMANTICS_REVIEW_REQUIRED applies as a later-review flag, not a verdict
 - IDEMPOTENCY / DUPLICATE BEHAVIOR: idempotency records present in a linked family; exact key behavior UNRESOLVED statically
@@ -2202,7 +2202,7 @@ Enforcement observed on production mounts (`src/index.ts` mount middleware, R8-A
 - AUTHORIZATION / ROLE SCOPE: `requireVerifiedSchoolContext` school-context enforcement (mount evidence); role checks UNRESOLVED statically
 - CORE DECISION LOGIC: UNRESOLVED statically — decision internals live in service/domain source; route→service linkage above is the proven frame
 - STATE TRANSITIONS: UNRESOLVED statically except where linked families carry state models (see matrix family rows)
-- PERSISTENCE EFFECT: `operations-readiness`: UNRESOLVED; `safeguarding-privacy`: UNRESOLVED
+- PERSISTENCE EFFECT: `operations-readiness`: AMBIGUOUS; `safeguarding-privacy`: DUPLICATE_WRITER_CANDIDATE
 - EXTERNAL DEPENDENCIES: UNRESOLVED — none proven statically for this group
 - FAILURE SEMANTICS: UNRESOLVED statically — error shapes live in service/route bodies not extracted by R8-A; where equivalent paths diverge, ERROR_SEMANTICS_REVIEW_REQUIRED applies as a later-review flag, not a verdict
 - IDEMPOTENCY / DUPLICATE BEHAVIOR: UNRESOLVED — no idempotency record linked to this group
@@ -2228,7 +2228,7 @@ Enforcement observed on production mounts (`src/index.ts` mount middleware, R8-A
 - AUTHORIZATION / ROLE SCOPE: UNRESOLVED — no school-context middleware on these mounts; service-level role checks not statically extracted
 - CORE DECISION LOGIC: UNRESOLVED statically — decision internals live in service/domain source; route→service linkage above is the proven frame
 - STATE TRANSITIONS: UNRESOLVED statically except where linked families carry state models (see matrix family rows)
-- PERSISTENCE EFFECT: `operations-readiness`: UNRESOLVED; `safeguarding-privacy`: UNRESOLVED
+- PERSISTENCE EFFECT: `operations-readiness`: AMBIGUOUS; `safeguarding-privacy`: DUPLICATE_WRITER_CANDIDATE
 - EXTERNAL DEPENDENCIES: UNRESOLVED — none proven statically for this group
 - FAILURE SEMANTICS: UNRESOLVED statically — error shapes live in service/route bodies not extracted by R8-A; where equivalent paths diverge, ERROR_SEMANTICS_REVIEW_REQUIRED applies as a later-review flag, not a verdict
 - IDEMPOTENCY / DUPLICATE BEHAVIOR: UNRESOLVED — no idempotency record linked to this group
@@ -2254,7 +2254,7 @@ Enforcement observed on production mounts (`src/index.ts` mount middleware, R8-A
 - AUTHORIZATION / ROLE SCOPE: UNRESOLVED — no school-context middleware on these mounts; service-level role checks not statically extracted
 - CORE DECISION LOGIC: UNRESOLVED statically — decision internals live in service/domain source; route→service linkage above is the proven frame
 - STATE TRANSITIONS: UNRESOLVED statically except where linked families carry state models (see matrix family rows)
-- PERSISTENCE EFFECT: `operations-readiness`: UNRESOLVED; `question-bank`: UNRESOLVED; `school-integration`: UNRESOLVED
+- PERSISTENCE EFFECT: `operations-readiness`: AMBIGUOUS; `question-bank`: AMBIGUOUS; `school-integration`: AMBIGUOUS
 - EXTERNAL DEPENDENCIES: UNRESOLVED — none proven statically for this group
 - FAILURE SEMANTICS: UNRESOLVED statically — error shapes live in service/route bodies not extracted by R8-A; where equivalent paths diverge, ERROR_SEMANTICS_REVIEW_REQUIRED applies as a later-review flag, not a verdict
 - IDEMPOTENCY / DUPLICATE BEHAVIOR: idempotency records present in a linked family; exact key behavior UNRESOLVED statically
@@ -2280,7 +2280,7 @@ Enforcement observed on production mounts (`src/index.ts` mount middleware, R8-A
 - AUTHORIZATION / ROLE SCOPE: `requireVerifiedSchoolContext` school-context enforcement (mount evidence); role checks UNRESOLVED statically
 - CORE DECISION LOGIC: UNRESOLVED statically — decision internals live in service/domain source; route→service linkage above is the proven frame
 - STATE TRANSITIONS: UNRESOLVED statically except where linked families carry state models (see matrix family rows)
-- PERSISTENCE EFFECT: `operations-readiness`: UNRESOLVED; `question-bank`: UNRESOLVED; `school-integration`: UNRESOLVED
+- PERSISTENCE EFFECT: `operations-readiness`: AMBIGUOUS; `question-bank`: AMBIGUOUS; `school-integration`: AMBIGUOUS
 - EXTERNAL DEPENDENCIES: UNRESOLVED — none proven statically for this group
 - FAILURE SEMANTICS: UNRESOLVED statically — error shapes live in service/route bodies not extracted by R8-A; where equivalent paths diverge, ERROR_SEMANTICS_REVIEW_REQUIRED applies as a later-review flag, not a verdict
 - IDEMPOTENCY / DUPLICATE BEHAVIOR: idempotency records present in a linked family; exact key behavior UNRESOLVED statically
@@ -2306,7 +2306,7 @@ Enforcement observed on production mounts (`src/index.ts` mount middleware, R8-A
 - AUTHORIZATION / ROLE SCOPE: `requireVerifiedSchoolContext` school-context enforcement (mount evidence); role checks UNRESOLVED statically
 - CORE DECISION LOGIC: UNRESOLVED statically — decision internals live in service/domain source; route→service linkage above is the proven frame
 - STATE TRANSITIONS: UNRESOLVED statically except where linked families carry state models (see matrix family rows)
-- PERSISTENCE EFFECT: `operations-readiness`: UNRESOLVED; `question-bank`: UNRESOLVED; `school-integration`: UNRESOLVED
+- PERSISTENCE EFFECT: `operations-readiness`: AMBIGUOUS; `question-bank`: AMBIGUOUS; `school-integration`: AMBIGUOUS
 - EXTERNAL DEPENDENCIES: UNRESOLVED — none proven statically for this group
 - FAILURE SEMANTICS: UNRESOLVED statically — error shapes live in service/route bodies not extracted by R8-A; where equivalent paths diverge, ERROR_SEMANTICS_REVIEW_REQUIRED applies as a later-review flag, not a verdict
 - IDEMPOTENCY / DUPLICATE BEHAVIOR: idempotency records present in a linked family; exact key behavior UNRESOLVED statically
@@ -2332,7 +2332,7 @@ Enforcement observed on production mounts (`src/index.ts` mount middleware, R8-A
 - AUTHORIZATION / ROLE SCOPE: UNRESOLVED — no school-context middleware on these mounts; service-level role checks not statically extracted
 - CORE DECISION LOGIC: UNRESOLVED statically — decision internals live in service/domain source; route→service linkage above is the proven frame
 - STATE TRANSITIONS: UNRESOLVED statically except where linked families carry state models (see matrix family rows)
-- PERSISTENCE EFFECT: `operations-readiness`: UNRESOLVED
+- PERSISTENCE EFFECT: `operations-readiness`: AMBIGUOUS
 - EXTERNAL DEPENDENCIES: UNRESOLVED — none proven statically for this group
 - FAILURE SEMANTICS: UNRESOLVED statically — error shapes live in service/route bodies not extracted by R8-A; where equivalent paths diverge, ERROR_SEMANTICS_REVIEW_REQUIRED applies as a later-review flag, not a verdict
 - IDEMPOTENCY / DUPLICATE BEHAVIOR: UNRESOLVED — no idempotency record linked to this group
@@ -2358,7 +2358,7 @@ Enforcement observed on production mounts (`src/index.ts` mount middleware, R8-A
 - AUTHORIZATION / ROLE SCOPE: `requireVerifiedSchoolContext` school-context enforcement (mount evidence); role checks UNRESOLVED statically
 - CORE DECISION LOGIC: UNRESOLVED statically — decision internals live in service/domain source; route→service linkage above is the proven frame
 - STATE TRANSITIONS: UNRESOLVED statically except where linked families carry state models (see matrix family rows)
-- PERSISTENCE EFFECT: `assessment`: UNRESOLVED; `learning-evidence`: UNRESOLVED; `operations-readiness`: UNRESOLVED; `question-bank`: UNRESOLVED; `safeguarding-privacy`: UNRESOLVED; `school-integration`: UNRESOLVED; `student-identity-context`: UNRESOLVED
+- PERSISTENCE EFFECT: `assessment`: UNRESOLVED; `learning-evidence`: AMBIGUOUS; `operations-readiness`: AMBIGUOUS; `question-bank`: AMBIGUOUS; `safeguarding-privacy`: DUPLICATE_WRITER_CANDIDATE; `school-integration`: AMBIGUOUS; `student-identity-context`: DUPLICATE_WRITER_CANDIDATE
 - EXTERNAL DEPENDENCIES: UNRESOLVED — none proven statically for this group
 - FAILURE SEMANTICS: UNRESOLVED statically — error shapes live in service/route bodies not extracted by R8-A; where equivalent paths diverge, ERROR_SEMANTICS_REVIEW_REQUIRED applies as a later-review flag, not a verdict
 - IDEMPOTENCY / DUPLICATE BEHAVIOR: idempotency records present in a linked family; exact key behavior UNRESOLVED statically
@@ -2384,7 +2384,7 @@ Enforcement observed on production mounts (`src/index.ts` mount middleware, R8-A
 - AUTHORIZATION / ROLE SCOPE: UNRESOLVED — no school-context middleware on these mounts; service-level role checks not statically extracted
 - CORE DECISION LOGIC: UNRESOLVED statically — decision internals live in service/domain source; route→service linkage above is the proven frame
 - STATE TRANSITIONS: UNRESOLVED statically except where linked families carry state models (see matrix family rows)
-- PERSISTENCE EFFECT: `assessment`: UNRESOLVED; `learning-evidence`: UNRESOLVED; `safeguarding-privacy`: UNRESOLVED; `school-integration`: UNRESOLVED; `student-identity-context`: UNRESOLVED
+- PERSISTENCE EFFECT: `assessment`: UNRESOLVED; `learning-evidence`: AMBIGUOUS; `safeguarding-privacy`: DUPLICATE_WRITER_CANDIDATE; `school-integration`: AMBIGUOUS; `student-identity-context`: DUPLICATE_WRITER_CANDIDATE
 - EXTERNAL DEPENDENCIES: UNRESOLVED — none proven statically for this group
 - FAILURE SEMANTICS: UNRESOLVED statically — error shapes live in service/route bodies not extracted by R8-A; where equivalent paths diverge, ERROR_SEMANTICS_REVIEW_REQUIRED applies as a later-review flag, not a verdict
 - IDEMPOTENCY / DUPLICATE BEHAVIOR: idempotency records present in a linked family; exact key behavior UNRESOLVED statically
@@ -2410,7 +2410,7 @@ Enforcement observed on production mounts (`src/index.ts` mount middleware, R8-A
 - AUTHORIZATION / ROLE SCOPE: UNRESOLVED — no school-context middleware on these mounts; service-level role checks not statically extracted
 - CORE DECISION LOGIC: UNRESOLVED statically — decision internals live in service/domain source; route→service linkage above is the proven frame
 - STATE TRANSITIONS: UNRESOLVED statically except where linked families carry state models (see matrix family rows)
-- PERSISTENCE EFFECT: `assessment`: UNRESOLVED; `learning-evidence`: UNRESOLVED; `question-bank`: UNRESOLVED; `safeguarding-privacy`: UNRESOLVED; `school-integration`: UNRESOLVED; `student-identity-context`: UNRESOLVED
+- PERSISTENCE EFFECT: `assessment`: UNRESOLVED; `learning-evidence`: AMBIGUOUS; `question-bank`: AMBIGUOUS; `safeguarding-privacy`: DUPLICATE_WRITER_CANDIDATE; `school-integration`: AMBIGUOUS; `student-identity-context`: DUPLICATE_WRITER_CANDIDATE
 - EXTERNAL DEPENDENCIES: UNRESOLVED — none proven statically for this group
 - FAILURE SEMANTICS: UNRESOLVED statically — error shapes live in service/route bodies not extracted by R8-A; where equivalent paths diverge, ERROR_SEMANTICS_REVIEW_REQUIRED applies as a later-review flag, not a verdict
 - IDEMPOTENCY / DUPLICATE BEHAVIOR: idempotency records present in a linked family; exact key behavior UNRESOLVED statically
@@ -2436,7 +2436,7 @@ Enforcement observed on production mounts (`src/index.ts` mount middleware, R8-A
 - AUTHORIZATION / ROLE SCOPE: UNRESOLVED — no school-context middleware on these mounts; service-level role checks not statically extracted
 - CORE DECISION LOGIC: UNRESOLVED statically — decision internals live in service/domain source; route→service linkage above is the proven frame
 - STATE TRANSITIONS: UNRESOLVED statically except where linked families carry state models (see matrix family rows)
-- PERSISTENCE EFFECT: `assessment`: UNRESOLVED; `learning-evidence`: UNRESOLVED; `safeguarding-privacy`: UNRESOLVED; `school-integration`: UNRESOLVED; `student-identity-context`: UNRESOLVED
+- PERSISTENCE EFFECT: `assessment`: UNRESOLVED; `learning-evidence`: AMBIGUOUS; `safeguarding-privacy`: DUPLICATE_WRITER_CANDIDATE; `school-integration`: AMBIGUOUS; `student-identity-context`: DUPLICATE_WRITER_CANDIDATE
 - EXTERNAL DEPENDENCIES: UNRESOLVED — none proven statically for this group
 - FAILURE SEMANTICS: UNRESOLVED statically — error shapes live in service/route bodies not extracted by R8-A; where equivalent paths diverge, ERROR_SEMANTICS_REVIEW_REQUIRED applies as a later-review flag, not a verdict
 - IDEMPOTENCY / DUPLICATE BEHAVIOR: idempotency records present in a linked family; exact key behavior UNRESOLVED statically
@@ -2462,7 +2462,7 @@ Enforcement observed on production mounts (`src/index.ts` mount middleware, R8-A
 - AUTHORIZATION / ROLE SCOPE: `requireVerifiedSchoolContext` school-context enforcement (mount evidence); role checks UNRESOLVED statically
 - CORE DECISION LOGIC: UNRESOLVED statically — decision internals live in service/domain source; route→service linkage above is the proven frame
 - STATE TRANSITIONS: UNRESOLVED statically except where linked families carry state models (see matrix family rows)
-- PERSISTENCE EFFECT: `assessment`: UNRESOLVED; `learning-evidence`: UNRESOLVED; `question-bank`: UNRESOLVED; `safeguarding-privacy`: UNRESOLVED; `school-integration`: UNRESOLVED
+- PERSISTENCE EFFECT: `assessment`: UNRESOLVED; `learning-evidence`: AMBIGUOUS; `question-bank`: AMBIGUOUS; `safeguarding-privacy`: DUPLICATE_WRITER_CANDIDATE; `school-integration`: AMBIGUOUS
 - EXTERNAL DEPENDENCIES: UNRESOLVED — none proven statically for this group
 - FAILURE SEMANTICS: UNRESOLVED statically — error shapes live in service/route bodies not extracted by R8-A; where equivalent paths diverge, ERROR_SEMANTICS_REVIEW_REQUIRED applies as a later-review flag, not a verdict
 - IDEMPOTENCY / DUPLICATE BEHAVIOR: idempotency records present in a linked family; exact key behavior UNRESOLVED statically
@@ -2488,7 +2488,7 @@ Enforcement observed on production mounts (`src/index.ts` mount middleware, R8-A
 - AUTHORIZATION / ROLE SCOPE: UNRESOLVED — no school-context middleware on these mounts; service-level role checks not statically extracted
 - CORE DECISION LOGIC: UNRESOLVED statically — decision internals live in service/domain source; route→service linkage above is the proven frame
 - STATE TRANSITIONS: UNRESOLVED statically except where linked families carry state models (see matrix family rows)
-- PERSISTENCE EFFECT: `assessment`: UNRESOLVED; `learning-evidence`: UNRESOLVED; `question-bank`: UNRESOLVED; `safeguarding-privacy`: UNRESOLVED; `school-integration`: UNRESOLVED
+- PERSISTENCE EFFECT: `assessment`: UNRESOLVED; `learning-evidence`: AMBIGUOUS; `question-bank`: AMBIGUOUS; `safeguarding-privacy`: DUPLICATE_WRITER_CANDIDATE; `school-integration`: AMBIGUOUS
 - EXTERNAL DEPENDENCIES: UNRESOLVED — none proven statically for this group
 - FAILURE SEMANTICS: UNRESOLVED statically — error shapes live in service/route bodies not extracted by R8-A; where equivalent paths diverge, ERROR_SEMANTICS_REVIEW_REQUIRED applies as a later-review flag, not a verdict
 - IDEMPOTENCY / DUPLICATE BEHAVIOR: idempotency records present in a linked family; exact key behavior UNRESOLVED statically
@@ -2514,7 +2514,7 @@ Enforcement observed on production mounts (`src/index.ts` mount middleware, R8-A
 - AUTHORIZATION / ROLE SCOPE: UNRESOLVED — no school-context middleware on these mounts; service-level role checks not statically extracted
 - CORE DECISION LOGIC: UNRESOLVED statically — decision internals live in service/domain source; route→service linkage above is the proven frame
 - STATE TRANSITIONS: UNRESOLVED statically except where linked families carry state models (see matrix family rows)
-- PERSISTENCE EFFECT: `assessment`: UNRESOLVED; `learning-evidence`: UNRESOLVED; `operations-readiness`: UNRESOLVED; `safeguarding-privacy`: UNRESOLVED; `school-integration`: UNRESOLVED
+- PERSISTENCE EFFECT: `assessment`: UNRESOLVED; `learning-evidence`: AMBIGUOUS; `operations-readiness`: AMBIGUOUS; `safeguarding-privacy`: DUPLICATE_WRITER_CANDIDATE; `school-integration`: AMBIGUOUS
 - EXTERNAL DEPENDENCIES: UNRESOLVED — none proven statically for this group
 - FAILURE SEMANTICS: UNRESOLVED statically — error shapes live in service/route bodies not extracted by R8-A; where equivalent paths diverge, ERROR_SEMANTICS_REVIEW_REQUIRED applies as a later-review flag, not a verdict
 - IDEMPOTENCY / DUPLICATE BEHAVIOR: idempotency records present in a linked family; exact key behavior UNRESOLVED statically
@@ -2566,7 +2566,7 @@ Enforcement observed on production mounts (`src/index.ts` mount middleware, R8-A
 - AUTHORIZATION / ROLE SCOPE: `requireVerifiedSchoolContext` school-context enforcement (mount evidence); role checks UNRESOLVED statically
 - CORE DECISION LOGIC: UNRESOLVED statically — decision internals live in service/domain source; route→service linkage above is the proven frame
 - STATE TRANSITIONS: UNRESOLVED statically except where linked families carry state models (see matrix family rows)
-- PERSISTENCE EFFECT: `operations-readiness`: UNRESOLVED; `question-bank`: UNRESOLVED; `school-integration`: UNRESOLVED
+- PERSISTENCE EFFECT: `operations-readiness`: AMBIGUOUS; `question-bank`: AMBIGUOUS; `school-integration`: AMBIGUOUS
 - EXTERNAL DEPENDENCIES: UNRESOLVED — none proven statically for this group
 - FAILURE SEMANTICS: UNRESOLVED statically — error shapes live in service/route bodies not extracted by R8-A; where equivalent paths diverge, ERROR_SEMANTICS_REVIEW_REQUIRED applies as a later-review flag, not a verdict
 - IDEMPOTENCY / DUPLICATE BEHAVIOR: idempotency records present in a linked family; exact key behavior UNRESOLVED statically
@@ -2592,7 +2592,7 @@ Enforcement observed on production mounts (`src/index.ts` mount middleware, R8-A
 - AUTHORIZATION / ROLE SCOPE: `requireVerifiedSchoolContext` school-context enforcement (mount evidence); role checks UNRESOLVED statically
 - CORE DECISION LOGIC: UNRESOLVED statically — decision internals live in service/domain source; route→service linkage above is the proven frame
 - STATE TRANSITIONS: UNRESOLVED statically except where linked families carry state models (see matrix family rows)
-- PERSISTENCE EFFECT: `question-bank`: UNRESOLVED
+- PERSISTENCE EFFECT: `question-bank`: AMBIGUOUS
 - EXTERNAL DEPENDENCIES: UNRESOLVED — none proven statically for this group
 - FAILURE SEMANTICS: UNRESOLVED statically — error shapes live in service/route bodies not extracted by R8-A; where equivalent paths diverge, ERROR_SEMANTICS_REVIEW_REQUIRED applies as a later-review flag, not a verdict
 - IDEMPOTENCY / DUPLICATE BEHAVIOR: idempotency records present in a linked family; exact key behavior UNRESOLVED statically
@@ -2618,7 +2618,7 @@ Enforcement observed on production mounts (`src/index.ts` mount middleware, R8-A
 - AUTHORIZATION / ROLE SCOPE: `requireVerifiedSchoolContext` school-context enforcement (mount evidence); role checks UNRESOLVED statically
 - CORE DECISION LOGIC: UNRESOLVED statically — decision internals live in service/domain source; route→service linkage above is the proven frame
 - STATE TRANSITIONS: UNRESOLVED statically except where linked families carry state models (see matrix family rows)
-- PERSISTENCE EFFECT: `question-bank`: UNRESOLVED
+- PERSISTENCE EFFECT: `question-bank`: AMBIGUOUS
 - EXTERNAL DEPENDENCIES: UNRESOLVED — none proven statically for this group
 - FAILURE SEMANTICS: UNRESOLVED statically — error shapes live in service/route bodies not extracted by R8-A; where equivalent paths diverge, ERROR_SEMANTICS_REVIEW_REQUIRED applies as a later-review flag, not a verdict
 - IDEMPOTENCY / DUPLICATE BEHAVIOR: idempotency records present in a linked family; exact key behavior UNRESOLVED statically
@@ -2670,7 +2670,7 @@ Enforcement observed on production mounts (`src/index.ts` mount middleware, R8-A
 - AUTHORIZATION / ROLE SCOPE: `requireVerifiedSchoolContext` school-context enforcement (mount evidence); role checks UNRESOLVED statically
 - CORE DECISION LOGIC: UNRESOLVED statically — decision internals live in service/domain source; route→service linkage above is the proven frame
 - STATE TRANSITIONS: UNRESOLVED statically except where linked families carry state models (see matrix family rows)
-- PERSISTENCE EFFECT: `operations-readiness`: UNRESOLVED; `question-bank`: UNRESOLVED; `safeguarding-privacy`: UNRESOLVED; `school-integration`: UNRESOLVED
+- PERSISTENCE EFFECT: `operations-readiness`: AMBIGUOUS; `question-bank`: AMBIGUOUS; `safeguarding-privacy`: DUPLICATE_WRITER_CANDIDATE; `school-integration`: AMBIGUOUS
 - EXTERNAL DEPENDENCIES: UNRESOLVED — none proven statically for this group
 - FAILURE SEMANTICS: UNRESOLVED statically — error shapes live in service/route bodies not extracted by R8-A; where equivalent paths diverge, ERROR_SEMANTICS_REVIEW_REQUIRED applies as a later-review flag, not a verdict
 - IDEMPOTENCY / DUPLICATE BEHAVIOR: idempotency records present in a linked family; exact key behavior UNRESOLVED statically
@@ -2696,7 +2696,7 @@ Enforcement observed on production mounts (`src/index.ts` mount middleware, R8-A
 - AUTHORIZATION / ROLE SCOPE: `requireVerifiedSchoolContext` school-context enforcement (mount evidence); role checks UNRESOLVED statically
 - CORE DECISION LOGIC: UNRESOLVED statically — decision internals live in service/domain source; route→service linkage above is the proven frame
 - STATE TRANSITIONS: UNRESOLVED statically except where linked families carry state models (see matrix family rows)
-- PERSISTENCE EFFECT: `question-bank`: UNRESOLVED; `safeguarding-privacy`: UNRESOLVED; `school-integration`: UNRESOLVED
+- PERSISTENCE EFFECT: `question-bank`: AMBIGUOUS; `safeguarding-privacy`: DUPLICATE_WRITER_CANDIDATE; `school-integration`: AMBIGUOUS
 - EXTERNAL DEPENDENCIES: UNRESOLVED — none proven statically for this group
 - FAILURE SEMANTICS: UNRESOLVED statically — error shapes live in service/route bodies not extracted by R8-A; where equivalent paths diverge, ERROR_SEMANTICS_REVIEW_REQUIRED applies as a later-review flag, not a verdict
 - IDEMPOTENCY / DUPLICATE BEHAVIOR: idempotency records present in a linked family; exact key behavior UNRESOLVED statically
@@ -2750,7 +2750,7 @@ Enforcement observed on production mounts (`src/index.ts` mount middleware, R8-A
 - AUTHORIZATION / ROLE SCOPE: UNRESOLVED — no school-context middleware on these mounts; service-level role checks not statically extracted
 - CORE DECISION LOGIC: UNRESOLVED statically — decision internals live in service/domain source; route→service linkage above is the proven frame
 - STATE TRANSITIONS: UNRESOLVED statically except where linked families carry state models (see matrix family rows)
-- PERSISTENCE EFFECT: `student-identity-context`: UNRESOLVED
+- PERSISTENCE EFFECT: `student-identity-context`: DUPLICATE_WRITER_CANDIDATE
 - EXTERNAL DEPENDENCIES: AI provider gateway / media pipeline per EXTERNAL_PROVIDER_USAGE + AI_CALL_CANDIDATE findings; exact calls UNRESOLVED statically
 - FAILURE SEMANTICS: UNRESOLVED statically — error shapes live in service/route bodies not extracted by R8-A; where equivalent paths diverge, ERROR_SEMANTICS_REVIEW_REQUIRED applies as a later-review flag, not a verdict
 - IDEMPOTENCY / DUPLICATE BEHAVIOR: UNRESOLVED — no idempotency record linked to this group
@@ -2776,7 +2776,7 @@ Enforcement observed on production mounts (`src/index.ts` mount middleware, R8-A
 - AUTHORIZATION / ROLE SCOPE: UNRESOLVED — no school-context middleware on these mounts; service-level role checks not statically extracted
 - CORE DECISION LOGIC: UNRESOLVED statically — decision internals live in service/domain source; route→service linkage above is the proven frame
 - STATE TRANSITIONS: UNRESOLVED statically except where linked families carry state models (see matrix family rows)
-- PERSISTENCE EFFECT: `student-identity-context`: UNRESOLVED
+- PERSISTENCE EFFECT: `student-identity-context`: DUPLICATE_WRITER_CANDIDATE
 - EXTERNAL DEPENDENCIES: AI provider gateway / media pipeline per EXTERNAL_PROVIDER_USAGE + AI_CALL_CANDIDATE findings; exact calls UNRESOLVED statically
 - FAILURE SEMANTICS: UNRESOLVED statically — error shapes live in service/route bodies not extracted by R8-A; where equivalent paths diverge, ERROR_SEMANTICS_REVIEW_REQUIRED applies as a later-review flag, not a verdict
 - IDEMPOTENCY / DUPLICATE BEHAVIOR: UNRESOLVED — no idempotency record linked to this group
@@ -2802,7 +2802,7 @@ Enforcement observed on production mounts (`src/index.ts` mount middleware, R8-A
 - AUTHORIZATION / ROLE SCOPE: UNRESOLVED — no school-context middleware on these mounts; service-level role checks not statically extracted
 - CORE DECISION LOGIC: UNRESOLVED statically — decision internals live in service/domain source; route→service linkage above is the proven frame
 - STATE TRANSITIONS: UNRESOLVED statically except where linked families carry state models (see matrix family rows)
-- PERSISTENCE EFFECT: `chat-session`: UNRESOLVED; `student-identity-context`: UNRESOLVED
+- PERSISTENCE EFFECT: `chat-session`: AMBIGUOUS; `student-identity-context`: DUPLICATE_WRITER_CANDIDATE
 - EXTERNAL DEPENDENCIES: AI provider gateway / media pipeline per EXTERNAL_PROVIDER_USAGE + AI_CALL_CANDIDATE findings; exact calls UNRESOLVED statically
 - FAILURE SEMANTICS: UNRESOLVED statically — error shapes live in service/route bodies not extracted by R8-A; where equivalent paths diverge, ERROR_SEMANTICS_REVIEW_REQUIRED applies as a later-review flag, not a verdict
 - IDEMPOTENCY / DUPLICATE BEHAVIOR: UNRESOLVED — no idempotency record linked to this group
@@ -2828,7 +2828,7 @@ Enforcement observed on production mounts (`src/index.ts` mount middleware, R8-A
 - AUTHORIZATION / ROLE SCOPE: UNRESOLVED — no school-context middleware on these mounts; service-level role checks not statically extracted
 - CORE DECISION LOGIC: UNRESOLVED statically — decision internals live in service/domain source; route→service linkage above is the proven frame
 - STATE TRANSITIONS: UNRESOLVED statically except where linked families carry state models (see matrix family rows)
-- PERSISTENCE EFFECT: `question-bank`: UNRESOLVED; `student-identity-context`: UNRESOLVED
+- PERSISTENCE EFFECT: `question-bank`: AMBIGUOUS; `student-identity-context`: DUPLICATE_WRITER_CANDIDATE
 - EXTERNAL DEPENDENCIES: AI provider gateway / media pipeline per EXTERNAL_PROVIDER_USAGE + AI_CALL_CANDIDATE findings; exact calls UNRESOLVED statically
 - FAILURE SEMANTICS: UNRESOLVED statically — error shapes live in service/route bodies not extracted by R8-A; where equivalent paths diverge, ERROR_SEMANTICS_REVIEW_REQUIRED applies as a later-review flag, not a verdict
 - IDEMPOTENCY / DUPLICATE BEHAVIOR: idempotency records present in a linked family; exact key behavior UNRESOLVED statically
@@ -2854,7 +2854,7 @@ Enforcement observed on production mounts (`src/index.ts` mount middleware, R8-A
 - AUTHORIZATION / ROLE SCOPE: UNRESOLVED — no school-context middleware on these mounts; service-level role checks not statically extracted
 - CORE DECISION LOGIC: UNRESOLVED statically — decision internals live in service/domain source; route→service linkage above is the proven frame
 - STATE TRANSITIONS: UNRESOLVED statically except where linked families carry state models (see matrix family rows)
-- PERSISTENCE EFFECT: `operations-readiness`: UNRESOLVED; `student-identity-context`: UNRESOLVED
+- PERSISTENCE EFFECT: `operations-readiness`: AMBIGUOUS; `student-identity-context`: DUPLICATE_WRITER_CANDIDATE
 - EXTERNAL DEPENDENCIES: AI provider gateway / media pipeline per EXTERNAL_PROVIDER_USAGE + AI_CALL_CANDIDATE findings; exact calls UNRESOLVED statically
 - FAILURE SEMANTICS: UNRESOLVED statically — error shapes live in service/route bodies not extracted by R8-A; where equivalent paths diverge, ERROR_SEMANTICS_REVIEW_REQUIRED applies as a later-review flag, not a verdict
 - IDEMPOTENCY / DUPLICATE BEHAVIOR: UNRESOLVED — no idempotency record linked to this group
@@ -2880,7 +2880,7 @@ Enforcement observed on production mounts (`src/index.ts` mount middleware, R8-A
 - AUTHORIZATION / ROLE SCOPE: UNRESOLVED — no school-context middleware on these mounts; service-level role checks not statically extracted
 - CORE DECISION LOGIC: UNRESOLVED statically — decision internals live in service/domain source; route→service linkage above is the proven frame
 - STATE TRANSITIONS: UNRESOLVED statically except where linked families carry state models (see matrix family rows)
-- PERSISTENCE EFFECT: `voice`: UNRESOLVED
+- PERSISTENCE EFFECT: `voice`: CLEAR
 - EXTERNAL DEPENDENCIES: AI provider gateway / media pipeline per EXTERNAL_PROVIDER_USAGE + AI_CALL_CANDIDATE findings; exact calls UNRESOLVED statically
 - FAILURE SEMANTICS: UNRESOLVED statically — error shapes live in service/route bodies not extracted by R8-A; where equivalent paths diverge, ERROR_SEMANTICS_REVIEW_REQUIRED applies as a later-review flag, not a verdict
 - IDEMPOTENCY / DUPLICATE BEHAVIOR: UNRESOLVED — no idempotency record linked to this group

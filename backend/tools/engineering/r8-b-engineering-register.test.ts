@@ -98,6 +98,16 @@ describe('r8-b model to writer/readers grouping', () => {
     expect(memory?.models).toContain('LearnerMemoryItem');
     expect(memory?.prodReaders).toContain('src/services/learnerMemoryRepository.ts');
   });
+
+  it('joins writer groups case-insensitively to canonical model names', () => {
+    const inv = fixtureInventory();
+    inv.prisma.modelWriterGroups = [
+      { model: 'learnerMemoryItem', writers: [{ path: 'src/services/learnerMemoryService.ts', symbol: 'prisma', line: 3 }] },
+    ];
+    const ctx = buildRegisterContext(inv, GRAPH_FIXTURE);
+    expect(ctx.writerByModel.get('LearnerMemoryItem')?.status).toBe('CLEAR');
+    expect(ctx.coverage.writerGroupsAccounted).toBe(1);
+  });
 });
 
 describe('r8-b multi-writer classification', () => {

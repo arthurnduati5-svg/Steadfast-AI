@@ -24,16 +24,16 @@ A canonical writer is the single production file that R8-A write-access evidence
 
 - PRIMARY DOMAIN: artifacts
 - MODELS (3): `LearningArtifact`, `LearningArtifactBlock`, `MediaAsset`
-- CANONICAL WRITER(S): `UNRESOLVED`
-- ADDITIONAL WRITERS: none proven in production evidence
-- READERS (production, up to 12): none proven in production evidence
+- CANONICAL WRITER(S): `UNRESOLVED`, `src/services/artifactService.ts`
+- ADDITIONAL WRITERS: `src/services/artifactService.ts`, `src/services/artifactStructuredRepository.ts`
+- READERS (production, up to 12): `src/services/artifactService.ts`, `src/services/learnerGrowthDataReaderService.ts`
 - ROUTE / API SURFACES: `/api/copilot#videoAwarePracticeRoutes`, `/api/copilot#videoLearningSessionRoutes`, `/api/copilot#videoRecommendationRoutes`, `/api/copilot/artifacts`, `/api/copilot/remediation`, `/api/video-learning-analytics#videoLearningAnalyticsRoutes`
 - TRANSACTION BOUNDARY: UNRESOLVED — no explicit transaction evidence in R8-A substrate
 - DURABILITY: PostgreSQL via Prisma where a production writer exists; otherwise UNRESOLVED
 - PROCESS-LOCAL STATE RELATION: see Runtime State Ownership for module/class Map/Set owners in this domain
-- OWNERSHIP CONFIDENCE: high
+- OWNERSHIP CONFIDENCE: low
 - EVIDENCE: 01 prisma.models[] + prisma.modelWriterGroups[] + prisma.accesses[] (readWrite split, production paths only); 02 writes/uses edges; canonical schema prisma/schema.prisma
-- STATUS: UNRESOLVED
+- STATUS: AMBIGUOUS
 
 ### Assessment (`assessment`)
 
@@ -54,204 +54,204 @@ A canonical writer is the single production file that R8-A write-access evidence
 
 - PRIMARY DOMAIN: learning-session
 - MODELS (9): `ChatMessage`, `ChatSession`, `ConversationArchiveRecord`, `RecoveryPostSimulationHandoffPacketRecord`, `StudentLearningSessionEvent`, `StudentLearningSessionState`, `TutorActionDecisionRecord`, `TutorActionEffectivenessRecord`, `TutorState`
-- CANONICAL WRITER(S): `UNRESOLVED`
-- ADDITIONAL WRITERS: none proven in production evidence
-- READERS (production, up to 12): none proven in production evidence
+- CANONICAL WRITER(S): `UNRESOLVED`, `prisma/seed.ts`, `src/routes/ai.ts`, `src/services/conversationArchiveService.ts`, `src/services/studentLearningSessionRepository.ts`
+- ADDITIONAL WRITERS: `prisma/seed.ts`, `src/routes/ai.ts`, `src/routes/ai/ai-chat.routes.ts`, `src/routes/ai/ai-research.routes.ts`, `src/services/aiService.ts`, `src/services/conversationArchiveService.ts`, `src/services/studentExitArchiveService.ts`, `src/services/studentLearningSessionRepository.ts`, `src/workers/index.ts`
+- READERS (production, up to 12): `src/routes/ai.ts`, `src/routes/ai/ai-chat.routes.ts`, `src/routes/ai/ai-research.routes.ts`, `src/routes/ai/ai-safety.routes.ts`, `src/services/aiService.ts`, `src/services/conversationArchiveService.ts`, `src/services/learnerGrowthDataReaderService.ts`, `src/services/studentExitArchiveService.ts`, `src/services/studentLearningSessionRepository.ts`, `src/services/voiceLedgerService.ts`, `src/workers/index.ts`
 - ROUTE / API SURFACES: `/api/copilot#tutorSafeChatRoutes`, `/api/copilot#videoLearningSessionRoutes`, `/api/copilot/chat-pipeline`, `/api/copilot/learning-sessions`, `/api/copilot/live-chat`, `/api/learner#learnerSessionRoutes`
 - TRANSACTION BOUNDARY: UNRESOLVED — no explicit transaction evidence in R8-A substrate
 - DURABILITY: PostgreSQL via Prisma where a production writer exists; otherwise UNRESOLVED
 - PROCESS-LOCAL STATE RELATION: see Runtime State Ownership for module/class Map/Set owners in this domain
-- OWNERSHIP CONFIDENCE: high
+- OWNERSHIP CONFIDENCE: low
 - EVIDENCE: 01 prisma.models[] + prisma.modelWriterGroups[] + prisma.accesses[] (readWrite split, production paths only); 02 writes/uses edges; canonical schema prisma/schema.prisma
-- STATUS: UNRESOLVED
+- STATUS: AMBIGUOUS
 
 ### Curriculum / Content (`curriculum-content`)
 
 - PRIMARY DOMAIN: curriculum
 - MODELS (11): `AnswerKeyVersionRecord`, `ApprovedSourceRecord`, `ContentGapRecord`, `ContentGovernanceAuditRecord`, `ContentItemRecord`, `ContentReviewRecord`, `CurriculumSkillRecord`, `CurriculumTopicRecord`, `CurriculumVersionRecord`, `DifficultyCalibrationRecord`, `QuestionCurriculumValidityRecord`
-- CANONICAL WRITER(S): `UNRESOLVED`
-- ADDITIONAL WRITERS: none proven in production evidence
-- READERS (production, up to 12): none proven in production evidence
+- CANONICAL WRITER(S): `UNRESOLVED`, `src/services/difficultyCalibrationRepository.ts`
+- ADDITIONAL WRITERS: `src/services/difficultyCalibrationRepository.ts`
+- READERS (production, up to 12): `src/services/difficultyCalibrationRepository.ts`, `src/services/phase3ObjectiveRepository.ts`
 - ROUTE / API SURFACES: `/api/content-governance#contentGovernanceRoutes`, `/api/task022/curriculum-governance`
 - TRANSACTION BOUNDARY: UNRESOLVED — no explicit transaction evidence in R8-A substrate
 - DURABILITY: PostgreSQL via Prisma where a production writer exists; otherwise UNRESOLVED
 - PROCESS-LOCAL STATE RELATION: see Runtime State Ownership for module/class Map/Set owners in this domain
-- OWNERSHIP CONFIDENCE: high
+- OWNERSHIP CONFIDENCE: low
 - EVIDENCE: 01 prisma.models[] + prisma.modelWriterGroups[] + prisma.accesses[] (readWrite split, production paths only); 02 writes/uses edges; canonical schema prisma/schema.prisma
-- STATUS: UNRESOLVED
+- STATUS: AMBIGUOUS
 
 ### Learner Memory (`learner-memory`)
 
 - PRIMARY DOMAIN: memory
 - MODELS (3): `GlobalMemory`, `LearnerMemoryItem`, `SafeMemorySummary`
-- CANONICAL WRITER(S): `UNRESOLVED`
-- ADDITIONAL WRITERS: none proven in production evidence
-- READERS (production, up to 12): none proven in production evidence
+- CANONICAL WRITER(S): `UNRESOLVED`, `src/services/learnerMemoryService.ts`, `src/services/safeMemorySummaryService.ts`
+- ADDITIONAL WRITERS: `src/services/learnerMemoryService.ts`, `src/services/safeMemorySummaryService.ts`, `src/services/studentExitArchiveService.ts`
+- READERS (production, up to 12): `src/services/learnerGrowthDataReaderService.ts`, `src/services/learnerMemoryService.ts`, `src/services/safeMemorySummaryService.ts`
 - ROUTE / API SURFACES: `/api/copilot/evidence`, `/api/copilot/learner-memory`, `/api/copilot/learner-transparency`, `/api/copilot/learning-evidence`, `/api/copilot/teacher-insights`, `/api/learner#adaptiveChallengeRoutes`, `/api/learner#learnerPreferenceRoutes`, `/api/learner#learnerRecommendationRoutes`, `/api/learner#learnerSessionRoutes`, `/api/learner#privacyGovernanceRoutes`, `/api/question-bank/result-learning-evidence`
 - TRANSACTION BOUNDARY: UNRESOLVED — no explicit transaction evidence in R8-A substrate
 - DURABILITY: PostgreSQL via Prisma where a production writer exists; otherwise UNRESOLVED
 - PROCESS-LOCAL STATE RELATION: see Runtime State Ownership for module/class Map/Set owners in this domain
-- OWNERSHIP CONFIDENCE: high
+- OWNERSHIP CONFIDENCE: medium
 - EVIDENCE: 01 prisma.models[] + prisma.modelWriterGroups[] + prisma.accesses[] (readWrite split, production paths only); 02 writes/uses edges; canonical schema prisma/schema.prisma
-- STATUS: UNRESOLVED
+- STATUS: DUPLICATE_WRITER_CANDIDATE
 
 ### Learning Evidence (`learning-evidence`)
 
 - PRIMARY DOMAIN: evidence
 - MODELS (19): `CanonicalMasteryEvidenceApplicationRecord`, `CommittedLearningEvidenceProjection`, `LearningEvent`, `LearningEvidenceCandidateProjection`, `LearningEvidenceEvent`, `LearningEvidenceIdempotency`, `LearningEvidenceProjectionCheckpoint`, `LearningEvidenceStream`, `PilotExpansionEvidencePack`, `RecoveryCaseReviewEvidenceBundleRecord`, `RecoveryEvidenceRollupRecord`, `RecoveryOutcomeEvidenceRecord`, `ResultLearningEvidenceAuditRecord`, `ResultLearningEvidenceBridgeRecord`, `ResultLearningEvidenceIdempotencyRecord`, `ResultReportCardEvidenceLinkRecord`, `SafeLearningEvidenceAggregateRecord`, `SafeLearningEvidenceAuditRecord`, `SafeLearningEvidenceRecord`
-- CANONICAL WRITER(S): `UNRESOLVED`
-- ADDITIONAL WRITERS: none proven in production evidence
-- READERS (production, up to 12): none proven in production evidence
+- CANONICAL WRITER(S): `UNRESOLVED`, `src/domains/assessment/result-learning-evidence/repositories/prismaResultLearningEvidenceRepositories.ts`, `src/domains/assessment/result-report-card/repositories/prismaResultReportCardRepositories.ts`, `src/domains/learning-evidence/repositories/prismaLearningEvidenceEventStoreRepository.ts`, `src/services/learnerMemoryService.ts`, `src/services/probabilisticMasteryRepository.ts`
+- ADDITIONAL WRITERS: `src/domains/assessment/result-learning-evidence/repositories/prismaResultLearningEvidenceRepositories.ts`, `src/domains/assessment/result-report-card/repositories/prismaResultReportCardRepositories.ts`, `src/domains/learning-evidence/repositories/prismaLearningEvidenceEventStoreRepository.ts`, `src/services/learnerMemoryService.ts`, `src/services/probabilisticMasteryRepository.ts`
+- READERS (production, up to 12): `src/domains/assessment/result-learning-evidence/repositories/prismaResultLearningEvidenceRepositories.ts`, `src/domains/assessment/result-report-card/repositories/prismaResultReportCardRepositories.ts`, `src/services/probabilisticMasteryRepository.ts`
 - ROUTE / API SURFACES: `/api#learningModeRoutes`, `/api/copilot#copilotHandoffRoutes`, `/api/copilot#learningProfileRoutes`, `/api/copilot#videoLearningSessionRoutes`, `/api/copilot/evidence`, `/api/copilot/learning-evidence`, `/api/copilot/learning-sessions`, `/api/copilot/live-chat`, `/api/copilot/tutor-actions`, `/api/copilot/tutor-state`, `/api/copilot/tutor-turn`, `/api/phase3/daily-learning-feed`, `/api/phase3/peer-learning`, `/api/question-bank/result-learning-evidence`, `/api/tutor#tutorConversationRoutes`, `/api/video-learning-analytics#videoLearningAnalyticsRoutes`
 - TRANSACTION BOUNDARY: idempotency records present; boundary per capability (see Logic Register)
 - DURABILITY: PostgreSQL via Prisma where a production writer exists; otherwise UNRESOLVED
 - PROCESS-LOCAL STATE RELATION: see Runtime State Ownership for module/class Map/Set owners in this domain
-- OWNERSHIP CONFIDENCE: high
+- OWNERSHIP CONFIDENCE: low
 - EVIDENCE: 01 prisma.models[] + prisma.modelWriterGroups[] + prisma.accesses[] (readWrite split, production paths only); 02 writes/uses edges; canonical schema prisma/schema.prisma
-- STATUS: UNRESOLVED
+- STATUS: AMBIGUOUS
 
 ### Mastery (`mastery`)
 
 - PRIMARY DOMAIN: mastery
 - MODELS (13): `CanonicalMasteryChangeRecord`, `CanonicalMasteryStateRecord`, `GrowthMasteryTrendState`, `GrowthMistakePatternState`, `GrowthProofRecord`, `GrowthRecommendationState`, `GrowthWeakTopicState`, `ResultGrowthSignalRecord`, `ResultMasteryMutationEventRecord`, `ResultMasteryMutationPlanRecord`, `ResultObjectiveMasteryImpactRecord`, `SkillMasterySnapshot`, `StudentMasteryAggregationRun`
-- CANONICAL WRITER(S): `UNRESOLVED`
-- ADDITIONAL WRITERS: none proven in production evidence
-- READERS (production, up to 12): none proven in production evidence
+- CANONICAL WRITER(S): `UNRESOLVED`, `src/domains/assessment/result-learning-evidence/repositories/prismaResultLearningEvidenceRepositories.ts`, `src/services/probabilisticMasteryRepository.ts`
+- ADDITIONAL WRITERS: `src/domains/assessment/result-learning-evidence/repositories/prismaResultLearningEvidenceRepositories.ts`, `src/services/probabilisticMasteryRepository.ts`
+- READERS (production, up to 12): `src/domains/assessment/result-learning-evidence/repositories/prismaResultLearningEvidenceRepositories.ts`, `src/services/learnerGrowthDataReaderService.ts`, `src/services/learningProfileEvidenceService.ts`, `src/services/masteryAggregationService.ts`, `src/services/studentLearningProfileService.ts`, `src/services/weakTopicDetectionService.ts`
 - ROUTE / API SURFACES: `/api/copilot/adaptive-challenges`, `/api/copilot/adaptive-recommendations`, `/api/copilot/exam-mode`, `/api/copilot/focus-mode`, `/api/copilot/growth`, `/api/copilot/practice-mastery`, `/api/copilot/quiz-mode`, `/api/copilot/remediation`, `/api/copilot/revision-mode`, `/api/copilot/teach-back-mode`, `/api/learner#adaptiveChallengeRoutes`, `/api/phase3/confidence-recovery`, `/api/phase3/daily-learning-feed`, `/api/phase3/daily-objective-checks`, `/api/phase3/growth-page`, `/api/phase3/living-revision`, `/api/phase3/objectives`, `/api/phase3/study-plans`
 - TRANSACTION BOUNDARY: UNRESOLVED — no explicit transaction evidence in R8-A substrate
 - DURABILITY: PostgreSQL via Prisma where a production writer exists; otherwise UNRESOLVED
 - PROCESS-LOCAL STATE RELATION: see Runtime State Ownership for module/class Map/Set owners in this domain
-- OWNERSHIP CONFIDENCE: high
+- OWNERSHIP CONFIDENCE: low
 - EVIDENCE: 01 prisma.models[] + prisma.modelWriterGroups[] + prisma.accesses[] (readWrite split, production paths only); 02 writes/uses edges; canonical schema prisma/schema.prisma
-- STATUS: UNRESOLVED
+- STATUS: AMBIGUOUS
 
 ### Objectives / Plans / Feed (`objectives`)
 
 - PRIMARY DOMAIN: objectives
 - MODELS (31): `ExamModeAttemptRecord`, `ExamModeQuestionStateRecord`, `ExamModeSessionRecord`, `ExamModeSummaryRecord`, `FocusModeAttemptRecord`, `FocusModeSessionRecord`, `FocusModeStepRecord`, `FocusModeSummaryRecord`, `LearningModeAttempt`, `LearningModeExitSummary`, `LearningModeHintEvent`, `LearningModeSession`, `LearningModeSignal`, `LearningObjectiveRecord`, `QuestionObjectiveMappingRecord`, `QuizModeAttemptRecord`, `QuizModeQuestionStateRecord`, `QuizModeSessionRecord`, `QuizModeSummaryRecord`, `ResultRecoveryObjectiveRecord`, `ResultRecoveryParentSupportNoteDraftRecord`, `RevisionModeAttemptRecord`, `RevisionModeItemStateRecord`, `RevisionModeQueueRecord`, `RevisionModeSessionRecord`, `RevisionModeSummaryRecord`, `StudyPlan`, `TeachBackModeAttemptRecord`, `TeachBackModePromptStateRecord`, `TeachBackModeSessionRecord`, `TeachBackModeSummaryRecord`
-- CANONICAL WRITER(S): `UNRESOLVED`
-- ADDITIONAL WRITERS: none proven in production evidence
-- READERS (production, up to 12): none proven in production evidence
+- CANONICAL WRITER(S): `UNRESOLVED`, `src/services/examModeAttemptService.ts`, `src/services/examModeQuestionStateService.ts`, `src/services/examModeSessionService.ts`, `src/services/examModeSummaryService.ts`, `src/services/focusModeAttemptService.ts`, `src/services/focusModeSessionService.ts`, `src/services/focusModeStepService.ts`, `src/services/focusModeSummaryService.ts`, `src/services/learningAttemptService.ts`, `src/services/learningHintTrackingService.ts`, `src/services/learningModeSessionService.ts`, `src/services/learningSignalService.ts`, `src/services/modeExitSummaryService.ts`, `src/services/quizModeAttemptService.ts`, `src/services/quizModeQuestionStateService.ts`, `src/services/quizModeSessionService.ts`, `src/services/quizModeSummaryService.ts`, `src/services/revisionModeAttemptService.ts`, `src/services/revisionModeItemStateService.ts`, `src/services/revisionModeQueueService.ts`, `src/services/revisionModeSessionService.ts`, `src/services/revisionModeSummaryService.ts`, `src/services/teachBackModeAttemptService.ts`, `src/services/teachBackModePromptStateService.ts`, `src/services/teachBackModeSessionService.ts`, `src/services/teachBackModeSummaryService.ts`
+- ADDITIONAL WRITERS: `src/services/examModeAttemptService.ts`, `src/services/examModeQuestionStateService.ts`, `src/services/examModeSessionService.ts`, `src/services/examModeSummaryService.ts`, `src/services/focusModeAttemptService.ts`, `src/services/focusModeSessionService.ts`, `src/services/focusModeStepService.ts`, `src/services/focusModeSummaryService.ts`, `src/services/learningAttemptService.ts`, `src/services/learningHintTrackingService.ts`, `src/services/learningModeSessionService.ts`, `src/services/learningSignalService.ts`
+- READERS (production, up to 12): `src/services/examModeAttemptService.ts`, `src/services/examModeQuestionStateService.ts`, `src/services/examModeSessionService.ts`, `src/services/examModeSummaryService.ts`, `src/services/focusModeAttemptService.ts`, `src/services/focusModeSessionService.ts`, `src/services/focusModeStepService.ts`, `src/services/focusModeSummaryService.ts`, `src/services/learningAttemptService.ts`, `src/services/learningHintTrackingService.ts`, `src/services/learningModeSessionService.ts`, `src/services/learningProfileEvidenceService.ts`
 - ROUTE / API SURFACES: `/api/phase3/objectives`
 - TRANSACTION BOUNDARY: UNRESOLVED — no explicit transaction evidence in R8-A substrate
 - DURABILITY: PostgreSQL via Prisma where a production writer exists; otherwise UNRESOLVED
 - PROCESS-LOCAL STATE RELATION: see Runtime State Ownership for module/class Map/Set owners in this domain
-- OWNERSHIP CONFIDENCE: high
+- OWNERSHIP CONFIDENCE: medium
 - EVIDENCE: 01 prisma.models[] + prisma.modelWriterGroups[] + prisma.accesses[] (readWrite split, production paths only); 02 writes/uses edges; canonical schema prisma/schema.prisma
-- STATUS: UNRESOLVED
+- STATUS: DUPLICATE_WRITER_CANDIDATE
 
 ### Operations / Readiness (`operations-readiness`)
 
 - PRIMARY DOMAIN: operations
 - MODELS (7): `LatencyThresholdAlert`, `OpsBackupCheck`, `OpsIncident`, `OpsMetricSnapshot`, `OpsReport`, `OpsRestoreDrill`, `TurnLatencyMetric`
-- CANONICAL WRITER(S): `UNRESOLVED`
-- ADDITIONAL WRITERS: none proven in production evidence
-- READERS (production, up to 12): none proven in production evidence
+- CANONICAL WRITER(S): `UNRESOLVED`, `src/services/latencyService.ts`
+- ADDITIONAL WRITERS: `src/services/latencyService.ts`
+- READERS (production, up to 12): `src/services/abnormalBehaviorService.ts`, `src/services/latencyService.ts`
 - ROUTE / API SURFACES: `/api#deploymentReadinessRoutes`, `/api#readinessRoutes`, `/api#task024OperationsRoutes`, `/api#task025PilotRoutes`, `/api#task026PilotExecutionRoutes`, `/api#task027PilotExpansionRoutes`, `/api#task028ExpansionExecutionRoutes`, `/api#task029ExpansionOperationsRoutes`, `/api/health#healthRoutes`, `/api/ops#opsPublicRouter`, `/api/ops/diagnostics`, `/api/question-bank/recovery-execution-readiness-board`, `/api/task023/deployment-readiness`, `/api/task024/operations-readiness`, `/api/task025/pilot-readiness`, `/api/task028/controlled-expansion-execution`, `/api/task030/controlled-staging-rehearsal`, `/api/task031/staging-smoke-canary-readiness`, `/api/task032/controlled-canary-activation`, `/api/task033/controlled-canary-observation`, `/api/task034/controlled-limited-rollout`, `/api/task035/school-wide-readiness`, `/api/task036/live-school-launch`, `/api/task040/backend-freeze`
 - TRANSACTION BOUNDARY: UNRESOLVED — no explicit transaction evidence in R8-A substrate
 - DURABILITY: PostgreSQL via Prisma where a production writer exists; otherwise UNRESOLVED
 - PROCESS-LOCAL STATE RELATION: see Runtime State Ownership for module/class Map/Set owners in this domain
-- OWNERSHIP CONFIDENCE: high
+- OWNERSHIP CONFIDENCE: low
 - EVIDENCE: 01 prisma.models[] + prisma.modelWriterGroups[] + prisma.accesses[] (readWrite split, production paths only); 02 writes/uses edges; canonical schema prisma/schema.prisma
-- STATUS: UNRESOLVED
+- STATUS: AMBIGUOUS
 
 ### Practice / Attempts (`practice`)
 
 - PRIMARY DOMAIN: practice
 - MODELS (6): `AdaptiveChallengeRecord`, `AdaptiveRecommendationProfileRecord`, `PracticeAttempt`, `PracticeMisconceptionSignal`, `RemediationPathRecord`, `ResultRecoveryPracticeDraftRecord`
-- CANONICAL WRITER(S): `UNRESOLVED`
-- ADDITIONAL WRITERS: none proven in production evidence
-- READERS (production, up to 12): none proven in production evidence
+- CANONICAL WRITER(S): `UNRESOLVED`, `src/services/adaptiveChallengeRepository.ts`, `src/services/adaptiveRecommendationProfileRepository.ts`, `src/services/remediationPathRepository.ts`
+- ADDITIONAL WRITERS: `src/services/adaptiveChallengeRepository.ts`, `src/services/adaptiveRecommendationProfileRepository.ts`, `src/services/remediationPathRepository.ts`
+- READERS (production, up to 12): `src/services/adaptiveChallengeRepository.ts`, `src/services/adaptiveRecommendationProfileRepository.ts`, `src/services/learnerGrowthDataReaderService.ts`, `src/services/learningProfileEvidenceService.ts`, `src/services/remediationPathRepository.ts`
 - ROUTE / API SURFACES: `/api/copilot#videoAwarePracticeRoutes`, `/api/copilot/practice-mastery`
 - TRANSACTION BOUNDARY: UNRESOLVED — no explicit transaction evidence in R8-A substrate
 - DURABILITY: PostgreSQL via Prisma where a production writer exists; otherwise UNRESOLVED
 - PROCESS-LOCAL STATE RELATION: see Runtime State Ownership for module/class Map/Set owners in this domain
-- OWNERSHIP CONFIDENCE: high
+- OWNERSHIP CONFIDENCE: low
 - EVIDENCE: 01 prisma.models[] + prisma.modelWriterGroups[] + prisma.accesses[] (readWrite split, production paths only); 02 writes/uses edges; canonical schema prisma/schema.prisma
-- STATUS: UNRESOLVED
+- STATUS: AMBIGUOUS
 
 ### Question Bank / Exam Papers / Marking (`question-bank`)
 
 - PRIMARY DOMAIN: question-bank
 - MODELS (226): `ExamAttemptQuestionSnapshotRecord`, `ExamAttemptRecord`, `ExamAttemptSubmissionSnapshotRecord`, `ExamAttemptTimingEventRecord`, `ExamBlueprintRecord`, `ExamBlueprintRequirementRecord`, `ExamBlueprintVersionRecord`, `ExamDeliveryAuditRecord`, `ExamDeliveryIdempotencyRecord`, `ExamDeliverySessionRecord`, `ExamDeliverySessionStateRecord`, `ExamDraftQuestionRecord`, `ExamDraftRecord`, `ExamDraftSetRecord`, `ExamPaperApprovalRecord`, `ExamPaperAssemblyRunRecord`, `ExamPaperDeliveryBridgeRecord`, `ExamPaperQuestionRecord`, `ExamPaperRecord`, `ExamPaperSectionRecord`, `ExamPaperVersionRecord`, `ExamVariantAssignmentRecord`, `ExamVariantQuestionRecord`, `ExamVariantRecord`, `FollowUpAuditRecord`, `FollowUpEscalationPlanRecord`, `FollowUpIdempotencyRecord`, `FollowUpReviewWindowRecord`, `FollowUpSummaryRecord`, `MarkingBatchItemRecord`, `MarkingBatchRecord`, `MarkingBreakdownItemRecord`, `MarkingDispatchAuditRecord`, `MarkingInvocationIdempotencyRecord`, `MarkingInvocationRequestRecord`, `MarkingReadinessCheckRecord`, `MarkingResultLinkRecord`, `MarkingResultVersionRecord`, `MarkingRunRecord`, `QuestionBankItemRecord`, `RecoveryAdminGovernanceReviewPacketRecord`, `RecoveryArchiveManifestRecord`, `RecoveryCaseAdjudicationAuditRecord`, `RecoveryCaseAdjudicationIdempotencyRecord`, `RecoveryCaseAdjudicationReadinessRecord`, `RecoveryCaseAdjudicationSummaryRecord`, `RecoveryCaseCapacitySnapshotRecord`, `RecoveryCaseConflictOfInterestDeclarationRecord`, `RecoveryCaseDisagreementResolutionDraftRecord`, `RecoveryCaseDuplicateSuppressionRecord`, `RecoveryCaseEscalationDraftRecord`, `RecoveryCaseFairnessCheckRecord`, `RecoveryCasePriorityAssessmentRecord`, `RecoveryCasePriorityFactorRecord`, `RecoveryCasePriorityOverrideRequestRecord`, `RecoveryCaseQualitySampleRecord`, `RecoveryCaseQueueDispositionRecord`, `RecoveryCaseQueueExplanationRecord`, `RecoveryCaseReviewChecklistRecord`, `RecoveryCaseReviewerConsensusRecord`, `RecoveryCaseReviewerDecisionDraftRecord`, `RecoveryCaseReviewSessionRecord`, `RecoveryCaseReviewWindowDraftRecord`, `RecoveryCaseSecondReviewRequestRecord`, `RecoveryCaseTriageAuditRecord`, `RecoveryCaseTriageIdempotencyRecord`, `RecoveryCaseTriageQueueItemRecord`, `RecoveryCaseTriageQueueSnapshotRecord`, `RecoveryCaseTriageReadinessRecord`, `RecoveryCaseTriageSummaryRecord`, `RecoveryCaseWorkloadAllocationDraftRecord`, `RecoveryCheckpointEvaluationRecord`, `RecoveryClosureActionDraftRecord`, `RecoveryClosureDecisionDraftRecord`, `RecoveryContinuationActionDraftRecord`, `RecoveryContinuationDecisionDraftRecord`, `RecoveryDeferredIntegrationTicketRecord`, `RecoveryExecutionApprovalChainDraftRecord`, `RecoveryExecutionAuthorityMatrixSnapshotRecord`, `RecoveryExecutionAuthorizationAuditRecord`, `RecoveryExecutionAuthorizationDryRunRecord`, `RecoveryExecutionAuthorizationEligibilityCheckRecord`, `RecoveryExecutionAuthorizationIdempotencyRecord`, `RecoveryExecutionAuthorizationPreviewReadinessRecord`, `RecoveryExecutionAuthorizationRequestDraftRecord`, `RecoveryExecutionAuthorizationSummaryRecord`, `RecoveryExecutionConsentBoundaryCheckRecord`, `RecoveryExecutionMockAuthorizationReceiptRecord`, `RecoveryExecutionPreflightChecklistRecord`, `RecoveryExecutionPreLiveDecisionPacketRecord`, `RecoveryExecutionReadinessBoardAdminQueueRecord`, `RecoveryExecutionReadinessBoardAuditRecord`, `RecoveryExecutionReadinessBoardBlockerRecord`, `RecoveryExecutionReadinessBoardCardRecord`, `RecoveryExecutionReadinessBoardFilterPresetRecord`, `RecoveryExecutionReadinessBoardGovernanceNoteRecord`, `RecoveryExecutionReadinessBoardIdempotencyRecord`, `RecoveryExecutionReadinessBoardLaneRecord`, `RecoveryExecutionReadinessBoardParentSafeStatusDraftRecord`, `RecoveryExecutionReadinessBoardRefreshJobRecord`, `RecoveryExecutionReadinessBoardRiskSignalRecord`, `RecoveryExecutionReadinessBoardRoleProjectionRecord`, `RecoveryExecutionReadinessBoardSnapshotRecord`, `RecoveryExecutionReadinessBoardStudentSafeStatusDraftRecord`, `RecoveryExecutionReadinessBoardSummaryRecord`, `RecoveryExecutionReadinessBoardTeacherQueueRecord`, `RecoveryExecutionRiskAttestationRecord`, `RecoveryExecutionVetoRecord`, `RecoveryExitCriteriaEvaluationRecord`, `RecoveryExitCriteriaRecord`, `RecoveryFinalLifecycleSummaryRecord`, `RecoveryIntensificationActionDraftRecord`, `RecoveryIntensificationDecisionDraftRecord`, `RecoveryLifecycleClosureAuditRecord`, `RecoveryLifecycleClosureIdempotencyRecord`, `RecoveryLifecycleClosureReadinessRecord`, `RecoveryNextCycleRecommendationDraftRecord`, `RecoveryOutcomeActionAuditRecord`, `RecoveryOutcomeActionBundleRecord`, `RecoveryOutcomeActionIdempotencyRecord`, `RecoveryOutcomeActionReadinessRecord`, `RecoveryOutcomeActionSummaryRecord`, `RecoveryOutcomeApprovalGateRecord`, `RecoveryOutcomeAuditRecord`, `RecoveryOutcomeDecisionReadinessRecord`, `RecoveryOutcomeDecisionSummaryRecord`, `RecoveryOutcomeDryRunReceiptRecord`, `RecoveryOutcomeExecutionBlockedActionDiagnosticRecord`, `RecoveryOutcomeExecutionEligibilityCheckRecord`, `RecoveryOutcomeExecutionFailureInjectionRecord`, `RecoveryOutcomeExecutionParentPreviewDraftRecord`, `RecoveryOutcomeExecutionReadinessVerdictRecord`, `RecoveryOutcomeExecutionSimulationAuditRecord`, `RecoveryOutcomeExecutionSimulationIdempotencyRecord`, `RecoveryOutcomeExecutionSimulationPlanRecord`, `RecoveryOutcomeExecutionSimulationReadinessRecord`, `RecoveryOutcomeExecutionSimulationResultRecord`, `RecoveryOutcomeExecutionSimulationRunRecord`, `RecoveryOutcomeExecutionSimulationStepRecord`, `RecoveryOutcomeExecutionSimulationSummaryRecord`, `RecoveryOutcomeExecutionStudentPreviewDraftRecord`, `RecoveryOutcomeExecutionTeacherReviewRecord`, `RecoveryOutcomeIdempotencyRecord`, `RecoveryOutcomeMockActivationQueueRecord`, `RecoveryOutcomeParentUpdateDraftRecord`, `RecoveryOutcomeRollbackPlanRecord`, `RecoveryOutcomeStudentNextStepDraftRecord`, `RecoveryOutcomeSuppressionRuleRecord`, `RecoveryOutcomeTeacherReviewPacketRecord`, `RecoveryParentClosureGuidanceDraftRecord`, `RecoveryParentProgressNoteDraftRecord`, `RecoveryPauseActionDraftRecord`, `RecoveryPauseDecisionDraftRecord`, `RecoveryPlanAdjustmentDraftRecord`, `RecoveryProgressAuditRecord`, `RecoveryProgressIdempotencyRecord`, `RecoveryProgressObservationRecord`, `RecoveryProgressSummaryRecord`, `RecoveryStudentClosureReflectionDraftRecord`, `RecoveryStudentProgressReflectionDraftRecord`, `RecoveryTeacherClosureReviewPacketRecord`, `RecoveryTeacherReviewDecisionRecord`, `RecoveryUnresolvedRiskRegisterRecord`, `ResultDeliveryAttemptRecord`, `ResultDeliveryAuditRecord`, `ResultDeliveryChannelEnvelopeRecord`, `ResultDeliveryIdempotencyRecord`, `ResultDeliveryJobRecord`, `ResultDeliveryMockProviderRecord`, `ResultDeliveryReceiptRecord`, `ResultDeliveryRecipientRecord`, `ResultDeliveryRetryPlanRecord`, `ResultDeliverySuppressionRecord`, `ResultFollowUpActionPlanRecord`, `ResultFollowUpCaseRecord`, `ResultFollowUpSignalRecord`, `ResultGovernanceAuditRecord`, `ResultGovernanceIdempotencyRecord`, `ResultRecoveryAuditRecord`, `ResultRecoveryCheckpointRecord`, `ResultRecoveryIdempotencyRecord`, `ResultRecoveryPlanRecord`, `ResultRecoveryResourceRecommendationRecord`, `ResultRecoveryStepRecord`, `ResultRecoveryStudentSupportDraftRecord`, `ResultRecoverySummaryRecord`, `ResultRecoveryTeacherReviewPacketRecord`, `ResultReleaseApprovalRecord`, `ResultReleaseAuditRecord`, `ResultReleaseBoundaryRecord`, `ResultReleaseDeliveryIntentRecord`, `ResultReleaseIdempotencyRecord`, `ResultReleasePacketRecord`, `ResultReleaseReadinessRecord`, `ResultReportCardAccessAcknowledgementRecord`, `ResultReportCardAccessAuditRecord`, `ResultReportCardAccessExpiryRecord`, `ResultReportCardAccessGrantRecord`, `ResultReportCardAccessIdempotencyRecord`, `ResultReportCardAccessRecipientRecord`, `ResultReportCardAccessRevocationRecord`, `ResultReportCardAccessSummaryRecord`, `ResultReportCardAccessTimelineRecord`, `ResultReportCardAccessTokenIntentRecord`, `ResultReportCardArchiveManifestRecord`, `ResultReportCardAssemblyRecord`, `ResultReportCardAudienceProjectionRecord`, `ResultReportCardAuditRecord`, `ResultReportCardExportAuditRecord`, `ResultReportCardExportEnvelopeRecord`, `ResultReportCardExportIdempotencyRecord`, `ResultReportCardExportIntentRecord`, `ResultReportCardExportJobRecord`, `ResultReportCardExportReceiptRecord`, `ResultReportCardExportRetryPlanRecord`, `ResultReportCardExportSuppressionRecord`, `ResultReportCardExportTargetRecord`, `ResultReportCardIdempotencyRecord`, `ResultReportCardMockExportAttemptRecord`, `ResultReportCardPortalPreviewRecord`, `ResultReportCardRenderManifestRecord`, `ResultReportCardReviewRecord`, `ResultReportCardSectionRecord`, `ResultReportCardTemplateRecord`, `ResultReportCardTemplateVersionRecord`, `TeacherFollowUpQueueItemRecord`
-- CANONICAL WRITER(S): `UNRESOLVED`
-- ADDITIONAL WRITERS: none proven in production evidence
-- READERS (production, up to 12): none proven in production evidence
+- CANONICAL WRITER(S): `UNRESOLVED`, `src/domains/assessment/exam-paper/services/prismaExamPaperAssemblyPersistence.ts`, `src/domains/assessment/result-delivery/repositories/prismaResultDeliveryRepositories.ts`, `src/domains/assessment/result-release/repositories/prismaResultReleaseRepositories.ts`, `src/domains/assessment/result-report-card/repositories/prismaResultReportCardRepositories.ts`
+- ADDITIONAL WRITERS: `src/domains/assessment/exam-paper/services/prismaExamPaperAssemblyPersistence.ts`, `src/domains/assessment/result-delivery/repositories/prismaResultDeliveryRepositories.ts`, `src/domains/assessment/result-release/repositories/prismaResultReleaseRepositories.ts`, `src/domains/assessment/result-report-card/repositories/prismaResultReportCardRepositories.ts`
+- READERS (production, up to 12): `src/domains/assessment/result-delivery/repositories/prismaResultDeliveryRepositories.ts`, `src/domains/assessment/result-release/repositories/prismaResultReleaseRepositories.ts`, `src/domains/assessment/result-report-card/repositories/prismaResultReportCardRepositories.ts`
 - ROUTE / API SURFACES: `/api#learningModeRoutes`, `/api/content-governance#contentGovernanceRoutes`, `/api/question-bank#examBlueprintRoutes`, `/api/question-bank#questionBankRoutes`, `/api/question-bank/exam-delivery`, `/api/question-bank/exam-papers`, `/api/question-bank/marking`, `/api/question-bank/marking-invocation`, `/api/question-bank/recovery-case-adjudication`, `/api/question-bank/recovery-case-triage`, `/api/question-bank/recovery-execution-authorization-preview`, `/api/question-bank/recovery-execution-readiness-board`, `/api/question-bank/recovery-lifecycle-closure`, `/api/question-bank/recovery-outcome`, `/api/question-bank/recovery-outcome-action`, `/api/question-bank/recovery-outcome-execution-simulation`, `/api/question-bank/recovery-progress`, `/api/question-bank/result-delivery`, `/api/question-bank/result-follow-up`, `/api/question-bank/result-governance`, `/api/question-bank/result-learning-evidence`, `/api/question-bank/result-recovery`, `/api/question-bank/result-release`, `/api/question-bank/result-report-card-access`, `/api/question-bank/result-report-card-export`, `/api/question-bank/result-report-cards`, `/api/task022/curriculum-governance`
 - TRANSACTION BOUNDARY: idempotency records present; boundary per capability (see Logic Register)
 - DURABILITY: PostgreSQL via Prisma where a production writer exists; otherwise UNRESOLVED
 - PROCESS-LOCAL STATE RELATION: see Runtime State Ownership for module/class Map/Set owners in this domain
-- OWNERSHIP CONFIDENCE: high
+- OWNERSHIP CONFIDENCE: low
 - EVIDENCE: 01 prisma.models[] + prisma.modelWriterGroups[] + prisma.accesses[] (readWrite split, production paths only); 02 writes/uses edges; canonical schema prisma/schema.prisma
-- STATUS: UNRESOLVED
+- STATUS: AMBIGUOUS
 
 ### Revision (`revision`)
 
 - PRIMARY DOMAIN: revision
 - MODELS (8): `ResultRevisionSignalRecord`, `RevisionCollection`, `RevisionGuidedSessionRecord`, `RevisionGuidedStepRecord`, `RevisionItem`, `RevisionNoteLink`, `RevisionReviewEvent`, `RevisionSourceSignalReceipt`
-- CANONICAL WRITER(S): `UNRESOLVED`
-- ADDITIONAL WRITERS: none proven in production evidence
-- READERS (production, up to 12): none proven in production evidence
+- CANONICAL WRITER(S): `UNRESOLVED`, `src/domains/assessment/result-learning-evidence/repositories/prismaResultLearningEvidenceRepositories.ts`
+- ADDITIONAL WRITERS: `src/domains/assessment/result-learning-evidence/repositories/prismaResultLearningEvidenceRepositories.ts`
+- READERS (production, up to 12): `src/domains/assessment/result-learning-evidence/repositories/prismaResultLearningEvidenceRepositories.ts`, `src/routes/ai.ts`, `src/routes/ai/ai-revision.routes.ts`, `src/services/learnerGrowthDataReaderService.ts`
 - ROUTE / API SURFACES: `/api/copilot/revision-mode`, `/api/phase3/living-revision`
 - TRANSACTION BOUNDARY: UNRESOLVED — no explicit transaction evidence in R8-A substrate
 - DURABILITY: PostgreSQL via Prisma where a production writer exists; otherwise UNRESOLVED
 - PROCESS-LOCAL STATE RELATION: see Runtime State Ownership for module/class Map/Set owners in this domain
-- OWNERSHIP CONFIDENCE: high
+- OWNERSHIP CONFIDENCE: low
 - EVIDENCE: 01 prisma.models[] + prisma.modelWriterGroups[] + prisma.accesses[] (readWrite split, production paths only); 02 writes/uses edges; canonical schema prisma/schema.prisma
-- STATUS: UNRESOLVED
+- STATUS: AMBIGUOUS
 
 ### Safeguarding / Privacy (`safeguarding-privacy`)
 
 - PRIMARY DOMAIN: safety
 - MODELS (12): `DurableAuditEvent`, `ExpansionExecutionAuditRecord`, `OpsIncidentAudit`, `PersonalizationAuditRecord`, `PilotAuditRecord`, `PilotExecutionAuditRecord`, `PilotExpansionAuditRecord`, `PilotSafetySignal`, `SafetyAlert`, `SafetyEventAudit`, `SchoolIntegrationAuditRecord`, `TeacherInterventionAuditEvent`
-- CANONICAL WRITER(S): `UNRESOLVED`
-- ADDITIONAL WRITERS: none proven in production evidence
-- READERS (production, up to 12): none proven in production evidence
+- CANONICAL WRITER(S): `UNRESOLVED`, `src/repositories/schoolIntegrationAuditRepository.ts`, `src/repositories/task025PilotRepository.ts`, `src/repositories/task028ExpansionExecutionRepository.ts`, `src/routes/ai.ts`, `src/services/adaptiveChallengeAuditRepository.ts`, `src/services/personalizationAuditRepository.ts`, `src/services/teacherInterventionAuditService.ts`
+- ADDITIONAL WRITERS: `src/repositories/schoolIntegrationAuditRepository.ts`, `src/repositories/task025PilotRepository.ts`, `src/repositories/task028ExpansionExecutionRepository.ts`, `src/routes/ai.ts`, `src/routes/ai/ai-safety.routes.ts`, `src/services/abnormalBehaviorService.ts`, `src/services/adaptiveChallengeAuditRepository.ts`, `src/services/durableAuditRepository.ts`, `src/services/personalizationAuditRepository.ts`, `src/services/teacherInterventionAuditService.ts`
+- READERS (production, up to 12): `src/repositories/schoolIntegrationAuditRepository.ts`, `src/repositories/task025PilotRepository.ts`, `src/repositories/task028ExpansionExecutionRepository.ts`, `src/routes/ai/ai-safety.routes.ts`, `src/services/abnormalBehaviorService.ts`, `src/services/adaptiveChallengeAuditRepository.ts`, `src/services/durableAuditRepository.ts`, `src/services/personalizationAuditRepository.ts`, `src/services/teacherInterventionAuditService.ts`
 - ROUTE / API SURFACES: `/api/copilot#tutorPolicyEvaluateRoutes`, `/api/copilot#tutorSafeChatRoutes`, `/api/copilot/no-ai-bypass`, `/api/governance#privacyGovernanceRoutes`, `/api/learner#privacyGovernanceRoutes`, `/api/task020/security-privacy-governance`, `/api/task027/pilot-expansion-governance`
 - TRANSACTION BOUNDARY: UNRESOLVED — no explicit transaction evidence in R8-A substrate
 - DURABILITY: PostgreSQL via Prisma where a production writer exists; otherwise UNRESOLVED
 - PROCESS-LOCAL STATE RELATION: see Runtime State Ownership for module/class Map/Set owners in this domain
-- OWNERSHIP CONFIDENCE: high
+- OWNERSHIP CONFIDENCE: medium
 - EVIDENCE: 01 prisma.models[] + prisma.modelWriterGroups[] + prisma.accesses[] (readWrite split, production paths only); 02 writes/uses edges; canonical schema prisma/schema.prisma
-- STATUS: UNRESOLVED
+- STATUS: DUPLICATE_WRITER_CANDIDATE
 
 ### School Integration / Teacher / Admin (`school-integration`)
 
 - PRIMARY DOMAIN: school
 - MODELS (33): `ExpandedPilotParticipant`, `ExpansionCompletionReview`, `ExpansionExecutionReport`, `ExpansionExecutionRun`, `ExpansionExecutionStage`, `ExpansionHealthSnapshot`, `ExpansionInterventionRecord`, `ExpansionOversightItem`, `ExpansionRollbackRecord`, `ExpansionRuntimeEvent`, `InterventionEffectEvent`, `PilotCohort`, `PilotDryRun`, `PilotExecutionEvent`, `PilotExecutionRun`, `PilotExpansionApproval`, `PilotExpansionCohortChange`, `PilotExpansionProposal`, `PilotExpansionReport`, `PilotExpansionReview`, `PilotFeedbackRecord`, `PilotParticipant`, `PilotPostPilotReview`, `PilotProgram`, `PilotReadinessCheck`, `PilotRuntimeMetricSnapshot`, `SchoolIntegrationIdempotencyRecord`, `SchoolRosterSyncConflictRecord`, `SchoolRosterSyncJobRecord`, `TeacherInterventionAssignment`, `TeacherOverrideRecord`, `TeacherReviewGroupRecord`, `TeacherReviewItemRecord`
-- CANONICAL WRITER(S): `UNRESOLVED`
-- ADDITIONAL WRITERS: none proven in production evidence
-- READERS (production, up to 12): none proven in production evidence
+- CANONICAL WRITER(S): `UNRESOLVED`, `src/repositories/schoolIntegrationIdempotencyRepository.ts`, `src/repositories/schoolRosterSyncConflictRepository.ts`, `src/repositories/schoolRosterSyncJobRepository.ts`, `src/repositories/task025PilotRepository.ts`, `src/repositories/task028ExpansionExecutionRepository.ts`, `src/services/teacherInterventionRepository.ts`
+- ADDITIONAL WRITERS: `src/repositories/schoolIntegrationIdempotencyRepository.ts`, `src/repositories/schoolRosterSyncConflictRepository.ts`, `src/repositories/schoolRosterSyncJobRepository.ts`, `src/repositories/task025PilotRepository.ts`, `src/repositories/task028ExpansionExecutionRepository.ts`, `src/services/teacherInterventionRepository.ts`
+- READERS (production, up to 12): `src/repositories/schoolIntegrationIdempotencyRepository.ts`, `src/repositories/schoolRosterSyncConflictRepository.ts`, `src/repositories/schoolRosterSyncJobRepository.ts`, `src/repositories/task025PilotRepository.ts`, `src/repositories/task028ExpansionExecutionRepository.ts`, `src/services/learnerGrowthDataReaderService.ts`, `src/services/teacherInterventionRepository.ts`
 - ROUTE / API SURFACES: `/api#profileRoutes`, `/api#schoolIntegrationRoutes`, `/api#teacherInterventionRoutes`, `/api#teacherReportRoutes`, `/api/copilot#learningProfileRoutes`, `/api/copilot/learning-sessions`, `/api/learner#learnerPreferenceRoutes`, `/api/learner#learnerRecommendationRoutes`, `/api/learner#learnerSessionRoutes`, `/api/phase3/parent-support`, `/api/phase3/peer-learning`, `/api/task021/school-integration`, `/api/task035/school-wide-readiness`, `/api/task036/live-school-launch`
 - TRANSACTION BOUNDARY: idempotency records present; boundary per capability (see Logic Register)
 - DURABILITY: PostgreSQL via Prisma where a production writer exists; otherwise UNRESOLVED
 - PROCESS-LOCAL STATE RELATION: see Runtime State Ownership for module/class Map/Set owners in this domain
-- OWNERSHIP CONFIDENCE: high
+- OWNERSHIP CONFIDENCE: low
 - EVIDENCE: 01 prisma.models[] + prisma.modelWriterGroups[] + prisma.accesses[] (readWrite split, production paths only); 02 writes/uses edges; canonical schema prisma/schema.prisma
-- STATUS: UNRESOLVED
+- STATUS: AMBIGUOUS
 
 ### Student Identity / Context (`student-identity-context`)
 
 - PRIMARY DOMAIN: identity
 - MODELS (3): `CopilotPreferences`, `LearnerPreferenceFeedbackRecord`, `StudentProfile`
-- CANONICAL WRITER(S): `UNRESOLVED`
-- ADDITIONAL WRITERS: none proven in production evidence
-- READERS (production, up to 12): none proven in production evidence
+- CANONICAL WRITER(S): `prisma/seed.ts`, `src/routes/ai/ai-memory-preferences.routes.ts`, `src/services/learnerPreferenceFeedbackRepository.ts`
+- ADDITIONAL WRITERS: `prisma/seed.ts`, `src/routes/ai.ts`, `src/routes/ai/ai-memory-preferences.routes.ts`, `src/services/copilotPreferenceService.ts`, `src/services/learnerPreferenceFeedbackRepository.ts`, `src/services/voiceLedgerService.ts`
+- READERS (production, up to 12): `src/routes/ai/ai-memory-preferences.routes.ts`, `src/services/aiService.ts`, `src/services/copilotPreferenceService.ts`, `src/services/learnerPreferenceFeedbackRepository.ts`, `src/workers/index.ts`
 - ROUTE / API SURFACES: UNRESOLVED — no capability key overlap proven
 - TRANSACTION BOUNDARY: UNRESOLVED — no explicit transaction evidence in R8-A substrate
 - DURABILITY: PostgreSQL via Prisma where a production writer exists; otherwise UNRESOLVED
 - PROCESS-LOCAL STATE RELATION: see Runtime State Ownership for module/class Map/Set owners in this domain
-- OWNERSHIP CONFIDENCE: high
+- OWNERSHIP CONFIDENCE: medium
 - EVIDENCE: 01 prisma.models[] + prisma.modelWriterGroups[] + prisma.accesses[] (readWrite split, production paths only); 02 writes/uses edges; canonical schema prisma/schema.prisma
-- STATUS: UNRESOLVED
+- STATUS: DUPLICATE_WRITER_CANDIDATE
 
 ### Unclassified (explicit) (`unclassified`)
 
 - PRIMARY DOMAIN: unclassified
 - MODELS (42): `ExamAnswerSubmissionRecord`, `LearningEffectEvent`, `MetacognitiveEvent`, `Mistake`, `ModerationDecisionRecord`, `ParentGuidanceDraftRecord`, `ParentSafeResultSummaryRecord`, `PrerequisiteLinkRecord`, `Progress`, `QuestionApprovalRecord`, `QuestionApprovalRequestRecord`, `QuestionAssetVersionRecord`, `QuestionDuplicateCandidateRecord`, `QuestionExposureHoldRecord`, `QuestionIngestionBatchRecord`, `QuestionIngestionCandidateRecord`, `QuestionPartVersionRecord`, `QuestionSelectionCandidateRecord`, `QuestionSelectionRunRecord`, `QuestionSourceRecordRecord`, `QuestionUsageEligibilityRecord`, `QuestionVersionRecord`, `RecommendationInteractionRecord`, `ResultAudienceProjectionRecord`, `ResultFinalizationDecisionRecord`, `ResultFinalizationReviewRecord`, `ResultRegradeIntakeRecord`, `ResultRegradeRequestRecord`, `RubricVersionRecord`, `ScoringSuggestionRecord`, `SpacedReviewItem`, `StudentLearningProfileSnapshot`, `StudentMarkChallengeRecord`, `StudentReflectionTaskDraftRecord`, `StudentResultReportSnapshotRecord`, `StudentSafeResultSummaryRecord`, `StudentSupportPatternSnapshot`, `StudyGoal`, `SubmittedSnapshotIntakeRecord`, `TutorHintLadderStateRecord`, `TutorLearnerIdentityMap`, `TutorSession`
-- CANONICAL WRITER(S): `UNRESOLVED`
-- ADDITIONAL WRITERS: none proven in production evidence
-- READERS (production, up to 12): none proven in production evidence
+- CANONICAL WRITER(S): `UNRESOLVED`, `src/domains/assessment/result-release/repositories/prismaResultReleaseRepositories.ts`, `src/lib/personalization.ts`, `src/repositories/schoolIdentityMappingRepository.ts`, `src/services/learningEffectivenessService.ts`, `src/services/metacognitionService.ts`, `src/services/recommendationInteractionRepository.ts`, `src/services/studentLearningProfileService.ts`
+- ADDITIONAL WRITERS: `src/domains/assessment/result-release/repositories/prismaResultReleaseRepositories.ts`, `src/lib/personalization.ts`, `src/repositories/schoolIdentityMappingRepository.ts`, `src/routes/ai.ts`, `src/routes/ai/ai-memory-preferences.routes.ts`, `src/services/externalStudentIdentityMapper.ts`, `src/services/learningEffectivenessService.ts`, `src/services/masteryInferenceService.ts`, `src/services/metacognitionService.ts`, `src/services/recommendationInteractionRepository.ts`, `src/services/studentLearningProfileService.ts`, `src/services/task021SchoolIntegrationDurableBridge.ts`
+- READERS (production, up to 12): `src/domains/assessment/result-release/repositories/prismaResultReleaseRepositories.ts`, `src/lib/personalization.ts`, `src/repositories/schoolIdentityMappingRepository.ts`, `src/routes/ai.ts`, `src/routes/ai/ai-memory-preferences.routes.ts`, `src/services/aiService.ts`, `src/services/externalStudentIdentityMapper.ts`, `src/services/growthIntelligenceService.ts`, `src/services/learningEffectivenessService.ts`, `src/services/masteryInferenceService.ts`, `src/services/metacognitionService.ts`, `src/services/recommendationInteractionRepository.ts`
 - ROUTE / API SURFACES: UNRESOLVED — no capability key overlap proven
 - TRANSACTION BOUNDARY: UNRESOLVED — no explicit transaction evidence in R8-A substrate
 - DURABILITY: PostgreSQL via Prisma where a production writer exists; otherwise UNRESOLVED
@@ -264,65 +264,46 @@ A canonical writer is the single production file that R8-A write-access evidence
 
 - PRIMARY DOMAIN: voice
 - MODELS (4): `VoiceLedgerEntry`, `VoicePackageGrant`, `VoiceSessionUsage`, `VoiceUsage`
-- CANONICAL WRITER(S): `UNRESOLVED`
-- ADDITIONAL WRITERS: none proven in production evidence
-- READERS (production, up to 12): none proven in production evidence
+- CANONICAL WRITER(S): `src/routes/ai/ai-voice.routes.ts`, `src/services/voiceLedgerService.ts`
+- ADDITIONAL WRITERS: `src/routes/ai/ai-voice.routes.ts`, `src/services/voiceLedgerService.ts`
+- READERS (production, up to 12): `src/routes/ai.ts`, `src/routes/ai/ai-voice.routes.ts`, `src/services/voiceLedgerService.ts`
 - ROUTE / API SURFACES: `/api/copilot#aiRoutes`, `/api/copilot/anomalies`, `/api/copilot/chat-pipeline`, `/api/copilot/intent`, `/api/copilot/latency`, `/api/voice#voiceRoutes`
 - TRANSACTION BOUNDARY: UNRESOLVED — no explicit transaction evidence in R8-A substrate
 - DURABILITY: PostgreSQL via Prisma where a production writer exists; otherwise UNRESOLVED
 - PROCESS-LOCAL STATE RELATION: see Runtime State Ownership for module/class Map/Set owners in this domain
 - OWNERSHIP CONFIDENCE: high
 - EVIDENCE: 01 prisma.models[] + prisma.modelWriterGroups[] + prisma.accesses[] (readWrite split, production paths only); 02 writes/uses edges; canonical schema prisma/schema.prisma
-- STATUS: UNRESOLVED
+- STATUS: CLEAR
 
 ## Canonical Writers
 
 Model | Canonical writer | Additional writers | Status | Evidence
 --- | --- | --- | --- | ---
-adaptiveChallengeRecord | src/services/adaptiveChallengeRepository.ts | — | CLEAR | modelWriterGroups:adaptiveChallengeRecord; Single production writer file.
-AdaptiveChallengeRecord | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:AdaptiveChallengeRecord; No R8-A modelWriterGroups entry for this model.
-adaptiveRecommendationProfileRecord | src/services/adaptiveRecommendationProfileRepository.ts | — | CLEAR | modelWriterGroups:adaptiveRecommendationProfileRecord; Single production writer file.
-AdaptiveRecommendationProfileRecord | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:AdaptiveRecommendationProfileRecord; No R8-A modelWriterGroups entry for this model.
+AdaptiveChallengeRecord | src/services/adaptiveChallengeRepository.ts | — | CLEAR | modelWriterGroups:AdaptiveChallengeRecord; Single production writer file.
+AdaptiveRecommendationProfileRecord | src/services/adaptiveRecommendationProfileRepository.ts | — | CLEAR | modelWriterGroups:AdaptiveRecommendationProfileRecord; Single production writer file.
 AnswerKeyVersionRecord | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:AnswerKeyVersionRecord; No R8-A modelWriterGroups entry for this model.
-approvedSourceRecord | UNRESOLVED | src/tests/task-022-final-persistence-failure-blocks-source-approval.contract.test.ts:98, src/tests/task-022-final-production-memory-only-fails-closed.contract.test.ts:45, src/tests/task-022-final-production-memory-only-fails-closed.contract.test.ts:59, src/tests/task-022-final-real-db-approved-source-readback.test.ts:28 | UNRESOLVED | modelWriterGroups:approvedSourceRecord; Writer evidence is TEST_PROOF only; no production writer identified.
-ApprovedSourceRecord | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:ApprovedSourceRecord; No R8-A modelWriterGroups entry for this model.
-canonicalMasteryChangeRecord | src/services/probabilisticMasteryRepository.ts | — | CLEAR | modelWriterGroups:canonicalMasteryChangeRecord; Single production writer file.
-CanonicalMasteryChangeRecord | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:CanonicalMasteryChangeRecord; No R8-A modelWriterGroups entry for this model.
-canonicalMasteryEvidenceApplicationRecord | src/services/probabilisticMasteryRepository.ts | — | CLEAR | modelWriterGroups:canonicalMasteryEvidenceApplicationRecord; Single production writer file.
-CanonicalMasteryEvidenceApplicationRecord | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:CanonicalMasteryEvidenceApplicationRecord; No R8-A modelWriterGroups entry for this model.
-canonicalMasteryStateRecord | src/services/probabilisticMasteryRepository.ts | — | CLEAR | modelWriterGroups:canonicalMasteryStateRecord; Single production writer file.
-CanonicalMasteryStateRecord | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:CanonicalMasteryStateRecord; No R8-A modelWriterGroups entry for this model.
-chatMessage | src/routes/ai.ts | src/routes/ai/ai-chat.routes.ts, src/services/aiService.ts | DUPLICATE_WRITER_CANDIDATE | modelWriterGroups:chatMessage; Multiple distinct production writer files without an established coordination boundary.
-ChatMessage | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:ChatMessage; No R8-A modelWriterGroups entry for this model.
-chatSession | prisma/seed.ts | src/routes/ai.ts, src/routes/ai/ai-chat.routes.ts, src/routes/ai/ai-research.routes.ts, src/services/aiService.ts | AMBIGUOUS | modelWriterGroups:chatSession; More than three distinct production writer files; ownership cannot be reduced statically.
-ChatSession | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:ChatSession; No R8-A modelWriterGroups entry for this model.
-committedLearningEvidenceProjection | src/domains/learning-evidence/repositories/prismaLearningEvidenceEventStoreRepository.ts | — | CLEAR | modelWriterGroups:committedLearningEvidenceProjection; Single production writer file.
-CommittedLearningEvidenceProjection | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:CommittedLearningEvidenceProjection; No R8-A modelWriterGroups entry for this model.
-contentGapRecord | UNRESOLVED | src/tests/task-022-final-persistence-failure-blocks-source-approval.contract.test.ts:51, src/tests/task-022-final-real-db-content-gap-audit-readback.test.ts:26, src/tests/task-022-final-real-db-diagnostics-source-of-truth.contract.test.ts:82, src/tests/task-022-final-real-db-diagnostics-source-of-truth.contract.test.ts:92 | UNRESOLVED | modelWriterGroups:contentGapRecord; Writer evidence is TEST_PROOF only; no production writer identified.
-ContentGapRecord | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:ContentGapRecord; No R8-A modelWriterGroups entry for this model.
-contentGovernanceAuditRecord | UNRESOLVED | src/tests/task-022-final-persistence-failure-blocks-source-approval.contract.test.ts:78, src/tests/task-022-final-real-db-content-gap-audit-readback.test.ts:68, src/tests/task-022-final-real-db-diagnostics-source-of-truth.contract.test.ts:102, src/tests/task-022-final-real-db-diagnostics-source-of-truth.contract.test.ts:111 | UNRESOLVED | modelWriterGroups:contentGovernanceAuditRecord; Writer evidence is TEST_PROOF only; no production writer identified.
-ContentGovernanceAuditRecord | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:ContentGovernanceAuditRecord; No R8-A modelWriterGroups entry for this model.
-contentItemRecord | UNRESOLVED | src/tests/task-022-final-persistence-failure-blocks-source-approval.contract.test.ts:38, src/tests/task-022-final-real-db-content-grounding-source-of-truth.contract.test.ts:107, src/tests/task-022-final-real-db-content-grounding-source-of-truth.contract.test.ts:38, src/tests/task-022-final-real-db-content-grounding-source-of-truth.contract.test.ts:90 | UNRESOLVED | modelWriterGroups:contentItemRecord; Writer evidence is TEST_PROOF only; no production writer identified.
-ContentItemRecord | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:ContentItemRecord; No R8-A modelWriterGroups entry for this model.
+ApprovedSourceRecord | UNRESOLVED | src/tests/task-022-final-persistence-failure-blocks-source-approval.contract.test.ts:98, src/tests/task-022-final-production-memory-only-fails-closed.contract.test.ts:45, src/tests/task-022-final-production-memory-only-fails-closed.contract.test.ts:59, src/tests/task-022-final-real-db-approved-source-readback.test.ts:28 | UNRESOLVED | modelWriterGroups:ApprovedSourceRecord; Writer evidence is TEST_PROOF only; no production writer identified.
+CanonicalMasteryChangeRecord | src/services/probabilisticMasteryRepository.ts | — | CLEAR | modelWriterGroups:CanonicalMasteryChangeRecord; Single production writer file.
+CanonicalMasteryEvidenceApplicationRecord | src/services/probabilisticMasteryRepository.ts | — | CLEAR | modelWriterGroups:CanonicalMasteryEvidenceApplicationRecord; Single production writer file.
+CanonicalMasteryStateRecord | src/services/probabilisticMasteryRepository.ts | — | CLEAR | modelWriterGroups:CanonicalMasteryStateRecord; Single production writer file.
+ChatMessage | src/routes/ai.ts | src/routes/ai/ai-chat.routes.ts, src/services/aiService.ts | DUPLICATE_WRITER_CANDIDATE | modelWriterGroups:ChatMessage; Multiple distinct production writer files without an established coordination boundary.
+ChatSession | prisma/seed.ts | src/routes/ai.ts, src/routes/ai/ai-chat.routes.ts, src/routes/ai/ai-research.routes.ts, src/services/aiService.ts | AMBIGUOUS | modelWriterGroups:ChatSession; More than three distinct production writer files; ownership cannot be reduced statically.
+CommittedLearningEvidenceProjection | src/domains/learning-evidence/repositories/prismaLearningEvidenceEventStoreRepository.ts | — | CLEAR | modelWriterGroups:CommittedLearningEvidenceProjection; Single production writer file.
+ContentGapRecord | UNRESOLVED | src/tests/task-022-final-persistence-failure-blocks-source-approval.contract.test.ts:51, src/tests/task-022-final-real-db-content-gap-audit-readback.test.ts:26, src/tests/task-022-final-real-db-diagnostics-source-of-truth.contract.test.ts:82, src/tests/task-022-final-real-db-diagnostics-source-of-truth.contract.test.ts:92 | UNRESOLVED | modelWriterGroups:ContentGapRecord; Writer evidence is TEST_PROOF only; no production writer identified.
+ContentGovernanceAuditRecord | UNRESOLVED | src/tests/task-022-final-persistence-failure-blocks-source-approval.contract.test.ts:78, src/tests/task-022-final-real-db-content-gap-audit-readback.test.ts:68, src/tests/task-022-final-real-db-diagnostics-source-of-truth.contract.test.ts:102, src/tests/task-022-final-real-db-diagnostics-source-of-truth.contract.test.ts:111 | UNRESOLVED | modelWriterGroups:ContentGovernanceAuditRecord; Writer evidence is TEST_PROOF only; no production writer identified.
+ContentItemRecord | UNRESOLVED | src/tests/task-022-final-persistence-failure-blocks-source-approval.contract.test.ts:38, src/tests/task-022-final-real-db-content-grounding-source-of-truth.contract.test.ts:107, src/tests/task-022-final-real-db-content-grounding-source-of-truth.contract.test.ts:38, src/tests/task-022-final-real-db-content-grounding-source-of-truth.contract.test.ts:90 | UNRESOLVED | modelWriterGroups:ContentItemRecord; Writer evidence is TEST_PROOF only; no production writer identified.
 ContentReviewRecord | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:ContentReviewRecord; No R8-A modelWriterGroups entry for this model.
-conversationArchiveRecord | src/services/conversationArchiveService.ts | src/services/studentExitArchiveService.ts | DUPLICATE_WRITER_CANDIDATE | modelWriterGroups:conversationArchiveRecord; Multiple distinct production writer files without an established coordination boundary.
-ConversationArchiveRecord | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:ConversationArchiveRecord; No R8-A modelWriterGroups entry for this model.
-copilotPreferences | src/routes/ai/ai-memory-preferences.routes.ts | src/services/copilotPreferenceService.ts | DUPLICATE_WRITER_CANDIDATE | modelWriterGroups:copilotPreferences; Multiple distinct production writer files without an established coordination boundary.
-CopilotPreferences | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:CopilotPreferences; No R8-A modelWriterGroups entry for this model.
-curriculumSkillRecord | UNRESOLVED | src/tests/r4-daily-objectives-prisma-integration.test.ts:47, src/tests/task-022-final-real-db-curriculum-readback.test.ts:114, src/tests/task-022-final-real-db-curriculum-readback.test.ts:80 | UNRESOLVED | modelWriterGroups:curriculumSkillRecord; Writer evidence is TEST_PROOF only; no production writer identified.
-CurriculumSkillRecord | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:CurriculumSkillRecord; No R8-A modelWriterGroups entry for this model.
-curriculumTopicRecord | UNRESOLVED | src/tests/r4-daily-objectives-prisma-integration.test.ts:43, src/tests/task-022-final-real-db-curriculum-readback.test.ts:62 | UNRESOLVED | modelWriterGroups:curriculumTopicRecord; Writer evidence is TEST_PROOF only; no production writer identified.
-CurriculumTopicRecord | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:CurriculumTopicRecord; No R8-A modelWriterGroups entry for this model.
-curriculumVersionRecord | UNRESOLVED | src/tests/r4-daily-objectives-prisma-integration.test.ts:39, src/tests/task-022-final-real-db-curriculum-readback.test.ts:45, src/tests/task-022-final-real-db-diagnostics-source-of-truth.contract.test.ts:20, src/tests/task-022-final-real-db-diagnostics-source-of-truth.contract.test.ts:30 | UNRESOLVED | modelWriterGroups:curriculumVersionRecord; Writer evidence is TEST_PROOF only; no production writer identified.
-CurriculumVersionRecord | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:CurriculumVersionRecord; No R8-A modelWriterGroups entry for this model.
-dailyObjectiveCheckAttemptRecord | src/services/phase3DailyObjectiveCheckRepository.ts | — | CLEAR | modelWriterGroups:dailyObjectiveCheckAttemptRecord; Single production writer file.
-dailyObjectiveCheckCompletionIdempotencyRecord | src/services/phase3DailyObjectiveCheckCompletionService.ts | src/services/phase3DailyObjectiveCheckRepository.ts | SHARED_BY_DESIGN | modelWriterGroups:dailyObjectiveCheckCompletionIdempotencyRecord; Multiple writer files follow the repository/service coordination boundary.
-dailyObjectiveCheckConfidenceRecord | src/services/phase3DailyObjectiveCheckRepository.ts | — | CLEAR | modelWriterGroups:dailyObjectiveCheckConfidenceRecord; Single production writer file.
-dailyObjectiveCheckSessionRecord | src/services/phase3DailyObjectiveCheckRepository.ts | — | CLEAR | modelWriterGroups:dailyObjectiveCheckSessionRecord; Single production writer file.
-difficultyCalibrationRecord | src/services/difficultyCalibrationRepository.ts | — | CLEAR | modelWriterGroups:difficultyCalibrationRecord; Single production writer file.
-DifficultyCalibrationRecord | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:DifficultyCalibrationRecord; No R8-A modelWriterGroups entry for this model.
-durableAuditEvent | src/services/adaptiveChallengeAuditRepository.ts | src/services/durableAuditRepository.ts | SHARED_BY_DESIGN | modelWriterGroups:durableAuditEvent; Multiple writer files follow the repository/service coordination boundary.
-DurableAuditEvent | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:DurableAuditEvent; No R8-A modelWriterGroups entry for this model.
+ConversationArchiveRecord | src/services/conversationArchiveService.ts | src/services/studentExitArchiveService.ts | DUPLICATE_WRITER_CANDIDATE | modelWriterGroups:ConversationArchiveRecord; Multiple distinct production writer files without an established coordination boundary.
+CopilotPreferences | src/routes/ai/ai-memory-preferences.routes.ts | src/services/copilotPreferenceService.ts | DUPLICATE_WRITER_CANDIDATE | modelWriterGroups:CopilotPreferences; Multiple distinct production writer files without an established coordination boundary.
+CurriculumSkillRecord | UNRESOLVED | src/tests/r4-daily-objectives-prisma-integration.test.ts:47, src/tests/task-022-final-real-db-curriculum-readback.test.ts:114, src/tests/task-022-final-real-db-curriculum-readback.test.ts:80 | UNRESOLVED | modelWriterGroups:CurriculumSkillRecord; Writer evidence is TEST_PROOF only; no production writer identified.
+CurriculumTopicRecord | UNRESOLVED | src/tests/r4-daily-objectives-prisma-integration.test.ts:43, src/tests/task-022-final-real-db-curriculum-readback.test.ts:62 | UNRESOLVED | modelWriterGroups:CurriculumTopicRecord; Writer evidence is TEST_PROOF only; no production writer identified.
+CurriculumVersionRecord | UNRESOLVED | src/tests/r4-daily-objectives-prisma-integration.test.ts:39, src/tests/task-022-final-real-db-curriculum-readback.test.ts:45, src/tests/task-022-final-real-db-diagnostics-source-of-truth.contract.test.ts:20, src/tests/task-022-final-real-db-diagnostics-source-of-truth.contract.test.ts:30 | UNRESOLVED | modelWriterGroups:CurriculumVersionRecord; Writer evidence is TEST_PROOF only; no production writer identified.
+dailyObjectiveCheckAttemptRecord | src/services/phase3DailyObjectiveCheckRepository.ts | — | AMBIGUOUS | modelWriterGroups:dailyObjectiveCheckAttemptRecord; Single production writer file. Writer-group key matches no canonical Prisma model (naming drift); carried as an orphan for later review.
+dailyObjectiveCheckCompletionIdempotencyRecord | src/services/phase3DailyObjectiveCheckCompletionService.ts | src/services/phase3DailyObjectiveCheckRepository.ts | SHARED_BY_DESIGN | modelWriterGroups:dailyObjectiveCheckCompletionIdempotencyRecord; Multiple writer files follow the repository/service coordination boundary. Writer-group key matches no canonical Prisma model (naming drift); carried as an orphan for later review.
+dailyObjectiveCheckConfidenceRecord | src/services/phase3DailyObjectiveCheckRepository.ts | — | AMBIGUOUS | modelWriterGroups:dailyObjectiveCheckConfidenceRecord; Single production writer file. Writer-group key matches no canonical Prisma model (naming drift); carried as an orphan for later review.
+dailyObjectiveCheckSessionRecord | src/services/phase3DailyObjectiveCheckRepository.ts | — | AMBIGUOUS | modelWriterGroups:dailyObjectiveCheckSessionRecord; Single production writer file. Writer-group key matches no canonical Prisma model (naming drift); carried as an orphan for later review.
+DifficultyCalibrationRecord | src/services/difficultyCalibrationRepository.ts | — | CLEAR | modelWriterGroups:DifficultyCalibrationRecord; Single production writer file.
+DurableAuditEvent | src/services/adaptiveChallengeAuditRepository.ts | src/services/durableAuditRepository.ts | SHARED_BY_DESIGN | modelWriterGroups:DurableAuditEvent; Multiple writer files follow the repository/service coordination boundary.
 ExamAccessPolicyRecord | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:ExamAccessPolicyRecord; No R8-A modelWriterGroups entry for this model.
 ExamAnswerSubmissionRecord | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:ExamAnswerSubmissionRecord; No R8-A modelWriterGroups entry for this model.
 ExamAttemptQuestionSnapshotRecord | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:ExamAttemptQuestionSnapshotRecord; No R8-A modelWriterGroups entry for this model.
@@ -339,59 +320,35 @@ ExamDeliverySessionStateRecord | UNRESOLVED | — | UNRESOLVED | modelWriterGrou
 ExamDraftQuestionRecord | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:ExamDraftQuestionRecord; No R8-A modelWriterGroups entry for this model.
 ExamDraftRecord | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:ExamDraftRecord; No R8-A modelWriterGroups entry for this model.
 ExamDraftSetRecord | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:ExamDraftSetRecord; No R8-A modelWriterGroups entry for this model.
-examModeAttemptRecord | src/services/examModeAttemptService.ts | — | CLEAR | modelWriterGroups:examModeAttemptRecord; Single production writer file.
-ExamModeAttemptRecord | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:ExamModeAttemptRecord; No R8-A modelWriterGroups entry for this model.
-examModeQuestionStateRecord | src/services/examModeQuestionStateService.ts | — | CLEAR | modelWriterGroups:examModeQuestionStateRecord; Single production writer file.
-ExamModeQuestionStateRecord | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:ExamModeQuestionStateRecord; No R8-A modelWriterGroups entry for this model.
-examModeSessionRecord | src/services/examModeSessionService.ts | — | CLEAR | modelWriterGroups:examModeSessionRecord; Single production writer file.
-ExamModeSessionRecord | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:ExamModeSessionRecord; No R8-A modelWriterGroups entry for this model.
-examModeSummaryRecord | src/services/examModeSummaryService.ts | — | CLEAR | modelWriterGroups:examModeSummaryRecord; Single production writer file.
-ExamModeSummaryRecord | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:ExamModeSummaryRecord; No R8-A modelWriterGroups entry for this model.
+ExamModeAttemptRecord | src/services/examModeAttemptService.ts | — | CLEAR | modelWriterGroups:ExamModeAttemptRecord; Single production writer file.
+ExamModeQuestionStateRecord | src/services/examModeQuestionStateService.ts | — | CLEAR | modelWriterGroups:ExamModeQuestionStateRecord; Single production writer file.
+ExamModeSessionRecord | src/services/examModeSessionService.ts | — | CLEAR | modelWriterGroups:ExamModeSessionRecord; Single production writer file.
+ExamModeSummaryRecord | src/services/examModeSummaryService.ts | — | CLEAR | modelWriterGroups:ExamModeSummaryRecord; Single production writer file.
 ExamPaperApprovalRecord | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:ExamPaperApprovalRecord; No R8-A modelWriterGroups entry for this model.
-examPaperAssemblyRunRecord | src/domains/assessment/exam-paper/services/prismaExamPaperAssemblyPersistence.ts | — | CLEAR | modelWriterGroups:examPaperAssemblyRunRecord; Single production writer file.
-ExamPaperAssemblyRunRecord | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:ExamPaperAssemblyRunRecord; No R8-A modelWriterGroups entry for this model.
+ExamPaperAssemblyRunRecord | src/domains/assessment/exam-paper/services/prismaExamPaperAssemblyPersistence.ts | — | CLEAR | modelWriterGroups:ExamPaperAssemblyRunRecord; Single production writer file.
 ExamPaperDeliveryBridgeRecord | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:ExamPaperDeliveryBridgeRecord; No R8-A modelWriterGroups entry for this model.
-examPaperQuestionRecord | src/domains/assessment/exam-paper/services/prismaExamPaperAssemblyPersistence.ts | — | CLEAR | modelWriterGroups:examPaperQuestionRecord; Single production writer file.
-ExamPaperQuestionRecord | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:ExamPaperQuestionRecord; No R8-A modelWriterGroups entry for this model.
-examPaperRecord | src/domains/assessment/exam-paper/services/prismaExamPaperAssemblyPersistence.ts | — | CLEAR | modelWriterGroups:examPaperRecord; Single production writer file.
-ExamPaperRecord | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:ExamPaperRecord; No R8-A modelWriterGroups entry for this model.
-examPaperSectionRecord | src/domains/assessment/exam-paper/services/prismaExamPaperAssemblyPersistence.ts | — | CLEAR | modelWriterGroups:examPaperSectionRecord; Single production writer file.
-ExamPaperSectionRecord | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:ExamPaperSectionRecord; No R8-A modelWriterGroups entry for this model.
-examPaperVersionRecord | src/domains/assessment/exam-paper/services/prismaExamPaperAssemblyPersistence.ts | — | CLEAR | modelWriterGroups:examPaperVersionRecord; Single production writer file.
-ExamPaperVersionRecord | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:ExamPaperVersionRecord; No R8-A modelWriterGroups entry for this model.
+ExamPaperQuestionRecord | src/domains/assessment/exam-paper/services/prismaExamPaperAssemblyPersistence.ts | — | CLEAR | modelWriterGroups:ExamPaperQuestionRecord; Single production writer file.
+ExamPaperRecord | src/domains/assessment/exam-paper/services/prismaExamPaperAssemblyPersistence.ts | — | CLEAR | modelWriterGroups:ExamPaperRecord; Single production writer file.
+ExamPaperSectionRecord | src/domains/assessment/exam-paper/services/prismaExamPaperAssemblyPersistence.ts | — | CLEAR | modelWriterGroups:ExamPaperSectionRecord; Single production writer file.
+ExamPaperVersionRecord | src/domains/assessment/exam-paper/services/prismaExamPaperAssemblyPersistence.ts | — | CLEAR | modelWriterGroups:ExamPaperVersionRecord; Single production writer file.
 ExamVariantAssignmentRecord | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:ExamVariantAssignmentRecord; No R8-A modelWriterGroups entry for this model.
 ExamVariantQuestionRecord | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:ExamVariantQuestionRecord; No R8-A modelWriterGroups entry for this model.
 ExamVariantRecord | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:ExamVariantRecord; No R8-A modelWriterGroups entry for this model.
-expandedPilotParticipant | src/repositories/task028ExpansionExecutionRepository.ts | — | CLEAR | modelWriterGroups:expandedPilotParticipant; Single production writer file.
-ExpandedPilotParticipant | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:ExpandedPilotParticipant; No R8-A modelWriterGroups entry for this model.
-expansionCompletionReview | src/repositories/task028ExpansionExecutionRepository.ts | — | CLEAR | modelWriterGroups:expansionCompletionReview; Single production writer file.
-ExpansionCompletionReview | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:ExpansionCompletionReview; No R8-A modelWriterGroups entry for this model.
-expansionExecutionAuditRecord | src/repositories/task028ExpansionExecutionRepository.ts | — | CLEAR | modelWriterGroups:expansionExecutionAuditRecord; Single production writer file.
-ExpansionExecutionAuditRecord | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:ExpansionExecutionAuditRecord; No R8-A modelWriterGroups entry for this model.
-expansionExecutionReport | src/repositories/task028ExpansionExecutionRepository.ts | — | CLEAR | modelWriterGroups:expansionExecutionReport; Single production writer file.
-ExpansionExecutionReport | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:ExpansionExecutionReport; No R8-A modelWriterGroups entry for this model.
-expansionExecutionRun | src/repositories/task028ExpansionExecutionRepository.ts | — | CLEAR | modelWriterGroups:expansionExecutionRun; Single production writer file.
-ExpansionExecutionRun | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:ExpansionExecutionRun; No R8-A modelWriterGroups entry for this model.
-expansionExecutionStage | src/repositories/task028ExpansionExecutionRepository.ts | — | CLEAR | modelWriterGroups:expansionExecutionStage; Single production writer file.
-ExpansionExecutionStage | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:ExpansionExecutionStage; No R8-A modelWriterGroups entry for this model.
-expansionHealthSnapshot | src/repositories/task028ExpansionExecutionRepository.ts | — | CLEAR | modelWriterGroups:expansionHealthSnapshot; Single production writer file.
-ExpansionHealthSnapshot | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:ExpansionHealthSnapshot; No R8-A modelWriterGroups entry for this model.
-expansionInterventionRecord | src/repositories/task028ExpansionExecutionRepository.ts | — | CLEAR | modelWriterGroups:expansionInterventionRecord; Single production writer file.
-ExpansionInterventionRecord | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:ExpansionInterventionRecord; No R8-A modelWriterGroups entry for this model.
-expansionOversightItem | src/repositories/task028ExpansionExecutionRepository.ts | — | CLEAR | modelWriterGroups:expansionOversightItem; Single production writer file.
-ExpansionOversightItem | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:ExpansionOversightItem; No R8-A modelWriterGroups entry for this model.
-expansionRollbackRecord | src/repositories/task028ExpansionExecutionRepository.ts | — | CLEAR | modelWriterGroups:expansionRollbackRecord; Single production writer file.
-ExpansionRollbackRecord | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:ExpansionRollbackRecord; No R8-A modelWriterGroups entry for this model.
-expansionRuntimeEvent | src/repositories/task028ExpansionExecutionRepository.ts | — | CLEAR | modelWriterGroups:expansionRuntimeEvent; Single production writer file.
-ExpansionRuntimeEvent | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:ExpansionRuntimeEvent; No R8-A modelWriterGroups entry for this model.
-focusModeAttemptRecord | src/services/focusModeAttemptService.ts | — | CLEAR | modelWriterGroups:focusModeAttemptRecord; Single production writer file.
-FocusModeAttemptRecord | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:FocusModeAttemptRecord; No R8-A modelWriterGroups entry for this model.
-focusModeSessionRecord | src/services/focusModeSessionService.ts | src/services/focusModeStepService.ts | DUPLICATE_WRITER_CANDIDATE | modelWriterGroups:focusModeSessionRecord; Multiple distinct production writer files without an established coordination boundary.
-FocusModeSessionRecord | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:FocusModeSessionRecord; No R8-A modelWriterGroups entry for this model.
-focusModeStepRecord | src/services/focusModeStepService.ts | — | CLEAR | modelWriterGroups:focusModeStepRecord; Single production writer file.
-FocusModeStepRecord | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:FocusModeStepRecord; No R8-A modelWriterGroups entry for this model.
-focusModeSummaryRecord | src/services/focusModeSummaryService.ts | — | CLEAR | modelWriterGroups:focusModeSummaryRecord; Single production writer file.
-FocusModeSummaryRecord | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:FocusModeSummaryRecord; No R8-A modelWriterGroups entry for this model.
+ExpandedPilotParticipant | src/repositories/task028ExpansionExecutionRepository.ts | — | CLEAR | modelWriterGroups:ExpandedPilotParticipant; Single production writer file.
+ExpansionCompletionReview | src/repositories/task028ExpansionExecutionRepository.ts | — | CLEAR | modelWriterGroups:ExpansionCompletionReview; Single production writer file.
+ExpansionExecutionAuditRecord | src/repositories/task028ExpansionExecutionRepository.ts | — | CLEAR | modelWriterGroups:ExpansionExecutionAuditRecord; Single production writer file.
+ExpansionExecutionReport | src/repositories/task028ExpansionExecutionRepository.ts | — | CLEAR | modelWriterGroups:ExpansionExecutionReport; Single production writer file.
+ExpansionExecutionRun | src/repositories/task028ExpansionExecutionRepository.ts | — | CLEAR | modelWriterGroups:ExpansionExecutionRun; Single production writer file.
+ExpansionExecutionStage | src/repositories/task028ExpansionExecutionRepository.ts | — | CLEAR | modelWriterGroups:ExpansionExecutionStage; Single production writer file.
+ExpansionHealthSnapshot | src/repositories/task028ExpansionExecutionRepository.ts | — | CLEAR | modelWriterGroups:ExpansionHealthSnapshot; Single production writer file.
+ExpansionInterventionRecord | src/repositories/task028ExpansionExecutionRepository.ts | — | CLEAR | modelWriterGroups:ExpansionInterventionRecord; Single production writer file.
+ExpansionOversightItem | src/repositories/task028ExpansionExecutionRepository.ts | — | CLEAR | modelWriterGroups:ExpansionOversightItem; Single production writer file.
+ExpansionRollbackRecord | src/repositories/task028ExpansionExecutionRepository.ts | — | CLEAR | modelWriterGroups:ExpansionRollbackRecord; Single production writer file.
+ExpansionRuntimeEvent | src/repositories/task028ExpansionExecutionRepository.ts | — | CLEAR | modelWriterGroups:ExpansionRuntimeEvent; Single production writer file.
+FocusModeAttemptRecord | src/services/focusModeAttemptService.ts | — | CLEAR | modelWriterGroups:FocusModeAttemptRecord; Single production writer file.
+FocusModeSessionRecord | src/services/focusModeSessionService.ts | src/services/focusModeStepService.ts | DUPLICATE_WRITER_CANDIDATE | modelWriterGroups:FocusModeSessionRecord; Multiple distinct production writer files without an established coordination boundary.
+FocusModeStepRecord | src/services/focusModeStepService.ts | — | CLEAR | modelWriterGroups:FocusModeStepRecord; Single production writer file.
+FocusModeSummaryRecord | src/services/focusModeSummaryService.ts | — | CLEAR | modelWriterGroups:FocusModeSummaryRecord; Single production writer file.
 FollowUpAuditRecord | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:FollowUpAuditRecord; No R8-A modelWriterGroups entry for this model.
 FollowUpEscalationPlanRecord | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:FollowUpEscalationPlanRecord; No R8-A modelWriterGroups entry for this model.
 FollowUpIdempotencyRecord | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:FollowUpIdempotencyRecord; No R8-A modelWriterGroups entry for this model.
@@ -404,42 +361,24 @@ GrowthProofRecord | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:GrowthProo
 GrowthRecommendationState | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:GrowthRecommendationState; No R8-A modelWriterGroups entry for this model.
 GrowthWeakTopicState | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:GrowthWeakTopicState; No R8-A modelWriterGroups entry for this model.
 InterventionEffectEvent | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:InterventionEffectEvent; No R8-A modelWriterGroups entry for this model.
-latencyThresholdAlert | src/services/latencyService.ts | — | CLEAR | modelWriterGroups:latencyThresholdAlert; Single production writer file.
-LatencyThresholdAlert | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:LatencyThresholdAlert; No R8-A modelWriterGroups entry for this model.
-learnerMemoryItem | src/services/learnerMemoryService.ts | — | CLEAR | modelWriterGroups:learnerMemoryItem; Single production writer file.
-LearnerMemoryItem | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:LearnerMemoryItem; No R8-A modelWriterGroups entry for this model.
-learnerPreferenceFeedbackRecord | src/services/learnerPreferenceFeedbackRepository.ts | — | CLEAR | modelWriterGroups:learnerPreferenceFeedbackRecord; Single production writer file.
-LearnerPreferenceFeedbackRecord | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:LearnerPreferenceFeedbackRecord; No R8-A modelWriterGroups entry for this model.
-learningArtifact | src/services/artifactService.ts | src/services/artifactStructuredRepository.ts | SHARED_BY_DESIGN | modelWriterGroups:learningArtifact; Multiple writer files follow the repository/service coordination boundary.
-LearningArtifact | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:LearningArtifact; No R8-A modelWriterGroups entry for this model.
-learningArtifactBlock | src/services/artifactService.ts | src/services/artifactStructuredRepository.ts | SHARED_BY_DESIGN | modelWriterGroups:learningArtifactBlock; Multiple writer files follow the repository/service coordination boundary.
-LearningArtifactBlock | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:LearningArtifactBlock; No R8-A modelWriterGroups entry for this model.
-learningEffectEvent | src/services/learningEffectivenessService.ts | — | CLEAR | modelWriterGroups:learningEffectEvent; Single production writer file.
-LearningEffectEvent | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:LearningEffectEvent; No R8-A modelWriterGroups entry for this model.
-learningEvent | src/services/learnerMemoryService.ts | — | CLEAR | modelWriterGroups:learningEvent; Single production writer file.
-LearningEvent | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:LearningEvent; No R8-A modelWriterGroups entry for this model.
-learningEvidenceCandidateProjection | src/domains/learning-evidence/repositories/prismaLearningEvidenceEventStoreRepository.ts | — | CLEAR | modelWriterGroups:learningEvidenceCandidateProjection; Single production writer file.
-LearningEvidenceCandidateProjection | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:LearningEvidenceCandidateProjection; No R8-A modelWriterGroups entry for this model.
-learningEvidenceEvent | src/domains/learning-evidence/repositories/prismaLearningEvidenceEventStoreRepository.ts | — | CLEAR | modelWriterGroups:learningEvidenceEvent; Single production writer file.
-LearningEvidenceEvent | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:LearningEvidenceEvent; No R8-A modelWriterGroups entry for this model.
-learningEvidenceIdempotency | src/domains/learning-evidence/repositories/prismaLearningEvidenceEventStoreRepository.ts | — | CLEAR | modelWriterGroups:learningEvidenceIdempotency; Single production writer file.
-LearningEvidenceIdempotency | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:LearningEvidenceIdempotency; No R8-A modelWriterGroups entry for this model.
-learningEvidenceProjectionCheckpoint | src/domains/learning-evidence/repositories/prismaLearningEvidenceEventStoreRepository.ts | — | CLEAR | modelWriterGroups:learningEvidenceProjectionCheckpoint; Single production writer file.
-LearningEvidenceProjectionCheckpoint | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:LearningEvidenceProjectionCheckpoint; No R8-A modelWriterGroups entry for this model.
-learningEvidenceStream | src/domains/learning-evidence/repositories/prismaLearningEvidenceEventStoreRepository.ts | — | CLEAR | modelWriterGroups:learningEvidenceStream; Single production writer file.
-LearningEvidenceStream | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:LearningEvidenceStream; No R8-A modelWriterGroups entry for this model.
-learningModeAttempt | src/services/learningAttemptService.ts | — | CLEAR | modelWriterGroups:learningModeAttempt; Single production writer file.
-LearningModeAttempt | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:LearningModeAttempt; No R8-A modelWriterGroups entry for this model.
-learningModeExitSummary | src/services/modeExitSummaryService.ts | — | CLEAR | modelWriterGroups:learningModeExitSummary; Single production writer file.
-LearningModeExitSummary | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:LearningModeExitSummary; No R8-A modelWriterGroups entry for this model.
-learningModeHintEvent | src/services/learningHintTrackingService.ts | — | CLEAR | modelWriterGroups:learningModeHintEvent; Single production writer file.
-LearningModeHintEvent | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:LearningModeHintEvent; No R8-A modelWriterGroups entry for this model.
-learningModeSession | src/services/learningModeSessionService.ts | src/services/quizModeSessionService.ts, src/services/teachBackModeSessionService.ts | DUPLICATE_WRITER_CANDIDATE | modelWriterGroups:learningModeSession; Multiple distinct production writer files without an established coordination boundary.
-LearningModeSession | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:LearningModeSession; No R8-A modelWriterGroups entry for this model.
-learningModeSignal | src/services/learningSignalService.ts | — | CLEAR | modelWriterGroups:learningModeSignal; Single production writer file.
-LearningModeSignal | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:LearningModeSignal; No R8-A modelWriterGroups entry for this model.
-learningObjectiveRecord | UNRESOLVED | src/tests/r4-daily-objectives-prisma-integration.test.ts:51, src/tests/task-022-final-real-db-curriculum-readback.test.ts:97 | UNRESOLVED | modelWriterGroups:learningObjectiveRecord; Writer evidence is TEST_PROOF only; no production writer identified.
-LearningObjectiveRecord | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:LearningObjectiveRecord; No R8-A modelWriterGroups entry for this model.
+LatencyThresholdAlert | src/services/latencyService.ts | — | CLEAR | modelWriterGroups:LatencyThresholdAlert; Single production writer file.
+LearnerMemoryItem | src/services/learnerMemoryService.ts | — | CLEAR | modelWriterGroups:LearnerMemoryItem; Single production writer file.
+LearnerPreferenceFeedbackRecord | src/services/learnerPreferenceFeedbackRepository.ts | — | CLEAR | modelWriterGroups:LearnerPreferenceFeedbackRecord; Single production writer file.
+LearningArtifact | src/services/artifactService.ts | src/services/artifactStructuredRepository.ts | SHARED_BY_DESIGN | modelWriterGroups:LearningArtifact; Multiple writer files follow the repository/service coordination boundary.
+LearningArtifactBlock | src/services/artifactService.ts | src/services/artifactStructuredRepository.ts | SHARED_BY_DESIGN | modelWriterGroups:LearningArtifactBlock; Multiple writer files follow the repository/service coordination boundary.
+LearningEffectEvent | src/services/learningEffectivenessService.ts | — | CLEAR | modelWriterGroups:LearningEffectEvent; Single production writer file.
+LearningEvent | src/services/learnerMemoryService.ts | — | CLEAR | modelWriterGroups:LearningEvent; Single production writer file.
+LearningEvidenceCandidateProjection | src/domains/learning-evidence/repositories/prismaLearningEvidenceEventStoreRepository.ts | — | CLEAR | modelWriterGroups:LearningEvidenceCandidateProjection; Single production writer file.
+LearningEvidenceEvent | src/domains/learning-evidence/repositories/prismaLearningEvidenceEventStoreRepository.ts | — | CLEAR | modelWriterGroups:LearningEvidenceEvent; Single production writer file.
+LearningEvidenceIdempotency | src/domains/learning-evidence/repositories/prismaLearningEvidenceEventStoreRepository.ts | — | CLEAR | modelWriterGroups:LearningEvidenceIdempotency; Single production writer file.
+LearningEvidenceProjectionCheckpoint | src/domains/learning-evidence/repositories/prismaLearningEvidenceEventStoreRepository.ts | — | CLEAR | modelWriterGroups:LearningEvidenceProjectionCheckpoint; Single production writer file.
+LearningEvidenceStream | src/domains/learning-evidence/repositories/prismaLearningEvidenceEventStoreRepository.ts | — | CLEAR | modelWriterGroups:LearningEvidenceStream; Single production writer file.
+LearningModeAttempt | src/services/learningAttemptService.ts | — | CLEAR | modelWriterGroups:LearningModeAttempt; Single production writer file.
+LearningModeExitSummary | src/services/modeExitSummaryService.ts | — | CLEAR | modelWriterGroups:LearningModeExitSummary; Single production writer file.
+LearningModeHintEvent | src/services/learningHintTrackingService.ts | — | CLEAR | modelWriterGroups:LearningModeHintEvent; Single production writer file.
+LearningModeSession | src/services/learningModeSessionService.ts | src/services/quizModeSessionService.ts, src/services/teachBackModeSessionService.ts | DUPLICATE_WRITER_CANDIDATE | modelWriterGroups:LearningModeSession; Multiple distinct production writer files without an established coordination boundary.
+LearningModeSignal | src/services/learningSignalService.ts | — | CLEAR | modelWriterGroups:LearningModeSignal; Single production writer file.
+LearningObjectiveRecord | UNRESOLVED | src/tests/r4-daily-objectives-prisma-integration.test.ts:51, src/tests/task-022-final-real-db-curriculum-readback.test.ts:97 | UNRESOLVED | modelWriterGroups:LearningObjectiveRecord; Writer evidence is TEST_PROOF only; no production writer identified.
 MarkingBatchItemRecord | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:MarkingBatchItemRecord; No R8-A modelWriterGroups entry for this model.
 MarkingBatchRecord | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:MarkingBatchRecord; No R8-A modelWriterGroups entry for this model.
 MarkingBreakdownItemRecord | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:MarkingBreakdownItemRecord; No R8-A modelWriterGroups entry for this model.
@@ -451,34 +390,21 @@ MarkingResultLinkRecord | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:Mark
 MarkingResultVersionRecord | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:MarkingResultVersionRecord; No R8-A modelWriterGroups entry for this model.
 MarkingRunRecord | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:MarkingRunRecord; No R8-A modelWriterGroups entry for this model.
 MediaAsset | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:MediaAsset; No R8-A modelWriterGroups entry for this model.
-metacognitiveEvent | src/services/metacognitionService.ts | — | CLEAR | modelWriterGroups:metacognitiveEvent; Single production writer file.
-MetacognitiveEvent | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:MetacognitiveEvent; No R8-A modelWriterGroups entry for this model.
-mistake | src/lib/personalization.ts | src/routes/ai.ts, src/routes/ai/ai-memory-preferences.routes.ts, src/services/masteryInferenceService.ts | AMBIGUOUS | modelWriterGroups:mistake; More than three distinct production writer files; ownership cannot be reduced statically.
-Mistake | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:Mistake; No R8-A modelWriterGroups entry for this model.
+MetacognitiveEvent | src/services/metacognitionService.ts | — | CLEAR | modelWriterGroups:MetacognitiveEvent; Single production writer file.
+Mistake | src/lib/personalization.ts | src/routes/ai.ts, src/routes/ai/ai-memory-preferences.routes.ts, src/services/masteryInferenceService.ts | AMBIGUOUS | modelWriterGroups:Mistake; More than three distinct production writer files; ownership cannot be reduced statically.
 ModerationDecisionRecord | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:ModerationDecisionRecord; No R8-A modelWriterGroups entry for this model.
-opsBackupCheck | UNRESOLVED | src/tests/task-024-real-prisma-persistence.test.ts:165 | UNRESOLVED | modelWriterGroups:opsBackupCheck; Writer evidence is TEST_PROOF only; no production writer identified.
-OpsBackupCheck | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:OpsBackupCheck; No R8-A modelWriterGroups entry for this model.
-opsIncident | UNRESOLVED | src/tests/task-024-real-prisma-persistence.test.ts:50 | UNRESOLVED | modelWriterGroups:opsIncident; Writer evidence is TEST_PROOF only; no production writer identified.
-OpsIncident | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:OpsIncident; No R8-A modelWriterGroups entry for this model.
-opsIncidentAudit | UNRESOLVED | src/tests/task-024-real-prisma-persistence.test.ts:91 | UNRESOLVED | modelWriterGroups:opsIncidentAudit; Writer evidence is TEST_PROOF only; no production writer identified.
-OpsIncidentAudit | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:OpsIncidentAudit; No R8-A modelWriterGroups entry for this model.
-opsMetricSnapshot | UNRESOLVED | src/tests/task-024-real-prisma-persistence.test.ts:128 | UNRESOLVED | modelWriterGroups:opsMetricSnapshot; Writer evidence is TEST_PROOF only; no production writer identified.
-OpsMetricSnapshot | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:OpsMetricSnapshot; No R8-A modelWriterGroups entry for this model.
-opsReport | UNRESOLVED | src/tests/task-024-real-prisma-persistence.test.ts:229 | UNRESOLVED | modelWriterGroups:opsReport; Writer evidence is TEST_PROOF only; no production writer identified.
-OpsReport | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:OpsReport; No R8-A modelWriterGroups entry for this model.
-opsRestoreDrill | UNRESOLVED | src/tests/task-024-real-prisma-persistence.test.ts:194 | UNRESOLVED | modelWriterGroups:opsRestoreDrill; Writer evidence is TEST_PROOF only; no production writer identified.
-OpsRestoreDrill | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:OpsRestoreDrill; No R8-A modelWriterGroups entry for this model.
+OpsBackupCheck | UNRESOLVED | src/tests/task-024-real-prisma-persistence.test.ts:165 | UNRESOLVED | modelWriterGroups:OpsBackupCheck; Writer evidence is TEST_PROOF only; no production writer identified.
+OpsIncident | UNRESOLVED | src/tests/task-024-real-prisma-persistence.test.ts:50 | UNRESOLVED | modelWriterGroups:OpsIncident; Writer evidence is TEST_PROOF only; no production writer identified.
+OpsIncidentAudit | UNRESOLVED | src/tests/task-024-real-prisma-persistence.test.ts:91 | UNRESOLVED | modelWriterGroups:OpsIncidentAudit; Writer evidence is TEST_PROOF only; no production writer identified.
+OpsMetricSnapshot | UNRESOLVED | src/tests/task-024-real-prisma-persistence.test.ts:128 | UNRESOLVED | modelWriterGroups:OpsMetricSnapshot; Writer evidence is TEST_PROOF only; no production writer identified.
+OpsReport | UNRESOLVED | src/tests/task-024-real-prisma-persistence.test.ts:229 | UNRESOLVED | modelWriterGroups:OpsReport; Writer evidence is TEST_PROOF only; no production writer identified.
+OpsRestoreDrill | UNRESOLVED | src/tests/task-024-real-prisma-persistence.test.ts:194 | UNRESOLVED | modelWriterGroups:OpsRestoreDrill; Writer evidence is TEST_PROOF only; no production writer identified.
 ParentGuidanceDraftRecord | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:ParentGuidanceDraftRecord; No R8-A modelWriterGroups entry for this model.
-parentSafeResultSummaryRecord | src/domains/assessment/result-release/repositories/prismaResultReleaseRepositories.ts | — | CLEAR | modelWriterGroups:parentSafeResultSummaryRecord; Single production writer file.
-ParentSafeResultSummaryRecord | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:ParentSafeResultSummaryRecord; No R8-A modelWriterGroups entry for this model.
-personalizationAuditRecord | src/services/personalizationAuditRepository.ts | — | CLEAR | modelWriterGroups:personalizationAuditRecord; Single production writer file.
-PersonalizationAuditRecord | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:PersonalizationAuditRecord; No R8-A modelWriterGroups entry for this model.
-pilotAuditRecord | src/repositories/task025PilotRepository.ts | — | CLEAR | modelWriterGroups:pilotAuditRecord; Single production writer file.
-PilotAuditRecord | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:PilotAuditRecord; No R8-A modelWriterGroups entry for this model.
-pilotCohort | src/repositories/task025PilotRepository.ts | — | CLEAR | modelWriterGroups:pilotCohort; Single production writer file.
-PilotCohort | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:PilotCohort; No R8-A modelWriterGroups entry for this model.
-pilotDryRun | src/repositories/task025PilotRepository.ts | — | CLEAR | modelWriterGroups:pilotDryRun; Single production writer file.
-PilotDryRun | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:PilotDryRun; No R8-A modelWriterGroups entry for this model.
+ParentSafeResultSummaryRecord | src/domains/assessment/result-release/repositories/prismaResultReleaseRepositories.ts | — | CLEAR | modelWriterGroups:ParentSafeResultSummaryRecord; Single production writer file.
+PersonalizationAuditRecord | src/services/personalizationAuditRepository.ts | — | CLEAR | modelWriterGroups:PersonalizationAuditRecord; Single production writer file.
+PilotAuditRecord | src/repositories/task025PilotRepository.ts | — | CLEAR | modelWriterGroups:PilotAuditRecord; Single production writer file.
+PilotCohort | src/repositories/task025PilotRepository.ts | — | CLEAR | modelWriterGroups:PilotCohort; Single production writer file.
+PilotDryRun | src/repositories/task025PilotRepository.ts | — | CLEAR | modelWriterGroups:PilotDryRun; Single production writer file.
 PilotExecutionAuditRecord | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:PilotExecutionAuditRecord; No R8-A modelWriterGroups entry for this model.
 PilotExecutionEvent | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:PilotExecutionEvent; No R8-A modelWriterGroups entry for this model.
 PilotExecutionRun | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:PilotExecutionRun; No R8-A modelWriterGroups entry for this model.
@@ -491,21 +417,16 @@ PilotExpansionReport | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:PilotEx
 PilotExpansionReview | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:PilotExpansionReview; No R8-A modelWriterGroups entry for this model.
 PilotExpansionRiskAssessment | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:PilotExpansionRiskAssessment; No R8-A modelWriterGroups entry for this model.
 PilotFeedbackRecord | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:PilotFeedbackRecord; No R8-A modelWriterGroups entry for this model.
-pilotParticipant | src/repositories/task025PilotRepository.ts | — | CLEAR | modelWriterGroups:pilotParticipant; Single production writer file.
-PilotParticipant | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:PilotParticipant; No R8-A modelWriterGroups entry for this model.
+PilotParticipant | src/repositories/task025PilotRepository.ts | — | CLEAR | modelWriterGroups:PilotParticipant; Single production writer file.
 PilotPostPilotReview | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:PilotPostPilotReview; No R8-A modelWriterGroups entry for this model.
-pilotProgram | src/repositories/task025PilotRepository.ts | — | CLEAR | modelWriterGroups:pilotProgram; Single production writer file.
-PilotProgram | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:PilotProgram; No R8-A modelWriterGroups entry for this model.
-pilotReadinessCheck | src/repositories/task025PilotRepository.ts | — | CLEAR | modelWriterGroups:pilotReadinessCheck; Single production writer file.
-PilotReadinessCheck | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:PilotReadinessCheck; No R8-A modelWriterGroups entry for this model.
+PilotProgram | src/repositories/task025PilotRepository.ts | — | CLEAR | modelWriterGroups:PilotProgram; Single production writer file.
+PilotReadinessCheck | src/repositories/task025PilotRepository.ts | — | CLEAR | modelWriterGroups:PilotReadinessCheck; Single production writer file.
 PilotRuntimeMetricSnapshot | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:PilotRuntimeMetricSnapshot; No R8-A modelWriterGroups entry for this model.
 PilotSafetySignal | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:PilotSafetySignal; No R8-A modelWriterGroups entry for this model.
 PracticeAttempt | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:PracticeAttempt; No R8-A modelWriterGroups entry for this model.
 PracticeMisconceptionSignal | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:PracticeMisconceptionSignal; No R8-A modelWriterGroups entry for this model.
-prerequisiteLinkRecord | UNRESOLVED | src/tests/task-022-final-real-db-curriculum-readback.test.ts:125 | UNRESOLVED | modelWriterGroups:prerequisiteLinkRecord; Writer evidence is TEST_PROOF only; no production writer identified.
-PrerequisiteLinkRecord | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:PrerequisiteLinkRecord; No R8-A modelWriterGroups entry for this model.
-progress | src/lib/personalization.ts | src/routes/ai.ts, src/routes/ai/ai-memory-preferences.routes.ts, src/services/masteryInferenceService.ts | AMBIGUOUS | modelWriterGroups:progress; More than three distinct production writer files; ownership cannot be reduced statically.
-Progress | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:Progress; No R8-A modelWriterGroups entry for this model.
+PrerequisiteLinkRecord | UNRESOLVED | src/tests/task-022-final-real-db-curriculum-readback.test.ts:125 | UNRESOLVED | modelWriterGroups:PrerequisiteLinkRecord; Writer evidence is TEST_PROOF only; no production writer identified.
+Progress | src/lib/personalization.ts | src/routes/ai.ts, src/routes/ai/ai-memory-preferences.routes.ts, src/services/masteryInferenceService.ts | AMBIGUOUS | modelWriterGroups:Progress; More than three distinct production writer files; ownership cannot be reduced statically.
 QuestionApprovalRecord | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:QuestionApprovalRecord; No R8-A modelWriterGroups entry for this model.
 QuestionApprovalRequestRecord | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:QuestionApprovalRequestRecord; No R8-A modelWriterGroups entry for this model.
 QuestionAssetVersionRecord | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:QuestionAssetVersionRecord; No R8-A modelWriterGroups entry for this model.
@@ -522,16 +443,11 @@ QuestionSelectionRunRecord | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:Q
 QuestionSourceRecordRecord | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:QuestionSourceRecordRecord; No R8-A modelWriterGroups entry for this model.
 QuestionUsageEligibilityRecord | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:QuestionUsageEligibilityRecord; No R8-A modelWriterGroups entry for this model.
 QuestionVersionRecord | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:QuestionVersionRecord; No R8-A modelWriterGroups entry for this model.
-quizModeAttemptRecord | src/services/quizModeAttemptService.ts | — | CLEAR | modelWriterGroups:quizModeAttemptRecord; Single production writer file.
-QuizModeAttemptRecord | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:QuizModeAttemptRecord; No R8-A modelWriterGroups entry for this model.
-quizModeQuestionStateRecord | src/services/quizModeQuestionStateService.ts | — | CLEAR | modelWriterGroups:quizModeQuestionStateRecord; Single production writer file.
-QuizModeQuestionStateRecord | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:QuizModeQuestionStateRecord; No R8-A modelWriterGroups entry for this model.
-quizModeSessionRecord | src/services/quizModeSessionService.ts | — | CLEAR | modelWriterGroups:quizModeSessionRecord; Single production writer file.
-QuizModeSessionRecord | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:QuizModeSessionRecord; No R8-A modelWriterGroups entry for this model.
-quizModeSummaryRecord | src/services/quizModeSummaryService.ts | — | CLEAR | modelWriterGroups:quizModeSummaryRecord; Single production writer file.
-QuizModeSummaryRecord | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:QuizModeSummaryRecord; No R8-A modelWriterGroups entry for this model.
-recommendationInteractionRecord | src/services/recommendationInteractionRepository.ts | — | CLEAR | modelWriterGroups:recommendationInteractionRecord; Single production writer file.
-RecommendationInteractionRecord | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:RecommendationInteractionRecord; No R8-A modelWriterGroups entry for this model.
+QuizModeAttemptRecord | src/services/quizModeAttemptService.ts | — | CLEAR | modelWriterGroups:QuizModeAttemptRecord; Single production writer file.
+QuizModeQuestionStateRecord | src/services/quizModeQuestionStateService.ts | — | CLEAR | modelWriterGroups:QuizModeQuestionStateRecord; Single production writer file.
+QuizModeSessionRecord | src/services/quizModeSessionService.ts | — | CLEAR | modelWriterGroups:QuizModeSessionRecord; Single production writer file.
+QuizModeSummaryRecord | src/services/quizModeSummaryService.ts | — | CLEAR | modelWriterGroups:QuizModeSummaryRecord; Single production writer file.
+RecommendationInteractionRecord | src/services/recommendationInteractionRepository.ts | — | CLEAR | modelWriterGroups:RecommendationInteractionRecord; Single production writer file.
 RecoveryAdminGovernanceReviewPacketRecord | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:RecoveryAdminGovernanceReviewPacketRecord; No R8-A modelWriterGroups entry for this model.
 RecoveryArchiveManifestRecord | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:RecoveryArchiveManifestRecord; No R8-A modelWriterGroups entry for this model.
 RecoveryCaseAdjudicationAuditRecord | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:RecoveryCaseAdjudicationAuditRecord; No R8-A modelWriterGroups entry for this model.
@@ -659,30 +575,18 @@ RecoveryStudentProgressReflectionDraftRecord | UNRESOLVED | — | UNRESOLVED | m
 RecoveryTeacherClosureReviewPacketRecord | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:RecoveryTeacherClosureReviewPacketRecord; No R8-A modelWriterGroups entry for this model.
 RecoveryTeacherReviewDecisionRecord | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:RecoveryTeacherReviewDecisionRecord; No R8-A modelWriterGroups entry for this model.
 RecoveryUnresolvedRiskRegisterRecord | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:RecoveryUnresolvedRiskRegisterRecord; No R8-A modelWriterGroups entry for this model.
-remediationPathRecord | src/services/remediationPathRepository.ts | — | CLEAR | modelWriterGroups:remediationPathRecord; Single production writer file.
-RemediationPathRecord | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:RemediationPathRecord; No R8-A modelWriterGroups entry for this model.
-resultAudienceProjectionRecord | src/domains/assessment/result-release/repositories/prismaResultReleaseRepositories.ts | — | CLEAR | modelWriterGroups:resultAudienceProjectionRecord; Single production writer file.
-ResultAudienceProjectionRecord | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:ResultAudienceProjectionRecord; No R8-A modelWriterGroups entry for this model.
-resultDeliveryAttemptRecord | src/domains/assessment/result-delivery/repositories/prismaResultDeliveryRepositories.ts | — | CLEAR | modelWriterGroups:resultDeliveryAttemptRecord; Single production writer file.
-ResultDeliveryAttemptRecord | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:ResultDeliveryAttemptRecord; No R8-A modelWriterGroups entry for this model.
-resultDeliveryAuditRecord | src/domains/assessment/result-delivery/repositories/prismaResultDeliveryRepositories.ts | — | CLEAR | modelWriterGroups:resultDeliveryAuditRecord; Single production writer file.
-ResultDeliveryAuditRecord | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:ResultDeliveryAuditRecord; No R8-A modelWriterGroups entry for this model.
-resultDeliveryChannelEnvelopeRecord | src/domains/assessment/result-delivery/repositories/prismaResultDeliveryRepositories.ts | — | CLEAR | modelWriterGroups:resultDeliveryChannelEnvelopeRecord; Single production writer file.
-ResultDeliveryChannelEnvelopeRecord | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:ResultDeliveryChannelEnvelopeRecord; No R8-A modelWriterGroups entry for this model.
-resultDeliveryIdempotencyRecord | src/domains/assessment/result-delivery/repositories/prismaResultDeliveryRepositories.ts | — | CLEAR | modelWriterGroups:resultDeliveryIdempotencyRecord; Single production writer file.
-ResultDeliveryIdempotencyRecord | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:ResultDeliveryIdempotencyRecord; No R8-A modelWriterGroups entry for this model.
-resultDeliveryJobRecord | src/domains/assessment/result-delivery/repositories/prismaResultDeliveryRepositories.ts | — | CLEAR | modelWriterGroups:resultDeliveryJobRecord; Single production writer file.
-ResultDeliveryJobRecord | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:ResultDeliveryJobRecord; No R8-A modelWriterGroups entry for this model.
-resultDeliveryMockProviderRecord | src/domains/assessment/result-delivery/repositories/prismaResultDeliveryRepositories.ts | — | CLEAR | modelWriterGroups:resultDeliveryMockProviderRecord; Single production writer file.
-ResultDeliveryMockProviderRecord | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:ResultDeliveryMockProviderRecord; No R8-A modelWriterGroups entry for this model.
-resultDeliveryReceiptRecord | src/domains/assessment/result-delivery/repositories/prismaResultDeliveryRepositories.ts | — | CLEAR | modelWriterGroups:resultDeliveryReceiptRecord; Single production writer file.
-ResultDeliveryReceiptRecord | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:ResultDeliveryReceiptRecord; No R8-A modelWriterGroups entry for this model.
-resultDeliveryRecipientRecord | src/domains/assessment/result-delivery/repositories/prismaResultDeliveryRepositories.ts | — | CLEAR | modelWriterGroups:resultDeliveryRecipientRecord; Single production writer file.
-ResultDeliveryRecipientRecord | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:ResultDeliveryRecipientRecord; No R8-A modelWriterGroups entry for this model.
-resultDeliveryRetryPlanRecord | src/domains/assessment/result-delivery/repositories/prismaResultDeliveryRepositories.ts | — | CLEAR | modelWriterGroups:resultDeliveryRetryPlanRecord; Single production writer file.
-ResultDeliveryRetryPlanRecord | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:ResultDeliveryRetryPlanRecord; No R8-A modelWriterGroups entry for this model.
-resultDeliverySuppressionRecord | src/domains/assessment/result-delivery/repositories/prismaResultDeliveryRepositories.ts | — | CLEAR | modelWriterGroups:resultDeliverySuppressionRecord; Single production writer file.
-ResultDeliverySuppressionRecord | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:ResultDeliverySuppressionRecord; No R8-A modelWriterGroups entry for this model.
+RemediationPathRecord | src/services/remediationPathRepository.ts | — | CLEAR | modelWriterGroups:RemediationPathRecord; Single production writer file.
+ResultAudienceProjectionRecord | src/domains/assessment/result-release/repositories/prismaResultReleaseRepositories.ts | — | CLEAR | modelWriterGroups:ResultAudienceProjectionRecord; Single production writer file.
+ResultDeliveryAttemptRecord | src/domains/assessment/result-delivery/repositories/prismaResultDeliveryRepositories.ts | — | CLEAR | modelWriterGroups:ResultDeliveryAttemptRecord; Single production writer file.
+ResultDeliveryAuditRecord | src/domains/assessment/result-delivery/repositories/prismaResultDeliveryRepositories.ts | — | CLEAR | modelWriterGroups:ResultDeliveryAuditRecord; Single production writer file.
+ResultDeliveryChannelEnvelopeRecord | src/domains/assessment/result-delivery/repositories/prismaResultDeliveryRepositories.ts | — | CLEAR | modelWriterGroups:ResultDeliveryChannelEnvelopeRecord; Single production writer file.
+ResultDeliveryIdempotencyRecord | src/domains/assessment/result-delivery/repositories/prismaResultDeliveryRepositories.ts | — | CLEAR | modelWriterGroups:ResultDeliveryIdempotencyRecord; Single production writer file.
+ResultDeliveryJobRecord | src/domains/assessment/result-delivery/repositories/prismaResultDeliveryRepositories.ts | — | CLEAR | modelWriterGroups:ResultDeliveryJobRecord; Single production writer file.
+ResultDeliveryMockProviderRecord | src/domains/assessment/result-delivery/repositories/prismaResultDeliveryRepositories.ts | — | CLEAR | modelWriterGroups:ResultDeliveryMockProviderRecord; Single production writer file.
+ResultDeliveryReceiptRecord | src/domains/assessment/result-delivery/repositories/prismaResultDeliveryRepositories.ts | — | CLEAR | modelWriterGroups:ResultDeliveryReceiptRecord; Single production writer file.
+ResultDeliveryRecipientRecord | src/domains/assessment/result-delivery/repositories/prismaResultDeliveryRepositories.ts | — | CLEAR | modelWriterGroups:ResultDeliveryRecipientRecord; Single production writer file.
+ResultDeliveryRetryPlanRecord | src/domains/assessment/result-delivery/repositories/prismaResultDeliveryRepositories.ts | — | CLEAR | modelWriterGroups:ResultDeliveryRetryPlanRecord; Single production writer file.
+ResultDeliverySuppressionRecord | src/domains/assessment/result-delivery/repositories/prismaResultDeliveryRepositories.ts | — | CLEAR | modelWriterGroups:ResultDeliverySuppressionRecord; Single production writer file.
 ResultFinalizationDecisionRecord | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:ResultFinalizationDecisionRecord; No R8-A modelWriterGroups entry for this model.
 ResultFinalizationReviewRecord | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:ResultFinalizationReviewRecord; No R8-A modelWriterGroups entry for this model.
 ResultFollowUpActionPlanRecord | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:ResultFollowUpActionPlanRecord; No R8-A modelWriterGroups entry for this model.
@@ -690,20 +594,13 @@ ResultFollowUpCaseRecord | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:Res
 ResultFollowUpSignalRecord | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:ResultFollowUpSignalRecord; No R8-A modelWriterGroups entry for this model.
 ResultGovernanceAuditRecord | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:ResultGovernanceAuditRecord; No R8-A modelWriterGroups entry for this model.
 ResultGovernanceIdempotencyRecord | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:ResultGovernanceIdempotencyRecord; No R8-A modelWriterGroups entry for this model.
-resultGrowthSignalRecord | src/domains/assessment/result-learning-evidence/repositories/prismaResultLearningEvidenceRepositories.ts | — | CLEAR | modelWriterGroups:resultGrowthSignalRecord; Single production writer file.
-ResultGrowthSignalRecord | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:ResultGrowthSignalRecord; No R8-A modelWriterGroups entry for this model.
-resultLearningEvidenceAuditRecord | src/domains/assessment/result-learning-evidence/repositories/prismaResultLearningEvidenceRepositories.ts | — | CLEAR | modelWriterGroups:resultLearningEvidenceAuditRecord; Single production writer file.
-ResultLearningEvidenceAuditRecord | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:ResultLearningEvidenceAuditRecord; No R8-A modelWriterGroups entry for this model.
-resultLearningEvidenceBridgeRecord | src/domains/assessment/result-learning-evidence/repositories/prismaResultLearningEvidenceRepositories.ts | — | CLEAR | modelWriterGroups:resultLearningEvidenceBridgeRecord; Single production writer file.
-ResultLearningEvidenceBridgeRecord | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:ResultLearningEvidenceBridgeRecord; No R8-A modelWriterGroups entry for this model.
-resultLearningEvidenceIdempotencyRecord | src/domains/assessment/result-learning-evidence/repositories/prismaResultLearningEvidenceRepositories.ts | — | CLEAR | modelWriterGroups:resultLearningEvidenceIdempotencyRecord; Single production writer file.
-ResultLearningEvidenceIdempotencyRecord | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:ResultLearningEvidenceIdempotencyRecord; No R8-A modelWriterGroups entry for this model.
-resultMasteryMutationEventRecord | src/domains/assessment/result-learning-evidence/repositories/prismaResultLearningEvidenceRepositories.ts | — | CLEAR | modelWriterGroups:resultMasteryMutationEventRecord; Single production writer file.
-ResultMasteryMutationEventRecord | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:ResultMasteryMutationEventRecord; No R8-A modelWriterGroups entry for this model.
-resultMasteryMutationPlanRecord | src/domains/assessment/result-learning-evidence/repositories/prismaResultLearningEvidenceRepositories.ts | — | CLEAR | modelWriterGroups:resultMasteryMutationPlanRecord; Single production writer file.
-ResultMasteryMutationPlanRecord | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:ResultMasteryMutationPlanRecord; No R8-A modelWriterGroups entry for this model.
-resultObjectiveMasteryImpactRecord | src/domains/assessment/result-learning-evidence/repositories/prismaResultLearningEvidenceRepositories.ts | — | CLEAR | modelWriterGroups:resultObjectiveMasteryImpactRecord; Single production writer file.
-ResultObjectiveMasteryImpactRecord | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:ResultObjectiveMasteryImpactRecord; No R8-A modelWriterGroups entry for this model.
+ResultGrowthSignalRecord | src/domains/assessment/result-learning-evidence/repositories/prismaResultLearningEvidenceRepositories.ts | — | CLEAR | modelWriterGroups:ResultGrowthSignalRecord; Single production writer file.
+ResultLearningEvidenceAuditRecord | src/domains/assessment/result-learning-evidence/repositories/prismaResultLearningEvidenceRepositories.ts | — | CLEAR | modelWriterGroups:ResultLearningEvidenceAuditRecord; Single production writer file.
+ResultLearningEvidenceBridgeRecord | src/domains/assessment/result-learning-evidence/repositories/prismaResultLearningEvidenceRepositories.ts | — | CLEAR | modelWriterGroups:ResultLearningEvidenceBridgeRecord; Single production writer file.
+ResultLearningEvidenceIdempotencyRecord | src/domains/assessment/result-learning-evidence/repositories/prismaResultLearningEvidenceRepositories.ts | — | CLEAR | modelWriterGroups:ResultLearningEvidenceIdempotencyRecord; Single production writer file.
+ResultMasteryMutationEventRecord | src/domains/assessment/result-learning-evidence/repositories/prismaResultLearningEvidenceRepositories.ts | — | CLEAR | modelWriterGroups:ResultMasteryMutationEventRecord; Single production writer file.
+ResultMasteryMutationPlanRecord | src/domains/assessment/result-learning-evidence/repositories/prismaResultLearningEvidenceRepositories.ts | — | CLEAR | modelWriterGroups:ResultMasteryMutationPlanRecord; Single production writer file.
+ResultObjectiveMasteryImpactRecord | src/domains/assessment/result-learning-evidence/repositories/prismaResultLearningEvidenceRepositories.ts | — | CLEAR | modelWriterGroups:ResultObjectiveMasteryImpactRecord; Single production writer file.
 ResultRecoveryAuditRecord | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:ResultRecoveryAuditRecord; No R8-A modelWriterGroups entry for this model.
 ResultRecoveryCheckpointRecord | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:ResultRecoveryCheckpointRecord; No R8-A modelWriterGroups entry for this model.
 ResultRecoveryIdempotencyRecord | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:ResultRecoveryIdempotencyRecord; No R8-A modelWriterGroups entry for this model.
@@ -718,17 +615,12 @@ ResultRecoverySummaryRecord | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:
 ResultRecoveryTeacherReviewPacketRecord | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:ResultRecoveryTeacherReviewPacketRecord; No R8-A modelWriterGroups entry for this model.
 ResultRegradeIntakeRecord | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:ResultRegradeIntakeRecord; No R8-A modelWriterGroups entry for this model.
 ResultRegradeRequestRecord | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:ResultRegradeRequestRecord; No R8-A modelWriterGroups entry for this model.
-resultReleaseApprovalRecord | src/domains/assessment/result-release/repositories/prismaResultReleaseRepositories.ts | — | CLEAR | modelWriterGroups:resultReleaseApprovalRecord; Single production writer file.
-ResultReleaseApprovalRecord | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:ResultReleaseApprovalRecord; No R8-A modelWriterGroups entry for this model.
-resultReleaseAuditRecord | src/domains/assessment/result-release/repositories/prismaResultReleaseRepositories.ts | — | CLEAR | modelWriterGroups:resultReleaseAuditRecord; Single production writer file.
-ResultReleaseAuditRecord | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:ResultReleaseAuditRecord; No R8-A modelWriterGroups entry for this model.
+ResultReleaseApprovalRecord | src/domains/assessment/result-release/repositories/prismaResultReleaseRepositories.ts | — | CLEAR | modelWriterGroups:ResultReleaseApprovalRecord; Single production writer file.
+ResultReleaseAuditRecord | src/domains/assessment/result-release/repositories/prismaResultReleaseRepositories.ts | — | CLEAR | modelWriterGroups:ResultReleaseAuditRecord; Single production writer file.
 ResultReleaseBoundaryRecord | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:ResultReleaseBoundaryRecord; No R8-A modelWriterGroups entry for this model.
-resultReleaseDeliveryIntentRecord | src/domains/assessment/result-release/repositories/prismaResultReleaseRepositories.ts | — | CLEAR | modelWriterGroups:resultReleaseDeliveryIntentRecord; Single production writer file.
-ResultReleaseDeliveryIntentRecord | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:ResultReleaseDeliveryIntentRecord; No R8-A modelWriterGroups entry for this model.
-resultReleaseIdempotencyRecord | src/domains/assessment/result-release/repositories/prismaResultReleaseRepositories.ts | — | CLEAR | modelWriterGroups:resultReleaseIdempotencyRecord; Single production writer file.
-ResultReleaseIdempotencyRecord | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:ResultReleaseIdempotencyRecord; No R8-A modelWriterGroups entry for this model.
-resultReleasePacketRecord | src/domains/assessment/result-release/repositories/prismaResultReleaseRepositories.ts | — | CLEAR | modelWriterGroups:resultReleasePacketRecord; Single production writer file.
-ResultReleasePacketRecord | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:ResultReleasePacketRecord; No R8-A modelWriterGroups entry for this model.
+ResultReleaseDeliveryIntentRecord | src/domains/assessment/result-release/repositories/prismaResultReleaseRepositories.ts | — | CLEAR | modelWriterGroups:ResultReleaseDeliveryIntentRecord; Single production writer file.
+ResultReleaseIdempotencyRecord | src/domains/assessment/result-release/repositories/prismaResultReleaseRepositories.ts | — | CLEAR | modelWriterGroups:ResultReleaseIdempotencyRecord; Single production writer file.
+ResultReleasePacketRecord | src/domains/assessment/result-release/repositories/prismaResultReleaseRepositories.ts | — | CLEAR | modelWriterGroups:ResultReleasePacketRecord; Single production writer file.
 ResultReleaseReadinessRecord | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:ResultReleaseReadinessRecord; No R8-A modelWriterGroups entry for this model.
 ResultReportCardAccessAcknowledgementRecord | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:ResultReportCardAccessAcknowledgementRecord; No R8-A modelWriterGroups entry for this model.
 ResultReportCardAccessAuditRecord | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:ResultReportCardAccessAuditRecord; No R8-A modelWriterGroups entry for this model.
@@ -741,54 +633,37 @@ ResultReportCardAccessSummaryRecord | UNRESOLVED | — | UNRESOLVED | modelWrite
 ResultReportCardAccessTimelineRecord | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:ResultReportCardAccessTimelineRecord; No R8-A modelWriterGroups entry for this model.
 ResultReportCardAccessTokenIntentRecord | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:ResultReportCardAccessTokenIntentRecord; No R8-A modelWriterGroups entry for this model.
 ResultReportCardArchiveManifestRecord | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:ResultReportCardArchiveManifestRecord; No R8-A modelWriterGroups entry for this model.
-resultReportCardAssemblyRecord | src/domains/assessment/result-report-card/repositories/prismaResultReportCardRepositories.ts | — | CLEAR | modelWriterGroups:resultReportCardAssemblyRecord; Single production writer file.
-ResultReportCardAssemblyRecord | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:ResultReportCardAssemblyRecord; No R8-A modelWriterGroups entry for this model.
-resultReportCardAudienceProjectionRecord | src/domains/assessment/result-report-card/repositories/prismaResultReportCardRepositories.ts | — | CLEAR | modelWriterGroups:resultReportCardAudienceProjectionRecord; Single production writer file.
-ResultReportCardAudienceProjectionRecord | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:ResultReportCardAudienceProjectionRecord; No R8-A modelWriterGroups entry for this model.
-resultReportCardAuditRecord | src/domains/assessment/result-report-card/repositories/prismaResultReportCardRepositories.ts | — | CLEAR | modelWriterGroups:resultReportCardAuditRecord; Single production writer file.
-ResultReportCardAuditRecord | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:ResultReportCardAuditRecord; No R8-A modelWriterGroups entry for this model.
-resultReportCardEvidenceLinkRecord | src/domains/assessment/result-report-card/repositories/prismaResultReportCardRepositories.ts | — | CLEAR | modelWriterGroups:resultReportCardEvidenceLinkRecord; Single production writer file.
-ResultReportCardEvidenceLinkRecord | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:ResultReportCardEvidenceLinkRecord; No R8-A modelWriterGroups entry for this model.
+ResultReportCardAssemblyRecord | src/domains/assessment/result-report-card/repositories/prismaResultReportCardRepositories.ts | — | CLEAR | modelWriterGroups:ResultReportCardAssemblyRecord; Single production writer file.
+ResultReportCardAudienceProjectionRecord | src/domains/assessment/result-report-card/repositories/prismaResultReportCardRepositories.ts | — | CLEAR | modelWriterGroups:ResultReportCardAudienceProjectionRecord; Single production writer file.
+ResultReportCardAuditRecord | src/domains/assessment/result-report-card/repositories/prismaResultReportCardRepositories.ts | — | CLEAR | modelWriterGroups:ResultReportCardAuditRecord; Single production writer file.
+ResultReportCardEvidenceLinkRecord | src/domains/assessment/result-report-card/repositories/prismaResultReportCardRepositories.ts | — | CLEAR | modelWriterGroups:ResultReportCardEvidenceLinkRecord; Single production writer file.
 ResultReportCardExportAuditRecord | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:ResultReportCardExportAuditRecord; No R8-A modelWriterGroups entry for this model.
 ResultReportCardExportEnvelopeRecord | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:ResultReportCardExportEnvelopeRecord; No R8-A modelWriterGroups entry for this model.
 ResultReportCardExportIdempotencyRecord | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:ResultReportCardExportIdempotencyRecord; No R8-A modelWriterGroups entry for this model.
-resultReportCardExportIntentRecord | src/domains/assessment/result-report-card/repositories/prismaResultReportCardRepositories.ts | — | CLEAR | modelWriterGroups:resultReportCardExportIntentRecord; Single production writer file.
-ResultReportCardExportIntentRecord | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:ResultReportCardExportIntentRecord; No R8-A modelWriterGroups entry for this model.
+ResultReportCardExportIntentRecord | src/domains/assessment/result-report-card/repositories/prismaResultReportCardRepositories.ts | — | CLEAR | modelWriterGroups:ResultReportCardExportIntentRecord; Single production writer file.
 ResultReportCardExportJobRecord | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:ResultReportCardExportJobRecord; No R8-A modelWriterGroups entry for this model.
 ResultReportCardExportReceiptRecord | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:ResultReportCardExportReceiptRecord; No R8-A modelWriterGroups entry for this model.
 ResultReportCardExportRetryPlanRecord | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:ResultReportCardExportRetryPlanRecord; No R8-A modelWriterGroups entry for this model.
 ResultReportCardExportSuppressionRecord | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:ResultReportCardExportSuppressionRecord; No R8-A modelWriterGroups entry for this model.
 ResultReportCardExportTargetRecord | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:ResultReportCardExportTargetRecord; No R8-A modelWriterGroups entry for this model.
-resultReportCardIdempotencyRecord | src/domains/assessment/result-report-card/repositories/prismaResultReportCardRepositories.ts | — | CLEAR | modelWriterGroups:resultReportCardIdempotencyRecord; Single production writer file.
-ResultReportCardIdempotencyRecord | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:ResultReportCardIdempotencyRecord; No R8-A modelWriterGroups entry for this model.
+ResultReportCardIdempotencyRecord | src/domains/assessment/result-report-card/repositories/prismaResultReportCardRepositories.ts | — | CLEAR | modelWriterGroups:ResultReportCardIdempotencyRecord; Single production writer file.
 ResultReportCardMockExportAttemptRecord | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:ResultReportCardMockExportAttemptRecord; No R8-A modelWriterGroups entry for this model.
 ResultReportCardPortalPreviewRecord | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:ResultReportCardPortalPreviewRecord; No R8-A modelWriterGroups entry for this model.
-resultReportCardRenderManifestRecord | src/domains/assessment/result-report-card/repositories/prismaResultReportCardRepositories.ts | — | CLEAR | modelWriterGroups:resultReportCardRenderManifestRecord; Single production writer file.
-ResultReportCardRenderManifestRecord | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:ResultReportCardRenderManifestRecord; No R8-A modelWriterGroups entry for this model.
-resultReportCardReviewRecord | src/domains/assessment/result-report-card/repositories/prismaResultReportCardRepositories.ts | — | CLEAR | modelWriterGroups:resultReportCardReviewRecord; Single production writer file.
-ResultReportCardReviewRecord | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:ResultReportCardReviewRecord; No R8-A modelWriterGroups entry for this model.
-resultReportCardSectionRecord | src/domains/assessment/result-report-card/repositories/prismaResultReportCardRepositories.ts | — | CLEAR | modelWriterGroups:resultReportCardSectionRecord; Single production writer file.
-ResultReportCardSectionRecord | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:ResultReportCardSectionRecord; No R8-A modelWriterGroups entry for this model.
-resultReportCardTemplateRecord | src/domains/assessment/result-report-card/repositories/prismaResultReportCardRepositories.ts | — | CLEAR | modelWriterGroups:resultReportCardTemplateRecord; Single production writer file.
-ResultReportCardTemplateRecord | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:ResultReportCardTemplateRecord; No R8-A modelWriterGroups entry for this model.
-resultReportCardTemplateVersionRecord | src/domains/assessment/result-report-card/repositories/prismaResultReportCardRepositories.ts | — | CLEAR | modelWriterGroups:resultReportCardTemplateVersionRecord; Single production writer file.
-ResultReportCardTemplateVersionRecord | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:ResultReportCardTemplateVersionRecord; No R8-A modelWriterGroups entry for this model.
-resultRevisionSignalRecord | src/domains/assessment/result-learning-evidence/repositories/prismaResultLearningEvidenceRepositories.ts | — | CLEAR | modelWriterGroups:resultRevisionSignalRecord; Single production writer file.
-ResultRevisionSignalRecord | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:ResultRevisionSignalRecord; No R8-A modelWriterGroups entry for this model.
+ResultReportCardRenderManifestRecord | src/domains/assessment/result-report-card/repositories/prismaResultReportCardRepositories.ts | — | CLEAR | modelWriterGroups:ResultReportCardRenderManifestRecord; Single production writer file.
+ResultReportCardReviewRecord | src/domains/assessment/result-report-card/repositories/prismaResultReportCardRepositories.ts | — | CLEAR | modelWriterGroups:ResultReportCardReviewRecord; Single production writer file.
+ResultReportCardSectionRecord | src/domains/assessment/result-report-card/repositories/prismaResultReportCardRepositories.ts | — | CLEAR | modelWriterGroups:ResultReportCardSectionRecord; Single production writer file.
+ResultReportCardTemplateRecord | src/domains/assessment/result-report-card/repositories/prismaResultReportCardRepositories.ts | — | CLEAR | modelWriterGroups:ResultReportCardTemplateRecord; Single production writer file.
+ResultReportCardTemplateVersionRecord | src/domains/assessment/result-report-card/repositories/prismaResultReportCardRepositories.ts | — | CLEAR | modelWriterGroups:ResultReportCardTemplateVersionRecord; Single production writer file.
+ResultRevisionSignalRecord | src/domains/assessment/result-learning-evidence/repositories/prismaResultLearningEvidenceRepositories.ts | — | CLEAR | modelWriterGroups:ResultRevisionSignalRecord; Single production writer file.
 RevisionCollection | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:RevisionCollection; No R8-A modelWriterGroups entry for this model.
 RevisionGuidedSessionRecord | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:RevisionGuidedSessionRecord; No R8-A modelWriterGroups entry for this model.
 RevisionGuidedStepRecord | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:RevisionGuidedStepRecord; No R8-A modelWriterGroups entry for this model.
 RevisionItem | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:RevisionItem; No R8-A modelWriterGroups entry for this model.
-revisionModeAttemptRecord | src/services/revisionModeAttemptService.ts | — | CLEAR | modelWriterGroups:revisionModeAttemptRecord; Single production writer file.
-RevisionModeAttemptRecord | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:RevisionModeAttemptRecord; No R8-A modelWriterGroups entry for this model.
-revisionModeItemStateRecord | src/services/revisionModeItemStateService.ts | — | CLEAR | modelWriterGroups:revisionModeItemStateRecord; Single production writer file.
-RevisionModeItemStateRecord | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:RevisionModeItemStateRecord; No R8-A modelWriterGroups entry for this model.
-revisionModeQueueRecord | src/services/revisionModeQueueService.ts | — | CLEAR | modelWriterGroups:revisionModeQueueRecord; Single production writer file.
-RevisionModeQueueRecord | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:RevisionModeQueueRecord; No R8-A modelWriterGroups entry for this model.
-revisionModeSessionRecord | src/services/revisionModeSessionService.ts | — | CLEAR | modelWriterGroups:revisionModeSessionRecord; Single production writer file.
-RevisionModeSessionRecord | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:RevisionModeSessionRecord; No R8-A modelWriterGroups entry for this model.
-revisionModeSummaryRecord | src/services/revisionModeSummaryService.ts | — | CLEAR | modelWriterGroups:revisionModeSummaryRecord; Single production writer file.
-RevisionModeSummaryRecord | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:RevisionModeSummaryRecord; No R8-A modelWriterGroups entry for this model.
+RevisionModeAttemptRecord | src/services/revisionModeAttemptService.ts | — | CLEAR | modelWriterGroups:RevisionModeAttemptRecord; Single production writer file.
+RevisionModeItemStateRecord | src/services/revisionModeItemStateService.ts | — | CLEAR | modelWriterGroups:RevisionModeItemStateRecord; Single production writer file.
+RevisionModeQueueRecord | src/services/revisionModeQueueService.ts | — | CLEAR | modelWriterGroups:RevisionModeQueueRecord; Single production writer file.
+RevisionModeSessionRecord | src/services/revisionModeSessionService.ts | — | CLEAR | modelWriterGroups:RevisionModeSessionRecord; Single production writer file.
+RevisionModeSummaryRecord | src/services/revisionModeSummaryService.ts | — | CLEAR | modelWriterGroups:RevisionModeSummaryRecord; Single production writer file.
 RevisionNoteLink | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:RevisionNoteLink; No R8-A modelWriterGroups entry for this model.
 RevisionReviewEvent | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:RevisionReviewEvent; No R8-A modelWriterGroups entry for this model.
 RevisionSourceSignalReceipt | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:RevisionSourceSignalReceipt; No R8-A modelWriterGroups entry for this model.
@@ -796,97 +671,75 @@ RubricVersionRecord | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:RubricVe
 SafeLearningEvidenceAggregateRecord | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:SafeLearningEvidenceAggregateRecord; No R8-A modelWriterGroups entry for this model.
 SafeLearningEvidenceAuditRecord | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:SafeLearningEvidenceAuditRecord; No R8-A modelWriterGroups entry for this model.
 SafeLearningEvidenceRecord | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:SafeLearningEvidenceRecord; No R8-A modelWriterGroups entry for this model.
-safeMemorySummary | src/services/safeMemorySummaryService.ts | src/services/studentExitArchiveService.ts | DUPLICATE_WRITER_CANDIDATE | modelWriterGroups:safeMemorySummary; Multiple distinct production writer files without an established coordination boundary.
-SafeMemorySummary | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:SafeMemorySummary; No R8-A modelWriterGroups entry for this model.
-safetyAlert | src/routes/ai.ts | src/routes/ai/ai-safety.routes.ts | DUPLICATE_WRITER_CANDIDATE | modelWriterGroups:safetyAlert; Multiple distinct production writer files without an established coordination boundary.
-SafetyAlert | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:SafetyAlert; No R8-A modelWriterGroups entry for this model.
-safetyEventAudit | src/routes/ai.ts | src/routes/ai/ai-safety.routes.ts, src/services/abnormalBehaviorService.ts | DUPLICATE_WRITER_CANDIDATE | modelWriterGroups:safetyEventAudit; Multiple distinct production writer files without an established coordination boundary.
-SafetyEventAudit | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:SafetyEventAudit; No R8-A modelWriterGroups entry for this model.
-schoolIntegrationAuditRecord | src/repositories/schoolIntegrationAuditRepository.ts | — | CLEAR | modelWriterGroups:schoolIntegrationAuditRecord; Single production writer file.
-SchoolIntegrationAuditRecord | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:SchoolIntegrationAuditRecord; No R8-A modelWriterGroups entry for this model.
-schoolIntegrationIdempotencyRecord | src/repositories/schoolIntegrationIdempotencyRepository.ts | — | CLEAR | modelWriterGroups:schoolIntegrationIdempotencyRecord; Single production writer file.
-SchoolIntegrationIdempotencyRecord | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:SchoolIntegrationIdempotencyRecord; No R8-A modelWriterGroups entry for this model.
-schoolRosterSyncConflictRecord | src/repositories/schoolRosterSyncConflictRepository.ts | — | CLEAR | modelWriterGroups:schoolRosterSyncConflictRecord; Single production writer file.
-SchoolRosterSyncConflictRecord | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:SchoolRosterSyncConflictRecord; No R8-A modelWriterGroups entry for this model.
-schoolRosterSyncJobRecord | src/repositories/schoolRosterSyncJobRepository.ts | — | CLEAR | modelWriterGroups:schoolRosterSyncJobRecord; Single production writer file.
-SchoolRosterSyncJobRecord | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:SchoolRosterSyncJobRecord; No R8-A modelWriterGroups entry for this model.
+SafeMemorySummary | src/services/safeMemorySummaryService.ts | src/services/studentExitArchiveService.ts | DUPLICATE_WRITER_CANDIDATE | modelWriterGroups:SafeMemorySummary; Multiple distinct production writer files without an established coordination boundary.
+SafetyAlert | src/routes/ai.ts | src/routes/ai/ai-safety.routes.ts | DUPLICATE_WRITER_CANDIDATE | modelWriterGroups:SafetyAlert; Multiple distinct production writer files without an established coordination boundary.
+SafetyEventAudit | src/routes/ai.ts | src/routes/ai/ai-safety.routes.ts, src/services/abnormalBehaviorService.ts | DUPLICATE_WRITER_CANDIDATE | modelWriterGroups:SafetyEventAudit; Multiple distinct production writer files without an established coordination boundary.
+SchoolIntegrationAuditRecord | src/repositories/schoolIntegrationAuditRepository.ts | — | CLEAR | modelWriterGroups:SchoolIntegrationAuditRecord; Single production writer file.
+SchoolIntegrationIdempotencyRecord | src/repositories/schoolIntegrationIdempotencyRepository.ts | — | CLEAR | modelWriterGroups:SchoolIntegrationIdempotencyRecord; Single production writer file.
+SchoolRosterSyncConflictRecord | src/repositories/schoolRosterSyncConflictRepository.ts | — | CLEAR | modelWriterGroups:SchoolRosterSyncConflictRecord; Single production writer file.
+SchoolRosterSyncJobRecord | src/repositories/schoolRosterSyncJobRepository.ts | — | CLEAR | modelWriterGroups:SchoolRosterSyncJobRecord; Single production writer file.
 ScoringSuggestionRecord | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:ScoringSuggestionRecord; No R8-A modelWriterGroups entry for this model.
 SkillMasterySnapshot | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:SkillMasterySnapshot; No R8-A modelWriterGroups entry for this model.
 SpacedReviewItem | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:SpacedReviewItem; No R8-A modelWriterGroups entry for this model.
-studentLearningProfileSnapshot | src/services/studentLearningProfileService.ts | — | CLEAR | modelWriterGroups:studentLearningProfileSnapshot; Single production writer file.
-StudentLearningProfileSnapshot | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:StudentLearningProfileSnapshot; No R8-A modelWriterGroups entry for this model.
-studentLearningSessionEvent | src/services/studentLearningSessionRepository.ts | — | CLEAR | modelWriterGroups:studentLearningSessionEvent; Single production writer file.
-StudentLearningSessionEvent | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:StudentLearningSessionEvent; No R8-A modelWriterGroups entry for this model.
-studentLearningSessionState | src/services/studentLearningSessionRepository.ts | — | CLEAR | modelWriterGroups:studentLearningSessionState; Single production writer file.
-StudentLearningSessionState | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:StudentLearningSessionState; No R8-A modelWriterGroups entry for this model.
+StudentLearningProfileSnapshot | src/services/studentLearningProfileService.ts | — | CLEAR | modelWriterGroups:StudentLearningProfileSnapshot; Single production writer file.
+StudentLearningSessionEvent | src/services/studentLearningSessionRepository.ts | — | CLEAR | modelWriterGroups:StudentLearningSessionEvent; Single production writer file.
+StudentLearningSessionState | src/services/studentLearningSessionRepository.ts | — | CLEAR | modelWriterGroups:StudentLearningSessionState; Single production writer file.
 StudentMarkChallengeRecord | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:StudentMarkChallengeRecord; No R8-A modelWriterGroups entry for this model.
 StudentMasteryAggregationRun | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:StudentMasteryAggregationRun; No R8-A modelWriterGroups entry for this model.
-studentProfile | prisma/seed.ts | src/routes/ai.ts, src/services/voiceLedgerService.ts | DUPLICATE_WRITER_CANDIDATE | modelWriterGroups:studentProfile; Multiple distinct production writer files without an established coordination boundary.
-StudentProfile | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:StudentProfile; No R8-A modelWriterGroups entry for this model.
+StudentProfile | prisma/seed.ts | src/routes/ai.ts, src/services/voiceLedgerService.ts | DUPLICATE_WRITER_CANDIDATE | modelWriterGroups:StudentProfile; Multiple distinct production writer files without an established coordination boundary.
 StudentReflectionTaskDraftRecord | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:StudentReflectionTaskDraftRecord; No R8-A modelWriterGroups entry for this model.
-studentResultReportSnapshotRecord | src/domains/assessment/result-release/repositories/prismaResultReleaseRepositories.ts | — | CLEAR | modelWriterGroups:studentResultReportSnapshotRecord; Single production writer file.
-StudentResultReportSnapshotRecord | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:StudentResultReportSnapshotRecord; No R8-A modelWriterGroups entry for this model.
-studentSafeResultSummaryRecord | src/domains/assessment/result-release/repositories/prismaResultReleaseRepositories.ts | — | CLEAR | modelWriterGroups:studentSafeResultSummaryRecord; Single production writer file.
-StudentSafeResultSummaryRecord | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:StudentSafeResultSummaryRecord; No R8-A modelWriterGroups entry for this model.
+StudentResultReportSnapshotRecord | src/domains/assessment/result-release/repositories/prismaResultReleaseRepositories.ts | — | CLEAR | modelWriterGroups:StudentResultReportSnapshotRecord; Single production writer file.
+StudentSafeResultSummaryRecord | src/domains/assessment/result-release/repositories/prismaResultReleaseRepositories.ts | — | CLEAR | modelWriterGroups:StudentSafeResultSummaryRecord; Single production writer file.
 StudentSupportPatternSnapshot | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:StudentSupportPatternSnapshot; No R8-A modelWriterGroups entry for this model.
 StudyGoal | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:StudyGoal; No R8-A modelWriterGroups entry for this model.
 StudyPlan | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:StudyPlan; No R8-A modelWriterGroups entry for this model.
 SubmittedSnapshotIntakeRecord | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:SubmittedSnapshotIntakeRecord; No R8-A modelWriterGroups entry for this model.
-teachBackModeAttemptRecord | src/services/teachBackModeAttemptService.ts | — | CLEAR | modelWriterGroups:teachBackModeAttemptRecord; Single production writer file.
-TeachBackModeAttemptRecord | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:TeachBackModeAttemptRecord; No R8-A modelWriterGroups entry for this model.
-teachBackModePromptStateRecord | src/services/teachBackModePromptStateService.ts | — | CLEAR | modelWriterGroups:teachBackModePromptStateRecord; Single production writer file.
-TeachBackModePromptStateRecord | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:TeachBackModePromptStateRecord; No R8-A modelWriterGroups entry for this model.
-teachBackModeSessionRecord | src/services/teachBackModeSessionService.ts | — | CLEAR | modelWriterGroups:teachBackModeSessionRecord; Single production writer file.
-TeachBackModeSessionRecord | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:TeachBackModeSessionRecord; No R8-A modelWriterGroups entry for this model.
-teachBackModeSummaryRecord | src/services/teachBackModeSummaryService.ts | — | CLEAR | modelWriterGroups:teachBackModeSummaryRecord; Single production writer file.
-TeachBackModeSummaryRecord | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:TeachBackModeSummaryRecord; No R8-A modelWriterGroups entry for this model.
+TeachBackModeAttemptRecord | src/services/teachBackModeAttemptService.ts | — | CLEAR | modelWriterGroups:TeachBackModeAttemptRecord; Single production writer file.
+TeachBackModePromptStateRecord | src/services/teachBackModePromptStateService.ts | — | CLEAR | modelWriterGroups:TeachBackModePromptStateRecord; Single production writer file.
+TeachBackModeSessionRecord | src/services/teachBackModeSessionService.ts | — | CLEAR | modelWriterGroups:TeachBackModeSessionRecord; Single production writer file.
+TeachBackModeSummaryRecord | src/services/teachBackModeSummaryService.ts | — | CLEAR | modelWriterGroups:TeachBackModeSummaryRecord; Single production writer file.
 TeacherFollowUpQueueItemRecord | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:TeacherFollowUpQueueItemRecord; No R8-A modelWriterGroups entry for this model.
-teacherInterventionAssignment | src/services/teacherInterventionRepository.ts | — | CLEAR | modelWriterGroups:teacherInterventionAssignment; Single production writer file.
-TeacherInterventionAssignment | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:TeacherInterventionAssignment; No R8-A modelWriterGroups entry for this model.
-teacherInterventionAuditEvent | src/services/teacherInterventionAuditService.ts | — | CLEAR | modelWriterGroups:teacherInterventionAuditEvent; Single production writer file.
-TeacherInterventionAuditEvent | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:TeacherInterventionAuditEvent; No R8-A modelWriterGroups entry for this model.
+TeacherInterventionAssignment | src/services/teacherInterventionRepository.ts | — | CLEAR | modelWriterGroups:TeacherInterventionAssignment; Single production writer file.
+TeacherInterventionAuditEvent | src/services/teacherInterventionAuditService.ts | — | CLEAR | modelWriterGroups:TeacherInterventionAuditEvent; Single production writer file.
 TeacherOverrideRecord | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:TeacherOverrideRecord; No R8-A modelWriterGroups entry for this model.
 TeacherReviewGroupRecord | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:TeacherReviewGroupRecord; No R8-A modelWriterGroups entry for this model.
 TeacherReviewItemRecord | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:TeacherReviewItemRecord; No R8-A modelWriterGroups entry for this model.
-turnLatencyMetric | src/services/latencyService.ts | — | CLEAR | modelWriterGroups:turnLatencyMetric; Single production writer file.
-TurnLatencyMetric | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:TurnLatencyMetric; No R8-A modelWriterGroups entry for this model.
+TurnLatencyMetric | src/services/latencyService.ts | — | CLEAR | modelWriterGroups:TurnLatencyMetric; Single production writer file.
 TutorActionDecisionRecord | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:TutorActionDecisionRecord; No R8-A modelWriterGroups entry for this model.
 TutorActionEffectivenessRecord | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:TutorActionEffectivenessRecord; No R8-A modelWriterGroups entry for this model.
 TutorHintLadderStateRecord | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:TutorHintLadderStateRecord; No R8-A modelWriterGroups entry for this model.
-tutorLearnerIdentityMap | src/repositories/schoolIdentityMappingRepository.ts | src/services/externalStudentIdentityMapper.ts, src/services/task021SchoolIntegrationDurableBridge.ts | SHARED_BY_DESIGN | modelWriterGroups:tutorLearnerIdentityMap; Multiple writer files follow the repository/service coordination boundary.
-TutorLearnerIdentityMap | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:TutorLearnerIdentityMap; No R8-A modelWriterGroups entry for this model.
+TutorLearnerIdentityMap | src/repositories/schoolIdentityMappingRepository.ts | src/services/externalStudentIdentityMapper.ts, src/services/task021SchoolIntegrationDurableBridge.ts | SHARED_BY_DESIGN | modelWriterGroups:TutorLearnerIdentityMap; Multiple writer files follow the repository/service coordination boundary.
 TutorSession | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:TutorSession; No R8-A modelWriterGroups entry for this model.
 TutorState | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:TutorState; No R8-A modelWriterGroups entry for this model.
-voiceLedgerEntry | src/services/voiceLedgerService.ts | — | CLEAR | modelWriterGroups:voiceLedgerEntry; Single production writer file.
-VoiceLedgerEntry | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:VoiceLedgerEntry; No R8-A modelWriterGroups entry for this model.
-voicePackageGrant | src/services/voiceLedgerService.ts | — | CLEAR | modelWriterGroups:voicePackageGrant; Single production writer file.
-VoicePackageGrant | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:VoicePackageGrant; No R8-A modelWriterGroups entry for this model.
-voiceSessionUsage | src/services/voiceLedgerService.ts | — | CLEAR | modelWriterGroups:voiceSessionUsage; Single production writer file.
-VoiceSessionUsage | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:VoiceSessionUsage; No R8-A modelWriterGroups entry for this model.
-voiceUsage | src/routes/ai/ai-voice.routes.ts | — | CLEAR | modelWriterGroups:voiceUsage; Single production writer file.
-VoiceUsage | UNRESOLVED | — | UNRESOLVED | modelWriterGroups:VoiceUsage; No R8-A modelWriterGroups entry for this model.
+VoiceLedgerEntry | src/services/voiceLedgerService.ts | — | CLEAR | modelWriterGroups:VoiceLedgerEntry; Single production writer file.
+VoicePackageGrant | src/services/voiceLedgerService.ts | — | CLEAR | modelWriterGroups:VoicePackageGrant; Single production writer file.
+VoiceSessionUsage | src/services/voiceLedgerService.ts | — | CLEAR | modelWriterGroups:VoiceSessionUsage; Single production writer file.
+VoiceUsage | src/routes/ai/ai-voice.routes.ts | — | CLEAR | modelWriterGroups:VoiceUsage; Single production writer file.
 
 ## Shared / Multiple Writer Candidates
 
 Model | Canonical writer | Additional writers | Classification | Evidence
 --- | --- | --- | --- | ---
-chatMessage | src/routes/ai.ts | src/routes/ai/ai-chat.routes.ts, src/services/aiService.ts | DUPLICATE_WRITER_CANDIDATE | Multiple distinct production writer files without an established coordination boundary.
-chatSession | prisma/seed.ts | src/routes/ai.ts, src/routes/ai/ai-chat.routes.ts, src/routes/ai/ai-research.routes.ts, src/services/aiService.ts, src/workers/index.ts | AMBIGUOUS | More than three distinct production writer files; ownership cannot be reduced statically.
-conversationArchiveRecord | src/services/conversationArchiveService.ts | src/services/studentExitArchiveService.ts | DUPLICATE_WRITER_CANDIDATE | Multiple distinct production writer files without an established coordination boundary.
-copilotPreferences | src/routes/ai/ai-memory-preferences.routes.ts | src/services/copilotPreferenceService.ts | DUPLICATE_WRITER_CANDIDATE | Multiple distinct production writer files without an established coordination boundary.
-dailyObjectiveCheckCompletionIdempotencyRecord | src/services/phase3DailyObjectiveCheckCompletionService.ts | src/services/phase3DailyObjectiveCheckRepository.ts | SHARED_BY_DESIGN | Multiple writer files follow the repository/service coordination boundary.
-durableAuditEvent | src/services/adaptiveChallengeAuditRepository.ts | src/services/durableAuditRepository.ts | SHARED_BY_DESIGN | Multiple writer files follow the repository/service coordination boundary.
-focusModeSessionRecord | src/services/focusModeSessionService.ts | src/services/focusModeStepService.ts | DUPLICATE_WRITER_CANDIDATE | Multiple distinct production writer files without an established coordination boundary.
-learningArtifact | src/services/artifactService.ts | src/services/artifactStructuredRepository.ts | SHARED_BY_DESIGN | Multiple writer files follow the repository/service coordination boundary.
-learningArtifactBlock | src/services/artifactService.ts | src/services/artifactStructuredRepository.ts | SHARED_BY_DESIGN | Multiple writer files follow the repository/service coordination boundary.
-learningModeSession | src/services/learningModeSessionService.ts | src/services/quizModeSessionService.ts, src/services/teachBackModeSessionService.ts | DUPLICATE_WRITER_CANDIDATE | Multiple distinct production writer files without an established coordination boundary.
-mistake | src/lib/personalization.ts | src/routes/ai.ts, src/routes/ai/ai-memory-preferences.routes.ts, src/services/masteryInferenceService.ts | AMBIGUOUS | More than three distinct production writer files; ownership cannot be reduced statically.
-progress | src/lib/personalization.ts | src/routes/ai.ts, src/routes/ai/ai-memory-preferences.routes.ts, src/services/masteryInferenceService.ts | AMBIGUOUS | More than three distinct production writer files; ownership cannot be reduced statically.
-safeMemorySummary | src/services/safeMemorySummaryService.ts | src/services/studentExitArchiveService.ts | DUPLICATE_WRITER_CANDIDATE | Multiple distinct production writer files without an established coordination boundary.
-safetyAlert | src/routes/ai.ts | src/routes/ai/ai-safety.routes.ts | DUPLICATE_WRITER_CANDIDATE | Multiple distinct production writer files without an established coordination boundary.
-safetyEventAudit | src/routes/ai.ts | src/routes/ai/ai-safety.routes.ts, src/services/abnormalBehaviorService.ts | DUPLICATE_WRITER_CANDIDATE | Multiple distinct production writer files without an established coordination boundary.
-studentProfile | prisma/seed.ts | src/routes/ai.ts, src/services/voiceLedgerService.ts | DUPLICATE_WRITER_CANDIDATE | Multiple distinct production writer files without an established coordination boundary.
-tutorLearnerIdentityMap | src/repositories/schoolIdentityMappingRepository.ts | src/services/externalStudentIdentityMapper.ts, src/services/task021SchoolIntegrationDurableBridge.ts | SHARED_BY_DESIGN | Multiple writer files follow the repository/service coordination boundary.
+ChatMessage | src/routes/ai.ts | src/routes/ai/ai-chat.routes.ts, src/services/aiService.ts | DUPLICATE_WRITER_CANDIDATE | Multiple distinct production writer files without an established coordination boundary.
+ChatSession | prisma/seed.ts | src/routes/ai.ts, src/routes/ai/ai-chat.routes.ts, src/routes/ai/ai-research.routes.ts, src/services/aiService.ts, src/workers/index.ts | AMBIGUOUS | More than three distinct production writer files; ownership cannot be reduced statically.
+ConversationArchiveRecord | src/services/conversationArchiveService.ts | src/services/studentExitArchiveService.ts | DUPLICATE_WRITER_CANDIDATE | Multiple distinct production writer files without an established coordination boundary.
+CopilotPreferences | src/routes/ai/ai-memory-preferences.routes.ts | src/services/copilotPreferenceService.ts | DUPLICATE_WRITER_CANDIDATE | Multiple distinct production writer files without an established coordination boundary.
+dailyObjectiveCheckAttemptRecord | src/services/phase3DailyObjectiveCheckRepository.ts | — | AMBIGUOUS | Single production writer file. Writer-group key matches no canonical Prisma model (naming drift); carried as an orphan for later review.
+dailyObjectiveCheckCompletionIdempotencyRecord | src/services/phase3DailyObjectiveCheckCompletionService.ts | src/services/phase3DailyObjectiveCheckRepository.ts | SHARED_BY_DESIGN | Multiple writer files follow the repository/service coordination boundary. Writer-group key matches no canonical Prisma model (naming drift); carried as an orphan for later review.
+dailyObjectiveCheckConfidenceRecord | src/services/phase3DailyObjectiveCheckRepository.ts | — | AMBIGUOUS | Single production writer file. Writer-group key matches no canonical Prisma model (naming drift); carried as an orphan for later review.
+dailyObjectiveCheckSessionRecord | src/services/phase3DailyObjectiveCheckRepository.ts | — | AMBIGUOUS | Single production writer file. Writer-group key matches no canonical Prisma model (naming drift); carried as an orphan for later review.
+DurableAuditEvent | src/services/adaptiveChallengeAuditRepository.ts | src/services/durableAuditRepository.ts | SHARED_BY_DESIGN | Multiple writer files follow the repository/service coordination boundary.
+FocusModeSessionRecord | src/services/focusModeSessionService.ts | src/services/focusModeStepService.ts | DUPLICATE_WRITER_CANDIDATE | Multiple distinct production writer files without an established coordination boundary.
+LearningArtifact | src/services/artifactService.ts | src/services/artifactStructuredRepository.ts | SHARED_BY_DESIGN | Multiple writer files follow the repository/service coordination boundary.
+LearningArtifactBlock | src/services/artifactService.ts | src/services/artifactStructuredRepository.ts | SHARED_BY_DESIGN | Multiple writer files follow the repository/service coordination boundary.
+LearningModeSession | src/services/learningModeSessionService.ts | src/services/quizModeSessionService.ts, src/services/teachBackModeSessionService.ts | DUPLICATE_WRITER_CANDIDATE | Multiple distinct production writer files without an established coordination boundary.
+Mistake | src/lib/personalization.ts | src/routes/ai.ts, src/routes/ai/ai-memory-preferences.routes.ts, src/services/masteryInferenceService.ts | AMBIGUOUS | More than three distinct production writer files; ownership cannot be reduced statically.
+Progress | src/lib/personalization.ts | src/routes/ai.ts, src/routes/ai/ai-memory-preferences.routes.ts, src/services/masteryInferenceService.ts | AMBIGUOUS | More than three distinct production writer files; ownership cannot be reduced statically.
+SafeMemorySummary | src/services/safeMemorySummaryService.ts | src/services/studentExitArchiveService.ts | DUPLICATE_WRITER_CANDIDATE | Multiple distinct production writer files without an established coordination boundary.
+SafetyAlert | src/routes/ai.ts | src/routes/ai/ai-safety.routes.ts | DUPLICATE_WRITER_CANDIDATE | Multiple distinct production writer files without an established coordination boundary.
+SafetyEventAudit | src/routes/ai.ts | src/routes/ai/ai-safety.routes.ts, src/services/abnormalBehaviorService.ts | DUPLICATE_WRITER_CANDIDATE | Multiple distinct production writer files without an established coordination boundary.
+StudentProfile | prisma/seed.ts | src/routes/ai.ts, src/services/voiceLedgerService.ts | DUPLICATE_WRITER_CANDIDATE | Multiple distinct production writer files without an established coordination boundary.
+TutorLearnerIdentityMap | src/repositories/schoolIdentityMappingRepository.ts | src/services/externalStudentIdentityMapper.ts, src/services/task021SchoolIntegrationDurableBridge.ts | SHARED_BY_DESIGN | Multiple writer files follow the repository/service coordination boundary.
 
 All rows above are classifications for later engineering review. R8-B records no final disposition.
 
@@ -2396,36 +2249,17 @@ Legend: `QK_DELETE` denotes the SQL write verb observed verbatim in 01 `prisma.r
 
 ## Unresolved Data Ownership
 
-- Families without a production writer: `artifacts-media` (3 models), `assessment` (2 models), `chat-session` (9 models), `curriculum-content` (11 models), `learner-memory` (3 models), `learning-evidence` (19 models), `mastery` (13 models), `objectives` (31 models), `operations-readiness` (7 models), `practice` (6 models), `question-bank` (226 models), `revision` (8 models), `safeguarding-privacy` (12 models), `school-integration` (33 models), `student-identity-context` (3 models), `unclassified` (42 models), `voice` (4 models)
-- Models without a production writer: 447 of 586
-  - `AdaptiveChallengeRecord`: No R8-A modelWriterGroups entry for this model. Evidence: `01 prisma.modelWriterGroups[AdaptiveChallengeRecord]`
-  - `AdaptiveRecommendationProfileRecord`: No R8-A modelWriterGroups entry for this model. Evidence: `01 prisma.modelWriterGroups[AdaptiveRecommendationProfileRecord]`
+- Families without a production writer: `assessment` (2 models), `unclassified` (42 models)
+- Models without a production writer: 297 of 436
   - `AnswerKeyVersionRecord`: No R8-A modelWriterGroups entry for this model. Evidence: `01 prisma.modelWriterGroups[AnswerKeyVersionRecord]`
-  - `approvedSourceRecord`: Writer evidence is TEST_PROOF only; no production writer identified. Evidence: `01 prisma.modelWriterGroups[approvedSourceRecord]`
-  - `ApprovedSourceRecord`: No R8-A modelWriterGroups entry for this model. Evidence: `01 prisma.modelWriterGroups[ApprovedSourceRecord]`
-  - `CanonicalMasteryChangeRecord`: No R8-A modelWriterGroups entry for this model. Evidence: `01 prisma.modelWriterGroups[CanonicalMasteryChangeRecord]`
-  - `CanonicalMasteryEvidenceApplicationRecord`: No R8-A modelWriterGroups entry for this model. Evidence: `01 prisma.modelWriterGroups[CanonicalMasteryEvidenceApplicationRecord]`
-  - `CanonicalMasteryStateRecord`: No R8-A modelWriterGroups entry for this model. Evidence: `01 prisma.modelWriterGroups[CanonicalMasteryStateRecord]`
-  - `ChatMessage`: No R8-A modelWriterGroups entry for this model. Evidence: `01 prisma.modelWriterGroups[ChatMessage]`
-  - `ChatSession`: No R8-A modelWriterGroups entry for this model. Evidence: `01 prisma.modelWriterGroups[ChatSession]`
-  - `CommittedLearningEvidenceProjection`: No R8-A modelWriterGroups entry for this model. Evidence: `01 prisma.modelWriterGroups[CommittedLearningEvidenceProjection]`
-  - `contentGapRecord`: Writer evidence is TEST_PROOF only; no production writer identified. Evidence: `01 prisma.modelWriterGroups[contentGapRecord]`
-  - `ContentGapRecord`: No R8-A modelWriterGroups entry for this model. Evidence: `01 prisma.modelWriterGroups[ContentGapRecord]`
-  - `contentGovernanceAuditRecord`: Writer evidence is TEST_PROOF only; no production writer identified. Evidence: `01 prisma.modelWriterGroups[contentGovernanceAuditRecord]`
-  - `ContentGovernanceAuditRecord`: No R8-A modelWriterGroups entry for this model. Evidence: `01 prisma.modelWriterGroups[ContentGovernanceAuditRecord]`
-  - `contentItemRecord`: Writer evidence is TEST_PROOF only; no production writer identified. Evidence: `01 prisma.modelWriterGroups[contentItemRecord]`
-  - `ContentItemRecord`: No R8-A modelWriterGroups entry for this model. Evidence: `01 prisma.modelWriterGroups[ContentItemRecord]`
+  - `ApprovedSourceRecord`: Writer evidence is TEST_PROOF only; no production writer identified. Evidence: `01 prisma.modelWriterGroups[ApprovedSourceRecord]`
+  - `ContentGapRecord`: Writer evidence is TEST_PROOF only; no production writer identified. Evidence: `01 prisma.modelWriterGroups[ContentGapRecord]`
+  - `ContentGovernanceAuditRecord`: Writer evidence is TEST_PROOF only; no production writer identified. Evidence: `01 prisma.modelWriterGroups[ContentGovernanceAuditRecord]`
+  - `ContentItemRecord`: Writer evidence is TEST_PROOF only; no production writer identified. Evidence: `01 prisma.modelWriterGroups[ContentItemRecord]`
   - `ContentReviewRecord`: No R8-A modelWriterGroups entry for this model. Evidence: `01 prisma.modelWriterGroups[ContentReviewRecord]`
-  - `ConversationArchiveRecord`: No R8-A modelWriterGroups entry for this model. Evidence: `01 prisma.modelWriterGroups[ConversationArchiveRecord]`
-  - `CopilotPreferences`: No R8-A modelWriterGroups entry for this model. Evidence: `01 prisma.modelWriterGroups[CopilotPreferences]`
-  - `curriculumSkillRecord`: Writer evidence is TEST_PROOF only; no production writer identified. Evidence: `01 prisma.modelWriterGroups[curriculumSkillRecord]`
-  - `CurriculumSkillRecord`: No R8-A modelWriterGroups entry for this model. Evidence: `01 prisma.modelWriterGroups[CurriculumSkillRecord]`
-  - `curriculumTopicRecord`: Writer evidence is TEST_PROOF only; no production writer identified. Evidence: `01 prisma.modelWriterGroups[curriculumTopicRecord]`
-  - `CurriculumTopicRecord`: No R8-A modelWriterGroups entry for this model. Evidence: `01 prisma.modelWriterGroups[CurriculumTopicRecord]`
-  - `curriculumVersionRecord`: Writer evidence is TEST_PROOF only; no production writer identified. Evidence: `01 prisma.modelWriterGroups[curriculumVersionRecord]`
-  - `CurriculumVersionRecord`: No R8-A modelWriterGroups entry for this model. Evidence: `01 prisma.modelWriterGroups[CurriculumVersionRecord]`
-  - `DifficultyCalibrationRecord`: No R8-A modelWriterGroups entry for this model. Evidence: `01 prisma.modelWriterGroups[DifficultyCalibrationRecord]`
-  - `DurableAuditEvent`: No R8-A modelWriterGroups entry for this model. Evidence: `01 prisma.modelWriterGroups[DurableAuditEvent]`
+  - `CurriculumSkillRecord`: Writer evidence is TEST_PROOF only; no production writer identified. Evidence: `01 prisma.modelWriterGroups[CurriculumSkillRecord]`
+  - `CurriculumTopicRecord`: Writer evidence is TEST_PROOF only; no production writer identified. Evidence: `01 prisma.modelWriterGroups[CurriculumTopicRecord]`
+  - `CurriculumVersionRecord`: Writer evidence is TEST_PROOF only; no production writer identified. Evidence: `01 prisma.modelWriterGroups[CurriculumVersionRecord]`
   - `ExamAccessPolicyRecord`: No R8-A modelWriterGroups entry for this model. Evidence: `01 prisma.modelWriterGroups[ExamAccessPolicyRecord]`
   - `ExamAnswerSubmissionRecord`: No R8-A modelWriterGroups entry for this model. Evidence: `01 prisma.modelWriterGroups[ExamAnswerSubmissionRecord]`
   - `ExamAttemptQuestionSnapshotRecord`: No R8-A modelWriterGroups entry for this model. Evidence: `01 prisma.modelWriterGroups[ExamAttemptQuestionSnapshotRecord]`
@@ -2442,35 +2276,11 @@ Legend: `QK_DELETE` denotes the SQL write verb observed verbatim in 01 `prisma.r
   - `ExamDraftQuestionRecord`: No R8-A modelWriterGroups entry for this model. Evidence: `01 prisma.modelWriterGroups[ExamDraftQuestionRecord]`
   - `ExamDraftRecord`: No R8-A modelWriterGroups entry for this model. Evidence: `01 prisma.modelWriterGroups[ExamDraftRecord]`
   - `ExamDraftSetRecord`: No R8-A modelWriterGroups entry for this model. Evidence: `01 prisma.modelWriterGroups[ExamDraftSetRecord]`
-  - `ExamModeAttemptRecord`: No R8-A modelWriterGroups entry for this model. Evidence: `01 prisma.modelWriterGroups[ExamModeAttemptRecord]`
-  - `ExamModeQuestionStateRecord`: No R8-A modelWriterGroups entry for this model. Evidence: `01 prisma.modelWriterGroups[ExamModeQuestionStateRecord]`
-  - `ExamModeSessionRecord`: No R8-A modelWriterGroups entry for this model. Evidence: `01 prisma.modelWriterGroups[ExamModeSessionRecord]`
-  - `ExamModeSummaryRecord`: No R8-A modelWriterGroups entry for this model. Evidence: `01 prisma.modelWriterGroups[ExamModeSummaryRecord]`
   - `ExamPaperApprovalRecord`: No R8-A modelWriterGroups entry for this model. Evidence: `01 prisma.modelWriterGroups[ExamPaperApprovalRecord]`
-  - `ExamPaperAssemblyRunRecord`: No R8-A modelWriterGroups entry for this model. Evidence: `01 prisma.modelWriterGroups[ExamPaperAssemblyRunRecord]`
   - `ExamPaperDeliveryBridgeRecord`: No R8-A modelWriterGroups entry for this model. Evidence: `01 prisma.modelWriterGroups[ExamPaperDeliveryBridgeRecord]`
-  - `ExamPaperQuestionRecord`: No R8-A modelWriterGroups entry for this model. Evidence: `01 prisma.modelWriterGroups[ExamPaperQuestionRecord]`
-  - `ExamPaperRecord`: No R8-A modelWriterGroups entry for this model. Evidence: `01 prisma.modelWriterGroups[ExamPaperRecord]`
-  - `ExamPaperSectionRecord`: No R8-A modelWriterGroups entry for this model. Evidence: `01 prisma.modelWriterGroups[ExamPaperSectionRecord]`
-  - `ExamPaperVersionRecord`: No R8-A modelWriterGroups entry for this model. Evidence: `01 prisma.modelWriterGroups[ExamPaperVersionRecord]`
   - `ExamVariantAssignmentRecord`: No R8-A modelWriterGroups entry for this model. Evidence: `01 prisma.modelWriterGroups[ExamVariantAssignmentRecord]`
   - `ExamVariantQuestionRecord`: No R8-A modelWriterGroups entry for this model. Evidence: `01 prisma.modelWriterGroups[ExamVariantQuestionRecord]`
   - `ExamVariantRecord`: No R8-A modelWriterGroups entry for this model. Evidence: `01 prisma.modelWriterGroups[ExamVariantRecord]`
-  - `ExpandedPilotParticipant`: No R8-A modelWriterGroups entry for this model. Evidence: `01 prisma.modelWriterGroups[ExpandedPilotParticipant]`
-  - `ExpansionCompletionReview`: No R8-A modelWriterGroups entry for this model. Evidence: `01 prisma.modelWriterGroups[ExpansionCompletionReview]`
-  - `ExpansionExecutionAuditRecord`: No R8-A modelWriterGroups entry for this model. Evidence: `01 prisma.modelWriterGroups[ExpansionExecutionAuditRecord]`
-  - `ExpansionExecutionReport`: No R8-A modelWriterGroups entry for this model. Evidence: `01 prisma.modelWriterGroups[ExpansionExecutionReport]`
-  - `ExpansionExecutionRun`: No R8-A modelWriterGroups entry for this model. Evidence: `01 prisma.modelWriterGroups[ExpansionExecutionRun]`
-  - `ExpansionExecutionStage`: No R8-A modelWriterGroups entry for this model. Evidence: `01 prisma.modelWriterGroups[ExpansionExecutionStage]`
-  - `ExpansionHealthSnapshot`: No R8-A modelWriterGroups entry for this model. Evidence: `01 prisma.modelWriterGroups[ExpansionHealthSnapshot]`
-  - `ExpansionInterventionRecord`: No R8-A modelWriterGroups entry for this model. Evidence: `01 prisma.modelWriterGroups[ExpansionInterventionRecord]`
-  - `ExpansionOversightItem`: No R8-A modelWriterGroups entry for this model. Evidence: `01 prisma.modelWriterGroups[ExpansionOversightItem]`
-  - `ExpansionRollbackRecord`: No R8-A modelWriterGroups entry for this model. Evidence: `01 prisma.modelWriterGroups[ExpansionRollbackRecord]`
-  - `ExpansionRuntimeEvent`: No R8-A modelWriterGroups entry for this model. Evidence: `01 prisma.modelWriterGroups[ExpansionRuntimeEvent]`
-  - `FocusModeAttemptRecord`: No R8-A modelWriterGroups entry for this model. Evidence: `01 prisma.modelWriterGroups[FocusModeAttemptRecord]`
-  - `FocusModeSessionRecord`: No R8-A modelWriterGroups entry for this model. Evidence: `01 prisma.modelWriterGroups[FocusModeSessionRecord]`
-  - `FocusModeStepRecord`: No R8-A modelWriterGroups entry for this model. Evidence: `01 prisma.modelWriterGroups[FocusModeStepRecord]`
-  - `FocusModeSummaryRecord`: No R8-A modelWriterGroups entry for this model. Evidence: `01 prisma.modelWriterGroups[FocusModeSummaryRecord]`
   - `FollowUpAuditRecord`: No R8-A modelWriterGroups entry for this model. Evidence: `01 prisma.modelWriterGroups[FollowUpAuditRecord]`
   - `FollowUpEscalationPlanRecord`: No R8-A modelWriterGroups entry for this model. Evidence: `01 prisma.modelWriterGroups[FollowUpEscalationPlanRecord]`
   - `FollowUpIdempotencyRecord`: No R8-A modelWriterGroups entry for this model. Evidence: `01 prisma.modelWriterGroups[FollowUpIdempotencyRecord]`
@@ -2478,8 +2288,51 @@ Legend: `QK_DELETE` denotes the SQL write verb observed verbatim in 01 `prisma.r
   - `FollowUpSummaryRecord`: No R8-A modelWriterGroups entry for this model. Evidence: `01 prisma.modelWriterGroups[FollowUpSummaryRecord]`
   - `GlobalMemory`: No R8-A modelWriterGroups entry for this model. Evidence: `01 prisma.modelWriterGroups[GlobalMemory]`
   - `GrowthMasteryTrendState`: No R8-A modelWriterGroups entry for this model. Evidence: `01 prisma.modelWriterGroups[GrowthMasteryTrendState]`
-  - _… 367 further models; full list in Canonical Writers table above._
-- Models with no writer-group entry at all: 432 (`AdaptiveChallengeRecord`, `AdaptiveRecommendationProfileRecord`, `AnswerKeyVersionRecord`, `ApprovedSourceRecord`, `ChatMessage`, `ChatSession`, `CommittedLearningEvidenceProjection`, `ContentGapRecord`, `ContentGovernanceAuditRecord`, `ContentItemRecord`, `ContentReviewRecord`, `ConversationArchiveRecord`, `CopilotPreferences`, `CurriculumSkillRecord`, `CurriculumTopicRecord`, `CurriculumVersionRecord`, `DifficultyCalibrationRecord`, `DurableAuditEvent`, `ExamAccessPolicyRecord`, `ExamAnswerSubmissionRecord`, …)
+  - `GrowthMistakePatternState`: No R8-A modelWriterGroups entry for this model. Evidence: `01 prisma.modelWriterGroups[GrowthMistakePatternState]`
+  - `GrowthProofRecord`: No R8-A modelWriterGroups entry for this model. Evidence: `01 prisma.modelWriterGroups[GrowthProofRecord]`
+  - `GrowthRecommendationState`: No R8-A modelWriterGroups entry for this model. Evidence: `01 prisma.modelWriterGroups[GrowthRecommendationState]`
+  - `GrowthWeakTopicState`: No R8-A modelWriterGroups entry for this model. Evidence: `01 prisma.modelWriterGroups[GrowthWeakTopicState]`
+  - `InterventionEffectEvent`: No R8-A modelWriterGroups entry for this model. Evidence: `01 prisma.modelWriterGroups[InterventionEffectEvent]`
+  - `LearningObjectiveRecord`: Writer evidence is TEST_PROOF only; no production writer identified. Evidence: `01 prisma.modelWriterGroups[LearningObjectiveRecord]`
+  - `MarkingBatchItemRecord`: No R8-A modelWriterGroups entry for this model. Evidence: `01 prisma.modelWriterGroups[MarkingBatchItemRecord]`
+  - `MarkingBatchRecord`: No R8-A modelWriterGroups entry for this model. Evidence: `01 prisma.modelWriterGroups[MarkingBatchRecord]`
+  - `MarkingBreakdownItemRecord`: No R8-A modelWriterGroups entry for this model. Evidence: `01 prisma.modelWriterGroups[MarkingBreakdownItemRecord]`
+  - `MarkingDispatchAuditRecord`: No R8-A modelWriterGroups entry for this model. Evidence: `01 prisma.modelWriterGroups[MarkingDispatchAuditRecord]`
+  - `MarkingInvocationIdempotencyRecord`: No R8-A modelWriterGroups entry for this model. Evidence: `01 prisma.modelWriterGroups[MarkingInvocationIdempotencyRecord]`
+  - `MarkingInvocationRequestRecord`: No R8-A modelWriterGroups entry for this model. Evidence: `01 prisma.modelWriterGroups[MarkingInvocationRequestRecord]`
+  - `MarkingReadinessCheckRecord`: No R8-A modelWriterGroups entry for this model. Evidence: `01 prisma.modelWriterGroups[MarkingReadinessCheckRecord]`
+  - `MarkingResultLinkRecord`: No R8-A modelWriterGroups entry for this model. Evidence: `01 prisma.modelWriterGroups[MarkingResultLinkRecord]`
+  - `MarkingResultVersionRecord`: No R8-A modelWriterGroups entry for this model. Evidence: `01 prisma.modelWriterGroups[MarkingResultVersionRecord]`
+  - `MarkingRunRecord`: No R8-A modelWriterGroups entry for this model. Evidence: `01 prisma.modelWriterGroups[MarkingRunRecord]`
+  - `MediaAsset`: No R8-A modelWriterGroups entry for this model. Evidence: `01 prisma.modelWriterGroups[MediaAsset]`
+  - `ModerationDecisionRecord`: No R8-A modelWriterGroups entry for this model. Evidence: `01 prisma.modelWriterGroups[ModerationDecisionRecord]`
+  - `OpsBackupCheck`: Writer evidence is TEST_PROOF only; no production writer identified. Evidence: `01 prisma.modelWriterGroups[OpsBackupCheck]`
+  - `OpsIncident`: Writer evidence is TEST_PROOF only; no production writer identified. Evidence: `01 prisma.modelWriterGroups[OpsIncident]`
+  - `OpsIncidentAudit`: Writer evidence is TEST_PROOF only; no production writer identified. Evidence: `01 prisma.modelWriterGroups[OpsIncidentAudit]`
+  - `OpsMetricSnapshot`: Writer evidence is TEST_PROOF only; no production writer identified. Evidence: `01 prisma.modelWriterGroups[OpsMetricSnapshot]`
+  - `OpsReport`: Writer evidence is TEST_PROOF only; no production writer identified. Evidence: `01 prisma.modelWriterGroups[OpsReport]`
+  - `OpsRestoreDrill`: Writer evidence is TEST_PROOF only; no production writer identified. Evidence: `01 prisma.modelWriterGroups[OpsRestoreDrill]`
+  - `ParentGuidanceDraftRecord`: No R8-A modelWriterGroups entry for this model. Evidence: `01 prisma.modelWriterGroups[ParentGuidanceDraftRecord]`
+  - `PilotExecutionAuditRecord`: No R8-A modelWriterGroups entry for this model. Evidence: `01 prisma.modelWriterGroups[PilotExecutionAuditRecord]`
+  - `PilotExecutionEvent`: No R8-A modelWriterGroups entry for this model. Evidence: `01 prisma.modelWriterGroups[PilotExecutionEvent]`
+  - `PilotExecutionRun`: No R8-A modelWriterGroups entry for this model. Evidence: `01 prisma.modelWriterGroups[PilotExecutionRun]`
+  - `PilotExpansionApproval`: No R8-A modelWriterGroups entry for this model. Evidence: `01 prisma.modelWriterGroups[PilotExpansionApproval]`
+  - `PilotExpansionAuditRecord`: No R8-A modelWriterGroups entry for this model. Evidence: `01 prisma.modelWriterGroups[PilotExpansionAuditRecord]`
+  - `PilotExpansionCohortChange`: No R8-A modelWriterGroups entry for this model. Evidence: `01 prisma.modelWriterGroups[PilotExpansionCohortChange]`
+  - `PilotExpansionEvidencePack`: No R8-A modelWriterGroups entry for this model. Evidence: `01 prisma.modelWriterGroups[PilotExpansionEvidencePack]`
+  - `PilotExpansionProposal`: No R8-A modelWriterGroups entry for this model. Evidence: `01 prisma.modelWriterGroups[PilotExpansionProposal]`
+  - `PilotExpansionReport`: No R8-A modelWriterGroups entry for this model. Evidence: `01 prisma.modelWriterGroups[PilotExpansionReport]`
+  - `PilotExpansionReview`: No R8-A modelWriterGroups entry for this model. Evidence: `01 prisma.modelWriterGroups[PilotExpansionReview]`
+  - `PilotExpansionRiskAssessment`: No R8-A modelWriterGroups entry for this model. Evidence: `01 prisma.modelWriterGroups[PilotExpansionRiskAssessment]`
+  - `PilotFeedbackRecord`: No R8-A modelWriterGroups entry for this model. Evidence: `01 prisma.modelWriterGroups[PilotFeedbackRecord]`
+  - `PilotPostPilotReview`: No R8-A modelWriterGroups entry for this model. Evidence: `01 prisma.modelWriterGroups[PilotPostPilotReview]`
+  - `PilotRuntimeMetricSnapshot`: No R8-A modelWriterGroups entry for this model. Evidence: `01 prisma.modelWriterGroups[PilotRuntimeMetricSnapshot]`
+  - `PilotSafetySignal`: No R8-A modelWriterGroups entry for this model. Evidence: `01 prisma.modelWriterGroups[PilotSafetySignal]`
+  - `PracticeAttempt`: No R8-A modelWriterGroups entry for this model. Evidence: `01 prisma.modelWriterGroups[PracticeAttempt]`
+  - `PracticeMisconceptionSignal`: No R8-A modelWriterGroups entry for this model. Evidence: `01 prisma.modelWriterGroups[PracticeMisconceptionSignal]`
+  - `PrerequisiteLinkRecord`: Writer evidence is TEST_PROOF only; no production writer identified. Evidence: `01 prisma.modelWriterGroups[PrerequisiteLinkRecord]`
+  - _… 217 further models; full list in Canonical Writers table above._
+- Models with no writer-group entry at all: 282 (`AnswerKeyVersionRecord`, `ContentReviewRecord`, `ExamAccessPolicyRecord`, `ExamAnswerSubmissionRecord`, `ExamAttemptQuestionSnapshotRecord`, `ExamAttemptRecord`, `ExamAttemptSubmissionSnapshotRecord`, `ExamAttemptTimingEventRecord`, `ExamBlueprintRecord`, `ExamBlueprintRequirementRecord`, `ExamBlueprintVersionRecord`, `ExamDeliveryAuditRecord`, `ExamDeliveryIdempotencyRecord`, `ExamDeliverySessionRecord`, `ExamDeliverySessionStateRecord`, `ExamDraftQuestionRecord`, `ExamDraftRecord`, `ExamDraftSetRecord`, `ExamPaperApprovalRecord`, `ExamPaperDeliveryBridgeRecord`, …)
 
 ## R8-A Findings Requiring Later Engineering Review
 
