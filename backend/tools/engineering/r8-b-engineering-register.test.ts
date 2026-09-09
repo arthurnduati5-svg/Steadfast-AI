@@ -11,19 +11,27 @@ import {
   InventoryLike,
   WriterGroupLike,
   assertNoDestructiveDisposition,
+  attachStructuralEvidence,
   buildLogicId,
   buildRegisterContext,
+  candidateServiceMatches,
   classifyDirectAccess,
   classifyFamily,
   classifyRuntimeCollection,
   classifyWriterGroup,
   completenessFor,
+  findWriterCoordination,
   groupModelsByFamily,
   groupRoutesToCapabilities,
+  inspectionFor,
+  inspectionCoversFullBehavior,
   renderLogicRegister,
   renderOwnershipMatrix,
   requiredMatrixSections,
   requiredRegisterSections,
+  resolveAuthorization,
+  resolveStructuralDownstream,
+  selectCanonicalWriterFromAccesses,
 } from './r8-b-engineering-register';
 
 function fixtureInventory(): InventoryLike {
@@ -122,7 +130,7 @@ describe('r8-b multi-writer classification', () => {
     expect(classifyWriterGroup(group).status).toBe('DUPLICATE_WRITER_CANDIDATE');
   });
 
-  it('treats repository/service coordination as SHARED_BY_DESIGN', () => {
+  it('treats repository/service filenames alone as DUPLICATE_WRITER_CANDIDATE (never SHARED_BY_DESIGN)', () => {
     const group: WriterGroupLike = {
       model: 'LearnerMemoryItem',
       writers: [
@@ -130,7 +138,22 @@ describe('r8-b multi-writer classification', () => {
         { path: 'src/services/learnerMemoryRepository.ts', symbol: 'prisma', line: 9 },
       ],
     };
-    expect(classifyWriterGroup(group).status).toBe('SHARED_BY_DESIGN');
+    // Filename co-occurrence is candidate signal only without coordination proof.
+    expect(classifyWriterGroup(group).status).toBe('DUPLICATE_WRITER_CANDIDATE');
+  });
+
+  it('establishes SHARED_BY_DESIGN only with explicit dependency/delegation evidence', () => {
+    const group: WriterGroupLike = {
+      model: 'LearnerMemoryItem',
+      writers: [
+        { path: 'src/services/learnerMemoryService.ts', symbol: 'prisma', line: 3 },
+        { path: 'src/services/learnerMemoryRepository.ts', symbol: 'prisma', line: 9 },
+      ],
+    };
+    const withProof = classifyWriterGroup(group, {
+      coordination: { kind: 'dependency-edge', detail: 'src/services/learnerMemoryService.ts imports src/services/learnerMemoryRepository.ts (02 dependency graph)' },
+    });
+    expect(withProof.status).toBe('SHARED_BY_DESIGN');
   });
 
   it('classifies direct access shapes deterministically', () => {
@@ -224,5 +247,174 @@ describe('r8-b required artifact sections', () => {
     expect(register).toContain('UNRESOLVED_INTERNAL_IMPORT');
     expect(register).toContain('f-fixture');
     expect(completenessFor(ctx.capabilities[0], fixtureInventory())).toMatch(/^L[1-4]$/);
+  });
+});
+
+describe('r8-b evidence-hierarchy repair (frozen continuation C1-C9)', () => {
+  it('C1: model-name-only family evidence does NOT produce authoritative high-confidence ownership', () => {
+    const inv = fixtureInventory();
+    inv.prisma.models = [{ name: 'VoiceGrantRecord' }];
+    inv.prisma.accesses = [];
+    inv.prisma.modelWriterGroups = [];
+    const ctx = buildRegisterContext(inv, GRAPH_FIXTURE);
+    const voice = ctx.families.find((f) => f.family.id === 'voice');
+    expect(voice).toBeDefined();
+    expect(voice?.isCandidateOnly).toBe(true);
+    expect(voice?.status).toBe('UNRESOLVED');
+    expect(voice?.confidence).toBe('low');
+    expect(voice?.evidenceKinds).toContain('CANDIDATE_SIGNAL');
+    const matrix = renderOwnershipMatrix(ctx);
+    expect(matrix).toContain('CANDIDATE FAMILY');
+  });
+
+  it('C3: single real write path establishes a canonical mutation path', () => {
+    const accesses: AccessLike[] = [
+      { path: 'src/services/learnerMemoryService.ts', line: 3, clientSymbol: 'prisma', model: 'LearnerMemoryItem', operation: 'create', readWrite: 'write', layerSignal: 'service' },
+      { path: 'src/services/learnerMemoryService.ts', line: 9, clientSymbol: 'prisma', model: 'LearnerMemoryItem', operation: 'update', readWrite: 'write', layerSignal: 'service' },
+    ];
+    const pick = selectCanonicalWriterFromAccesses(accesses);
+    expect(pick?.path).toBe('src/services/learnerMemoryService.ts');
+    const verdict = classifyWriterGroup(
+      { model: 'LearnerMemoryItem', writers: [{ path: 'src/services/learnerMemoryService.ts', symbol: 'prisma', line: 3 }] },
+      { writeAccesses: accesses },
+    );
+    expect(verdict.canonicalWriter).toBe('src/services/learnerMemoryService.ts');
+    expect(verdict.evidenceKinds).toContain('PRISMA_WRITE_ACCESS');
+  });
+
+  it('C2: service+repository filenames alone do NOT establish SHARED_BY_DESIGN', () => {
+    const verdict = classifyWriterGroup({
+      model: 'M',
+      writers: [
+        { path: 'src/services/mService.ts', symbol: 'prisma', line: 1 },
+        { path: 'src/services/mRepository.ts', symbol: 'prisma', line: 2 },
+      ],
+    });
+    expect(verdict.status).not.toBe('SHARED_BY_DESIGN');
+    expect(verdict.status).toBe('DUPLICATE_WRITER_CANDIDATE');
+  });
+
+  it('C2: explicit dependency evidence CAN establish SHARED_BY_DESIGN', () => {
+    const graph = {
+      unresolvedImports: [],
+      edges: [{ from: 'file:src/services/a.ts', to: 'file:src/services/b.ts', type: 'imports', sourcePath: 'src/services/a.ts', line: 1 }],
+    };
+    const coord = findWriterCoordination('M', ['src/services/a.ts', 'src/services/b.ts'], graph, []);
+    expect(coord?.kind).toBe('dependency-edge');
+    const verdict = classifyWriterGroup(
+      {
+        model: 'M',
+        writers: [
+          { path: 'src/services/a.ts', symbol: 'prisma', line: 1 },
+          { path: 'src/services/b.ts', symbol: 'prisma', line: 2 },
+        ],
+      },
+      { coordination: coord },
+    );
+    expect(verdict.status).toBe('SHARED_BY_DESIGN');
+  });
+
+  it('C4: route-service association requires structural dependency, not keyword overlap', () => {
+    const inv = fixtureInventory();
+    const groups = groupRoutesToCapabilities(inv.routes.mounts);
+    // Keyword overlap alone suggests a candidate (never proof).
+    const memory = groups.find((g) => g.key === '/api/copilot/learner-memory');
+    expect(memory).toBeDefined();
+    const candidates = candidateServiceMatches(memory?.keywords ?? [], inv.components.services.map((s) => s.path));
+    expect(candidates).toContain('src/services/learnerMemoryService.ts');
+    // Without graph edges the group stays unresolved with PRIMARY SERVICE UNRESOLVED.
+    attachStructuralEvidence(groups, inv, GRAPH_FIXTURE);
+    expect(memory?.isConfirmed).toBe(false);
+    const register = renderLogicRegister(buildRegisterContext(inv, GRAPH_FIXTURE));
+    expect(register).toContain('UNRESOLVED — no structural dependency');
+  });
+
+  it('C4: structural edges prove route-service-data linkage', () => {
+    const inv = fixtureInventory();
+    const graph = {
+      unresolvedImports: [],
+      edges: [
+        { from: 'file:src/routes/memory.ts', to: 'file:src/services/learnerMemoryService.ts', type: 'imports', sourcePath: 'src/routes/memory.ts', line: 1 },
+        { from: 'file:src/services/learnerMemoryService.ts', to: 'file:src/services/learnerMemoryRepository.ts', type: 'imports', sourcePath: 'src/services/learnerMemoryService.ts', line: 2 },
+      ],
+    };
+    const down = resolveStructuralDownstream(['src/routes/memory.ts'], graph);
+    expect(down.services).toContain('src/services/learnerMemoryService.ts');
+    const groups = groupRoutesToCapabilities(inv.routes.mounts);
+    attachStructuralEvidence(groups, inv, graph);
+    // Fixture importOrigin is src/routes/memory.ts so the memory group confirms.
+    const memory = groups.find((g) => g.key === '/api/copilot/learner-memory');
+    expect(memory?.structuralServices).toContain('src/services/learnerMemoryService.ts');
+    expect(memory?.isConfirmed).toBe(true);
+  });
+
+  it('C5: URL prefix does not establish role authorization', () => {
+    const inv = fixtureInventory();
+    const ctx = buildRegisterContext(inv, GRAPH_FIXTURE);
+    const adminish = ctx.capabilities.find((c) => c.key.includes('/api/health'));
+    expect(adminish).toBeDefined();
+    const authz = resolveAuthorization(adminish!);
+    expect(authz.authorization).toContain('UNRESOLVED');
+    expect(authz.authorization).not.toMatch(/prefix scoping/i);
+    const register = renderLogicRegister(ctx);
+    expect(register).not.toMatch(/ROLE AUTHORIZATION = route-prefix/i);
+    expect(register).not.toContain('route-prefix scoping');
+  });
+
+  it('C7: L4 cannot be obtained by path/name matching only', () => {
+    const inv = fixtureInventory();
+    const ctx = buildRegisterContext(inv, GRAPH_FIXTURE);
+    for (const c of ctx.capabilities) {
+      // No fixture group has source inspection + structural proof together.
+      expect(completenessFor(c, inv)).not.toBe('L4');
+    }
+  });
+
+  it('C7: source-confirmed coherent capability can obtain L4', () => {
+    const insp = inspectionFor('/api/copilot/learner-memory');
+    expect(insp).not.toBeNull();
+    expect(inspectionCoversFullBehavior(insp!)).toBe(true);
+    const inv = fixtureInventory();
+    const graph = {
+      unresolvedImports: [],
+      edges: [
+        { from: 'file:src/routes/memory.ts', to: 'file:src/services/learnerMemoryService.ts', type: 'imports', sourcePath: 'src/routes/memory.ts', line: 1 },
+      ],
+    };
+    const ctx = buildRegisterContext(inv, graph);
+    const memory = ctx.capabilities.find((g) => g.key === '/api/copilot/learner-memory');
+    expect(memory?.isConfirmed).toBe(true);
+    expect(completenessFor(memory!, inv)).toBe('L4');
+  });
+
+  it('C6: unresolved route groups remain in Unresolved Logic', () => {
+    const inv = fixtureInventory();
+    const ctx = buildRegisterContext(inv, GRAPH_FIXTURE);
+    const register = renderLogicRegister(ctx);
+    expect(register).toContain('## Unresolved Logic');
+    expect(register).toContain('Unresolved route-group candidates');
+    const unresolved = ctx.capabilities.filter((c) => !c.isConfirmed);
+    expect(unresolved.length).toBeGreaterThan(0);
+    for (const c of unresolved) {
+      expect(register).toContain(c.logicId);
+    }
+  });
+
+  it('C10-C12: synthetic accounting stays intact (models, writers, route modules)', () => {
+    const inv = fixtureInventory();
+    const ctx = buildRegisterContext(inv, GRAPH_FIXTURE);
+    expect(ctx.coverage.modelsAccounted).toBe(ctx.coverage.modelsTotal);
+    expect(ctx.coverage.writerGroupsAccounted).toBe(inv.prisma.modelWriterGroups.length);
+    expect(ctx.coverage.routeModulesRepresented).toBe(ctx.coverage.routeModulesTotal);
+  });
+
+  it('C13-C14: deterministic IDs and truthfulness labels hold', () => {
+    expect(buildLogicId('Memory', '/api/copilot/learner-memory')).toBe('LOGIC-memory-api-copilot-learner-memory');
+    const ctx = buildRegisterContext(fixtureInventory(), GRAPH_FIXTURE);
+    const matrix = renderOwnershipMatrix(ctx);
+    const register = renderLogicRegister(ctx);
+    expect(matrix).toContain('EVIDENCE KIND');
+    expect(register).toContain('EVIDENCE KIND');
+    expect(register).toContain('CANDIDATE_SIGNAL');
   });
 });
