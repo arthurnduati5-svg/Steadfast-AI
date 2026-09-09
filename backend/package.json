@@ -9,7 +9,8 @@
     "test": "cd .. && npx vitest run --reporter=verbose",
     "seed": "ts-node prisma/seed.ts",
     "engineering:scan": "tsx tools/engineering/r8-engineering-scan.ts --repo-root ..",
-    "engineering:register": "tsx tools/engineering/r8-b-engineering-register.ts --repo-root .."
+    "engineering:register": "tsx tools/engineering/r8-b-engineering-register.ts --repo-root ..",
+    "engineering:algorithms": "tsx tools/engineering/r8-c-algorithm-register.ts --repo-root .."
   },
   "keywords": [],
   "author": "",
