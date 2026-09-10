@@ -39,6 +39,8 @@ function createApp(
 
 const VERIFIED_STUDENT = { id: 'learner-1', role: 'student', schoolId: 'school-1' };
 const VERIFIED_TEACHER = { id: 'teacher-1', role: 'teacher', schoolId: 'school-1' };
+const VERIFIED_SCHOOL_ADMIN = { id: 'admin-1', role: 'school_admin', schoolId: 'school-1' };
+const VERIFIED_INTERNAL_OPERATOR = { id: 'operator-1', role: 'internal_operator', schoolId: 'school-1' };
 
 function validCandidateBody(learnerId: string) {
   return {
@@ -115,16 +117,80 @@ describe('Learning Evidence Routes', () => {
     expect(Array.isArray(res.body.data)).toBe(true);
   });
 
-  it('GET /internal/streams/:id/integrity returns 200', async () => {
-    const res = await fetchJson(app, 'GET', '/api/copilot/evidence/internal/streams/learner-x/integrity');
+  it('GET /internal/streams/:id/integrity returns 200 for verified school_admin', async () => {
+    const adminApp = createApp(repo, VERIFIED_SCHOOL_ADMIN);
+    const res = await fetchJson(adminApp, 'GET', '/api/copilot/evidence/internal/streams/learner-x/integrity');
     expect(res.status).toBe(200);
     expect(res.body.ok).toBe(true);
   });
 
-  it('POST /internal/seeds returns 201', async () => {
-    const res = await fetchJson(app, 'POST', '/api/copilot/evidence/internal/seeds', { learnerId: 'seed-route' });
+  it('POST /internal/seeds returns 201 for verified school_admin', async () => {
+    const adminApp = createApp(repo, VERIFIED_SCHOOL_ADMIN);
+    const res = await fetchJson(adminApp, 'POST', '/api/copilot/evidence/internal/seeds', { learnerId: 'seed-route' });
     expect(res.status).toBe(201);
     expect(res.body.ok).toBe(true);
+  });
+
+  // --- R8-SEC-01 continuation proofs ---
+
+  it('P1: incomplete verified actor context fails closed (missing role)', async () => {
+    const incompleteApp = createApp(repo, { id: 'learner-1', role: '', schoolId: 'school-1' });
+    const res = await fetchJson(incompleteApp, 'POST', '/api/copilot/evidence/candidates', validCandidateBody('learner-1'));
+    expect(res.status).toBe(400);
+    expect(res.body.ok).toBe(false);
+    expect(res.body.error.code).toBe('EVIDENCE_SCHOOL_CONTEXT_REQUIRED');
+    // No domain mutation occurred.
+    const events = await repo.getEventsForLearner('school-1', 'learner-1');
+    expect(events).toHaveLength(0);
+  });
+
+  it('P2: verified student is denied all internal administrative endpoints', async () => {
+    const rebuild = await fetchJson(app, 'POST', '/api/copilot/evidence/internal/projections/rebuild', { learnerId: 'learner-1' });
+    expect(rebuild.status).toBe(403);
+    expect(rebuild.body.error.code).toBe('EVIDENCE_ROLE_FORBIDDEN');
+
+    const integrity = await fetchJson(app, 'GET', '/api/copilot/evidence/internal/streams/learner-1/integrity');
+    expect(integrity.status).toBe(403);
+    expect(integrity.body.error.code).toBe('EVIDENCE_ROLE_FORBIDDEN');
+
+    const seeds = await fetchJson(app, 'POST', '/api/copilot/evidence/internal/seeds', { learnerId: 'learner-1' });
+    expect(seeds.status).toBe(403);
+    expect(seeds.body.error.code).toBe('EVIDENCE_ROLE_FORBIDDEN');
+  });
+
+  it('P2b: verified teacher is denied internal administrative endpoints', async () => {
+    const teacherApp = createApp(repo, VERIFIED_TEACHER);
+    const rebuild = await fetchJson(teacherApp, 'POST', '/api/copilot/evidence/internal/projections/rebuild', { learnerId: 'learner-1' });
+    expect(rebuild.status).toBe(403);
+    expect(rebuild.body.error.code).toBe('EVIDENCE_ROLE_FORBIDDEN');
+
+    const integrity = await fetchJson(teacherApp, 'GET', '/api/copilot/evidence/internal/streams/learner-1/integrity');
+    expect(integrity.status).toBe(403);
+
+    const seeds = await fetchJson(teacherApp, 'POST', '/api/copilot/evidence/internal/seeds', { learnerId: 'learner-1' });
+    expect(seeds.status).toBe(403);
+  });
+
+  it('P3: verified school_admin succeeds on all internal endpoints', async () => {
+    const adminApp = createApp(repo, VERIFIED_SCHOOL_ADMIN);
+    const rebuild = await fetchJson(adminApp, 'POST', '/api/copilot/evidence/internal/projections/rebuild', { learnerId: 'learner-1' });
+    expect(rebuild.status).toBe(200);
+    expect(rebuild.body.ok).toBe(true);
+
+    const integrity = await fetchJson(adminApp, 'GET', '/api/copilot/evidence/internal/streams/learner-1/integrity');
+    expect(integrity.status).toBe(200);
+    expect(integrity.body.ok).toBe(true);
+
+    const seeds = await fetchJson(adminApp, 'POST', '/api/copilot/evidence/internal/seeds', { learnerId: 'learner-1' });
+    expect(seeds.status).toBe(201);
+    expect(seeds.body.ok).toBe(true);
+  });
+
+  it('P3b: verified internal_operator is allowed on internal endpoints', async () => {
+    const opApp = createApp(repo, VERIFIED_INTERNAL_OPERATOR);
+    const integrity = await fetchJson(opApp, 'GET', '/api/copilot/evidence/internal/streams/learner-1/integrity');
+    expect(integrity.status).toBe(200);
+    expect(integrity.body.ok).toBe(true);
   });
 
   // --- R8-SEC-01 regression proofs ---

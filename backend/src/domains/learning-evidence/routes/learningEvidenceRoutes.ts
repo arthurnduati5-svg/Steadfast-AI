@@ -22,6 +22,38 @@ function getSchoolContext(req: Request): { schoolId: string; actorId: string; ac
   return { schoolId, actorId, actorRole };
 }
 
+// Route-local fail-closed guard: requires complete verified identity
+// (schoolId, actorId, actorRole) from server-side context only. Returns null
+// when any element is absent; callers reject before any domain/service work.
+function requireVerifiedEvidenceActor(req: Request): { schoolId: string; actorId: string; actorRole: string } | null {
+  const ctx = getSchoolContext(req);
+  if (!ctx.schoolId || !ctx.actorId || !ctx.actorRole) {
+    return null;
+  }
+  return ctx;
+}
+
+// Route-surface access policy for /internal/* administrative endpoints.
+// Privileged roles only; the decision is made before any internal service runs.
+const INTERNAL_ALLOWED_ROLES: readonly string[] = ['school_admin', 'internal_operator'];
+
+type VerifiedEvidenceActor = { schoolId: string; actorId: string; actorRole: string };
+
+type InternalActorResolution =
+  | { ok: true; ctx: VerifiedEvidenceActor }
+  | { ok: false; code: 'EVIDENCE_SCHOOL_CONTEXT_REQUIRED' | 'EVIDENCE_ROLE_FORBIDDEN' };
+
+function resolveInternalActor(req: Request): InternalActorResolution {
+  const ctx = requireVerifiedEvidenceActor(req);
+  if (!ctx) {
+    return { ok: false, code: 'EVIDENCE_SCHOOL_CONTEXT_REQUIRED' };
+  }
+  if (!INTERNAL_ALLOWED_ROLES.includes(ctx.actorRole)) {
+    return { ok: false, code: 'EVIDENCE_ROLE_FORBIDDEN' };
+  }
+  return { ok: true, ctx };
+}
+
 function makeActorContext(req: Request, learnerId?: string): EvidenceActorContext {
   const ctx = getSchoolContext(req);
   return {
@@ -55,9 +87,9 @@ export function createLearningEvidenceRouter(
   // POST /candidates
   router.post('/candidates', async (req: Request, res: Response) => {
     try {
-      const schoolCtx = getSchoolContext(req);
-      if (!schoolCtx.schoolId) {
-        return errorEnvelope(res, 400, 'EVIDENCE_SCHOOL_CONTEXT_REQUIRED', 'Verified school context required', req.headers['x-request-id'] as string || '', req.headers['x-correlation-id'] as string || '');
+      const schoolCtx = requireVerifiedEvidenceActor(req);
+      if (!schoolCtx) {
+        return errorEnvelope(res, 400, 'EVIDENCE_SCHOOL_CONTEXT_REQUIRED', 'Verified school and actor context required', req.headers['x-request-id'] as string || '', req.headers['x-correlation-id'] as string || '');
       }
 
       const { learnerId, sourceLineage, safePayload, idempotencyKey } = req.body;
@@ -95,9 +127,9 @@ export function createLearningEvidenceRouter(
 
   // POST /candidates/:candidateId/validate
   router.post('/candidates/:candidateId/validate', async (req: Request, res: Response) => {
-    const schoolCtx = getSchoolContext(req);
-    if (!schoolCtx.schoolId) {
-      return errorEnvelope(res, 400, 'EVIDENCE_SCHOOL_CONTEXT_REQUIRED', 'School context required', req.headers['x-request-id'] as string || '', req.headers['x-correlation-id'] as string || '');
+    const schoolCtx = requireVerifiedEvidenceActor(req);
+    if (!schoolCtx) {
+      return errorEnvelope(res, 400, 'EVIDENCE_SCHOOL_CONTEXT_REQUIRED', 'Verified school and actor context required', req.headers['x-request-id'] as string || '', req.headers['x-correlation-id'] as string || '');
     }
 
     const { expectedStreamSequence, idempotencyKey } = req.body;
@@ -125,9 +157,9 @@ export function createLearningEvidenceRouter(
 
   // POST /candidates/:candidateId/review-required
   router.post('/candidates/:candidateId/review-required', async (req: Request, res: Response) => {
-    const schoolCtx = getSchoolContext(req);
-    if (!schoolCtx.schoolId) {
-      return errorEnvelope(res, 400, 'EVIDENCE_SCHOOL_CONTEXT_REQUIRED', 'School context required', req.headers['x-request-id'] as string || '', req.headers['x-correlation-id'] as string || '');
+    const schoolCtx = requireVerifiedEvidenceActor(req);
+    if (!schoolCtx) {
+      return errorEnvelope(res, 400, 'EVIDENCE_SCHOOL_CONTEXT_REQUIRED', 'Verified school and actor context required', req.headers['x-request-id'] as string || '', req.headers['x-correlation-id'] as string || '');
     }
     const { expectedStreamSequence, idempotencyKey } = req.body;
     const actor = makeActorContext(req);
@@ -153,9 +185,9 @@ export function createLearningEvidenceRouter(
 
   // POST /candidates/:candidateId/usable
   router.post('/candidates/:candidateId/usable', async (req: Request, res: Response) => {
-    const schoolCtx = getSchoolContext(req);
-    if (!schoolCtx.schoolId) {
-      return errorEnvelope(res, 400, 'EVIDENCE_SCHOOL_CONTEXT_REQUIRED', 'School context required', req.headers['x-request-id'] as string || '', req.headers['x-correlation-id'] as string || '');
+    const schoolCtx = requireVerifiedEvidenceActor(req);
+    if (!schoolCtx) {
+      return errorEnvelope(res, 400, 'EVIDENCE_SCHOOL_CONTEXT_REQUIRED', 'Verified school and actor context required', req.headers['x-request-id'] as string || '', req.headers['x-correlation-id'] as string || '');
     }
     const { expectedStreamSequence, idempotencyKey } = req.body;
     const actor = makeActorContext(req);
@@ -181,9 +213,9 @@ export function createLearningEvidenceRouter(
 
   // POST /candidates/:candidateId/commit
   router.post('/candidates/:candidateId/commit', async (req: Request, res: Response) => {
-    const schoolCtx = getSchoolContext(req);
-    if (!schoolCtx.schoolId) {
-      return errorEnvelope(res, 400, 'EVIDENCE_SCHOOL_CONTEXT_REQUIRED', 'School context required', req.headers['x-request-id'] as string || '', req.headers['x-correlation-id'] as string || '');
+    const schoolCtx = requireVerifiedEvidenceActor(req);
+    if (!schoolCtx) {
+      return errorEnvelope(res, 400, 'EVIDENCE_SCHOOL_CONTEXT_REQUIRED', 'Verified school and actor context required', req.headers['x-request-id'] as string || '', req.headers['x-correlation-id'] as string || '');
     }
     const { expectedStreamSequence, idempotencyKey } = req.body;
     const actor = makeActorContext(req);
@@ -209,9 +241,9 @@ export function createLearningEvidenceRouter(
 
   // POST /evidence/:evidenceId/supersede
   router.post('/evidence/:evidenceId/supersede', async (req: Request, res: Response) => {
-    const schoolCtx = getSchoolContext(req);
-    if (!schoolCtx.schoolId) {
-      return errorEnvelope(res, 400, 'EVIDENCE_SCHOOL_CONTEXT_REQUIRED', 'School context required', req.headers['x-request-id'] as string || '', req.headers['x-correlation-id'] as string || '');
+    const schoolCtx = requireVerifiedEvidenceActor(req);
+    if (!schoolCtx) {
+      return errorEnvelope(res, 400, 'EVIDENCE_SCHOOL_CONTEXT_REQUIRED', 'Verified school and actor context required', req.headers['x-request-id'] as string || '', req.headers['x-correlation-id'] as string || '');
     }
     const { expectedStreamSequence, idempotencyKey, replacementEvidenceCandidateId } = req.body;
     const actor = makeActorContext(req);
@@ -238,9 +270,9 @@ export function createLearningEvidenceRouter(
 
   // POST /evidence/:evidenceId/retain
   router.post('/evidence/:evidenceId/retain', async (req: Request, res: Response) => {
-    const schoolCtx = getSchoolContext(req);
-    if (!schoolCtx.schoolId) {
-      return errorEnvelope(res, 400, 'EVIDENCE_SCHOOL_CONTEXT_REQUIRED', 'School context required', req.headers['x-request-id'] as string || '', req.headers['x-correlation-id'] as string || '');
+    const schoolCtx = requireVerifiedEvidenceActor(req);
+    if (!schoolCtx) {
+      return errorEnvelope(res, 400, 'EVIDENCE_SCHOOL_CONTEXT_REQUIRED', 'Verified school and actor context required', req.headers['x-request-id'] as string || '', req.headers['x-correlation-id'] as string || '');
     }
     const { expectedStreamSequence, idempotencyKey, policyReason } = req.body;
     const actor = makeActorContext(req);
@@ -267,9 +299,9 @@ export function createLearningEvidenceRouter(
 
   // GET /learners/:learnerId/evidence
   router.get('/learners/:learnerId/evidence', async (req: Request, res: Response) => {
-    const schoolCtx = getSchoolContext(req);
-    if (!schoolCtx.schoolId) {
-      return errorEnvelope(res, 400, 'EVIDENCE_SCHOOL_CONTEXT_REQUIRED', 'School context required', req.headers['x-request-id'] as string || '', req.headers['x-correlation-id'] as string || '');
+    const schoolCtx = requireVerifiedEvidenceActor(req);
+    if (!schoolCtx) {
+      return errorEnvelope(res, 400, 'EVIDENCE_SCHOOL_CONTEXT_REQUIRED', 'Verified school and actor context required', req.headers['x-request-id'] as string || '', req.headers['x-correlation-id'] as string || '');
     }
     if (!['student', 'teacher', 'school_admin', 'internal_operator'].includes(schoolCtx.actorRole)) {
       return errorEnvelope(res, 403, 'EVIDENCE_ROLE_FORBIDDEN', 'Role not authorized to view evidence', req.headers['x-request-id'] as string || '', req.headers['x-correlation-id'] as string || '');
@@ -289,9 +321,9 @@ export function createLearningEvidenceRouter(
 
   // GET /learners/:learnerId/evidence/:evidenceId
   router.get('/learners/:learnerId/evidence/:evidenceId', async (req: Request, res: Response) => {
-    const schoolCtx = getSchoolContext(req);
-    if (!schoolCtx.schoolId) {
-      return errorEnvelope(res, 400, 'EVIDENCE_SCHOOL_CONTEXT_REQUIRED', 'School context required', req.headers['x-request-id'] as string || '', req.headers['x-correlation-id'] as string || '');
+    const schoolCtx = requireVerifiedEvidenceActor(req);
+    if (!schoolCtx) {
+      return errorEnvelope(res, 400, 'EVIDENCE_SCHOOL_CONTEXT_REQUIRED', 'Verified school and actor context required', req.headers['x-request-id'] as string || '', req.headers['x-correlation-id'] as string || '');
     }
     if (!['student', 'teacher', 'school_admin', 'internal_operator'].includes(schoolCtx.actorRole)) {
       return errorEnvelope(res, 403, 'EVIDENCE_ROLE_FORBIDDEN', 'Role not authorized to view evidence', req.headers['x-request-id'] as string || '', req.headers['x-correlation-id'] as string || '');
@@ -312,24 +344,27 @@ export function createLearningEvidenceRouter(
 
   // POST /internal/projections/rebuild
   router.post('/internal/projections/rebuild', async (req: Request, res: Response) => {
-    const schoolCtx = getSchoolContext(req);
-    if (!schoolCtx.schoolId) {
-      return errorEnvelope(res, 400, 'EVIDENCE_SCHOOL_CONTEXT_REQUIRED', 'School context required', req.headers['x-request-id'] as string || '', req.headers['x-correlation-id'] as string || '');
+    const internal = resolveInternalActor(req);
+    if (!internal.ok) {
+      const status = internal.code === 'EVIDENCE_ROLE_FORBIDDEN' ? 403 : 400;
+      return errorEnvelope(res, status, internal.code, internal.code === 'EVIDENCE_ROLE_FORBIDDEN' ? 'Role not authorized for internal evidence operations' : 'Verified school and actor context required', req.headers['x-request-id'] as string || '', req.headers['x-correlation-id'] as string || '');
     }
     const { learnerId } = req.body;
     if (!learnerId) {
       return errorEnvelope(res, 400, 'VALIDATION_ERROR', 'learnerId required', req.headers['x-request-id'] as string || '', req.headers['x-correlation-id'] as string || '');
     }
-    const result = await projectionService.rebuildProjections(schoolCtx.schoolId, learnerId);
+    const result = await projectionService.rebuildProjections(internal.ctx.schoolId, learnerId);
     return safeEnvelope(res, 200, result);
   });
 
   // GET /internal/streams/:learnerId/integrity
   router.get('/internal/streams/:learnerId/integrity', async (req: Request, res: Response) => {
-    const schoolCtx = getSchoolContext(req);
-    if (!schoolCtx.schoolId) {
-      return errorEnvelope(res, 400, 'EVIDENCE_SCHOOL_CONTEXT_REQUIRED', 'School context required', req.headers['x-request-id'] as string || '', req.headers['x-correlation-id'] as string || '');
+    const internal = resolveInternalActor(req);
+    if (!internal.ok) {
+      const status = internal.code === 'EVIDENCE_ROLE_FORBIDDEN' ? 403 : 400;
+      return errorEnvelope(res, status, internal.code, internal.code === 'EVIDENCE_ROLE_FORBIDDEN' ? 'Role not authorized for internal evidence operations' : 'Verified school and actor context required', req.headers['x-request-id'] as string || '', req.headers['x-correlation-id'] as string || '');
     }
+    const schoolCtx = internal.ctx;
     const streamId = `evidence_${schoolCtx.schoolId}_${req.params.learnerId}`;
     const integrity = await eventStoreRepo.verifyStreamIntegrity(schoolCtx.schoolId, streamId);
     return safeEnvelope(res, 200, integrity);
@@ -337,15 +372,16 @@ export function createLearningEvidenceRouter(
 
   // POST /internal/seeds
   router.post('/internal/seeds', async (req: Request, res: Response) => {
-    const schoolCtx = getSchoolContext(req);
-    if (!schoolCtx.schoolId) {
-      return errorEnvelope(res, 400, 'EVIDENCE_SCHOOL_CONTEXT_REQUIRED', 'School context required', req.headers['x-request-id'] as string || '', req.headers['x-correlation-id'] as string || '');
+    const internal = resolveInternalActor(req);
+    if (!internal.ok) {
+      const status = internal.code === 'EVIDENCE_ROLE_FORBIDDEN' ? 403 : 400;
+      return errorEnvelope(res, status, internal.code, internal.code === 'EVIDENCE_ROLE_FORBIDDEN' ? 'Role not authorized for internal evidence operations' : 'Verified school and actor context required', req.headers['x-request-id'] as string || '', req.headers['x-correlation-id'] as string || '');
     }
     const { learnerId } = req.body;
     if (!learnerId) {
       return errorEnvelope(res, 400, 'VALIDATION_ERROR', 'learnerId required', req.headers['x-request-id'] as string || '', req.headers['x-correlation-id'] as string || '');
     }
-    const result = await seedService.seedAll(schoolCtx.schoolId, learnerId);
+    const result = await seedService.seedAll(internal.ctx.schoolId, learnerId);
     return safeEnvelope(res, 201, result);
   });
 
