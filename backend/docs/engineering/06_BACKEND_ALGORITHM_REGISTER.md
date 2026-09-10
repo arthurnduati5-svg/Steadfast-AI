@@ -8,7 +8,7 @@ R8-C evidence-backed register of non-trivial computation inside the Steadfast ba
 - R8-A accepted structural snapshot: files=5398 typescriptFiles=5319 routeModules=134 routeMounts=167 routeEndpoints=3312 prismaModels=432 unresolvedInternalImports=1 cycles=5 findings=9610
 - Accepted R8-B baseline: data families=17 (15 confirmed), Prisma models=432/432, writer groups=154/154, canonical mutation groups=139, route-surface groups=110, confirmed logic capabilities=103, unresolved logic candidates=7, route modules=134/134, completeness L2=7 L3=99 L4=4
 - Inventory git: branch=main head=87df12783eb0283d4b24963879f8a632b315e8cf
-- R8-C generated at: 2026-09-09T07:48:44.039Z
+- R8-C generated at: 2026-09-10T03:00:54.386Z
 - Production source files analyzed: 587
 - Test files scanned for evidence: 3443; benchmark-mention hits repository-wide: 22
 - R8-C scope: classification/understanding only. No production behavior was changed and no finding below carries a final disposition.
@@ -22,7 +22,7 @@ R8-C evidence-backed register of non-trivial computation inside the Steadfast ba
 - Detailed records: only source-verified curated procedures (30). Structural candidates are listed with file/symbol/signal evidence in Unresolved Algorithms, never promoted without inspection.
 - Complexity is theoretical/static only with HIGH/MEDIUM/LOW/UNRESOLVED confidence. Database work is DB_QUERY_BOUND with bounded/unbounded, filter, take/limit, ordering and query counts where visible; query-plan complexity is never inferred from Prisma syntax. Provider work is PROVIDER_BOUND.
 - Fingerprints normalize whitespace/comments (sha256, 16 hex) and are duplication evidence only, never final equivalence.
-- Test evidence: corpus search for symbol/module references; DIRECT requires symbol + expect() in the same file. Benchmark evidence: repository-wide benchmark-mention scan. Measured performance is uniformly NOT MEASURED IN R8-C.
+- Test evidence (grounded R8-C repair): test files are parsed with the TypeScript compiler API into real it(...)/test(...) blocks. DIRECT_BEHAVIOR_TEST requires the recorded algorithm symbol (or owning class method via conservative alias tracking: in-block construction, receiver statically imported from the recorded module, or case-folded singleton receiver) to be invoked inside the SAME test callback that asserts on its outcome (result variable, direct expect wrap, throw/reject path, or post-invocation state assertion for methods). INDIRECT_INTEGRATION_TEST requires a higher-level production-path invocation plus a same-block assertion plus structural import-graph reachability from the invoked production module to the algorithm module. CONTRACT_ONLY covers static shape/contract assertions without behavioral invocation. Filenames, stems, imports alone, comments, type names, and cross-block expects never prove evidence; uncertain cases downgrade (false negatives preferred). Benchmark evidence is grounded likewise: BENCHMARK_EVIDENCED requires actual target invocation inside a bench/benchmark harness or timing-measured repeated invocation; PERFORMANCE_TEST_ONLY covers real perf/load tests without a measured benchmark. Measured performance is uniformly NOT MEASURED IN R8-C.
 - Prior art was NOT researched in R8-C; novelty/superiority claims are prohibited and gated.
 - The Authentication / Authorization capability is prose-only in R8-B (section-table count 1, no LOGIC header); it is carried as PROSE-authentication-authorization-capability with identical coverage semantics and never invents a LOGIC ID.
 
@@ -183,34 +183,34 @@ Algorithm ID | Domain | Purpose | Category | Source | Complexity | Bound | Risk 
 --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | ---
 ALG-artifacts-artifacts-content-fingerprint | artifacts | Derive a stable short identity for artifact content used by dedupe and replay detection. | HASH_OR_FINGERPRINT | `src/services/artifactService.ts:130-132` | O(n) in content bytes (library) (MEDIUM) | BOUNDED output; input size bounded by upload/parse limits upstream (UNRESOLVED here) | DATA_INTEGRITY+DUPLICATION_CANDIDATE | INDIRECT_INTEGRATION_TEST | NO_BENCHMARK_EVIDENCE | P1
 ALG-artifacts-artifacts-media-dedupe-key | artifacts | Give each ingested media asset a stable identity so re-ingestion resolves to one row. | DEDUPLICATION | `src/services/mediaAssetService.ts:330-336` | O(n) in parts length (library) (MEDIUM) | BOUNDED output; key space per user | DATA_INTEGRITY+RETRY_IDEMPOTENCY+DATABASE_HOTSPOT_CANDIDATE | INDIRECT_INTEGRATION_TEST | NO_BENCHMARK_EVIDENCE | P1
-ALG-artifacts-artifacts-media-stream-rank-score | artifacts | Score a media asset against learner context so the best study/creative asset can be selected. | SCORE_OR_WEIGHTED_SCORE | `src/media-stream/scoring.ts:65-149` | O(w), w = weak-topic count (small); else O(1) (MEDIUM) | BOUNDED per asset; corpus scan bound lives with caller (UNRESOLVED here) | MAGIC_CONSTANTS+SCALE_SENSITIVE+TIME_SENSITIVE+DUPLICATION_CANDIDATE | INDIRECT_INTEGRATION_TEST | NO_BENCHMARK_EVIDENCE | P1
-ALG-artifacts-artifacts-recency-decay | artifacts | Convert asset age into a decaying relevance bonus. | DECAY_OR_RETENTION | `src/media-stream/scoring.ts:37-42` | O(1) (HIGH) | BOUNDED output [0,22] | TIME_SENSITIVE+MAGIC_CONSTANTS | INDIRECT_INTEGRATION_TEST | NO_BENCHMARK_EVIDENCE | P2
+ALG-artifacts-artifacts-media-stream-rank-score | artifacts | Score a media asset against learner context so the best study/creative asset can be selected. | SCORE_OR_WEIGHTED_SCORE | `src/media-stream/scoring.ts:65-149` | O(w), w = weak-topic count (small); else O(1) (MEDIUM) | BOUNDED per asset; corpus scan bound lives with caller (UNRESOLVED here) | MAGIC_CONSTANTS+SCALE_SENSITIVE+TIME_SENSITIVE+DUPLICATION_CANDIDATE | NO_TEST_EVIDENCE_FOUND | NO_BENCHMARK_EVIDENCE | P1
+ALG-artifacts-artifacts-recency-decay | artifacts | Convert asset age into a decaying relevance bonus. | DECAY_OR_RETENTION | `src/media-stream/scoring.ts:37-42` | O(1) (HIGH) | BOUNDED output [0,22] | TIME_SENSITIVE+MAGIC_CONSTANTS | NO_TEST_EVIDENCE_FOUND | NO_BENCHMARK_EVIDENCE | P2
 ALG-artifacts-artifacts-replay-idempotency | artifacts | Decide whether an incoming re-parse is a same-content replay that must not disturb stored truth. | IDEMPOTENCY | `src/services/artifactService.ts:476-483` | O(n) in incoming content bytes (hash) (MEDIUM) | BOUNDED per call | DATA_INTEGRITY+RETRY_IDEMPOTENCY | DIRECT_BEHAVIOR_TEST | NO_BENCHMARK_EVIDENCE | P0
-ALG-artifacts-artifacts-study-stream-rank-score | artifacts | Extend the base media score with revision-lane signals (due-now, needs-attention, spacing) for study ranking. | RANKING_OR_TOP_K | `src/media-stream/scoring.ts:168-221` | O(n) over bounded revision-id sets + base score (HIGH) | BOUNDED per asset | MAGIC_CONSTANTS+TIME_SENSITIVE+DUPLICATION_CANDIDATE | INDIRECT_INTEGRATION_TEST | NO_BENCHMARK_EVIDENCE | P1
+ALG-artifacts-artifacts-study-stream-rank-score | artifacts | Extend the base media score with revision-lane signals (due-now, needs-attention, spacing) for study ranking. | RANKING_OR_TOP_K | `src/media-stream/scoring.ts:168-221` | O(n) over bounded revision-id sets + base score (HIGH) | BOUNDED per asset | MAGIC_CONSTANTS+TIME_SENSITIVE+DUPLICATION_CANDIDATE | NO_TEST_EVIDENCE_FOUND | NO_BENCHMARK_EVIDENCE | P1
 ALG-artifacts-videoaware-external-video-dedupe | artifacts | Merge YouTube/Vimeo candidate lists into one deduped set keeping the stronger record per video. | DEDUPLICATION | `src/services/externalVideoCandidateService.ts:38-56` | O(n) single pass (HIGH) | BOUNDED per request by provider limits; cache is module-local (MEMORY_HOTSPOT_CANDIDATE for R8-E) | NETWORK_COST+PROVIDER_COST+MEMORY_HOTSPOT_CANDIDATE+MAGIC_CONSTANTS | NO_TEST_EVIDENCE_FOUND | NO_BENCHMARK_EVIDENCE | P1
-ALG-mastery-confidencerecovery-mismatch-rank-dedupe | mastery | Collapse duplicate mismatch detections and order them for recovery follow-up. | RANKING_OR_TOP_K | `src/services/phase3ConfidenceMismatchDetectionService.ts:186-218` | application CPU: O(n log n) sort + O(n) dedupe (HIGH) | BOUNDED in practice; small fixed type vocabulary | ACADEMIC_CORRECTNESS+MAGIC_CONSTANTS | INDIRECT_INTEGRATION_TEST | NO_BENCHMARK_EVIDENCE | P1
+ALG-mastery-confidencerecovery-mismatch-rank-dedupe | mastery | Collapse duplicate mismatch detections and order them for recovery follow-up. | RANKING_OR_TOP_K | `src/services/phase3ConfidenceMismatchDetectionService.ts:186-218` | application CPU: O(n log n) sort + O(n) dedupe (HIGH) | BOUNDED in practice; small fixed type vocabulary | ACADEMIC_CORRECTNESS+MAGIC_CONSTANTS | NO_TEST_EVIDENCE_FOUND | NO_BENCHMARK_EVIDENCE | P1
 ALG-mastery-dailyfeed-feed-rank-dedupe | mastery | Collapse duplicate objective items, derive urgency-aware priorities, and order the learner feed. | RANKING_OR_TOP_K | `src/services/phase3DailyLearningFeedRankingService.ts:14-176` | application CPU: O(n log n) sort + O(n) dedupe; database: none in unit (MEDIUM) | BOUNDED in practice by daily item volume; no explicit cap in unit — POTENTIALLY_UNBOUNDED input noted | TIME_SENSITIVE+SCALE_SENSITIVE+UNBOUNDED_DATA | DIRECT_BEHAVIOR_TEST | NO_BENCHMARK_EVIDENCE | P1
 ALG-mastery-dailyobjective-idempotency-settle | mastery | Guarantee exactly-once settlement of a check session across retries, races and partial failures. | IDEMPOTENCY | `src/services/phase3DailyObjectiveCheckCompletionService.ts:25-115` | O(1) map operations (HIGH) | BOUNDED per session; module Map growth across sessions is a MEMORY_HOTSPOT_CANDIDATE for R8-E | DATA_INTEGRITY+CONCURRENCY_SENSITIVE+RETRY_IDEMPOTENCY+MEMORY_HOTSPOT_CANDIDATE | DIRECT_BEHAVIOR_TEST | NO_BENCHMARK_EVIDENCE | P0
 ALG-mastery-growth-topic-inference-signal-count | mastery | Infer a topic label and next step from bounded recent learning-effect signals plus progress/mistake snapshots. | AGGREGATION_OR_REDUCTION | `src/services/masteryInferenceService.ts:61-129` | O(n), n<=40 events, plus fixed signal-vocabulary Sets (HIGH) | BOUNDED | MASTERY_SENSITIVITY+ACADEMIC_CORRECTNESS+MAGIC_CONSTANTS+DATABASE_HOTSPOT_CANDIDATE | NO_TEST_EVIDENCE_FOUND | NO_BENCHMARK_EVIDENCE | P0
 ALG-mastery-growth-video-effectiveness-score | mastery | Score whether a video actually improves learning (not just gets watched) and gate continued recommendation. | SCORE_OR_WEIGHTED_SCORE | `src/services/videoEffectivenessScoringService.ts:26-52` | O(1) (HIGH) | BOUNDED output [0,1] | ACADEMIC_CORRECTNESS+MAGIC_CONSTANTS | DIRECT_BEHAVIOR_TEST | NO_BENCHMARK_EVIDENCE | P1
 ALG-mastery-practicemastery-evidence-level-ladder | mastery | Map accumulated evidence counts, correctness ratio and confidence into a mastery ladder level. | DETERMINISTIC_RULE_SET | `src/services/mastery/masteryEvidenceAggregationService.ts:13-40` | O(1) (HIGH) | BOUNDED | MASTERY_SENSITIVITY+ACADEMIC_CORRECTNESS+MAGIC_CONSTANTS+DUPLICATION_CANDIDATE | INDIRECT_INTEGRATION_TEST | NO_BENCHMARK_EVIDENCE | P0
-ALG-mastery-practicemastery-next-practice-priority | mastery | Decide what the tutor should do next from misconceptions, recent attempts and review state. | SELECTION_OR_FILTERING | `src/services/nextPracticeService.ts:36-121` | O(n) over bounded windows (n<=10) (HIGH) | BOUNDED | MASTERY_SENSITIVITY+ACADEMIC_CORRECTNESS+RANDOMNESS_SENSITIVE | INDIRECT_INTEGRATION_TEST | NO_BENCHMARK_EVIDENCE | P0
-ALG-mastery-practicemastery-score-compute | mastery | Convert a mastery level plus confidence into a capped 0-100 score. | SCORE_OR_WEIGHTED_SCORE | `src/services/masteryScoringService.ts:101-119` | O(1) (HIGH) | BOUNDED | ACADEMIC_CORRECTNESS+MAGIC_CONSTANTS | INDIRECT_INTEGRATION_TEST | NO_BENCHMARK_EVIDENCE | P1
-ALG-mastery-practicemastery-score-threshold-ladder | mastery | Derive a bounded mastery level from attempt history while detecting regression and blocking one-shot mastery. | DETERMINISTIC_RULE_SET | `src/services/masteryScoringService.ts:20-80` | O(T), T=6 table rows (HIGH) | BOUNDED | MASTERY_SENSITIVITY+ACADEMIC_CORRECTNESS+MAGIC_CONSTANTS+DUPLICATION_CANDIDATE | INDIRECT_INTEGRATION_TEST | NO_BENCHMARK_EVIDENCE | P0
-ALG-mastery-practicemastery-spaced-review-interval | mastery | Compute when a skill must next be reviewed from priority, mastery level, mistakes and independent successes. | SCHEDULING_OR_PRIORITY | `src/services/mastery/spacedReviewPlanner.ts:24-63` | O(1) (HIGH) | BOUNDED (interval clamped [1,90]) | MASTERY_SENSITIVITY+ACADEMIC_CORRECTNESS+TIME_SENSITIVE+MAGIC_CONSTANTS | INDIRECT_INTEGRATION_TEST | NO_BENCHMARK_EVIDENCE | P0
-ALG-operations-canary-state-transition | operations | Admit or block canary lifecycle transitions with role and path guards, recording an auditable transition. | STATE_MACHINE | `src/services/task032CanaryActivationStateMachine.ts:16-66` | O(1) (HIGH) | BOUNDED | AUTHORIZATION_SENSITIVE+DATA_INTEGRITY+SECURITY_SENSITIVE+DUPLICATION_CANDIDATE | INDIRECT_INTEGRATION_TEST | NO_BENCHMARK_EVIDENCE | P0
+ALG-mastery-practicemastery-next-practice-priority | mastery | Decide what the tutor should do next from misconceptions, recent attempts and review state. | SELECTION_OR_FILTERING | `src/services/nextPracticeService.ts:36-121` | O(n) over bounded windows (n<=10) (HIGH) | BOUNDED | MASTERY_SENSITIVITY+ACADEMIC_CORRECTNESS+RANDOMNESS_SENSITIVE | DIRECT_BEHAVIOR_TEST | NO_BENCHMARK_EVIDENCE | P0
+ALG-mastery-practicemastery-score-compute | mastery | Convert a mastery level plus confidence into a capped 0-100 score. | SCORE_OR_WEIGHTED_SCORE | `src/services/masteryScoringService.ts:101-119` | O(1) (HIGH) | BOUNDED | ACADEMIC_CORRECTNESS+MAGIC_CONSTANTS | DIRECT_BEHAVIOR_TEST | NO_BENCHMARK_EVIDENCE | P1
+ALG-mastery-practicemastery-score-threshold-ladder | mastery | Derive a bounded mastery level from attempt history while detecting regression and blocking one-shot mastery. | DETERMINISTIC_RULE_SET | `src/services/masteryScoringService.ts:20-80` | O(T), T=6 table rows (HIGH) | BOUNDED | MASTERY_SENSITIVITY+ACADEMIC_CORRECTNESS+MAGIC_CONSTANTS+DUPLICATION_CANDIDATE | DIRECT_BEHAVIOR_TEST | NO_BENCHMARK_EVIDENCE | P0
+ALG-mastery-practicemastery-spaced-review-interval | mastery | Compute when a skill must next be reviewed from priority, mastery level, mistakes and independent successes. | SCHEDULING_OR_PRIORITY | `src/services/mastery/spacedReviewPlanner.ts:24-63` | O(1) (HIGH) | BOUNDED (interval clamped [1,90]) | MASTERY_SENSITIVITY+ACADEMIC_CORRECTNESS+TIME_SENSITIVE+MAGIC_CONSTANTS | DIRECT_BEHAVIOR_TEST | NO_BENCHMARK_EVIDENCE | P0
+ALG-operations-canary-state-transition | operations | Admit or block canary lifecycle transitions with role and path guards, recording an auditable transition. | STATE_MACHINE | `src/services/task032CanaryActivationStateMachine.ts:16-66` | O(1) (HIGH) | BOUNDED | AUTHORIZATION_SENSITIVE+DATA_INTEGRITY+SECURITY_SENSITIVE+DUPLICATION_CANDIDATE | NO_TEST_EVIDENCE_FOUND | NO_BENCHMARK_EVIDENCE | P0
 ALG-operations-reliability-ai-circuit-breaker | operations | Stop calling failing providers fast and probe recovery without manual intervention. | CIRCUIT_BREAKER | `src/services/aiRuntimeCircuitBreakerService.ts:5-80` | O(1) map operations (HIGH) | BOUNDED key space; counters reset on transitions | RETRY_IDEMPOTENCY+TIME_SENSITIVE+CONCURRENCY_SENSITIVE+MEMORY_HOTSPOT_CANDIDATE | DIRECT_BEHAVIOR_TEST | NO_BENCHMARK_EVIDENCE | P1
 ALG-operations-reliability-ai-rate-limit-window | operations | Enforce per-minute quotas at three scopes before provider calls are admitted. | RATE_LIMIT_OR_QUOTA | `src/services/aiRuntimeRateLimitGuardService.ts:21-107` | O(w) filter scan per scope check, w = events in window (MEDIUM) | POTENTIALLY_UNBOUNDED timestamp arrays under burst (prune only on check) — flagged UNBOUNDED_DATA for R8-E | SCALE_SENSITIVE+MEMORY_HOTSPOT_CANDIDATE+UNBOUNDED_DATA+CONCURRENCY_SENSITIVE+PROVIDER_COST+MAGIC_CONSTANTS | DIRECT_BEHAVIOR_TEST | NO_BENCHMARK_EVIDENCE | P1
 ALG-operations-reliability-ai-retry-backoff-jitter | operations | Decide whether a failed provider call may retry and how long to wait, without retry storms. | RETRY_OR_BACKOFF | `src/services/aiRuntimeRetryPolicyService.ts:8-107` | O(1) (HIGH) | BOUNDED attempts and capped delay | RETRY_IDEMPOTENCY+PROVIDER_COST+RANDOMNESS_SENSITIVE+TIME_SENSITIVE | DIRECT_BEHAVIOR_TEST | NO_BENCHMARK_EVIDENCE | P0
 ALG-operations-shared-pagination-cursor | operations | Clamp client pagination input and describe page position so list endpoints cannot request unbounded pages. | PAGINATION_OR_CURSOR | `src/services/apiPaginationService.ts:15-63` | O(1) (HIGH) | BOUNDED (limit ≤ 100 enforced) | SCALE_SENSITIVE | DIRECT_BEHAVIOR_TEST | NO_BENCHMARK_EVIDENCE | P2
-ALG-questionbank-markinginvocation-batch-mark-sweep | question-bank | Mark all deterministic-mode batch items while isolating failures and tracking batch lifecycle. | BATCHING_OR_CHUNKING | `src/domains/assessment/marking-invocation/services/deterministicMarkingInvocationService.ts:14-56` | O(b) sequential items, b = batch size (MEDIUM) | POTENTIALLY_UNBOUNDED batch size — flagged for R8-E chunking review | ASSESSMENT_INTEGRITY+SCALE_SENSITIVE+UNBOUNDED_DATA+DATABASE_HOTSPOT_CANDIDATE+CPU_HOTSPOT_CANDIDATE | INDIRECT_INTEGRATION_TEST | NO_BENCHMARK_EVIDENCE | P1
-ALG-safety-task020-auth-jwt-claim-extract | safety | Prove caller identity from JWT and derive a normalized user/role/school triple without trusting URL shape. | DETERMINISTIC_RULE_SET | `src/middleware/schoolAuthMiddleware.ts:18-77` | O(1) (HIGH) | BOUNDED | SECURITY_SENSITIVE+AUTHORIZATION_SENSITIVE+PRIVACY_SENSITIVE | DIRECT_BEHAVIOR_TEST | NO_BENCHMARK_EVIDENCE | P0
+ALG-questionbank-markinginvocation-batch-mark-sweep | question-bank | Mark all deterministic-mode batch items while isolating failures and tracking batch lifecycle. | BATCHING_OR_CHUNKING | `src/domains/assessment/marking-invocation/services/deterministicMarkingInvocationService.ts:14-56` | O(b) sequential items, b = batch size (MEDIUM) | POTENTIALLY_UNBOUNDED batch size — flagged for R8-E chunking review | ASSESSMENT_INTEGRITY+SCALE_SENSITIVE+UNBOUNDED_DATA+DATABASE_HOTSPOT_CANDIDATE+CPU_HOTSPOT_CANDIDATE | DIRECT_BEHAVIOR_TEST | NO_BENCHMARK_EVIDENCE | P1
+ALG-safety-task020-auth-jwt-claim-extract | safety | Prove caller identity from JWT and derive a normalized user/role/school triple without trusting URL shape. | DETERMINISTIC_RULE_SET | `src/middleware/schoolAuthMiddleware.ts:18-77` | O(1) (HIGH) | BOUNDED | SECURITY_SENSITIVE+AUTHORIZATION_SENSITIVE+PRIVACY_SENSITIVE | INDIRECT_INTEGRATION_TEST | NO_BENCHMARK_EVIDENCE | P0
 ALG-safety-tutorpolicy-generation-policy-gate | safety | Decide whether the tutor may generate, in which safe mode, before any provider call. | DETERMINISTIC_RULE_SET | `src/services/aiGateway/generationPolicyGate.ts:10-70` | O(1) (HIGH) | BOUNDED | SECURITY_SENSITIVE+PRIVACY_SENSITIVE+ACADEMIC_CORRECTNESS+ASSESSMENT_INTEGRITY+DUPLICATION_CANDIDATE | DIRECT_BEHAVIOR_TEST | NO_BENCHMARK_EVIDENCE | P0
 ALG-school-learnerrecommendation-priority-policy | school | Fix the display order and explanation contract for every learner recommendation type. | SCHEDULING_OR_PRIORITY | `src/services/learnerTransparencyContracts.ts:172-183` | O(1) table lookup (HIGH) | BOUNDED (10-type vocabulary) | ACADEMIC_CORRECTNESS+MAGIC_CONSTANTS | INDIRECT_INTEGRATION_TEST | NO_BENCHMARK_EVIDENCE | P1
 ALG-school-schoolintegration-roster-dryrun-conflict-scan | school | Preview a roster payload for duplicate ids and school-scope mismatches before any write. | SELECTION_OR_FILTERING | `src/services/rosterSyncDryRunService.ts:9-70` | O(n) three passes (HIGH) | POTENTIALLY_UNBOUNDED input (whole-school payloads) — flagged for R8-E | DATA_INTEGRITY+PRIVACY_SENSITIVE+UNBOUNDED_DATA+SCALE_SENSITIVE+MEMORY_HOTSPOT_CANDIDATE | DIRECT_BEHAVIOR_TEST | NO_BENCHMARK_EVIDENCE | P0
 ALG-school-schoolintegration-roster-reconcile | school | Turn an external roster diff into safe per-entry mapping actions without losing learning history. | RECONCILIATION | `src/services/task021RosterReconciliationService.ts:19-90` | O(n) single pass over entries (HIGH) | POTENTIALLY_UNBOUNDED input (school-size rosters) — flagged for R8-E batching review | DATA_INTEGRITY+PRIVACY_SENSITIVE+UNBOUNDED_DATA+SCALE_SENSITIVE | INDIRECT_INTEGRATION_TEST | NO_BENCHMARK_EVIDENCE | P0
-ALG-voice-airoutes-express-rate-limit | voice | Cap per-user AI, speech-to-text, text-to-speech and general request rates to bound provider cost and abuse. | RATE_LIMIT_OR_QUOTA | `src/routes/ai/ai-middleware.ts:24-46` | library-dependent / UNRESOLVED (LOW) | window-bounded counters; redis keys expire (60s) | PROVIDER_COST+NETWORK_COST+SCALE_SENSITIVE+MAGIC_CONSTANTS+DUPLICATION_CANDIDATE+SECURITY_SENSITIVE | DIRECT_BEHAVIOR_TEST | NO_BENCHMARK_EVIDENCE | P1
-ALG-voice-voice-ledger-billing-quota | voice | Enforce per-student voice time quotas with auditable double-entry style ledger updates. | RATE_LIMIT_OR_QUOTA | `src/services/voiceLedgerService.ts:105-213` | application CPU: O(g), g = active grants (FIFO loop) (MEDIUM) | BOUNDED per student by grant volume; ledger tail fixed at 10 | DATA_INTEGRITY+CONCURRENCY_SENSITIVE+DATABASE_HOTSPOT_CANDIDATE+AUTHORIZATION_SENSITIVE | INDIRECT_INTEGRATION_TEST | NO_BENCHMARK_EVIDENCE | P0
+ALG-voice-airoutes-express-rate-limit | voice | Cap per-user AI, speech-to-text, text-to-speech and general request rates to bound provider cost and abuse. | RATE_LIMIT_OR_QUOTA | `src/routes/ai/ai-middleware.ts:24-46` | library-dependent / UNRESOLVED (LOW) | window-bounded counters; redis keys expire (60s) | PROVIDER_COST+NETWORK_COST+SCALE_SENSITIVE+MAGIC_CONSTANTS+DUPLICATION_CANDIDATE+SECURITY_SENSITIVE | INDIRECT_INTEGRATION_TEST | NO_BENCHMARK_EVIDENCE | P1
+ALG-voice-voice-ledger-billing-quota | voice | Enforce per-student voice time quotas with auditable double-entry style ledger updates. | RATE_LIMIT_OR_QUOTA | `src/services/voiceLedgerService.ts:105-213` | application CPU: O(g), g = active grants (FIFO loop) (MEDIUM) | BOUNDED per student by grant volume; ledger tail fixed at 10 | DATA_INTEGRITY+CONCURRENCY_SENSITIVE+DATABASE_HOTSPOT_CANDIDATE+AUTHORIZATION_SENSITIVE | NO_TEST_EVIDENCE_FOUND | NO_BENCHMARK_EVIDENCE | P0
 
 ## Authentication / Authorization
 
@@ -381,7 +381,7 @@ NOT RESEARCHED IN R8-C
 
 TEST EVIDENCE
 
-INDIRECT_INTEGRATION_TEST: `src/tests/phase3-confidence-mismatch-detection-service.test.ts`, `src/tests/phase3-confidence-recovery-smoke.test.ts`
+NO_TEST_EVIDENCE_FOUND
 
 BENCHMARK EVIDENCE
 
@@ -393,7 +393,7 @@ NOT MEASURED IN R8-C
 
 MATURITY EVIDENCE
 
-SOURCE_CONFIRMED, TEST_EVIDENCED
+SOURCE_CONFIRMED
 
 R8-E BENCHMARK PRIORITY
 
@@ -546,7 +546,7 @@ NOT RESEARCHED IN R8-C
 
 TEST EVIDENCE
 
-DIRECT_BEHAVIOR_TEST: `src/tests/phase3-daily-learning-feed-ranking-service.test.ts`
+DIRECT_BEHAVIOR_TEST: `src/tests/phase3-daily-learning-feed-ranking-service.test.ts::"teacher_support is urgent"::L28::invokes deriveFeedItemPriority::assert L29`, `src/tests/phase3-daily-learning-feed-ranking-service.test.ts::"source_required is urgent when due today"::L32::invokes deriveFeedItemPriority::assert L34`, `src/tests/phase3-daily-learning-feed-ranking-service.test.ts::"source_required is high when not due"::L37::invokes deriveFeedItemPriority::assert L39`, `src/tests/phase3-daily-learning-feed-ranking-service.test.ts::"objective_rescue is high"::L42::invokes deriveFeedItemPriority::assert L43`, `src/tests/phase3-daily-learning-feed-ranking-service.test.ts::"continue_check is high"::L46::invokes deriveFeedItemPriority::assert L47`
 
 BENCHMARK EVIDENCE
 
@@ -709,7 +709,7 @@ NOT RESEARCHED IN R8-C
 
 TEST EVIDENCE
 
-DIRECT_BEHAVIOR_TEST: `src/tests/r4-daily-objectives-canonical-integration.test.ts`, `src/tests/task-021-durable-school-integration-idempotency.test.ts`, `src/tests/task-021-final-restart-read-behavior.contract.test.ts`, `src/tests/task-021-no-critical-in-memory-production-store.contract.test.ts`
+DIRECT_BEHAVIOR_TEST: `src/tests/task-021-final-restart-read-behavior.contract.test.ts::"idempotency store can be cleared and re-created"::L87::invokes getIdempotencyRecord::assert L97`
 
 BENCHMARK EVIDENCE
 
@@ -1037,7 +1037,7 @@ NOT RESEARCHED IN R8-C
 
 TEST EVIDENCE
 
-DIRECT_BEHAVIOR_TEST: `src/domains/assessment/recovery-progress/tests/package-18-no-live-action-safety.test.ts`, `src/domains/assessment/result-follow-up/tests/package-16-no-live-action-safety.test.ts`, `src/domains/assessment/result-report-card-access/tests/package-15-no-live-portal-safety.test.ts`, `src/tests/video-effectiveness-scoring-service.test.ts`
+DIRECT_BEHAVIOR_TEST: `src/tests/video-effectiveness-scoring-service.test.ts::"returns low score for empty events"::L24::invokes scoreVideoEffectiveness::assert L26`, `src/tests/video-effectiveness-scoring-service.test.ts::"does not count passive watching as effectiveness"::L30::invokes scoreVideoEffectiveness::assert L40`, `src/tests/video-effectiveness-scoring-service.test.ts::"scores higher with improvement after practice"::L43::invokes scoreVideoEffectiveness::assert L53`, `src/tests/video-effectiveness-scoring-service.test.ts::"flags low improvement rate with warning"::L57::invokes scoreVideoEffectiveness::assert L67`, `src/tests/video-effectiveness-scoring-service.test.ts::"recommends continuing for effective videos"::L70::invokes scoreVideoEffectiveness::assert L86`
 
 BENCHMARK EVIDENCE
 
@@ -1201,7 +1201,7 @@ NOT RESEARCHED IN R8-C
 
 TEST EVIDENCE
 
-INDIRECT_INTEGRATION_TEST: `src/services/mastery/task011TutorTurnIntegrationService.ts`, `src/tests/task-011-growth-proof-summary-service.test.ts`, `src/tests/task-011-learner-progress-state-service.test.ts`, `src/tests/task-011-mastery-evidence-aggregation-service.test.ts`, `src/tests/task-013-learner-recommendation-transparency-runtime.test.ts`
+INDIRECT_INTEGRATION_TEST: `src/tests/task-011-deen-evidence-safety.contract.test.ts::"should store learning process only for Deen evidence"::L27::invokes task011TutorTurnIntegrationService.processValidatedTutorTurn→src/services/mastery/masteryEvidenceAggregationService.ts::assert L42`, `src/tests/task-011-deen-evidence-safety.contract.test.ts::"should not create mastery aggregation for Deen turns that would store religious facts"::L82::invokes task011TutorTurnIntegrationService.processValidatedTutorTurn→src/services/mastery/masteryEvidenceAggregationService.ts::assert L98`, `src/tests/task-011-tutor-turn-integration.contract.test.ts::"should process a validated correct practice turn"::L29::invokes task011TutorTurnIntegrationService.processValidatedTutorTurn→src/services/mastery/masteryEvidenceAggregationService.ts::assert L50`, `src/tests/task-011-tutor-turn-integration.contract.test.ts::"should skip learning persistence for safety turns"::L56::invokes task011TutorTurnIntegrationService.processValidatedTutorTurn→src/services/mastery/masteryEvidenceAggregationService.ts::assert L66`, `src/tests/task-011-tutor-turn-integration.contract.test.ts::"should not create normal mastery evidence for integrity-blocked turns"::L73::invokes task011TutorTurnIntegrationService.processValidatedTutorTurn→src/services/mastery/masteryEvidenceAggregationService.ts::assert L85`
 
 BENCHMARK EVIDENCE
 
@@ -1364,7 +1364,7 @@ NOT RESEARCHED IN R8-C
 
 TEST EVIDENCE
 
-INDIRECT_INTEGRATION_TEST: `src/tests/practice-mastery-route.test.ts`
+DIRECT_BEHAVIOR_TEST: `src/tests/practice-mastery-route.test.ts::"POST next returns recommendations"::L62::invokes NextPracticeService.recommendNextPractice::assert L71`
 
 BENCHMARK EVIDENCE
 
@@ -1527,7 +1527,7 @@ NOT RESEARCHED IN R8-C
 
 TEST EVIDENCE
 
-INDIRECT_INTEGRATION_TEST: `src/tests/mastery-scoring-confidence.test.ts`
+DIRECT_BEHAVIOR_TEST: `src/tests/mastery-scoring-confidence.test.ts::"computeScore returns higher for mastered + high confidence"::L58::invokes MasteryScoringService.computeScore::assert L60`, `src/tests/mastery-scoring-confidence.test.ts::"computeScore returns lower for unknown + low confidence"::L63::invokes MasteryScoringService.computeScore::assert L65`
 
 BENCHMARK EVIDENCE
 
@@ -1690,7 +1690,7 @@ NOT RESEARCHED IN R8-C
 
 TEST EVIDENCE
 
-INDIRECT_INTEGRATION_TEST: `src/tests/mastery-scoring-confidence.test.ts`
+DIRECT_BEHAVIOR_TEST: `src/tests/mastery-scoring-confidence.test.ts::"returns unknown for 0 attempts"::L5::invokes MasteryScoringService.deriveMasteryLevel::assert L7`, `src/tests/mastery-scoring-confidence.test.ts::"one correct answer does not create mastered state"::L10::invokes MasteryScoringService.deriveMasteryLevel::assert L12`, `src/tests/mastery-scoring-confidence.test.ts::"one wrong answer does not create permanent misconception"::L16::invokes MasteryScoringService.deriveMasteryLevel::assert L18`, `src/tests/mastery-scoring-confidence.test.ts::"repeated correct answers increase mastery"::L21::invokes MasteryScoringService.deriveMasteryLevel::assert L25`, `src/tests/mastery-scoring-confidence.test.ts::"high correct ratio with enough attempts reaches mastered"::L28::invokes MasteryScoringService.deriveMasteryLevel::assert L30`
 
 BENCHMARK EVIDENCE
 
@@ -1855,7 +1855,7 @@ NOT RESEARCHED IN R8-C
 
 TEST EVIDENCE
 
-INDIRECT_INTEGRATION_TEST: `src/services/mastery/task011TutorTurnIntegrationService.ts`, `src/tests/task-011-spaced-review-planner.test.ts`
+DIRECT_BEHAVIOR_TEST: `src/tests/task-011-spaced-review-planner.test.ts::"should plan 1 day interval for high priority"::L5::invokes SpacedReviewPlanner.planReview::assert L18`, `src/tests/task-011-spaced-review-planner.test.ts::"should plan 3 day interval for medium priority"::L22::invokes SpacedReviewPlanner.planReview::assert L35`, `src/tests/task-011-spaced-review-planner.test.ts::"should plan 14 day interval for secure maintenance"::L38::invokes SpacedReviewPlanner.planReview::assert L51`, `src/tests/task-011-spaced-review-planner.test.ts::"should plan 30 day interval for strong maintenance"::L54::invokes SpacedReviewPlanner.planReview::assert L67`, `src/tests/task-011-spaced-review-planner.test.ts::"should shorten interval after repeated mistakes"::L70::invokes SpacedReviewPlanner.planReview::assert L83`
 
 BENCHMARK EVIDENCE
 
@@ -2041,7 +2041,7 @@ NOT RESEARCHED IN R8-C
 
 TEST EVIDENCE
 
-INDIRECT_INTEGRATION_TEST: `src/tests/artifact-pipeline-route.test.ts`, `src/tests/artifact-practice-source-resolver.test.ts`, `src/tests/artifact-r3-structured-understanding.test.ts`, `src/tests/r3-durability-anchor-repair.test.ts`, `src/tests/r3-structured-artifact.test.ts`
+INDIRECT_INTEGRATION_TEST: `src/tests/artifact-learner-memory-integration.test.ts::"builds safe memory signals without raw text"::L5::invokes artifactLearnerMemoryBridge.buildArtifactMemorySignals→src/services/artifactService.ts::assert L9`, `src/tests/artifact-learner-memory-integration.test.ts::"returns bounded number of signals"::L16::invokes artifactLearnerMemoryBridge.buildArtifactMemorySignals→src/services/artifactService.ts::assert L20`, `src/tests/artifact-live-chat-integration.test.ts::"runs artifact reasoning pipeline for explain question"::L14::invokes artifactReasoningContextResolver.resolveContext→src/services/artifactService.ts::assert L22`, `src/tests/artifact-live-chat-integration.test.ts::"handles clarification path without AI"::L55::invokes artifactReasoningContextResolver.resolveContext→src/services/artifactService.ts::assert L61`, `src/tests/artifact-live-chat-integration.test.ts::"handles unsafe artifact instruction path"::L65::invokes artifactReasoningContextResolver.resolveContext→src/services/artifactService.ts::assert L86`
 
 BENCHMARK EVIDENCE
 
@@ -2205,7 +2205,7 @@ NOT RESEARCHED IN R8-C
 
 TEST EVIDENCE
 
-INDIRECT_INTEGRATION_TEST: `src/r6-learning-intelligence-integration.test.ts`, `src/services/growthIntelligenceService.integration.test.ts`
+INDIRECT_INTEGRATION_TEST: `src/r6-learning-intelligence-integration.test.ts::"Growth with Progress.mastery=100 and no canonical evidence does NOT project confident mastery"::L277::invokes getGrowthOverview→src/services/mediaAssetService.ts::assert L319`, `src/r6-learning-intelligence-integration.test.ts::"due revision with canonical incorrect evidence produces high-priority recommendation with real target"::L343::invokes getLearningIntelligenceSnapshot→src/services/mediaAssetService.ts::assert L379`, `src/r6-learning-intelligence-integration.test.ts::"growth read issues no writes against LearningEvidence or Mastery stores"::L401::invokes getGrowthOverview→src/services/mediaAssetService.ts::assert L424`, `src/r6-learning-intelligence-integration.test.ts::"clearing process cache rebuilds the same weak-topic projection"::L433::invokes getGrowthWeakTopics→src/services/mediaAssetService.ts::assert L474`, `src/r6-learning-intelligence-integration.test.ts::"canonical weak target outranks contradictory self-reported weak area"::L670::invokes generateAdaptiveStudyPlan→src/services/mediaAssetService.ts::assert L721`
 
 BENCHMARK EVIDENCE
 
@@ -2371,7 +2371,7 @@ NOT RESEARCHED IN R8-C
 
 TEST EVIDENCE
 
-INDIRECT_INTEGRATION_TEST: `src/domains/assessment/recovery-case-triage/tests/package-25-deterministic-priority-scoring.test.ts`, `src/domains/assessment/recovery-case-triage/tests/package-25-no-live-action-safety.test.ts`, `src/domains/assessment/recovery-case-triage/tests/package-25-routes-and-no-duplication.test.ts`, `src/lib/task036LiveSchoolLaunchValidation.ts`, `src/services/task022MadrasaDeenContentPolicyService.ts`
+NO_TEST_EVIDENCE_FOUND
 
 BENCHMARK EVIDENCE
 
@@ -2383,7 +2383,7 @@ NOT MEASURED IN R8-C
 
 MATURITY EVIDENCE
 
-SOURCE_CONFIRMED, TEST_EVIDENCED
+SOURCE_CONFIRMED
 
 R8-E BENCHMARK PRIORITY
 
@@ -2532,7 +2532,7 @@ NOT RESEARCHED IN R8-C
 
 TEST EVIDENCE
 
-INDIRECT_INTEGRATION_TEST: `src/domains/assessment/recovery-case-triage/tests/package-25-deterministic-priority-scoring.test.ts`, `src/domains/assessment/recovery-case-triage/tests/package-25-no-live-action-safety.test.ts`, `src/domains/assessment/recovery-case-triage/tests/package-25-routes-and-no-duplication.test.ts`, `src/lib/task036LiveSchoolLaunchValidation.ts`, `src/services/task022MadrasaDeenContentPolicyService.ts`
+NO_TEST_EVIDENCE_FOUND
 
 BENCHMARK EVIDENCE
 
@@ -2544,7 +2544,7 @@ NOT MEASURED IN R8-C
 
 MATURITY EVIDENCE
 
-SOURCE_CONFIRMED, TEST_EVIDENCED
+SOURCE_CONFIRMED
 
 R8-E BENCHMARK PRIORITY
 
@@ -2693,7 +2693,7 @@ NOT RESEARCHED IN R8-C
 
 TEST EVIDENCE
 
-DIRECT_BEHAVIOR_TEST: `src/tests/r3-structured-artifact.test.ts`
+DIRECT_BEHAVIOR_TEST: `src/tests/r3-structured-artifact.test.ts::"TEST7: repeated parse with same content fingerprint does not duplicate truth (stable projection)"::L402::invokes isReplayWithSameFingerprint::assert L420`
 
 BENCHMARK EVIDENCE
 
@@ -2858,7 +2858,7 @@ NOT RESEARCHED IN R8-C
 
 TEST EVIDENCE
 
-INDIRECT_INTEGRATION_TEST: `src/domains/assessment/recovery-case-triage/tests/package-25-deterministic-priority-scoring.test.ts`, `src/domains/assessment/recovery-case-triage/tests/package-25-no-live-action-safety.test.ts`, `src/domains/assessment/recovery-case-triage/tests/package-25-routes-and-no-duplication.test.ts`, `src/lib/task036LiveSchoolLaunchValidation.ts`, `src/services/task022MadrasaDeenContentPolicyService.ts`
+NO_TEST_EVIDENCE_FOUND
 
 BENCHMARK EVIDENCE
 
@@ -2870,7 +2870,7 @@ NOT MEASURED IN R8-C
 
 MATURITY EVIDENCE
 
-SOURCE_CONFIRMED, TEST_EVIDENCED
+SOURCE_CONFIRMED
 
 R8-E BENCHMARK PRIORITY
 
@@ -3198,7 +3198,7 @@ NOT RESEARCHED IN R8-C
 
 TEST EVIDENCE
 
-INDIRECT_INTEGRATION_TEST: `src/domains/assessment/marking-invocation/tests/package-8-deterministic-marking-bridge.test.ts`
+DIRECT_BEHAVIOR_TEST: `src/domains/assessment/marking-invocation/tests/package-8-deterministic-marking-bridge.test.ts::"deterministic marking can execute on eligible batch items"::L19::invokes DeterministicMarkingInvocationService.executeDeterministicBatch::assert L37`
 
 BENCHMARK EVIDENCE
 
@@ -3393,7 +3393,7 @@ NOT RESEARCHED IN R8-C
 
 TEST EVIDENCE
 
-INDIRECT_INTEGRATION_TEST: `src/tests/learner-safe-evidence-card-runtime.test.ts`, `src/tests/learner-transparency-contracts.test.ts`, `src/tests/learner-transparency-response-builder.test.ts`, `src/tests/learner-transparency-source-truth-policy.test.ts`, `src/tests/learner-transparency-task001-task012-integration.test.ts`
+INDIRECT_INTEGRATION_TEST: `src/tests/learner-agency-options.test.ts::"builds recommended option first - first option has recommended: true"::L10::invokes buildLearnerAgencyOptions→src/services/learnerTransparencyContracts.ts::assert L13`, `src/tests/learner-agency-options.test.ts::"provides safe alternatives"::L17::invokes buildLearnerAgencyOptions→src/services/learnerTransparencyContracts.ts::assert L21`, `src/tests/learner-agency-options.test.ts::"limits options to reasonable number - not empty"::L24::invokes buildLearnerAgencyOptions→src/services/learnerTransparencyContracts.ts::assert L27`, `src/tests/learner-agency-options.test.ts::"includes ask_for_hint option when appropriate - for non-deen types"::L31::invokes buildLearnerAgencyOptions→src/services/learnerTransparencyContracts.ts::assert L35`, `src/tests/learner-agency-options.test.ts::"includes ask_teacher_for_help when appropriate - for teacher_help_suggested"::L39::invokes buildLearnerAgencyOptions→src/services/learnerTransparencyContracts.ts::assert L43`
 
 BENCHMARK EVIDENCE
 
@@ -3557,7 +3557,7 @@ NOT RESEARCHED IN R8-C
 
 TEST EVIDENCE
 
-DIRECT_BEHAVIOR_TEST: `src/tests/task-039-roster-sync-dry-run-service.test.ts`
+DIRECT_BEHAVIOR_TEST: `src/tests/task-039-roster-sync-dry-run-service.test.ts::"valid roster passes dry run"::L5::invokes performRosterSyncDryRun::assert L10`, `src/tests/task-039-roster-sync-dry-run-service.test.ts::"detects duplicate students"::L17::invokes performRosterSyncDryRun::assert L22`, `src/tests/task-039-roster-sync-dry-run-service.test.ts::"detects school mismatch in roster"::L26::invokes performRosterSyncDryRun::assert L31`, `src/tests/task-039-roster-sync-dry-run-service.test.ts::"detects enrollment missing student"::L36::invokes performRosterSyncDryRun::assert L48`, `src/tests/task-039-roster-sync-dry-run-service.test.ts::"detects enrollment missing class"::L51::invokes performRosterSyncDryRun::assert L63`
 
 BENCHMARK EVIDENCE
 
@@ -3721,7 +3721,7 @@ NOT RESEARCHED IN R8-C
 
 TEST EVIDENCE
 
-INDIRECT_INTEGRATION_TEST: `src/services/task021RosterReconciliationService.ts`, `src/services/task021RosterSyncRuntime.ts`, `src/services/task023Task021SchoolIntegrationReadinessService.ts`, `src/tests/task-021-contract-integration-tests.test.ts`
+INDIRECT_INTEGRATION_TEST: `src/tests/task-021-final-enforcement-patch.contract.test.ts::"roster sync runtime durable persistence error propagates when durable mode is on"::L74::invokes processRosterSync→src/services/task021RosterReconciliationService.ts::assert L91`, `src/tests/task-021-final-enforcement-patch.contract.test.ts::"processRosterSync works without durable flag (no DB dependency)"::L289::invokes processRosterSync→src/services/task021RosterReconciliationService.ts::assert L303`, `src/tests/task-021-final-restart-read-behavior.contract.test.ts::"sync jobs survive clearSyncJobStore only if recreated"::L55::invokes processRosterSync→src/services/task021RosterReconciliationService.ts::assert L67`, `src/tests/task-021-role-scope-and-integration.test.ts::"denies diagnostics for learner role"::L349::invokes getSchoolIntegrationDiagnostics→src/services/task021RosterReconciliationService.ts::assert L351`, `src/tests/task-021-role-scope-and-integration.test.ts::"allows diagnostics for admin role"::L357::invokes getSchoolIntegrationDiagnostics→src/services/task021RosterReconciliationService.ts::assert L359`
 
 BENCHMARK EVIDENCE
 
@@ -3904,7 +3904,7 @@ NOT RESEARCHED IN R8-C
 
 TEST EVIDENCE
 
-DIRECT_BEHAVIOR_TEST: `src/domains/assessment/recovery-case-triage/tests/package-25-routes-and-no-duplication.test.ts`
+INDIRECT_INTEGRATION_TEST: `src/tests/intent-resolver-route.test.ts::"router has POST resolve route"::L18::invokes router.find→src/middleware/schoolAuthMiddleware.ts::assert L24`, `src/tests/intent-resolver-route.test.ts::"router has GET history route"::L27::invokes router.find→src/middleware/schoolAuthMiddleware.ts::assert L33`, `src/tests/intent-resolver-route.test.ts::"routes have schoolAuthMiddleware"::L36::invokes router.find→src/middleware/schoolAuthMiddleware.ts::assert L40`, `src/tests/task-023-no-private-data-leak.contract.test.ts::"smoke test results exclude raw chat"::L49::invokes runReleaseSmokeTests→src/middleware/schoolAuthMiddleware.ts::assert L52`, `src/tests/task-023-no-private-data-leak.contract.test.ts::"smoke test results exclude private memory"::L55::invokes runReleaseSmokeTests→src/middleware/schoolAuthMiddleware.ts::assert L58`
 
 BENCHMARK EVIDENCE
 
@@ -4068,7 +4068,7 @@ NOT RESEARCHED IN R8-C
 
 TEST EVIDENCE
 
-DIRECT_BEHAVIOR_TEST: `src/tests/ai-provider-gateway.test.ts`, `src/tests/route-provider-call-count.contract.test.ts`, `src/tests/tutor-safe-route-integration.test.ts`
+DIRECT_BEHAVIOR_TEST: `src/tests/ai-provider-gateway.test.ts::"blocks when policy decision is block"::L458::invokes evaluateGenerationPolicy::assert L461`, `src/tests/ai-provider-gateway.test.ts::"returns clarify when policy decision is clarify_first"::L465::invokes evaluateGenerationPolicy::assert L468`, `src/tests/ai-provider-gateway.test.ts::"blocks for serious safety risk"::L472::invokes evaluateGenerationPolicy::assert L484`, `src/tests/ai-provider-gateway.test.ts::"allows normal Socratic tutoring"::L487::invokes evaluateGenerationPolicy::assert L490`, `src/tests/ai-provider-gateway.test.ts::"returns hint_only for direct answer request without attempt"::L494::invokes evaluateGenerationPolicy::assert L515`
 
 BENCHMARK EVIDENCE
 
@@ -4246,7 +4246,7 @@ NOT RESEARCHED IN R8-C
 
 TEST EVIDENCE
 
-INDIRECT_INTEGRATION_TEST: `src/routes/task032ControlledCanaryActivationRoutes.ts`, `src/services/task032CanaryActivationCommandService.ts`, `src/services/task032CanaryActivationStateMachine.ts`, `src/services/task032CanaryControlActionService.ts`, `src/tests/task-032-activation-command.test.ts`
+NO_TEST_EVIDENCE_FOUND
 
 BENCHMARK EVIDENCE
 
@@ -4258,7 +4258,7 @@ NOT MEASURED IN R8-C
 
 MATURITY EVIDENCE
 
-SOURCE_CONFIRMED, TEST_EVIDENCED
+SOURCE_CONFIRMED
 
 R8-E BENCHMARK PRIORITY
 
@@ -4411,7 +4411,7 @@ NOT RESEARCHED IN R8-C
 
 TEST EVIDENCE
 
-DIRECT_BEHAVIOR_TEST: `src/tests/ai-runtime-circuit-breaker.test.ts`
+DIRECT_BEHAVIOR_TEST: `src/tests/ai-runtime-circuit-breaker.test.ts::"closed state allows calls"::L15::invokes beforeAiProviderCall::assert L17`, `src/tests/ai-runtime-circuit-breaker.test.ts::"open state fails fast"::L30::invokes beforeAiProviderCall::assert L35`
 
 BENCHMARK EVIDENCE
 
@@ -4575,7 +4575,7 @@ NOT RESEARCHED IN R8-C
 
 TEST EVIDENCE
 
-DIRECT_BEHAVIOR_TEST: `src/tests/ai-runtime-rate-limit-guard.test.ts`
+DIRECT_BEHAVIOR_TEST: `src/tests/ai-runtime-rate-limit-guard.test.ts::"allows requests under limit"::L9::invokes checkAiRateLimit::assert L16`, `src/tests/ai-runtime-rate-limit-guard.test.ts::"blocks after student rate limit"::L20::invokes checkAiRateLimit::assert L36`, `src/tests/ai-runtime-rate-limit-guard.test.ts::"returns retryAfterMs when blocked"::L40::invokes checkAiRateLimit::assert L56`, `src/tests/ai-runtime-rate-limit-guard.test.ts::"resets after resetAiRateLimitStateForTests"::L59::invokes checkAiRateLimit::assert L76`, `src/tests/ai-runtime-rate-limit-guard.test.ts::"does not expose raw IDs in public output"::L79::invokes checkAiRateLimit::assert L84`
 
 BENCHMARK EVIDENCE
 
@@ -4741,7 +4741,7 @@ NOT RESEARCHED IN R8-C
 
 TEST EVIDENCE
 
-DIRECT_BEHAVIOR_TEST: `src/tests/ai-runtime-no-raw-telemetry.contract.test.ts`, `src/tests/ai-runtime-retry-policy.test.ts`
+DIRECT_BEHAVIOR_TEST: `src/tests/ai-runtime-no-raw-telemetry.contract.test.ts::"retry decision does not include raw prompt data"::L22::invokes decideAiRetry::assert L30`, `src/tests/ai-runtime-retry-policy.test.ts::"returns increasing delay for higher attempts"::L6::invokes calculateRetryDelayMs::assert L10`, `src/tests/ai-runtime-retry-policy.test.ts::"respects retry-after-ms when provided and sane"::L15::invokes calculateRetryDelayMs::assert L17`, `src/tests/ai-runtime-retry-policy.test.ts::"caps at maxDelayMs"::L21::invokes calculateRetryDelayMs::assert L23`, `src/tests/ai-runtime-retry-policy.test.ts::"allows retry for retryable transient error within budget"::L34::invokes decideAiRetry::assert L42`
 
 BENCHMARK EVIDENCE
 
@@ -4903,7 +4903,7 @@ NOT RESEARCHED IN R8-C
 
 TEST EVIDENCE
 
-DIRECT_BEHAVIOR_TEST: `src/tests/api-pagination-contracts.test.ts`
+DIRECT_BEHAVIOR_TEST: `src/tests/api-pagination-contracts.test.ts::"applies default limit when none specified"::L6::invokes parsePaginationInput::assert L8`, `src/tests/api-pagination-contracts.test.ts::"enforces max limit"::L14::invokes parsePaginationInput::assert L16`, `src/tests/api-pagination-contracts.test.ts::"rejects invalid limit (negative)"::L22::invokes parsePaginationInput::assert L24`, `src/tests/api-pagination-contracts.test.ts::"rejects invalid limit (zero)"::L27::invokes parsePaginationInput::assert L29`, `src/tests/api-pagination-contracts.test.ts::"rejects invalid limit (non-numeric)"::L32::invokes parsePaginationInput::assert L34`
 
 BENCHMARK EVIDENCE
 
@@ -5098,7 +5098,7 @@ NOT RESEARCHED IN R8-C
 
 TEST EVIDENCE
 
-DIRECT_BEHAVIOR_TEST: `src/tests/ai-route-segmentation.contract.test.ts`
+INDIRECT_INTEGRATION_TEST: `src/tests/intent-resolver-route.test.ts::"router has POST resolve route"::L18::invokes router.find→src/routes/ai/ai-middleware.ts::assert L24`, `src/tests/intent-resolver-route.test.ts::"router has GET history route"::L27::invokes router.find→src/routes/ai/ai-middleware.ts::assert L33`, `src/tests/intent-resolver-route.test.ts::"routes have schoolAuthMiddleware"::L36::invokes router.find→src/routes/ai/ai-middleware.ts::assert L40`
 
 BENCHMARK EVIDENCE
 
@@ -5265,7 +5265,7 @@ NOT RESEARCHED IN R8-C
 
 TEST EVIDENCE
 
-INDIRECT_INTEGRATION_TEST: `src/services/voiceLedgerService.test.ts`
+NO_TEST_EVIDENCE_FOUND
 
 BENCHMARK EVIDENCE
 
@@ -5277,7 +5277,7 @@ NOT MEASURED IN R8-C
 
 MATURITY EVIDENCE
 
-SOURCE_CONFIRMED, TEST_EVIDENCED
+SOURCE_CONFIRMED
 
 R8-E BENCHMARK PRIORITY
 
@@ -5431,40 +5431,40 @@ Capabilities at the EXTERNAL / AI-LANE DECISION BOUNDARY (algorithm decompositio
 
 Test corpus: 3443 files. Benchmark mentions repository-wide: 22.
 
-Benchmark vocabulary: BENCHMARK_EVIDENCED | NO_BENCHMARK_EVIDENCE. PERFORMANCE_TEST_ONLY would require a located performance harness referencing the unit. Repository scan: benchmark evidence for 0 record(s); all other records are NO_BENCHMARK_EVIDENCE and every measured-performance field is NOT MEASURED IN R8-C.
+Benchmark vocabulary: BENCHMARK_EVIDENCED | PERFORMANCE_TEST_ONLY | NO_BENCHMARK_EVIDENCE. BENCHMARK_EVIDENCED requires actual target invocation inside a measurement harness; PERFORMANCE_TEST_ONLY requires a real perf/load test exercising the unit without a measured benchmark. Repository scan: benchmark evidence for 0 record(s), performance-test-only for 0 record(s); all other records are NO_BENCHMARK_EVIDENCE and every measured-performance field is NOT MEASURED IN R8-C.
 
 Algorithm ID | Test evidence | Benchmark evidence | Measured | Maturity
 --- | --- | --- | --- | ---
-ALG-artifacts-artifacts-content-fingerprint | INDIRECT_INTEGRATION_TEST (5 file(s)) | NO_BENCHMARK_EVIDENCE | NOT MEASURED IN R8-C | SOURCE_CONFIRMED+TEST_EVIDENCED
-ALG-artifacts-artifacts-media-dedupe-key | INDIRECT_INTEGRATION_TEST (2 file(s)) | NO_BENCHMARK_EVIDENCE | NOT MEASURED IN R8-C | SOURCE_CONFIRMED+TEST_EVIDENCED
-ALG-artifacts-artifacts-media-stream-rank-score | INDIRECT_INTEGRATION_TEST (5 file(s)) | NO_BENCHMARK_EVIDENCE | NOT MEASURED IN R8-C | SOURCE_CONFIRMED+TEST_EVIDENCED
-ALG-artifacts-artifacts-recency-decay | INDIRECT_INTEGRATION_TEST (5 file(s)) | NO_BENCHMARK_EVIDENCE | NOT MEASURED IN R8-C | SOURCE_CONFIRMED+TEST_EVIDENCED
-ALG-artifacts-artifacts-replay-idempotency | DIRECT_BEHAVIOR_TEST (1 file(s)) | NO_BENCHMARK_EVIDENCE | NOT MEASURED IN R8-C | SOURCE_CONFIRMED+TEST_EVIDENCED
-ALG-artifacts-artifacts-study-stream-rank-score | INDIRECT_INTEGRATION_TEST (5 file(s)) | NO_BENCHMARK_EVIDENCE | NOT MEASURED IN R8-C | SOURCE_CONFIRMED+TEST_EVIDENCED
+ALG-artifacts-artifacts-content-fingerprint | INDIRECT_INTEGRATION_TEST (5 ref(s)) | NO_BENCHMARK_EVIDENCE | NOT MEASURED IN R8-C | SOURCE_CONFIRMED+TEST_EVIDENCED
+ALG-artifacts-artifacts-media-dedupe-key | INDIRECT_INTEGRATION_TEST (5 ref(s)) | NO_BENCHMARK_EVIDENCE | NOT MEASURED IN R8-C | SOURCE_CONFIRMED+TEST_EVIDENCED
+ALG-artifacts-artifacts-media-stream-rank-score | NO_TEST_EVIDENCE_FOUND | NO_BENCHMARK_EVIDENCE | NOT MEASURED IN R8-C | SOURCE_CONFIRMED
+ALG-artifacts-artifacts-recency-decay | NO_TEST_EVIDENCE_FOUND | NO_BENCHMARK_EVIDENCE | NOT MEASURED IN R8-C | SOURCE_CONFIRMED
+ALG-artifacts-artifacts-replay-idempotency | DIRECT_BEHAVIOR_TEST (1 ref(s)) | NO_BENCHMARK_EVIDENCE | NOT MEASURED IN R8-C | SOURCE_CONFIRMED+TEST_EVIDENCED
+ALG-artifacts-artifacts-study-stream-rank-score | NO_TEST_EVIDENCE_FOUND | NO_BENCHMARK_EVIDENCE | NOT MEASURED IN R8-C | SOURCE_CONFIRMED
 ALG-artifacts-videoaware-external-video-dedupe | NO_TEST_EVIDENCE_FOUND | NO_BENCHMARK_EVIDENCE | NOT MEASURED IN R8-C | SOURCE_CONFIRMED
-ALG-mastery-confidencerecovery-mismatch-rank-dedupe | INDIRECT_INTEGRATION_TEST (2 file(s)) | NO_BENCHMARK_EVIDENCE | NOT MEASURED IN R8-C | SOURCE_CONFIRMED+TEST_EVIDENCED
-ALG-mastery-dailyfeed-feed-rank-dedupe | DIRECT_BEHAVIOR_TEST (1 file(s)) | NO_BENCHMARK_EVIDENCE | NOT MEASURED IN R8-C | SOURCE_CONFIRMED+TEST_EVIDENCED
-ALG-mastery-dailyobjective-idempotency-settle | DIRECT_BEHAVIOR_TEST (4 file(s)) | NO_BENCHMARK_EVIDENCE | NOT MEASURED IN R8-C | SOURCE_CONFIRMED+TEST_EVIDENCED
+ALG-mastery-confidencerecovery-mismatch-rank-dedupe | NO_TEST_EVIDENCE_FOUND | NO_BENCHMARK_EVIDENCE | NOT MEASURED IN R8-C | SOURCE_CONFIRMED
+ALG-mastery-dailyfeed-feed-rank-dedupe | DIRECT_BEHAVIOR_TEST (5 ref(s)) | NO_BENCHMARK_EVIDENCE | NOT MEASURED IN R8-C | SOURCE_CONFIRMED+TEST_EVIDENCED
+ALG-mastery-dailyobjective-idempotency-settle | DIRECT_BEHAVIOR_TEST (1 ref(s)) | NO_BENCHMARK_EVIDENCE | NOT MEASURED IN R8-C | SOURCE_CONFIRMED+TEST_EVIDENCED
 ALG-mastery-growth-topic-inference-signal-count | NO_TEST_EVIDENCE_FOUND | NO_BENCHMARK_EVIDENCE | NOT MEASURED IN R8-C | SOURCE_CONFIRMED
-ALG-mastery-growth-video-effectiveness-score | DIRECT_BEHAVIOR_TEST (4 file(s)) | NO_BENCHMARK_EVIDENCE | NOT MEASURED IN R8-C | SOURCE_CONFIRMED+TEST_EVIDENCED
-ALG-mastery-practicemastery-evidence-level-ladder | INDIRECT_INTEGRATION_TEST (5 file(s)) | NO_BENCHMARK_EVIDENCE | NOT MEASURED IN R8-C | SOURCE_CONFIRMED+TEST_EVIDENCED
-ALG-mastery-practicemastery-next-practice-priority | INDIRECT_INTEGRATION_TEST (1 file(s)) | NO_BENCHMARK_EVIDENCE | NOT MEASURED IN R8-C | SOURCE_CONFIRMED+TEST_EVIDENCED
-ALG-mastery-practicemastery-score-compute | INDIRECT_INTEGRATION_TEST (1 file(s)) | NO_BENCHMARK_EVIDENCE | NOT MEASURED IN R8-C | SOURCE_CONFIRMED+TEST_EVIDENCED
-ALG-mastery-practicemastery-score-threshold-ladder | INDIRECT_INTEGRATION_TEST (1 file(s)) | NO_BENCHMARK_EVIDENCE | NOT MEASURED IN R8-C | SOURCE_CONFIRMED+TEST_EVIDENCED
-ALG-mastery-practicemastery-spaced-review-interval | INDIRECT_INTEGRATION_TEST (2 file(s)) | NO_BENCHMARK_EVIDENCE | NOT MEASURED IN R8-C | SOURCE_CONFIRMED+TEST_EVIDENCED
-ALG-operations-canary-state-transition | INDIRECT_INTEGRATION_TEST (5 file(s)) | NO_BENCHMARK_EVIDENCE | NOT MEASURED IN R8-C | SOURCE_CONFIRMED+TEST_EVIDENCED
-ALG-operations-reliability-ai-circuit-breaker | DIRECT_BEHAVIOR_TEST (1 file(s)) | NO_BENCHMARK_EVIDENCE | NOT MEASURED IN R8-C | SOURCE_CONFIRMED+TEST_EVIDENCED
-ALG-operations-reliability-ai-rate-limit-window | DIRECT_BEHAVIOR_TEST (1 file(s)) | NO_BENCHMARK_EVIDENCE | NOT MEASURED IN R8-C | SOURCE_CONFIRMED+TEST_EVIDENCED
-ALG-operations-reliability-ai-retry-backoff-jitter | DIRECT_BEHAVIOR_TEST (2 file(s)) | NO_BENCHMARK_EVIDENCE | NOT MEASURED IN R8-C | SOURCE_CONFIRMED+TEST_EVIDENCED
-ALG-operations-shared-pagination-cursor | DIRECT_BEHAVIOR_TEST (1 file(s)) | NO_BENCHMARK_EVIDENCE | NOT MEASURED IN R8-C | SOURCE_CONFIRMED+TEST_EVIDENCED
-ALG-questionbank-markinginvocation-batch-mark-sweep | INDIRECT_INTEGRATION_TEST (1 file(s)) | NO_BENCHMARK_EVIDENCE | NOT MEASURED IN R8-C | SOURCE_CONFIRMED+TEST_EVIDENCED
-ALG-safety-task020-auth-jwt-claim-extract | DIRECT_BEHAVIOR_TEST (1 file(s)) | NO_BENCHMARK_EVIDENCE | NOT MEASURED IN R8-C | SOURCE_CONFIRMED+TEST_EVIDENCED
-ALG-safety-tutorpolicy-generation-policy-gate | DIRECT_BEHAVIOR_TEST (3 file(s)) | NO_BENCHMARK_EVIDENCE | NOT MEASURED IN R8-C | SOURCE_CONFIRMED+TEST_EVIDENCED
-ALG-school-learnerrecommendation-priority-policy | INDIRECT_INTEGRATION_TEST (5 file(s)) | NO_BENCHMARK_EVIDENCE | NOT MEASURED IN R8-C | SOURCE_CONFIRMED+TEST_EVIDENCED
-ALG-school-schoolintegration-roster-dryrun-conflict-scan | DIRECT_BEHAVIOR_TEST (1 file(s)) | NO_BENCHMARK_EVIDENCE | NOT MEASURED IN R8-C | SOURCE_CONFIRMED+TEST_EVIDENCED
-ALG-school-schoolintegration-roster-reconcile | INDIRECT_INTEGRATION_TEST (4 file(s)) | NO_BENCHMARK_EVIDENCE | NOT MEASURED IN R8-C | SOURCE_CONFIRMED+TEST_EVIDENCED
-ALG-voice-airoutes-express-rate-limit | DIRECT_BEHAVIOR_TEST (1 file(s)) | NO_BENCHMARK_EVIDENCE | NOT MEASURED IN R8-C | SOURCE_CONFIRMED+TEST_EVIDENCED
-ALG-voice-voice-ledger-billing-quota | INDIRECT_INTEGRATION_TEST (1 file(s)) | NO_BENCHMARK_EVIDENCE | NOT MEASURED IN R8-C | SOURCE_CONFIRMED+TEST_EVIDENCED
+ALG-mastery-growth-video-effectiveness-score | DIRECT_BEHAVIOR_TEST (5 ref(s)) | NO_BENCHMARK_EVIDENCE | NOT MEASURED IN R8-C | SOURCE_CONFIRMED+TEST_EVIDENCED
+ALG-mastery-practicemastery-evidence-level-ladder | INDIRECT_INTEGRATION_TEST (5 ref(s)) | NO_BENCHMARK_EVIDENCE | NOT MEASURED IN R8-C | SOURCE_CONFIRMED+TEST_EVIDENCED
+ALG-mastery-practicemastery-next-practice-priority | DIRECT_BEHAVIOR_TEST (1 ref(s)) | NO_BENCHMARK_EVIDENCE | NOT MEASURED IN R8-C | SOURCE_CONFIRMED+TEST_EVIDENCED
+ALG-mastery-practicemastery-score-compute | DIRECT_BEHAVIOR_TEST (2 ref(s)) | NO_BENCHMARK_EVIDENCE | NOT MEASURED IN R8-C | SOURCE_CONFIRMED+TEST_EVIDENCED
+ALG-mastery-practicemastery-score-threshold-ladder | DIRECT_BEHAVIOR_TEST (5 ref(s)) | NO_BENCHMARK_EVIDENCE | NOT MEASURED IN R8-C | SOURCE_CONFIRMED+TEST_EVIDENCED
+ALG-mastery-practicemastery-spaced-review-interval | DIRECT_BEHAVIOR_TEST (5 ref(s)) | NO_BENCHMARK_EVIDENCE | NOT MEASURED IN R8-C | SOURCE_CONFIRMED+TEST_EVIDENCED
+ALG-operations-canary-state-transition | NO_TEST_EVIDENCE_FOUND | NO_BENCHMARK_EVIDENCE | NOT MEASURED IN R8-C | SOURCE_CONFIRMED
+ALG-operations-reliability-ai-circuit-breaker | DIRECT_BEHAVIOR_TEST (2 ref(s)) | NO_BENCHMARK_EVIDENCE | NOT MEASURED IN R8-C | SOURCE_CONFIRMED+TEST_EVIDENCED
+ALG-operations-reliability-ai-rate-limit-window | DIRECT_BEHAVIOR_TEST (5 ref(s)) | NO_BENCHMARK_EVIDENCE | NOT MEASURED IN R8-C | SOURCE_CONFIRMED+TEST_EVIDENCED
+ALG-operations-reliability-ai-retry-backoff-jitter | DIRECT_BEHAVIOR_TEST (5 ref(s)) | NO_BENCHMARK_EVIDENCE | NOT MEASURED IN R8-C | SOURCE_CONFIRMED+TEST_EVIDENCED
+ALG-operations-shared-pagination-cursor | DIRECT_BEHAVIOR_TEST (5 ref(s)) | NO_BENCHMARK_EVIDENCE | NOT MEASURED IN R8-C | SOURCE_CONFIRMED+TEST_EVIDENCED
+ALG-questionbank-markinginvocation-batch-mark-sweep | DIRECT_BEHAVIOR_TEST (1 ref(s)) | NO_BENCHMARK_EVIDENCE | NOT MEASURED IN R8-C | SOURCE_CONFIRMED+TEST_EVIDENCED
+ALG-safety-task020-auth-jwt-claim-extract | INDIRECT_INTEGRATION_TEST (5 ref(s)) | NO_BENCHMARK_EVIDENCE | NOT MEASURED IN R8-C | SOURCE_CONFIRMED+TEST_EVIDENCED
+ALG-safety-tutorpolicy-generation-policy-gate | DIRECT_BEHAVIOR_TEST (5 ref(s)) | NO_BENCHMARK_EVIDENCE | NOT MEASURED IN R8-C | SOURCE_CONFIRMED+TEST_EVIDENCED
+ALG-school-learnerrecommendation-priority-policy | INDIRECT_INTEGRATION_TEST (5 ref(s)) | NO_BENCHMARK_EVIDENCE | NOT MEASURED IN R8-C | SOURCE_CONFIRMED+TEST_EVIDENCED
+ALG-school-schoolintegration-roster-dryrun-conflict-scan | DIRECT_BEHAVIOR_TEST (5 ref(s)) | NO_BENCHMARK_EVIDENCE | NOT MEASURED IN R8-C | SOURCE_CONFIRMED+TEST_EVIDENCED
+ALG-school-schoolintegration-roster-reconcile | INDIRECT_INTEGRATION_TEST (5 ref(s)) | NO_BENCHMARK_EVIDENCE | NOT MEASURED IN R8-C | SOURCE_CONFIRMED+TEST_EVIDENCED
+ALG-voice-airoutes-express-rate-limit | INDIRECT_INTEGRATION_TEST (3 ref(s)) | NO_BENCHMARK_EVIDENCE | NOT MEASURED IN R8-C | SOURCE_CONFIRMED+TEST_EVIDENCED
+ALG-voice-voice-ledger-billing-quota | NO_TEST_EVIDENCE_FOUND | NO_BENCHMARK_EVIDENCE | NOT MEASURED IN R8-C | SOURCE_CONFIRMED
 
 ## Tarzan Algorithm Lab Candidates
 

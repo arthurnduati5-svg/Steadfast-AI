@@ -2117,32 +2117,619 @@ function isTestFile(p: string, roleTags?: string[]): boolean {
   return p.includes('/tests/') || p.includes('.test.') || p.includes('.contract.') || p.includes('.spec.');
 }
 
-function camelToKebab(s: string): string {
-  return s.replace(/([a-z0-9])([A-Z])/g, '$1-$2').toLowerCase();
-}
-
-function stemsFor(record: CuratedAlgorithm): string[] {
-  const out = new Set<string>();
-  const base = record.path.split('/').pop()!.replace(/\.ts$/, '');
-  out.add(base);
-  out.add(camelToKebab(base));
-  out.add(base.toLowerCase());
-  for (const part of record.symbol.split('/')) {
-    const token = part.replace(/\(.*$/, '').trim();
-    if (token && token.length >= 3 && token !== 'anonymous') {
-      out.add(token);
-      out.add(camelToKebab(token));
-    }
-  }
-  return [...out];
-}
-
 export interface TestCorpus {
   files: Array<{ rel: string; content: string }>;
 }
 
-export function buildTestCorpus(backendRoot: string, inventoryFiles: InventoryFile[]): TestCorpus {
-  const rels = new Set<string>();
+/** A single recorded-algorithm target alternative from a `/`-separated symbol field. */
+export interface TargetAlternative {
+  raw: string;
+  className: string | null;
+  member: string;
+  isMethod: boolean;
+}
+
+/** Split a curated `symbol` field into conservative invocation targets. */
+export function targetAlternatives(record: CuratedAlgorithm): TargetAlternative[] {
+  const out: TargetAlternative[] = [];
+  for (const part of record.symbol.split('/')) {
+    const token = part.replace(/\(.*$/, '').trim();
+    if (!token || token.length < 2 || token === 'anonymous') continue;
+    const dotted = token.split('.').map((s) => s.trim()).filter(Boolean);
+    if (dotted.length >= 2) {
+      const member = dotted[dotted.length - 1];
+      const className = dotted[dotted.length - 2];
+      if (/^[A-Za-z_$][A-Za-z0-9_$]*$/.test(member) && /^[A-Za-z_$][A-Za-z0-9_$]*$/.test(className)) {
+        out.push({ raw: token, className, member, isMethod: true });
+      }
+    } else if (/^[A-Za-z_$][A-Za-z0-9_$]*$/.test(token)) {
+      out.push({ raw: token, className: null, member: token, isMethod: false });
+    }
+  }
+  // Deterministic, deduplicated by member+class.
+  const seen = new Set<string>();
+  return out.filter((a) => {
+    const k = `${a.className || ''}.${a.member}`;
+    if (seen.has(k)) return false;
+    seen.add(k);
+    return true;
+  });
+}
+
+export interface ParsedExpect {
+  line: number;
+  argText: string;
+  fullText: string;
+}
+
+export interface ParsedInvocation {
+  line: number;
+  text: string;
+  calleeRoot: string;
+  property: string | null;
+  fullText: string;
+  isNew: boolean;
+}
+
+export interface ParsedTestBlock {
+  name: string;
+  line: number;
+  endLine: number;
+  invocations: ParsedInvocation[];
+  expects: ParsedExpect[];
+  identifierRefs: string[];
+  aliasToClass: Map<string, string>;
+  destructuredMethods: Map<string, string>;
+  content: string;
+}
+
+export interface ParsedBenchBlock {
+  name: string;
+  line: number;
+  callbackText: string;
+  invocations: ParsedInvocation[];
+  identifierRefs: string[];
+  aliasToClass: Map<string, string>;
+  destructuredMethods: Map<string, string>;
+  hasMeasurement: boolean;
+  content: string;
+}
+
+const TEST_ROOTS = new Set(['it', 'test', 'xit', 'fit', 'xtest']);
+
+function leftmostRoot(node: ts.Expression): string | null {
+  let cur: ts.Expression = node;
+  while (ts.isPropertyAccessExpression(cur) || ts.isElementAccessExpression(cur)) {
+    cur = ts.isPropertyAccessExpression(cur) ? cur.expression : cur.argumentExpression as ts.Expression;
+    if (!cur) return null;
+  }
+  if (ts.isCallExpression(cur)) {
+    const inner = cur.expression;
+    if (ts.isIdentifier(inner)) return inner.text;
+    return leftmostRoot(inner as ts.Expression);
+  }
+  if (ts.isIdentifier(cur)) return cur.text;
+  return null;
+}
+
+function nodeLine(sf: ts.SourceFile, node: ts.Node): number {
+  return sf.getLineAndCharacterOfPosition(node.getStart(sf)).line + 1;
+}
+
+function collectAliasesAndDestructures(
+  scopeNode: ts.Node,
+  sf: ts.SourceFile,
+): { aliasToClass: Map<string, string>; destructuredMethods: Map<string, string> } {
+  const aliasToClass = new Map<string, string>();
+  const destructuredMethods = new Map<string, string>();
+  const visit = (node: ts.Node): void => {
+    if (ts.isVariableDeclaration(node) && node.name && node.initializer) {
+      const init = node.initializer;
+      const actual = ts.isAwaitExpression(init) ? init.expression : init;
+      if (ts.isNewExpression(actual) && actual.expression && ts.isIdentifier(actual.expression)) {
+        const cls = actual.expression.text;
+        if (ts.isIdentifier(node.name)) {
+          if (!aliasToClass.has(node.name.text)) aliasToClass.set(node.name.text, cls);
+        } else if (ts.isObjectBindingPattern(node.name)) {
+          for (const el of node.name.elements) {
+            if (ts.isBindingElement(el) && ts.isIdentifier(el.name)) {
+              if (!destructuredMethods.has(el.name.text)) destructuredMethods.set(el.name.text, cls);
+            }
+          }
+        }
+      }
+    }
+    if (
+      ts.isBinaryExpression(node) &&
+      node.operatorToken.kind === ts.SyntaxKind.EqualsToken &&
+      ts.isIdentifier(node.left) &&
+      (ts.isNewExpression(node.right) ||
+        (ts.isAwaitExpression(node.right) &&
+          ts.isNewExpression((node.right as ts.AwaitExpression).expression)))
+    ) {
+      const rhs = ts.isNewExpression(node.right)
+        ? node.right
+        : ((node.right as ts.AwaitExpression).expression as ts.NewExpression);
+      if (rhs.expression && ts.isIdentifier(rhs.expression)) {
+        if (!aliasToClass.has(node.left.text)) aliasToClass.set(node.left.text, rhs.expression.text);
+      }
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(scopeNode);
+  return { aliasToClass, destructuredMethods };
+}
+
+function collectBlockSignals(
+  callback: ts.FunctionLikeDeclaration | ts.ArrowFunction | ts.FunctionExpression,
+  sf: ts.SourceFile,
+): { invocations: ParsedInvocation[]; expects: ParsedExpect[]; identifierRefs: string[] } {
+  const invocations: ParsedInvocation[] = [];
+  const expects: ParsedExpect[] = [];
+  const identifierRefs: string[] = [];
+  const visit = (node: ts.Node): void => {
+    if (ts.isIdentifier(node)) identifierRefs.push(node.text);
+    if (ts.isNewExpression(node) && node.expression && ts.isIdentifier(node.expression)) {
+      invocations.push({
+        line: nodeLine(sf, node),
+        text: node.getText(sf).slice(0, 240),
+        calleeRoot: node.expression.text,
+        property: null,
+        fullText: node.getText(sf).slice(0, 480),
+        isNew: true,
+      });
+    }
+    if (ts.isCallExpression(node)) {
+      const expr = node.expression;
+      let calleeRoot = '';
+      let property: string | null = null;
+      if (ts.isIdentifier(expr)) {
+        calleeRoot = expr.text;
+      } else if (ts.isPropertyAccessExpression(expr)) {
+        property = expr.name.text;
+        const root = leftmostRoot(expr.expression);
+        calleeRoot = root || expr.expression.getText(sf).split('.')[0].slice(0, 80);
+      }
+      const fullText = node.getText(sf).slice(0, 480);
+      if (calleeRoot === 'expect') {
+        const firstArg = node.arguments.length > 0 ? node.arguments[0].getText(sf).slice(0, 480) : '';
+        expects.push({ line: nodeLine(sf, node), argText: firstArg, fullText });
+      } else {
+        invocations.push({
+          line: nodeLine(sf, node),
+          text: node.getText(sf).slice(0, 240),
+          calleeRoot,
+          property,
+          fullText,
+          isNew: false,
+        });
+      }
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(callback);
+  return { invocations, expects, identifierRefs };
+}
+
+/** Parse real `it(...)` / `test(...)` blocks (plus `.only/.skip/.each` equivalents) via the TS compiler API. */
+export function parseTestBlocks(content: string): ParsedTestBlock[] {
+  const out: ParsedTestBlock[] = [];
+  let sf: ts.SourceFile;
+  try {
+    sf = ts.createSourceFile('test-unit.ts', content, ts.ScriptTarget.Latest, true);
+  } catch {
+    return out;
+  }
+  const fileAliases = collectAliasesAndDestructures(sf, sf);
+  const visit = (node: ts.Node): void => {
+    if (ts.isCallExpression(node)) {
+      const root = leftmostRoot(node.expression);
+      if (root && TEST_ROOTS.has(root)) {
+        const args = node.arguments;
+        let name = '(anonymous)';
+        let callback: ts.Node | null = null;
+        for (const a of args) {
+          if (ts.isStringLiteralLike(a)) name = a.text;
+        }
+        for (let i = args.length - 1; i >= 0; i--) {
+          const a = args[i];
+          if (ts.isArrowFunction(a) || ts.isFunctionExpression(a)) {
+            callback = a;
+            break;
+          }
+        }
+        // Curried `it.each(data)(name, fn)`: callback lives on the outer call whose
+        // callee is itself a call into it/test. The generic walk reaches the outer
+        // call as well, so only handle the call that actually carries the function.
+        if (callback && (ts.isArrowFunction(callback) || ts.isFunctionExpression(callback))) {
+          const cb = callback as ts.ArrowFunction | ts.FunctionExpression;
+          const sig = collectBlockSignals(cb, sf);
+          const local = collectAliasesAndDestructures(cb, sf);
+          const aliasToClass = new Map<string, string>([...fileAliases.aliasToClass, ...local.aliasToClass]);
+          const destructuredMethods = new Map<string, string>([
+            ...fileAliases.destructuredMethods,
+            ...local.destructuredMethods,
+          ]);
+          const start = sf.getLineAndCharacterOfPosition(node.getStart(sf));
+          const end = sf.getLineAndCharacterOfPosition(node.getEnd());
+          out.push({
+            name,
+            line: start.line + 1,
+            endLine: end.line + 1,
+            invocations: sig.invocations,
+            expects: sig.expects,
+            identifierRefs: sig.identifierRefs,
+            aliasToClass,
+            destructuredMethods,
+            content: cb.getText(sf).slice(0, 4000),
+          });
+        }
+      }
+    }
+    ts.forEachChild(node, visit);
+  };
+  try {
+    ts.forEachChild(sf, visit);
+  } catch {
+    return out;
+  }
+  out.sort((a, b) => a.line - b.line || (a.name < b.name ? -1 : 1));
+  return out;
+}
+
+/** Parse `bench(...)` / `benchmark(...)` harnesses (plus `it.bench` / `describe.bench` equivalents). */
+export function parseBenchBlocks(content: string): ParsedBenchBlock[] {
+  const out: ParsedBenchBlock[] = [];
+  let sf: ts.SourceFile;
+  try {
+    sf = ts.createSourceFile('bench-unit.ts', content, ts.ScriptTarget.Latest, true);
+  } catch {
+    return out;
+  }
+  const fileAliases = collectAliasesAndDestructures(sf, sf);
+  const hasTimingMarkers = /performance\.now|Date\.now\s*\(|process\.hrtime|console\.time/i.test(content);
+  const visit = (node: ts.Node): void => {
+    if (ts.isCallExpression(node)) {
+      let harness = false;
+      const expr = node.expression;
+      if (ts.isIdentifier(expr) && /^(bench|benchmark)$/i.test(expr.text)) harness = true;
+      if (ts.isPropertyAccessExpression(expr) && /^(bench|benchmark)$/i.test(expr.name.text)) harness = true;
+      if (harness) {
+        const args = node.arguments;
+        let name = '(benchmark)';
+        let callback: ts.Node | null = null;
+        for (const a of args) {
+          if (ts.isStringLiteralLike(a)) name = a.text;
+        }
+        for (let i = args.length - 1; i >= 0; i--) {
+          const a = args[i];
+          if (ts.isArrowFunction(a) || ts.isFunctionExpression(a)) {
+            callback = a;
+            break;
+          }
+        }
+        if (callback && (ts.isArrowFunction(callback) || ts.isFunctionExpression(callback))) {
+          const cb = callback as ts.ArrowFunction | ts.FunctionExpression;
+          const sig = collectBlockSignals(cb, sf);
+          const local = collectAliasesAndDestructures(cb, sf);
+          out.push({
+            name,
+            line: nodeLine(sf, node),
+            callbackText: cb.getText(sf).slice(0, 4000),
+            invocations: sig.invocations,
+            identifierRefs: sig.identifierRefs,
+            aliasToClass: new Map([...fileAliases.aliasToClass, ...local.aliasToClass]),
+            destructuredMethods: new Map([...fileAliases.destructuredMethods, ...local.destructuredMethods]),
+            hasMeasurement: true,
+            content: node.getText(sf).slice(0, 4000),
+          });
+        }
+      }
+    }
+    ts.forEachChild(node, visit);
+  };
+  try {
+    ts.forEachChild(sf, visit);
+  } catch {
+    return out;
+  }
+  void hasTimingMarkers;
+  out.sort((a, b) => a.line - b.line || (a.name < b.name ? -1 : 1));
+  return out;
+}
+
+/** Match block invocations against a target alternative with conservative alias tracking. */
+export function matchTargetInvocations(
+  block: { invocations: ParsedInvocation[]; aliasToClass: Map<string, string>; destructuredMethods: Map<string, string> },
+  alts: TargetAlternative[],
+  targetImportedLocals?: Set<string>,
+): Array<{ alt: TargetAlternative; invocation: ParsedInvocation }> {
+  const out: Array<{ alt: TargetAlternative; invocation: ParsedInvocation }> = [];
+  for (const inv of block.invocations) {
+    if (inv.isNew) continue;
+    for (const alt of alts) {
+      if (!alt.isMethod) {
+        if (inv.calleeRoot === alt.member) out.push({ alt, invocation: inv });
+        else if (inv.property === alt.member) out.push({ alt, invocation: inv });
+      } else {
+        if (inv.property === alt.member) {
+          const receiverClass = block.aliasToClass.get(inv.calleeRoot);
+          const importedFromTarget = targetImportedLocals ? targetImportedLocals.has(inv.calleeRoot) : false;
+          const caseFoldSingleton =
+            alt.className !== null && inv.calleeRoot.toLowerCase() === alt.className.toLowerCase();
+          if (
+            inv.calleeRoot === alt.className ||
+            receiverClass === alt.className ||
+            importedFromTarget ||
+            caseFoldSingleton
+          ) {
+            out.push({ alt, invocation: inv });
+          }
+        } else if (inv.calleeRoot === alt.member && inv.property === null) {
+          const destructuredClass = block.destructuredMethods.get(inv.calleeRoot);
+          if (destructuredClass === alt.className) out.push({ alt, invocation: inv });
+        }
+      }
+    }
+  }
+  return out;
+}
+
+function wordRef(text: string, name: string): boolean {
+  return new RegExp(`\\b${name.replace(/[$]/g, '\\$')}\\b`).test(text);
+}
+
+/** Variables assigned from a target invocation inside the block (for outcome linkage). */
+export function resultVarsForInvocation(
+  blockContent: string,
+  invocationText: string,
+  member: string,
+): string[] {
+  const vars: string[] = [];
+  const declRe = /(?:const|let|var)\s+([A-Za-z_$][A-Za-z0-9_$]*)\s*=\s*([^;]{1,400})/g;
+  let m: RegExpExecArray | null;
+  while ((m = declRe.exec(blockContent)) !== null) {
+    const rhs = m[2];
+    if (rhs.includes(member + '(') || (invocationText.length > 0 && rhs.includes(invocationText.slice(0, 60)))) {
+      vars.push(m[1]);
+    }
+  }
+  const destructureRe = /(?:const|let|var)\s*\{([^}]{1,200})\}\s*=\s*([^;]{1,400})/g;
+  while ((m = destructureRe.exec(blockContent)) !== null) {
+    const rhs = m[2];
+    if (rhs.includes(member + '(')) {
+      for (const part of m[1].split(',')) {
+        const nm = part.split(':').pop()!.trim();
+        if (/^[A-Za-z_$][A-Za-z0-9_$]*$/.test(nm)) vars.push(nm);
+      }
+    }
+  }
+  return [...new Set(vars)];
+}
+
+/**
+ * Prove a DIRECT behavior link inside one test block: a target invocation plus an
+ * assertion in the SAME callback evaluating its outcome (result variable, direct
+ * wrap, throw/reject path, or post-invocation state assertion for methods).
+ */
+export function hasDirectLinkInBlock(
+  block: ParsedTestBlock,
+  alts: TargetAlternative[],
+  targetImportedLocals?: Set<string>,
+): { linked: boolean; invocationLine: number; assertionLine: number; invokedLabel: string } {
+  const matches = matchTargetInvocations(block, alts, targetImportedLocals);
+  if (matches.length === 0) return { linked: false, invocationLine: 0, assertionLine: 0, invokedLabel: '' };
+  if (block.expects.length === 0) return { linked: false, invocationLine: 0, assertionLine: 0, invokedLabel: '' };
+  const orderedMatches = [...matches].sort((a, b) => a.invocation.line - b.invocation.line);
+  const orderedExpects = [...block.expects].sort((a, b) => a.line - b.line);
+  for (const m of orderedMatches) {
+    const vars = resultVarsForInvocation(block.content, m.invocation.text, m.alt.member);
+    for (const e of orderedExpects) {
+      const invokedLabel = m.alt.isMethod
+        ? `${m.alt.className}.${m.alt.member}`
+        : m.alt.member;
+      // (a) direct wrap: expect(target(...)) or expect(() => target(...)).
+      if (e.argText.includes(m.alt.member + '(') || e.fullText.includes(m.invocation.text.slice(0, 60))) {
+        return { linked: true, invocationLine: m.invocation.line, assertionLine: e.line, invokedLabel };
+      }
+      // (b) result-variable linkage.
+      if (vars.some((v) => wordRef(e.argText, v))) {
+        return { linked: true, invocationLine: m.invocation.line, assertionLine: e.line, invokedLabel };
+      }
+      // (c) throw / reject path wrapping the target.
+      if (/toThrow|toReject|rejects|throws/i.test(e.fullText) && e.fullText.includes(m.alt.member + '(')) {
+        return { linked: true, invocationLine: m.invocation.line, assertionLine: e.line, invokedLabel };
+      }
+      // (d) method state-mutation allowance: method invoked, later assertion in same block.
+      if (m.alt.isMethod && e.line > m.invocation.line) {
+        return { linked: true, invocationLine: m.invocation.line, assertionLine: e.line, invokedLabel };
+      }
+      // (e) plain-function direct-wrap fallback via result variable declared with await.
+      void vars;
+    }
+    // Plain functions REQUIRE a result/wrap/throw link: an unrelated expect in the
+    // same block is never enough (T21/T26 guard). Method allowance handled above.
+  }
+  return { linked: false, invocationLine: 0, assertionLine: 0, invokedLabel: '' };
+}
+
+/** Static/contract reference without invocation (never behavioral evidence). */
+export function hasContractRefInBlock(
+  block: ParsedTestBlock,
+  alts: TargetAlternative[],
+  targetImportedLocals?: Set<string>,
+): boolean {
+  if (block.expects.length === 0) return false;
+  if (matchTargetInvocations(block, alts, targetImportedLocals).length > 0) return false;
+  const refs = new Set(block.identifierRefs);
+  return alts.some((a) => {
+    if (a.isMethod) return refs.has(a.member) || (a.className ? refs.has(a.className) : false);
+    return refs.has(a.member);
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Production import graph (structural reachability for INDIRECT evidence).
+// ---------------------------------------------------------------------------
+
+export type ProdImportIndex = Map<string, string[]>;
+
+function extractSpecifiers(content: string): string[] {
+  const out: string[] = [];
+  const res: RegExp[] = [
+    /\bimport\s+(?:[^'"]*?\s+from\s+)?['"]([^'"]+)['"]/g,
+    /\bexport\s+[^'"]*?\s+from\s+['"]([^'"]+)['"]/g,
+    /\brequire\s*\(\s*['"]([^'"]+)['"]\s*\)/g,
+    /\bimport\s*\(\s*['"]([^'"]+)['"]\s*\)/g,
+  ];
+  for (const re of res) {
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(content)) !== null) out.push(m[1]);
+  }
+  return [...new Set(out)];
+}
+
+/** Resolve an import specifier to a repo-relative backend path, or null when external/unresolvable. */
+export function resolveImportSpecifier(
+  importerRel: string,
+  spec: string,
+  knownSet: Set<string>,
+): string | null {
+  const tryVariants = (candidate: string): string | null => {
+    const cands = [candidate, `${candidate}.ts`, `${candidate}/index.ts`];
+    for (const c of cands) {
+      const norm = c.replace(/\\/g, '/').replace(/^\.\//, '');
+      if (knownSet.has(norm)) return norm;
+    }
+    return null;
+  };
+  if (spec.startsWith('.')) {
+    const dir = importerRel.includes('/') ? importerRel.slice(0, importerRel.lastIndexOf('/')) : '';
+    const joined = (dir ? `${dir}/` : '') + spec;
+    const parts: string[] = [];
+    for (const seg of joined.split('/')) {
+      if (seg === '.' || seg === '') {
+        if (seg === '' && parts.length === 0) continue;
+        if (seg === '.') continue;
+        parts.push(seg);
+      } else if (seg === '..') {
+        parts.pop();
+      } else {
+        parts.push(seg);
+      }
+    }
+    const normalized = parts.join('/').replace(/\/+/g, '/');
+    return tryVariants(normalized);
+  }
+  if (spec.startsWith('src/')) return tryVariants(spec);
+  if (spec.startsWith('@/')) return tryVariants(`src/${spec.slice(2)}`);
+  return null;
+}
+
+/** Build the production-module import adjacency (deterministic, read-only). */
+export function buildProdImportIndex(backendRoot: string, inventoryFiles: InventoryFile[]): ProdImportIndex {
+  const prodRels = new Set<string>();
+  for (const f of inventoryFiles) {
+    const rel = normalizeRepoPath(f.path);
+    if (isProductionSource(rel)) prodRels.add(rel);
+  }
+  const index: ProdImportIndex = new Map();
+  for (const rel of [...prodRels].sort()) {
+    let content = '';
+    try {
+      const abs = path.join(backendRoot, rel);
+      const stat = fs.statSync(abs);
+      if (!stat.isFile() || stat.size > 500 * 1024) {
+        index.set(rel, []);
+        continue;
+      }
+      content = fs.readFileSync(abs, 'utf8');
+    } catch {
+      index.set(rel, []);
+      continue;
+    }
+    const edges = new Set<string>();
+    for (const spec of extractSpecifiers(content)) {
+      const resolved = resolveImportSpecifier(rel, spec, prodRels);
+      if (resolved && resolved !== rel) edges.add(resolved);
+    }
+    index.set(rel, [...edges].sort());
+  }
+  return index;
+}
+
+/** BFS reachability from `from` to `target` over the production import graph. Null when unproven. */
+export function prodReachesTarget(
+  from: string,
+  target: string,
+  index: ProdImportIndex,
+): string[] | null {
+  if (from === target) return null;
+  const visited = new Set<string>([from]);
+  const queue: Array<{ node: string; chain: string[] }> = [{ node: from, chain: [from] }];
+  while (queue.length > 0) {
+    const cur = queue.shift()!;
+    const edges = index.get(cur.node) || [];
+    for (const next of edges) {
+      if (next === target) return [...cur.chain, next];
+      if (!visited.has(next)) {
+        visited.add(next);
+        queue.push({ node: next, chain: [...cur.chain, next] });
+      }
+    }
+  }
+  return null;
+}
+
+/** Local import bindings of a test file: local name -> raw specifier. */
+export function parseTestImports(content: string): Array<{ local: string; spec: string }> {
+  const out: Array<{ local: string; spec: string }> = [];
+  let sf: ts.SourceFile;
+  try {
+    sf = ts.createSourceFile('imports-unit.ts', content, ts.ScriptTarget.Latest, true);
+  } catch {
+    return out;
+  }
+  const visit = (node: ts.Node): void => {
+    if (ts.isImportDeclaration(node) && ts.isStringLiteralLike(node.moduleSpecifier)) {
+      const spec = node.moduleSpecifier.text;
+      const clause = node.importClause;
+      if (clause) {
+        if (clause.name) out.push({ local: clause.name.text, spec });
+        if (clause.namedBindings) {
+          if (ts.isNamespaceImport(clause.namedBindings)) {
+            out.push({ local: clause.namedBindings.name.text, spec });
+          } else if (ts.isNamedImports(clause.namedBindings)) {
+            for (const el of clause.namedBindings.elements) {
+              out.push({ local: el.name.text, spec });
+            }
+          }
+        }
+      }
+    }
+    if (
+      ts.isVariableDeclaration(node) &&
+      node.initializer &&
+      ts.isCallExpression(node.initializer) &&
+      ts.isIdentifier(node.initializer.expression) &&
+      node.initializer.expression.text === 'require' &&
+      node.initializer.arguments.length === 1 &&
+      ts.isStringLiteralLike(node.initializer.arguments[0])
+    ) {
+      const spec = node.initializer.arguments[0].text;
+      if (ts.isIdentifier(node.name)) out.push({ local: node.name.text, spec });
+    }
+    ts.forEachChild(node, visit);
+  };
+  try {
+    ts.forEachChild(sf, visit);
+  } catch {
+    return out;
+  }
+  return out;
+}
+
+export function buildTestCorpus(backendRoot: string, inventoryFiles: InventoryFile[]): TestCorpus {  const rels = new Set<string>();
   for (const f of inventoryFiles) {
     const rel = normalizeRepoPath(f.path);
     if (isTestFile(rel, f.roleTags)) rels.add(rel);
@@ -2162,40 +2749,214 @@ export function buildTestCorpus(backendRoot: string, inventoryFiles: InventoryFi
   return { files };
 }
 
-/** Classify existing test evidence for a record from the corpus (§25). */
-export function findTestEvidence(record: CuratedAlgorithm, corpus: TestCorpus): TestEvidence {
-  const stems = stemsFor(record);
-  const symbolTokens = record.symbol
-    .split('/')
-    .map((p) => p.replace(/\(.*$/, '').trim())
-    .filter((t) => t.length >= 3);
-  const direct: string[] = [];
-  const indirect: string[] = [];
-  const contractOnly: string[] = [];
-  for (const f of corpus.files) {
-    const hay = f.content;
-    const hitStem = stems.some((s) => hay.includes(s));
-    const hitSymbol = symbolTokens.some((t) => hay.includes(t));
-    if (!hitStem && !hitSymbol) continue;
-    const hasExpect = hay.includes('expect(');
-    if (hitSymbol && hasExpect) direct.push(f.rel);
-    else if (hitSymbol || hitStem) {
-      if (f.rel.includes('.contract.')) contractOnly.push(f.rel);
-      else indirect.push(f.rel);
+export interface GroundedRef {
+  ref: string;
+  file: string;
+  testName: string;
+  testLine: number;
+  invoked: string;
+  assertionLine: number;
+}
+
+// Parse cache: the 30-record evidence sweep reuses one corpus, so each test
+// file is parsed once per process (keyed by rel + content length + head hash).
+const testParseCache = new Map<string, { blocks: ParsedTestBlock[]; imports: Array<{ local: string; spec: string }> }>();
+const benchParseCache = new Map<string, { bench: ParsedBenchBlock[]; tests: ParsedTestBlock[] }>();
+
+function cacheKeyFor(rel: string, content: string): string {
+  let h = 0;
+  const head = content.slice(0, 4000);
+  for (let i = 0; i < head.length; i++) h = (Math.imul(h, 31) + head.charCodeAt(i)) | 0;
+  return `${rel}::${content.length}::${(h >>> 0).toString(16)}`;
+}
+
+function cachedTestParse(rel: string, content: string): { blocks: ParsedTestBlock[]; imports: Array<{ local: string; spec: string }> } {
+  const key = cacheKeyFor(rel, content);
+  const hit = testParseCache.get(key);
+  if (hit) return hit;
+  const parsed = { blocks: parseTestBlocks(content), imports: parseTestImports(content) };
+  testParseCache.set(key, parsed);
+  return parsed;
+}
+
+function cachedBenchParse(rel: string, content: string): { bench: ParsedBenchBlock[]; tests: ParsedTestBlock[] } {
+  const key = cacheKeyFor(rel, content);
+  const hit = benchParseCache.get(key);
+  if (hit) return hit;
+  const parsed = { bench: parseBenchBlocks(content), tests: parseTestBlocks(content) };
+  benchParseCache.set(key, parsed);
+  return parsed;
+}
+
+function groundedRef(
+  rel: string,
+  blockName: string,
+  blockLine: number,
+  invoked: string,
+  assertionLine: number,
+): string {
+  const safeName = blockName.replace(/"/g, "'").slice(0, 120);
+  return `${rel}::"${safeName}"::L${blockLine}::invokes ${invoked}::assert L${assertionLine}`;
+}
+
+/**
+ * Grounded test-evidence classifier (R8-C repair).
+ *
+ * DIRECT requires a target invocation + outcome assertion in the SAME test block.
+ * INDIRECT requires a higher-level production invocation + assertion in the same
+ * block + structural import-graph reachability to the algorithm module.
+ * CONTRACT_ONLY requires a static symbol reference with assertions but no
+ * behavioral invocation. Filenames, stems, comments, and cross-block expects
+ * never prove evidence. False negatives preferred over false positives.
+ */
+export function findTestEvidence(
+  record: CuratedAlgorithm,
+  corpus: TestCorpus,
+  prodIndex?: ProdImportIndex,
+  backendRootForResolve?: string,
+  inventoryFilesForResolve?: InventoryFile[],
+): TestEvidence {
+  const alts = targetAlternatives(record);
+  if (alts.length === 0) return { kind: 'NO_TEST_EVIDENCE_FOUND', refs: [] };
+  const targetModule = record.path.replace(/\\/g, '/');
+  const knownSet = new Set<string>();
+  if (inventoryFilesForResolve) {
+    for (const f of inventoryFilesForResolve) {
+      const rel = normalizeRepoPath(f.path);
+      if (isProductionSource(rel)) knownSet.add(rel);
     }
   }
-  direct.sort();
-  indirect.sort();
-  contractOnly.sort();
-  if (direct.length > 0) return { kind: 'DIRECT_BEHAVIOR_TEST', refs: direct.slice(0, 5) };
-  if (indirect.length > 0) return { kind: 'INDIRECT_INTEGRATION_TEST', refs: indirect.slice(0, 5) };
-  if (contractOnly.length > 0) return { kind: 'CONTRACT_ONLY', refs: contractOnly.slice(0, 5) };
+  knownSet.add(targetModule);
+
+  const directRefs: GroundedRef[] = [];
+  const indirectRefs: GroundedRef[] = [];
+  const contractRefs: GroundedRef[] = [];
+
+  for (const f of corpus.files) {
+    let blocks: ParsedTestBlock[];
+    let imports: Array<{ local: string; spec: string }>;
+    try {
+      const cached = cachedTestParse(f.rel, f.content);
+      blocks = cached.blocks;
+      imports = cached.imports;
+    } catch {
+      continue;
+    }
+    if (blocks.length === 0) continue;
+    const importMap = new Map(imports.map((i) => [i.local, i.spec] as [string, string]));
+    // Locals statically imported from the recorded algorithm module (singleton /
+    // namespace receivers such as `masteryScoringService` for class
+    // `MasteryScoringService`): a same-named method invoked on them is a target
+    // invocation with no data-flow speculation.
+    const targetImportedLocals = new Set<string>();
+    if (knownSet.size > 0) {
+      for (const [local, spec] of importMap) {
+        if (resolveImportSpecifier(f.rel, spec, knownSet) === targetModule) {
+          targetImportedLocals.add(local);
+        }
+      }
+    }
+    const resolvedImport = (local: string): string | null => {
+      const spec = importMap.get(local);
+      if (!spec) return null;
+      if (knownSet.size === 0) return null;
+      return resolveImportSpecifier(f.rel, spec, knownSet);
+    };
+
+    for (const b of blocks) {
+      // DIRECT proof first.
+      const direct = hasDirectLinkInBlock(b, alts, targetImportedLocals);
+      if (direct.linked) {
+        directRefs.push({
+          ref: groundedRef(f.rel, b.name, b.line, direct.invokedLabel, direct.assertionLine),
+          file: f.rel,
+          testName: b.name,
+          testLine: b.line,
+          invoked: direct.invokedLabel,
+          assertionLine: direct.assertionLine,
+        });
+        continue;
+      }
+      // INDIRECT: higher-level production invocation + same-block assertion + reachability.
+      if (b.expects.length > 0 && prodIndex) {
+        const seenModules = new Set<string>();
+        const candidates: Array<{ module: string; label: string }> = [];
+        for (const inv of b.invocations) {
+          if (inv.isNew && importMap.has(inv.calleeRoot)) {
+            const mod = resolvedImport(inv.calleeRoot);
+            if (mod && mod !== targetModule && !seenModules.has(mod)) {
+              seenModules.add(mod);
+              candidates.push({ module: mod, label: `new ${inv.calleeRoot}` });
+            }
+            continue;
+          }
+          if (!inv.isNew && importMap.has(inv.calleeRoot)) {
+            const mod = resolvedImport(inv.calleeRoot);
+            if (mod && mod !== targetModule && !seenModules.has(mod)) {
+              seenModules.add(mod);
+              candidates.push({
+                module: mod,
+                label: inv.property ? `${inv.calleeRoot}.${inv.property}` : inv.calleeRoot,
+              });
+            }
+          }
+        }
+        // Higher-level invocation must not itself be a direct target invocation.
+        const directHits = new Set(matchTargetInvocations(b, alts).map((m) => m.invocation));
+        void directHits;
+        for (const c of candidates) {
+          const chain = prodReachesTarget(c.module, targetModule, prodIndex);
+          if (chain) {
+            const firstExpect = [...b.expects].sort((a, x) => a.line - x.line)[0];
+            indirectRefs.push({
+              ref: groundedRef(f.rel, b.name, b.line, `${c.label}→${targetModule}`, firstExpect.line),
+              file: f.rel,
+              testName: b.name,
+              testLine: b.line,
+              invoked: `${c.label}→${targetModule}`,
+              assertionLine: firstExpect.line,
+            });
+            break;
+          }
+        }
+        if (indirectRefs.length > 0 && indirectRefs[indirectRefs.length - 1].file === f.rel) continue;
+      }
+      // CONTRACT: static reference, no invocation, with assertions.
+      if (hasContractRefInBlock(b, alts, targetImportedLocals)) {
+        const firstExpect = [...b.expects].sort((a, x) => a.line - x.line)[0];
+        contractRefs.push({
+          ref: groundedRef(f.rel, b.name, b.line, 'static-contract-ref', firstExpect.line),
+          file: f.rel,
+          testName: b.name,
+          testLine: b.line,
+          invoked: 'static-contract-ref',
+          assertionLine: firstExpect.line,
+        });
+      }
+    }
+  }
+
+  const byRef = (a: GroundedRef, b: GroundedRef): number =>
+    a.file < b.file ? -1 : a.file > b.file ? 1 : a.testLine - b.testLine || (a.ref < b.ref ? -1 : 1);
+  directRefs.sort(byRef);
+  indirectRefs.sort(byRef);
+  contractRefs.sort(byRef);
+  if (directRefs.length > 0) return { kind: 'DIRECT_BEHAVIOR_TEST', refs: directRefs.slice(0, 5).map((r) => r.ref) };
+  if (indirectRefs.length > 0) {
+    return { kind: 'INDIRECT_INTEGRATION_TEST', refs: indirectRefs.slice(0, 5).map((r) => r.ref) };
+  }
+  if (contractRefs.length > 0) return { kind: 'CONTRACT_ONLY', refs: contractRefs.slice(0, 5).map((r) => r.ref) };
   return { kind: 'NO_TEST_EVIDENCE_FOUND', refs: [] };
 }
 
 export interface BenchHit {
   rel: string;
   line: number;
+}
+
+export interface BenchFile {
+  rel: string;
+  content: string;
 }
 
 /** Repository-wide benchmark-mention scan (§26). Evidence only, never measurement. */
@@ -2225,10 +2986,178 @@ export function collectBenchmarkHits(backendRoot: string, inventoryFiles: Invent
   return hits;
 }
 
-export function findBenchmarkEvidence(record: CuratedAlgorithm, hits: BenchHit[]): string {
-  const stems = stemsFor(record).map((s) => s.toLowerCase());
-  const hit = hits.some((h) => stems.some((s) => h.rel.toLowerCase().includes(s)));
-  return hit ? 'BENCHMARK_EVIDENCED' : 'NO_BENCHMARK_EVIDENCE';
+/** Collect candidate benchmark/perf file contents for grounded classification. */
+export function collectBenchFiles(backendRoot: string, inventoryFiles: InventoryFile[]): BenchFile[] {
+  const rels = new Set<string>();
+  for (const f of inventoryFiles) {
+    const rel = normalizeRepoPath(f.path);
+    if (!rel.endsWith('.ts')) continue;
+    if (rel.includes('node_modules') || rel.includes('/dist/') || rel.includes('__generated__')) continue;
+    rels.add(rel);
+  }
+  const out: BenchFile[] = [];
+  for (const rel of [...rels].sort()) {
+    const abs = path.join(backendRoot, rel);
+    try {
+      const stat = fs.statSync(abs);
+      if (!stat.isFile() || stat.size > 200 * 1024) continue;
+      out.push({ rel, content: fs.readFileSync(abs, 'utf8') });
+    } catch {
+      continue;
+    }
+  }
+  return out;
+}
+
+function isPerfIndicator(rel: string, content: string): boolean {
+  if (/perf|load|stress|soak|\bk6\b|artillery|autocannon|\.bench\.|bench\//i.test(rel)) return true;
+  if (/\bfrom\s+['"]k6['"]|artillery|autocannon|Benchmark\.Suite|benchmark\.js/i.test(content)) return true;
+  return /load test|performance test|stress test|soak test/i.test(content);
+}
+
+/**
+ * Grounded benchmark classifier.
+ *
+ * BENCHMARK_EVIDENCED requires a benchmark harness that actually invokes the
+ * recorded target (alias-aware) with measurement. PERFORMANCE_TEST_ONLY requires
+ * a real perf/load test exercising the target (or a structurally proven
+ * higher-level path) without a proper measured benchmark. Comments, filenames,
+ * or nearby benchmark files never count.
+ */
+export function classifyBenchmarkEvidence(
+  record: CuratedAlgorithm,
+  benchFiles: BenchFile[],
+  prodIndex?: ProdImportIndex,
+  inventoryFilesForResolve?: InventoryFile[],
+): string {
+  const alts = targetAlternatives(record);
+  if (alts.length === 0) return 'NO_BENCHMARK_EVIDENCE';
+  const targetModule = record.path.replace(/\\/g, '/');
+  const knownSet = new Set<string>();
+  if (inventoryFilesForResolve) {
+    for (const f of inventoryFilesForResolve) {
+      const rel = normalizeRepoPath(f.path);
+      if (isProductionSource(rel) || isTestFile(rel, f.roleTags)) knownSet.add(rel);
+    }
+  }
+  let perfOnly = false;
+  for (const f of benchFiles) {
+    let benchBlocks: ParsedBenchBlock[];
+    let testBlocks: ParsedTestBlock[];
+    try {
+      const cached = cachedBenchParse(f.rel, f.content);
+      benchBlocks = cached.bench;
+      testBlocks = cached.tests;
+    } catch {
+      continue;
+    }
+    // Locals imported from the recorded algorithm module (singleton receivers).
+    const benchImportedLocals = new Set<string>();
+    if (knownSet.size > 0) {
+      for (const imp of parseTestImports(f.content)) {
+        if (resolveImportSpecifier(f.rel, imp.spec, knownSet) === targetModule) {
+          benchImportedLocals.add(imp.local);
+        }
+      }
+    }
+    // Grounded benchmark: target invocation inside a measurement harness.
+    for (const bb of benchBlocks) {
+      const matches = matchTargetInvocations(
+        { invocations: bb.invocations, aliasToClass: bb.aliasToClass, destructuredMethods: bb.destructuredMethods },
+        alts,
+        benchImportedLocals,
+      );
+      if (matches.length > 0 && bb.hasMeasurement) return 'BENCHMARK_EVIDENCED';
+    }
+    // Explicit timing harness around repeated target invocation (no bench() wrapper).
+    const timingMarkers =
+      /performance\.now|Date\.now\s*\(|process\.hrtime|console\.time/i.test(f.content);
+    if (timingMarkers) {
+      const fileAliases = (() => {
+        try {
+          const sf = ts.createSourceFile('alias-unit.ts', f.content, ts.ScriptTarget.Latest, true);
+          return collectAliasesAndDestructures(sf, sf);
+        } catch {
+          return { aliasToClass: new Map(), destructuredMethods: new Map() };
+        }
+      })();
+      const allInvocations: ParsedInvocation[] = [
+        ...benchBlocks.flatMap((b) => b.invocations),
+        ...testBlocks.flatMap((b) => b.invocations),
+      ];
+      const probe = { invocations: allInvocations, aliasToClass: fileAliases.aliasToClass, destructuredMethods: fileAliases.destructuredMethods };
+      const matches = matchTargetInvocations(probe, alts, benchImportedLocals);
+      const inLoop = /for\s*\(|while\s*\(|\.forEach\s*\(|for\s+await/i.test(f.content);
+      if (matches.length >= 2 && inLoop) return 'BENCHMARK_EVIDENCED';
+      if (matches.length >= 1 && inLoop && timingMarkers && /for\s*\(|while\s*\(/.test(bbTimingSlice(f.content, matches))) {
+        return 'BENCHMARK_EVIDENCED';
+      }
+    }
+    // PERFORMANCE_TEST_ONLY: perf-indicated file exercising target or proven higher path.
+    if (isPerfIndicator(f.rel, f.content)) {
+      const probeBlocks = testBlocks.length > 0 ? testBlocks : [];
+      let exercised = false;
+      for (const tb of probeBlocks) {
+        if (matchTargetInvocations(tb, alts, benchImportedLocals).length > 0 && tb.expects.length >= 0) {
+          exercised = true;
+          break;
+        }
+      }
+      if (!exercised && benchBlocks.length > 0) {
+        for (const bb of benchBlocks) {
+          if (
+            matchTargetInvocations(
+              { invocations: bb.invocations, aliasToClass: bb.aliasToClass, destructuredMethods: bb.destructuredMethods },
+              alts,
+              benchImportedLocals,
+            ).length > 0
+          ) {
+            exercised = true;
+            break;
+          }
+        }
+      }
+      if (!exercised && prodIndex && knownSet.size > 0) {
+        // Higher-level perf path with structural reachability (invocation, no bench harness).
+        for (const tb of probeBlocks) {
+          const imports = parseTestImports(f.content);
+          const importMap = new Map(imports.map((i) => [i.local, i.spec] as [string, string]));
+          for (const inv of tb.invocations) {
+            if (inv.isNew || !importMap.has(inv.calleeRoot)) continue;
+            const spec = importMap.get(inv.calleeRoot)!;
+            const mod = resolveImportSpecifier(f.rel, spec, knownSet);
+            if (mod && mod !== targetModule && prodReachesTarget(mod, targetModule, prodIndex)) {
+              exercised = true;
+              break;
+            }
+          }
+          if (exercised) break;
+        }
+      }
+      if (exercised) perfOnly = true;
+    }
+    void targetModule;
+  }
+  return perfOnly ? 'PERFORMANCE_TEST_ONLY' : 'NO_BENCHMARK_EVIDENCE';
+}
+
+function bbTimingSlice(content: string, matches: Array<{ invocation: ParsedInvocation }>): string {
+  const lines = content.split('\n');
+  const hitLines = new Set(matches.map((m) => m.invocation.line));
+  return lines.filter((_, i) => hitLines.has(i + 1)).join('\n');
+}
+
+export function findBenchmarkEvidence(
+  record: CuratedAlgorithm,
+  hits: BenchHit[],
+  benchFiles?: BenchFile[],
+  prodIndex?: ProdImportIndex,
+  inventoryFilesForResolve?: InventoryFile[],
+): string {
+  void hits;
+  // Grounded rule only: filename/comment mentions never prove benchmark evidence.
+  if (!benchFiles) return 'NO_BENCHMARK_EVIDENCE';
+  return classifyBenchmarkEvidence(record, benchFiles, prodIndex, inventoryFilesForResolve);
 }
 
 // ---------------------------------------------------------------------------
@@ -2607,7 +3536,7 @@ export function renderRegister(ctx: RenderContext, records: CuratedAlgorithm[]):
   L.push('- Detailed records: only source-verified curated procedures (30). Structural candidates are listed with file/symbol/signal evidence in Unresolved Algorithms, never promoted without inspection.');
   L.push('- Complexity is theoretical/static only with HIGH/MEDIUM/LOW/UNRESOLVED confidence. Database work is DB_QUERY_BOUND with bounded/unbounded, filter, take/limit, ordering and query counts where visible; query-plan complexity is never inferred from Prisma syntax. Provider work is PROVIDER_BOUND.');
   L.push('- Fingerprints normalize whitespace/comments (sha256, 16 hex) and are duplication evidence only, never final equivalence.');
-  L.push('- Test evidence: corpus search for symbol/module references; DIRECT requires symbol + expect() in the same file. Benchmark evidence: repository-wide benchmark-mention scan. Measured performance is uniformly NOT MEASURED IN R8-C.');
+  L.push('- Test evidence (grounded R8-C repair): test files are parsed with the TypeScript compiler API into real it(...)/test(...) blocks. DIRECT_BEHAVIOR_TEST requires the recorded algorithm symbol (or owning class method via conservative alias tracking: in-block construction, receiver statically imported from the recorded module, or case-folded singleton receiver) to be invoked inside the SAME test callback that asserts on its outcome (result variable, direct expect wrap, throw/reject path, or post-invocation state assertion for methods). INDIRECT_INTEGRATION_TEST requires a higher-level production-path invocation plus a same-block assertion plus structural import-graph reachability from the invoked production module to the algorithm module. CONTRACT_ONLY covers static shape/contract assertions without behavioral invocation. Filenames, stems, imports alone, comments, type names, and cross-block expects never prove evidence; uncertain cases downgrade (false negatives preferred). Benchmark evidence is grounded likewise: BENCHMARK_EVIDENCED requires actual target invocation inside a bench/benchmark harness or timing-measured repeated invocation; PERFORMANCE_TEST_ONLY covers real perf/load tests without a measured benchmark. Measured performance is uniformly NOT MEASURED IN R8-C.');
   L.push('- Prior art was NOT researched in R8-C; novelty/superiority claims are prohibited and gated.');
   L.push('- The Authentication / Authorization capability is prose-only in R8-B (section-table count 1, no LOGIC header); it is carried as PROSE-authentication-authorization-capability with identical coverage semantics and never invents a LOGIC ID.');
   L.push('');
@@ -2770,8 +3699,9 @@ export function renderRegister(ctx: RenderContext, records: CuratedAlgorithm[]):
   L.push(`Test corpus: ${ctx.testFileCount} files. Benchmark mentions repository-wide: ${ctx.benchHitCount}.`);
   L.push('');
   const benchFound = [...ctx.benchKind.values()].filter((b) => b === 'BENCHMARK_EVIDENCED').length;
-  L.push('Benchmark vocabulary: BENCHMARK_EVIDENCED | NO_BENCHMARK_EVIDENCE. PERFORMANCE_TEST_ONLY would require a located performance harness referencing the unit. '
-    + `Repository scan: benchmark evidence for ${benchFound} record(s); all other records are NO_BENCHMARK_EVIDENCE and every measured-performance field is NOT MEASURED IN R8-C.`);
+  const perfOnlyFound = [...ctx.benchKind.values()].filter((b) => b === 'PERFORMANCE_TEST_ONLY').length;
+  L.push('Benchmark vocabulary: BENCHMARK_EVIDENCED | PERFORMANCE_TEST_ONLY | NO_BENCHMARK_EVIDENCE. BENCHMARK_EVIDENCED requires actual target invocation inside a measurement harness; PERFORMANCE_TEST_ONLY requires a real perf/load test exercising the unit without a measured benchmark. '
+    + `Repository scan: benchmark evidence for ${benchFound} record(s), performance-test-only for ${perfOnlyFound} record(s); all other records are NO_BENCHMARK_EVIDENCE and every measured-performance field is NOT MEASURED IN R8-C.`);
   L.push('');
   L.push('Algorithm ID | Test evidence | Benchmark evidence | Measured | Maturity');
   L.push('--- | --- | --- | --- | ---');
@@ -2779,7 +3709,7 @@ export function renderRegister(ctx: RenderContext, records: CuratedAlgorithm[]):
     const te = ctx.testEvidence.get(r.id) || { kind: 'NO_TEST_EVIDENCE_FOUND', refs: [] };
     const bk = ctx.benchKind.get(r.id) || 'NO_BENCHMARK_EVIDENCE';
     const mat = ctx.maturity.get(r.id) || ['SOURCE_CONFIRMED'];
-    L.push(`${r.id} | ${te.kind}${te.refs.length > 0 ? ` (${te.refs.length} file(s))` : ''} | ${bk} | ${NOT_MEASURED} | ${mat.join('+')}`);
+    L.push(`${r.id} | ${te.kind}${te.refs.length > 0 ? ` (${te.refs.length} ref(s))` : ''} | ${bk} | ${NOT_MEASURED} | ${mat.join('+')}`);
   }
   L.push('');
 
@@ -2950,19 +3880,22 @@ export function run(repoRootArg: string | null): { exitCode: number; errors: str
   }
   const exactGroups = groupFingerprints(units);
 
-  // Evidence search.
+  // Evidence search (grounded R8-C repair: test-block + production-path proof).
   const corpus = buildTestCorpus(backendRoot, inventory.files || []);
   const benchHits = collectBenchmarkHits(backendRoot, inventory.files || []);
+  const benchFiles = collectBenchFiles(backendRoot, inventory.files || []);
+  const prodIndex = buildProdImportIndex(backendRoot, inventory.files || []);
   const testEvidence = new Map<string, TestEvidence>();
   const benchKind = new Map<string, string>();
   const maturity = new Map<string, string[]>();
   for (const r of CURATED_ALGORITHMS) {
-    const te = findTestEvidence(r, corpus);
+    const te = findTestEvidence(r, corpus, prodIndex, backendRoot, inventory.files || []);
     testEvidence.set(r.id, te);
-    const bk = findBenchmarkEvidence(r, benchHits);
+    const bk = findBenchmarkEvidence(r, benchHits, benchFiles, prodIndex, inventory.files || []);
     benchKind.set(r.id, bk);
     const mat = ['SOURCE_CONFIRMED'];
     if (te.kind === 'DIRECT_BEHAVIOR_TEST' || te.kind === 'INDIRECT_INTEGRATION_TEST') mat.push('TEST_EVIDENCED');
+    else if (te.kind === 'CONTRACT_ONLY') mat.push('CONTRACT_EVIDENCED');
     if (bk === 'BENCHMARK_EVIDENCED') mat.push('BENCHMARK_EVIDENCED');
     maturity.set(r.id, mat);
   }
@@ -3032,6 +3965,7 @@ export function run(repoRootArg: string | null): { exitCode: number; errors: str
     contractOnly: [...testEvidence.values()].filter((t) => t.kind === 'CONTRACT_ONLY').length,
     noLocatedTests: [...testEvidence.values()].filter((t) => t.kind === 'NO_TEST_EVIDENCE_FOUND').length,
     benchmarkEvidenced: [...benchKind.values()].filter((b) => b === 'BENCHMARK_EVIDENCED').length,
+    performanceTestOnly: [...benchKind.values()].filter((b) => b === 'PERFORMANCE_TEST_ONLY').length,
     noBenchmarkEvidence: [...benchKind.values()].filter((b) => b === 'NO_BENCHMARK_EVIDENCE').length,
     productionFilesChanged: 0,
   };

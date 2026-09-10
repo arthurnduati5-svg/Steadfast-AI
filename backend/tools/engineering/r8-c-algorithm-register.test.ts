@@ -1,9 +1,11 @@
 /**
- * R8-C focused synthetic tests (§45 test design).
+ * R8-C focused synthetic tests (§45 test design + R8-C evidence-grounding repair).
  *
  * All fixtures are synthetic. No test depends on current production defects.
- * Each test maps to a required §45 case (T1..T20); extra regression tests
- * pin the delegation-evidence fix and the prose-capability derivation.
+ * Each test maps to a required §45 case (T1..T20); T21..T35 prove the grounded
+ * test/benchmark evidence repair (same-block invocation+assertion, structural
+ * reachability, contract separation, benchmark harness grounding, ordering,
+ * and full 30-record classification).
  */
 
 import { describe, it, expect } from 'vitest';
@@ -32,8 +34,15 @@ import {
   findMissingSections,
   buildCoverage,
   renderRegister,
+  findTestEvidence,
+  classifyBenchmarkEvidence,
+  parseTestBlocks,
+  targetAlternatives,
+  CURATED_ALGORITHMS,
   REQUIRED_SECTIONS,
   type LogicEntry,
+  type CuratedAlgorithm,
+  type TestCorpus,
 } from './r8-c-algorithm-register';
 
 const CRUD_FIXTURE = `
@@ -433,5 +442,347 @@ describe('r8-c regression guards', () => {
     expect(idem.idemDedupeTokens).toBe(4);
     const states = detectSignals('currentState targetState transition stateMachine\n');
     expect(states.stateTokens).toBe(4);
+  });
+});
+
+describe('r8-c evidence grounding repair (T21-T35, synthetic fixtures only)', () => {
+  function stubRecord(symbol: string, recordPath: string): CuratedAlgorithm {
+    return {
+      id: 'ALG-synthetic-grounding-probe',
+      domain: 'synthetic',
+      logicIds: [],
+      linkageKind: 'CURATED_AFFINITY',
+      linkageNote: 'synthetic',
+      capability: 'synthetic',
+      purpose: 'synthetic',
+      path: recordPath,
+      symbol,
+      lines: '1-10',
+      category: 'DETERMINISTIC_RULE_SET',
+      tags: [],
+      implClass: 'PROJECT_DETERMINISTIC_POLICY',
+      inputs: 'synthetic',
+      outputs: 'synthetic',
+      dataStructures: [],
+      method: 'synthetic',
+      params: [],
+      determinism: 'DETERMINISTIC',
+      randomness: 'none',
+      stateRead: 'none',
+      stateWrite: 'none',
+      deps: [],
+      timeCx: 'O(1)',
+      spaceCx: 'O(1)',
+      ioCx: 'no I/O',
+      cxConfidence: 'HIGH',
+      scaleDriver: 'synthetic',
+      bound: 'BOUNDED',
+      invariants: [],
+      edgeCases: 'synthetic',
+      failure: 'synthetic',
+      concurrency: 'synthetic',
+      secPrivacy: 'synthetic',
+      duplication: 'SINGLE_IMPLEMENTATION',
+      baseline: 'UNRESOLVED',
+      r8e: 'P2',
+      r8eReason: 'synthetic',
+      risks: ['MAGIC_CONSTANTS'],
+      confidence: 'HIGH',
+      evidenceKind: 'SYNTHETIC',
+    };
+  }
+
+  function corpusOf(files: Array<{ rel: string; content: string }>): TestCorpus {
+    return { files };
+  }
+
+  it('T21: symbol imported/mentioned + unrelated expect() in same file does NOT become DIRECT', () => {
+    const record = stubRecord('computeScore', 'src/services/scoringService.ts');
+    const content = `import { computeScore } from '../services/scoringService';
+import { helperFn } from '../services/helperService';
+describe('unrelated', () => {
+  it('tests another function', () => {
+    const other = helperFn(1);
+    expect(other).toBe(1);
+  });
+});
+`;
+    const te = findTestEvidence(record, corpusOf([{ rel: 'src/tests/t21-probe.test.ts', content }]));
+    expect(te.kind).not.toBe('DIRECT_BEHAVIOR_TEST');
+  });
+
+  it('T22: symbol appears only in a comment does not become evidence', () => {
+    const record = stubRecord('computeScore', 'src/services/scoringService.ts');
+    const content = `// computeScore does great things for scoringService
+describe('comments', () => {
+  it('checks one', () => {
+    expect(1).toBe(1);
+  });
+});
+`;
+    const blocks = parseTestBlocks(content);
+    expect(blocks.length).toBe(1);
+    const te = findTestEvidence(record, corpusOf([{ rel: 'src/tests/t22-probe.test.ts', content }]));
+    expect(te.kind).toBe('NO_TEST_EVIDENCE_FOUND');
+  });
+
+  it('T23: symbol imported but never invoked does not become direct evidence', () => {
+    const record = stubRecord('computeScore', 'src/services/scoringService.ts');
+    const content = `import { computeScore } from '../services/scoringService';
+describe('import only', () => {
+  it('does something else', () => {
+    const x = 1;
+    expect(x).toBe(1);
+  });
+});
+`;
+    const te = findTestEvidence(record, corpusOf([{ rel: 'src/tests/t23-probe.test.ts', content }]));
+    expect(te.kind).not.toBe('DIRECT_BEHAVIOR_TEST');
+    expect(te.kind).toBe('NO_TEST_EVIDENCE_FOUND');
+  });
+
+  it('T24: direct function invocation + assertion on returned result in same block => DIRECT', () => {
+    const record = stubRecord('computeScore', 'src/services/scoringService.ts');
+    const content = `import { computeScore } from '../services/scoringService';
+describe('scoring', () => {
+  it('scores the input', () => {
+    const result = computeScore({ a: 1 });
+    expect(result).toBe(5);
+  });
+});
+`;
+    const te = findTestEvidence(record, corpusOf([{ rel: 'src/tests/t24-probe.test.ts', content }]));
+    expect(te.kind).toBe('DIRECT_BEHAVIOR_TEST');
+    expect(te.refs.length).toBeGreaterThan(0);
+    expect(te.refs[0]).toContain('src/tests/t24-probe.test.ts');
+    expect(te.refs[0]).toContain('scores the input');
+  });
+
+  it('T25: class instance method invocation + assertion in same block => DIRECT', () => {
+    const record = stubRecord(
+      'MasteryScoringService.deriveMasteryLevel',
+      'src/services/masteryScoringService.ts',
+    );
+    const content = `import { MasteryScoringService } from '../services/masteryScoringService';
+describe('mastery', () => {
+  it('derives the level', () => {
+    const service = new MasteryScoringService();
+    const result = service.deriveMasteryLevel(5, 0.9, 0);
+    expect(result).toBe('mastered');
+  });
+});
+`;
+    const te = findTestEvidence(record, corpusOf([{ rel: 'src/tests/t25-probe.test.ts', content }]));
+    expect(te.kind).toBe('DIRECT_BEHAVIOR_TEST');
+    expect(te.refs[0]).toContain('derives the level');
+  });
+
+  it('singleton receiver imported from the target module + same-block assertion => DIRECT', () => {
+    const record = stubRecord(
+      'MasteryScoringService.deriveMasteryLevel',
+      'src/services/masteryScoringService.ts',
+    );
+    const content = `import { masteryScoringService } from '../services/masteryScoringService';
+describe('mastery singleton', () => {
+  it('derives via singleton', () => {
+    const level = masteryScoringService.deriveMasteryLevel(8, 7, 1, 0);
+    expect(level).toBe('mastered');
+  });
+});
+`;
+    const invFiles = [{ path: 'src/services/masteryScoringService.ts' }];
+    const te = findTestEvidence(
+      record,
+      corpusOf([{ rel: 'src/tests/singleton-probe.test.ts', content }]),
+      undefined,
+      undefined,
+      invFiles,
+    );
+    expect(te.kind).toBe('DIRECT_BEHAVIOR_TEST');
+    expect(te.refs[0]).toContain('derives via singleton');
+  });
+
+  it('T26: direct invocation in one block and unrelated assertion in another block does NOT become direct', () => {
+    const record = stubRecord('computeScore', 'src/services/scoringService.ts');
+    const content = `import { computeScore } from '../services/scoringService';
+describe('split', () => {
+  it('invokes without asserting', () => {
+    computeScore({ a: 1 });
+  });
+  it('asserts without invoking', () => {
+    expect(1).toBe(1);
+  });
+});
+`;
+    const te = findTestEvidence(record, corpusOf([{ rel: 'src/tests/t26-probe.test.ts', content }]));
+    expect(te.kind).not.toBe('DIRECT_BEHAVIOR_TEST');
+    expect(te.kind).toBe('NO_TEST_EVIDENCE_FOUND');
+  });
+
+  it('T27: higher-level invocation + assertion + structural dependency => INDIRECT', () => {
+    const record = stubRecord('recommendNextPractice', 'src/services/nextPracticeService.ts');
+    const content = `import { runHigher } from '../services/higherService';
+describe('flow', () => {
+  it('flows through higher service', async () => {
+    const out = await runHigher({ x: 1 });
+    expect(out.ok).toBe(true);
+  });
+});
+`;
+    const prodIndex = new Map<string, string[]>([
+      ['src/services/higherService.ts', ['src/services/nextPracticeService.ts']],
+      ['src/services/nextPracticeService.ts', []],
+    ]);
+    const invFiles = [{ path: 'src/services/higherService.ts' }, { path: 'src/services/nextPracticeService.ts' }];
+    const te = findTestEvidence(
+      record,
+      corpusOf([{ rel: 'src/tests/t27-probe.test.ts', content }]),
+      prodIndex,
+      undefined,
+      invFiles,
+    );
+    expect(te.kind).toBe('INDIRECT_INTEGRATION_TEST');
+    expect(te.refs[0]).toContain('flows through higher service');
+    expect(te.refs[0]).toContain('nextPracticeService.ts');
+  });
+
+  it('T28: higher-level invocation without structural dependency proof does NOT become indirect', () => {
+    const record = stubRecord('recommendNextPractice', 'src/services/nextPracticeService.ts');
+    const content = `import { runHigher } from '../services/higherService';
+describe('flow', () => {
+  it('flows without proof', async () => {
+    const out = await runHigher({ x: 1 });
+    expect(out.ok).toBe(true);
+  });
+});
+`;
+    const prodIndex = new Map<string, string[]>([
+      ['src/services/higherService.ts', []],
+      ['src/services/nextPracticeService.ts', []],
+    ]);
+    const invFiles = [{ path: 'src/services/higherService.ts' }, { path: 'src/services/nextPracticeService.ts' }];
+    const te = findTestEvidence(
+      record,
+      corpusOf([{ rel: 'src/tests/t28-probe.test.ts', content }]),
+      prodIndex,
+      undefined,
+      invFiles,
+    );
+    expect(te.kind).not.toBe('INDIRECT_INTEGRATION_TEST');
+    expect(te.kind).toBe('NO_TEST_EVIDENCE_FOUND');
+  });
+
+  it('T29: contract/static shape assertion => CONTRACT_ONLY, not direct', () => {
+    const record = stubRecord('computeScore', 'src/services/scoringService.ts');
+    const content = `import { computeScore, SCORE_TABLE } from '../services/scoringService';
+describe('shape', () => {
+  it('exposes the contract', () => {
+    expect(typeof computeScore).toBe('function');
+    expect(SCORE_TABLE).toMatchObject({ a: expect.any(Number) });
+  });
+});
+`;
+    const te = findTestEvidence(record, corpusOf([{ rel: 'src/tests/t29-probe.test.ts', content }]));
+    expect(te.kind).toBe('CONTRACT_ONLY');
+  });
+
+  it('T30: mere file/stem/name similarity never proves evidence', () => {
+    const record = stubRecord('computeScore', 'src/services/scoringService.ts');
+    const content = `describe('similar names', () => {
+  it('checks one', () => {
+    expect(1).toBe(1);
+  });
+});
+`;
+    const te = findTestEvidence(record, corpusOf([{ rel: 'src/tests/scoring-service.test.ts', content }]));
+    expect(te.kind).toBe('NO_TEST_EVIDENCE_FOUND');
+  });
+
+  it('T31: comment containing benchmark does not produce BENCHMARK_EVIDENCED', () => {
+    const record = stubRecord('computeScore', 'src/services/scoringService.ts');
+    const files = [
+      { rel: 'src/bench/scoring.bench.ts', content: '// benchmark for computeScore\nconst x = 1;\n' },
+    ];
+    expect(classifyBenchmarkEvidence(record, files)).toBe('NO_BENCHMARK_EVIDENCE');
+  });
+
+  it('T32: benchmark file that never invokes target does not produce benchmark evidence', () => {
+    const record = stubRecord('computeScore', 'src/services/scoringService.ts');
+    const files = [
+      {
+        rel: 'src/bench/scoring.bench.ts',
+        content: `import { bench } from 'vitest';
+import { otherFn } from '../services/otherService';
+bench('other work', () => {
+  otherFn(1);
+});
+`,
+      },
+    ];
+    expect(classifyBenchmarkEvidence(record, files)).toBe('NO_BENCHMARK_EVIDENCE');
+  });
+
+  it('T33: actual target invocation inside a supported benchmark harness can produce BENCHMARK_EVIDENCED', () => {
+    const record = stubRecord('computeScore', 'src/services/scoringService.ts');
+    const files = [
+      {
+        rel: 'src/bench/scoring.bench.ts',
+        content: `import { bench } from 'vitest';
+import { computeScore } from '../services/scoringService';
+bench('scores inputs', () => {
+  computeScore({ a: 1 });
+});
+`,
+      },
+    ];
+    expect(classifyBenchmarkEvidence(record, files)).toBe('BENCHMARK_EVIDENCED');
+  });
+
+  it('T34: deterministic evidence ordering and auditable reference rendering', () => {
+    const record = stubRecord('computeScore', 'src/services/scoringService.ts');
+    const mk = (name: string) => `import { computeScore } from '../services/scoringService';
+describe('ordering', () => {
+  it('${name}', () => {
+    const result = computeScore(1);
+    expect(result).toBeDefined();
+  });
+});
+`;
+    const corpus = corpusOf([
+      { rel: 'src/tests/z-second.test.ts', content: mk('second block') },
+      { rel: 'src/tests/a-first.test.ts', content: mk('first block') },
+    ]);
+    const first = findTestEvidence(record, corpus);
+    const second = findTestEvidence(record, corpus);
+    expect(first.kind).toBe('DIRECT_BEHAVIOR_TEST');
+    expect(JSON.stringify(first)).toBe(JSON.stringify(second));
+    expect(first.refs.length).toBe(2);
+    expect(first.refs[0] < first.refs[1]).toBe(true);
+    for (const ref of first.refs) {
+      expect(ref).toContain('::"');
+      expect(ref).toContain('::L');
+    }
+    void targetAlternatives;
+  });
+
+  it('T35: all 30 curated algorithms receive exactly one final test-evidence classification', () => {
+    expect(CURATED_ALGORITHMS.length).toBe(30);
+    const kinds = new Set(['DIRECT_BEHAVIOR_TEST', 'INDIRECT_INTEGRATION_TEST', 'CONTRACT_ONLY', 'NO_TEST_EVIDENCE_FOUND']);
+    const seen = new Set<string>();
+    let direct = 0;
+    let indirect = 0;
+    let contract = 0;
+    let none = 0;
+    for (const r of CURATED_ALGORITHMS) {
+      expect(seen.has(r.id)).toBe(false);
+      seen.add(r.id);
+      const te = findTestEvidence(r, { files: [] });
+      expect(kinds.has(te.kind)).toBe(true);
+      if (te.kind === 'DIRECT_BEHAVIOR_TEST') direct += 1;
+      else if (te.kind === 'INDIRECT_INTEGRATION_TEST') indirect += 1;
+      else if (te.kind === 'CONTRACT_ONLY') contract += 1;
+      else none += 1;
+    }
+    expect(direct + indirect + contract + none).toBe(30);
   });
 });
