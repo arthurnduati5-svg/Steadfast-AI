@@ -22,25 +22,36 @@ R8-D gap classification. Evidence classifications only — no refactoring, no de
 
 | Disposition | Count |
 | --- | --- |
-| REQUIRED NOW | 0 |
-| REQUIRED BEFORE PRODUCTION | 12 |
+| REQUIRED NOW | 1 |
+| REQUIRED BEFORE PRODUCTION | 11 |
 | FUTURE | 4 |
 | NOT REQUIRED | 2 |
 | UNKNOWN | 4 |
 
-Gap counts by type (a gap may carry multiple types; exact per-gap audit): DURABILITY_GAP 6, CONCURRENCY_GAP 5, DATA_LIFECYCLE_GAP 4, OWNERSHIP_AMBIGUITY 4, UNKNOWN (as gap type) 10, AUTHENTICATION_GAP 2, AUTHORIZATION_GAP 2, STATIC_SCALE_BOUND_GAP 3, DUPLICATION_CANDIDATE 2, TRANSITIONAL_IMPLEMENTATION 1, CONTRACT_GAP 1, FAILURE_SEMANTICS_GAP 1, TRANSACTIONALITY_GAP 1, OBSERVABILITY_GAP 1. RETRY_IDEMPOTENCY_GAP 0 (retry protection was proven present where required: daily-objective settle, evidence idempotency, AI runtime backoff; remaining retry unknowns are carried under DURABILITY/UNKNOWN types).
+Gap counts by type (a gap may carry multiple types; exact per-gap audit): DURABILITY_GAP 6, CONCURRENCY_GAP 5, DATA_LIFECYCLE_GAP 4, OWNERSHIP_AMBIGUITY 4, UNKNOWN (as gap type) 10, AUTHENTICATION_GAP 1, AUTHORIZATION_GAP 3, STATIC_SCALE_BOUND_GAP 3, DUPLICATION_CANDIDATE 2, TRANSITIONAL_IMPLEMENTATION 1, CONTRACT_GAP 1, FAILURE_SEMANTICS_GAP 1, TRANSACTIONALITY_GAP 1, OBSERVABILITY_GAP 1. RETRY_IDEMPOTENCY_GAP 0 (retry protection was proven present where required: daily-objective settle, evidence idempotency, AI runtime backoff; remaining retry unknowns are carried under DURABILITY/UNKNOWN types).
 
 Domains with no proven gap: Parent-Facing Backend Data (only shared UNKNOWN dimensions), Artifacts beyond input-bound question (1 gap registered — noted here that no security/privacy gap was proven).
 
 ## REQUIRED NOW
 
-None. No inspected evidence showed a current violation of an established correctness/security/privacy/safeguarding/data-integrity requirement in accepted product behavior. Specifically:
+One gap: `GAP-evidence-header-identity` — an existing authorization/identity-provenance defect in an active production path (record below). Mount authentication itself is present; no other inspected evidence showed a current violation of an established correctness/security/privacy/safeguarding/data-integrity requirement in accepted product behavior. Specifically:
 
 - Mount authentication is present on production learner/teacher/governance/assessment surfaces (R8A_STRUCTURAL + SOURCE_INSPECTION `src/index.ts:360-414,540-553`).
 - The question-bank/marking/exam-paper in-memory repositories are fail-closed gated against production (SOURCE_INSPECTION `questionBankRepositoryMode.ts:33-35` throws in production without `QUESTION_BANK_REPOSITORY_MODE=prisma`).
 - Voice quota settlement is transactional with row locks (SOURCE_INSPECTION `voiceLedgerService.ts:144,216-220,472`).
-- Learning-evidence commands enforce role allow-lists and same-learner writes in-service (SOURCE_INSPECTION `learningEvidenceCommandService.ts:202-206,320,363,372`).
-- No catastrophic security/privacy/data-loss defect whose mere continued existence creates immediate risk was discovered; per §23 no contradiction return was triggered.
+- Learning-evidence commands enforce role allow-lists and same-learner writes in-service (SOURCE_INSPECTION `learningEvidenceCommandService.ts:202-206,320,363,372`) — but they enforce against an actor role sourced from caller-controlled headers, not the verified `req.user.role` (see GAP-evidence-header-identity).
+- Beyond GAP-evidence-header-identity, no additional catastrophic security/privacy/data-loss defect whose mere continued existence creates immediate risk was discovered; per §23 no contradiction return was triggered.
+
+### GAP-evidence-header-identity
+- LINKED LOGIC ID(S): LOGIC-memory-api-copilot-evidence, LOGIC-memory-api-copilot-learning-evidence
+- GAP TYPE: AUTHORIZATION_GAP; CONTRACT_GAP
+- CURRENT BEHAVIOR: `/api/copilot/evidence` IS mounted behind `schoolAuthMiddleware` + `requireVerifiedSchoolContext` (src/index.ts:545); `schoolAuthMiddleware` verifies JWT claims and assigns verified identity/role to `req.user.id`, `req.user.role`, and `req.schoolId`. The evidence router does NOT derive actor identity from that verified context: it builds actor identity from caller-controlled `x-actor-id`/`x-actor-role` headers with fallbacks (`learningEvidenceRoutes.ts:11-17`). The resulting `actorRole` is passed into `LearningEvidenceCommandService`.
+- MISSING/PARTIAL: actor role/id trust the client-supplied header instead of the verified `req.user` role; in-service role allow-lists (`learningEvidenceCommandService.ts:202-206,320,363,372`) then authorize teacher/admin/internal-operator-only transitions against that caller-controlled value.
+- WHY IT MATTERS: a caller can claim `internal_operator` or `school_admin` via `x-actor-role`, elevating evidence operations (commit/approve restricted ops) within their verified school context. Authentication is NOT absent — authenticated JWT identity, verified school context, and a verified role on `req.user.role` all exist; the defect is that the evidence router ignores the verified role.
+- EVIDENCE: SOURCE_INSPECTION `src/domains/learning-evidence/routes/learningEvidenceRoutes.ts:11-17` + `learningEvidenceCommandService.ts:187-206,320,363,372`; mount evidence src/index.ts:545; verified identity assignment `src/middleware/schoolAuthMiddleware.ts:18-77`. CONFIDENCE: high (exploitability structurally proven: the verified role exists on `req.user.role` and the router demonstrably consumes the header value instead).
+- SECURITY/PRIVACY IMPACT: privilege spoofing within tenant scope (role-provenance defect). DATA INTEGRITY: moderate (evidence commits). RESTART/CONCURRENCY/LONG-HISTORY: none.
+- CONSUMERS AFFECTED: evidence event store API. R8-E HANDOFF: none. R8-F HANDOFF: none.
+- DISPOSITION: REQUIRED NOW. REASON: existing authorization/identity-provenance defect in an active production path — verified JWT identity and role exist, the router ignores them in favor of caller-controlled `x-actor-role`, and command authorization consumes the resulting actor role; exploitability is structurally proven, not merely a future production-readiness concern.
 
 ## REQUIRED BEFORE PRODUCTION
 
@@ -88,17 +99,6 @@ None. No inspected evidence showed a current violation of an established correct
 - SECURITY/PRIVACY: none. DATA INTEGRITY: moderate. RESTART: none. RETRY/CONCURRENCY: moderate. LONG-HISTORY: none.
 - CONSUMERS AFFECTED: tutor client, growth reader. R8-E HANDOFF: none. R8-F HANDOFF: consolidation candidate.
 - DISPOSITION: REQUIRED BEFORE PRODUCTION. REASON: canonical chat history durability/integrity should be single-owner before launch.
-
-### GAP-evidence-header-identity
-- LINKED LOGIC ID(S): LOGIC-memory-api-copilot-evidence, LOGIC-memory-api-copilot-learning-evidence
-- GAP TYPE: AUTHENTICATION_GAP; CONTRACT_GAP
-- CURRENT BEHAVIOR: evidence router builds actor identity from `x-school-id`/`x-actor-id`/`x-actor-role` headers with fallbacks (`learningEvidenceRoutes.ts:11-17`), behind schoolAuthMiddleware + requireVerifiedSchoolContext.
-- MISSING/PARTIAL: actor role/id trust the client-supplied header when session-derived values are absent; in-service role allow-lists then gate on that value.
-- WHY IT MATTERS: if reachable with header control, a caller could claim `internal_operator` or `school_admin` within their own school context, elevating evidence operations (commit/approve restricted ops).
-- EVIDENCE: SOURCE_INSPECTION `src/domains/learning-evidence/routes/learningEvidenceRoutes.ts:11-17` + `learningEvidenceCommandService.ts:187-206,320,363,372`; mount evidence src/index.ts:545. CONFIDENCE: medium (reachability of the header fallback path behind middleware is UNKNOWN).
-- SECURITY/PRIVACY IMPACT: privilege spoofing within tenant scope if reachable. DATA INTEGRITY: moderate (evidence commits). RESTART/CONCURRENCY/LONG-HISTORY: none.
-- CONSUMERS AFFECTED: evidence event store API. R8-E HANDOFF: none. R8-F HANDOFF: none.
-- DISPOSITION: REQUIRED BEFORE PRODUCTION. REASON: identity must derive only from verified session claims before launch; not REQUIRED NOW because exploitability is unproven.
 
 ### GAP-evidence-idempotency-lifecycle
 - LINKED LOGIC ID(S): LOGIC-memory-api-copilot-learning-evidence, LOGIC-memory-api-copilot-evidence
@@ -282,11 +282,11 @@ None. No inspected evidence showed a current violation of an established correct
 
 ## Security / Privacy / Safeguarding Gaps
 
+- GAP-evidence-header-identity (REQUIRED NOW — proven authorization/identity-provenance defect: verified JWT role ignored in favor of caller-controlled `x-actor-role`)
 - GAP-identity-rolecheck-coverage (REQUIRED BEFORE PRODUCTION)
 - GAP-identity-mountless-authz (REQUIRED BEFORE PRODUCTION)
-- GAP-evidence-header-identity (REQUIRED BEFORE PRODUCTION)
 - GAP-safety-audit-writers (UNKNOWN)
-No REQUIRED NOW security/privacy/safeguarding gap was proven.
+No other REQUIRED NOW security/privacy/safeguarding gap was proven; GAP-evidence-header-identity is the single proven current violation.
 
 ## Data Integrity / Durability Gaps
 
