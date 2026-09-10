@@ -13,8 +13,11 @@ import type {
   ResultAudienceProjectionRepository, StudentResultReportSnapshotRepository,
   ParentSafeResultSummaryRepository, StudentSafeResultSummaryRepository,
   ResultReleaseDeliveryIntentRepository, ResultReleaseAuditRepository,
-  ResultReleaseIdempotencyRepository,
+  ResultReleaseIdempotencyRepository, ResultReleaseApprovalAtomicCommitter,
+  ApproveReleasePacketAtomicResult,
 } from '../contracts/resultReleaseRepositoryContracts';
+import { randomUUID } from 'crypto';
+import type { PrismaClient } from '@prisma/client';
 import { prisma } from '../../../../lib/prisma';
 
 function mapPacketFromPrisma(row: any): ResultReleasePacket {
@@ -811,5 +814,92 @@ export class PrismaResultReleaseIdempotencyRepository implements ResultReleaseId
       data: { status: 'expired', expiresAt: new Date(expiresAt) },
     }).catch(() => null);
     return row ? mapIdempotencyFromPrisma(row) : null;
+  }
+}
+
+class ResultReleaseAtomicAbort extends Error {
+  constructor(public readonly reason: 'CONFLICT' | 'NOT_FOUND' | 'PACKET_TRANSITION_FAILED') {
+    super(`RESULT_RELEASE_ATOMIC_ABORT:${reason}`);
+  }
+}
+
+/**
+ * Production atomic committer (R8-E closure repair): approval transition +
+ * linked packet transition + RELEASE_PACKET_APPROVED audit commit as ONE
+ * prisma.$transaction. Any packet-transition failure aborts the transaction,
+ * so the approval can never be left approved while the packet is not.
+ */
+export class PrismaResultReleaseApprovalAtomicCommitter implements ResultReleaseApprovalAtomicCommitter {
+  constructor(private db: PrismaClient = prisma) {}
+
+  async approvePacketAtomically(input: {
+    schoolId: string;
+    approvalId: string;
+    packetId: string;
+    actorId: string;
+    actorRole: string;
+    correlationId: string;
+  }): Promise<ApproveReleasePacketAtomicResult> {
+    try {
+      const approval = await this.db.$transaction(async (tx) => {
+        const transitioned = await tx.resultReleaseApprovalRecord.updateMany({
+          where: {
+            resultReleaseApprovalId: input.approvalId,
+            schoolId: input.schoolId,
+            resultReleasePacketId: input.packetId,
+            approvalStatus: 'draft',
+          },
+          data: {
+            approvalStatus: 'approved',
+            approvedAt: new Date(),
+            safeApprovalSummary: 'Approved by ' + input.actorRole,
+          },
+        });
+        if (transitioned.count === 0) {
+          const current = await tx.resultReleaseApprovalRecord.findUnique({
+            where: { resultReleaseApprovalId: input.approvalId },
+          });
+          if (!current || current.schoolId !== input.schoolId) throw new ResultReleaseAtomicAbort('NOT_FOUND');
+          throw new ResultReleaseAtomicAbort('CONFLICT');
+        }
+        const packetTransitioned = await tx.resultReleasePacketRecord.updateMany({
+          where: {
+            resultReleasePacketId: input.packetId,
+            schoolId: input.schoolId,
+            packetStatus: 'ready_for_approval',
+          },
+          data: { packetStatus: 'approved_for_internal_release', approvedAt: new Date() },
+        });
+        if (packetTransitioned.count === 0) throw new ResultReleaseAtomicAbort('PACKET_TRANSITION_FAILED');
+        await tx.resultReleaseAuditRecord.create({
+          data: {
+            resultReleaseAuditId: randomUUID(),
+            schoolId: input.schoolId,
+            resultReleasePacketId: input.packetId,
+            resultReleaseApprovalId: input.approvalId,
+            actorId: input.actorId,
+            actorRole: input.actorRole,
+            eventType: 'RELEASE_PACKET_APPROVED',
+            decision: 'approved',
+            safeSummary: `Release packet approved by ${input.actorRole}`,
+            metadataJson: { approvalId: input.approvalId },
+            requestId: input.correlationId,
+            correlationId: input.correlationId,
+          },
+        });
+        const row = await tx.resultReleaseApprovalRecord.findUnique({
+          where: { resultReleaseApprovalId: input.approvalId },
+        });
+        if (!row) throw new ResultReleaseAtomicAbort('PACKET_TRANSITION_FAILED');
+        return mapApprovalFromPrisma(row);
+      });
+      return { ok: true, approval };
+    } catch (err) {
+      if (err instanceof ResultReleaseAtomicAbort) {
+        if (err.reason === 'CONFLICT' || err.reason === 'NOT_FOUND') return { ok: false, reason: err.reason };
+        throw new Error('PACKET_TRANSITION_FAILED: linked packet could not transition to approved_for_internal_release');
+      }
+      throw err;
+    }
   }
 }

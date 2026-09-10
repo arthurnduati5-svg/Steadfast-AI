@@ -13,7 +13,8 @@ import type {
   ResultAudienceProjectionRepository, StudentResultReportSnapshotRepository,
   ParentSafeResultSummaryRepository, StudentSafeResultSummaryRepository,
   ResultReleaseDeliveryIntentRepository, ResultReleaseAuditRepository,
-  ResultReleaseIdempotencyRepository,
+  ResultReleaseIdempotencyRepository, ResultReleaseApprovalAtomicCommitter,
+  ApproveReleasePacketAtomicResult,
 } from '../contracts/resultReleaseRepositoryContracts';
 
 function uuid(): string { return Math.random().toString(36).substring(2, 15) + Date.now().toString(36); }
@@ -515,5 +516,58 @@ export class InMemoryResultReleaseIdempotencyRepository implements ResultRelease
     const updated = { ...r, status: 'expired', expiresAt, updatedAt: now() };
     this.store.set(id, updated);
     return updated;
+  }
+}
+
+/**
+ * Test-compatible atomic committer: validates approval guard AND packet guard
+ * before mutating anything, so a packet persistence failure leaves the
+ * approval in draft and writes no audit — the same rollback semantics as the
+ * production $transaction committer. `failPacketTransition` injects a packet
+ * persistence failure for rollback proof.
+ */
+export class InMemoryResultReleaseApprovalAtomicCommitter implements ResultReleaseApprovalAtomicCommitter {
+  public failPacketTransition = false;
+
+  constructor(
+    private approvals: InMemoryResultReleaseApprovalRepository,
+    private packets: InMemoryResultReleasePacketRepository,
+    private audits: InMemoryResultReleaseAuditRepository,
+  ) {}
+
+  async approvePacketAtomically(input: {
+    schoolId: string;
+    approvalId: string;
+    packetId: string;
+    actorId: string;
+    actorRole: string;
+    correlationId: string;
+  }): Promise<ApproveReleasePacketAtomicResult> {
+    const approval = await this.approvals.getById(input.approvalId);
+    if (!approval || approval.schoolId !== input.schoolId) return { ok: false, reason: 'NOT_FOUND' };
+    if (approval.approvalStatus !== 'draft' || approval.resultReleasePacketId !== input.packetId) {
+      return { ok: false, reason: 'CONFLICT' };
+    }
+    const packet = await this.packets.getById(input.packetId);
+    if (this.failPacketTransition || !packet || packet.schoolId !== input.schoolId || packet.packetStatus !== 'ready_for_approval') {
+      throw new Error('PACKET_TRANSITION_FAILED: linked packet could not transition to approved_for_internal_release');
+    }
+    const updated = await this.approvals.transitionStatusFrom(input.approvalId, 'draft', 'approved', 'Approved by ' + input.actorRole);
+    if (!updated) return { ok: false, reason: 'CONFLICT' };
+    await this.packets.updateStatus(input.packetId, 'approved_for_internal_release');
+    await this.audits.create({
+      schoolId: input.schoolId,
+      resultReleasePacketId: input.packetId,
+      resultReleaseApprovalId: input.approvalId,
+      actorId: input.actorId,
+      actorRole: input.actorRole,
+      eventType: 'RELEASE_PACKET_APPROVED',
+      decision: 'approved',
+      safeSummary: `Release packet approved by ${input.actorRole}`,
+      metadataJson: { approvalId: input.approvalId },
+      requestId: input.correlationId,
+      correlationId: input.correlationId,
+    });
+    return { ok: true, approval: updated };
   }
 }

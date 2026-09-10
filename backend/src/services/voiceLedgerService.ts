@@ -1,5 +1,6 @@
 import { Prisma, VoiceSessionMode } from '@prisma/client';
-import prisma from '../utils/prismaClient';
+import { randomUUID } from 'crypto';
+import prisma from '../lib/prisma';
 
 type TxClient = Prisma.TransactionClient;
 
@@ -137,7 +138,8 @@ const ensureStudentRowLocked = async (tx: TxClient, studentId: string) => {
       topInterests: [],
       profileCompleted: false,
       preferences: {},
-      favoriteShows: []
+      favoriteShows: [],
+      updatedAt: new Date()
     }
   });
 
@@ -166,6 +168,7 @@ const maybeBootstrapDevBalanceInTx = async (
 
   const grant = await tx.voicePackageGrant.create({
     data: {
+      id: randomUUID(),
       studentId,
       secondsGranted: DEV_BOOTSTRAP_SECONDS,
       secondsRemaining: DEV_BOOTSTRAP_SECONDS,
@@ -178,6 +181,7 @@ const maybeBootstrapDevBalanceInTx = async (
 
   await tx.voiceLedgerEntry.create({
     data: {
+      id: randomUUID(),
       studentId,
       type: 'GRANT',
       secondsDelta: DEV_BOOTSTRAP_SECONDS,
@@ -259,6 +263,7 @@ const grantVoicePackageInTx = async (tx: TxClient, input: {
 
   const grant = await tx.voicePackageGrant.create({
     data: {
+      id: randomUUID(),
       studentId: input.studentId,
       secondsGranted,
       secondsRemaining: secondsGranted,
@@ -270,6 +275,7 @@ const grantVoicePackageInTx = async (tx: TxClient, input: {
 
   await tx.voiceLedgerEntry.create({
     data: {
+      id: randomUUID(),
       studentId: input.studentId,
       type: 'GRANT',
       secondsDelta: secondsGranted,
@@ -401,6 +407,7 @@ export const startVoiceSession = async (input: StartVoiceSessionInput) => {
 
     const session = await tx.voiceSessionUsage.create({
       data: {
+        id: randomUUID(),
         studentId: input.studentId,
         chatSessionId: safeChatSessionId,
         mode,
@@ -513,6 +520,7 @@ export const stopVoiceSession = async (input: StopVoiceSessionInput): Promise<St
 
       await tx.voiceLedgerEntry.create({
         data: {
+          id: randomUUID(),
           studentId: input.studentId,
           type: 'DEBIT',
           secondsDelta: -billedSeconds,

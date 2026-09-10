@@ -9,6 +9,7 @@ import {
   InMemoryResultReleaseDeliveryIntentRepository,
   InMemoryResultReleaseAuditRepository,
   InMemoryResultReleaseIdempotencyRepository,
+  InMemoryResultReleaseApprovalAtomicCommitter,
 } from '../domains/assessment/result-release/repositories/inMemoryResultReleaseRepositories';
 import { ResultReleasePacketService } from '../domains/assessment/result-release/services/resultReleasePacketService';
 import { ResultReleaseBoundaryEnforcementService } from '../domains/assessment/result-release/services/resultReleaseBoundaryEnforcementService';
@@ -37,9 +38,10 @@ const idempotencyRepo = new InMemoryResultReleaseIdempotencyRepository();
 
 const auditBridge = new ResultReleaseAuditBridge(auditRepo);
 const idempotencyService = new ResultReleaseIdempotencyService(idempotencyRepo);
+const atomicCommitter = new InMemoryResultReleaseApprovalAtomicCommitter(approvalRepo, packetRepo, auditRepo);
 const packetService = new ResultReleasePacketService(packetRepo, approvalRepo, auditBridge, idempotencyService);
 const boundaryService = new ResultReleaseBoundaryEnforcementService();
-const approvalService = new ResultReleaseApprovalService(approvalRepo, packetRepo, auditBridge, idempotencyService);
+const approvalService = new ResultReleaseApprovalService(approvalRepo, packetRepo, auditBridge, idempotencyService, atomicCommitter);
 const projectionService = new ResultAudienceProjectionService(projectionRepo, auditBridge, idempotencyService);
 const reportSnapshotService = new ResultReportSnapshotService(reportSnapshotRepo, auditBridge, idempotencyService);
 const parentSummaryService = new ParentSafeResultSummaryService(parentSummaryRepo, auditBridge, idempotencyService);

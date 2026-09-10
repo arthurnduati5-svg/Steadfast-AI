@@ -145,3 +145,33 @@ export interface ResultReleaseIdempotencyRepository {
   updateStatus(idempotencyId: string, status: string, resourceId?: string, safeResultSummary?: string): Promise<ResultReleaseIdempotencyEntry | null>;
   expireEntry(idempotencyId: string, expiresAt: string): Promise<ResultReleaseIdempotencyEntry | null>;
 }
+
+export type ApproveReleasePacketAtomicResult =
+  | {
+      ok: true;
+      approval: ResultReleaseApproval;
+    }
+  | {
+      ok: false;
+      reason: 'CONFLICT' | 'NOT_FOUND';
+    };
+
+/**
+ * Narrow persistence port for the canonical result-release approval operation
+ * (R8-E closure repair). Implementations must commit approval transition
+ * (draft → approved) + linked packet transition
+ * (ready_for_approval → approved_for_internal_release) + RELEASE_PACKET_APPROVED
+ * audit as ONE transaction: all three commit or none. A packet-transition
+ * failure must abort the transaction (thrown error, never success); a lost
+ * approval race surfaces as ok:false CONFLICT/NOT_FOUND with no mutation.
+ */
+export interface ResultReleaseApprovalAtomicCommitter {
+  approvePacketAtomically(input: {
+    schoolId: string;
+    approvalId: string;
+    packetId: string;
+    actorId: string;
+    actorRole: string;
+    correlationId: string;
+  }): Promise<ApproveReleasePacketAtomicResult>;
+}

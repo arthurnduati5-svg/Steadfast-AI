@@ -30,7 +30,7 @@ const DATABASE_URL =
   'postgresql://postgres:postgres@localhost:8000/steadfast_r6_test?schema=public';
 
 if (!target) {
-  console.error('usage: tsx tools/engineering/r8-e-workload.ts --target <roster|marking|mastery|assessment|ai-reliab|daily-obj|evidence>');
+  console.error('usage: tsx tools/engineering/r8-e-workload.ts --target <roster|marking|mastery|assessment|ai-reliab|daily-obj|evidence|voice>');
   process.exit(2);
 }
 
@@ -515,6 +515,97 @@ async function runAssessment() {
     }));
   }
 
+  // W3: exercise the production atomic committer (approval + packet + audit
+  // in ONE $transaction) against the isolated test DB: one success commit,
+  // then one sabotaged packet proving rollback leaves approval draft.
+  {
+    const { PrismaResultReleaseApprovalAtomicCommitter } = await import('../../src/domains/assessment/result-release/repositories/prismaResultReleaseRepositories');
+    const committer = new PrismaResultReleaseApprovalAtomicCommitter(client as any);
+
+    async function atomicFixture(suffix: string, packetStatus: string) {
+      const packetId = `${RUN}_atomic_pkt_${suffix}`;
+      const approvalId = `${RUN}_atomic_appr_${suffix}`;
+      await client.resultReleasePacketRecord.create({
+        data: {
+          resultReleasePacketId: packetId,
+          schoolId,
+          resultFinalizationDecisionId: `${RUN}_fin_${suffix}`,
+          resultReleaseReadinessId: `${RUN}_rr_${suffix}`,
+          resultReleaseBoundaryId: `${RUN}_rb_${suffix}`,
+          markingResultVersionId: `${RUN}_mv_${suffix}`,
+          studentRef: 'r8e-stu',
+          packetStatus,
+          safePacketSummary: 'r8e atomic fixture',
+          createdByActorId: 'r8e-actor',
+          createdByRole: 'school_admin',
+          updatedAt: new Date(),
+        },
+      });
+      await client.resultReleaseApprovalRecord.create({
+        data: {
+          resultReleaseApprovalId: approvalId,
+          schoolId,
+          resultReleasePacketId: packetId,
+          resultFinalizationDecisionId: `${RUN}_fin_${suffix}`,
+          studentRef: 'r8e-stu',
+          approvalStatus: 'draft',
+          approvedByActorId: 'r8e-actor',
+          approvedByRole: 'school_admin',
+          safeApprovalSummary: 'r8e atomic approval',
+          updatedAt: new Date(),
+        },
+      });
+      return { packetId, approvalId };
+    }
+
+    const ok3 = await atomicFixture('ok', 'ready_for_approval');
+    const t3 = performance.now();
+    const commitResult = await committer.approvePacketAtomically({
+      schoolId, approvalId: ok3.approvalId, packetId: ok3.packetId,
+      actorId: 'r8e-actor', actorRole: 'school_admin', correlationId: `${RUN}_corr`,
+    });
+    const commitElapsed = performance.now() - t3;
+    const committedPacket = await client.resultReleasePacketRecord.findUnique({ where: { resultReleasePacketId: ok3.packetId } });
+    const commitAudits = await client.resultReleaseAuditRecord.count({
+      where: { resultReleaseApprovalId: ok3.approvalId, eventType: 'RELEASE_PACKET_APPROVED' },
+    });
+
+    const rb3 = await atomicFixture('rb', 'blocked');
+    let rollbackError: string | null = null;
+    try {
+      await committer.approvePacketAtomically({
+        schoolId, approvalId: rb3.approvalId, packetId: rb3.packetId,
+        actorId: 'r8e-actor', actorRole: 'school_admin', correlationId: `${RUN}_corr_rb`,
+      });
+    } catch (err) {
+      rollbackError = String(err).slice(0, 80);
+    }
+    const rolledBackApproval = await client.resultReleaseApprovalRecord.findUnique({ where: { resultReleaseApprovalId: rb3.approvalId } });
+    const rollbackAudits = await client.resultReleaseAuditRecord.count({
+      where: { resultReleaseApprovalId: rb3.approvalId, eventType: 'RELEASE_PACKET_APPROVED' },
+    });
+
+    console.log(JSON.stringify({
+      target: 'assessment-approval-atomic-commit',
+      cardinality: 2,
+      commitOk: commitResult.ok === true,
+      committedPacketStatus: committedPacket?.packetStatus,
+      commitAuditCount: commitAudits,
+      rollbackError,
+      rolledBackApprovalStatus: rolledBackApproval?.approvalStatus,
+      rollbackAuditCount: rollbackAudits,
+      atomicInvariant: commitResult.ok === true
+        && committedPacket?.packetStatus === 'approved_for_internal_release'
+        && commitAudits === 1
+        && rollbackError !== null
+        && rolledBackApproval?.approvalStatus === 'draft'
+        && rollbackAudits === 0
+        ? 'PROVEN: one transaction commits all three; packet failure rolls approval back with no audit'
+        : 'FAILED',
+      elapsedMs: Number(commitElapsed.toFixed(1)),
+    }));
+  }
+
   await client.$disconnect();
 }
 
@@ -699,6 +790,86 @@ async function runEvidence() {
   }));
 }
 
+// ════════════════════════════════════════════════════════════════════════
+// T8 — Voice quota contention (real Prisma/PostgreSQL, production path)
+// ════════════════════════════════════════════════════════════════════════
+async function runVoice() {
+  process.env.VOICE_DEV_BOOTSTRAP_MINUTES = '0';
+  const { PrismaClient } = await import('@prisma/client');
+  const voice = await import('../../src/services/voiceLedgerService');
+
+  const client = new PrismaClient({ datasourceUrl: DATABASE_URL });
+  try {
+    await client.$queryRaw`SELECT 1`;
+  } catch (err) {
+    console.error(JSON.stringify({ target: 'voice', blocked: 'SAFE ISOLATED DATABASE REQUIRED', error: String(err).slice(0, 200) }));
+    process.exit(3);
+  }
+
+  const RUN = `r8e_voice_${Date.now().toString(36)}`;
+  const studentId = `${RUN}_student`;
+  const QUOTA_SECONDS = 60;
+  const SESSIONS = 3;
+  const REQUEST_EACH = 40;
+
+  // Clean slate for the fixture student (isolated test DB only).
+  await client.voiceLedgerEntry.deleteMany({ where: { studentId } });
+  await client.voicePackageGrant.deleteMany({ where: { studentId } });
+  await client.voiceSessionUsage.deleteMany({ where: { studentId } });
+
+  await voice.grantVoicePackage({ studentId, minutesPurchased: 1, source: 'r8e-voice-fixture' });
+  const startingQuota = await voice.getVoiceBalanceSeconds(studentId);
+
+  const sessionIds: string[] = [];
+  for (let i = 0; i < SESSIONS; i++) {
+    const started = await voice.startVoiceSession({ studentId });
+    if (!started.allowed) {
+      console.error(JSON.stringify({ target: 'voice', fatal: 'fixture session start refused' }));
+      process.exit(1);
+    }
+    sessionIds.push(started.sessionUsageId);
+  }
+
+  // Combined requested consumption (120s) exceeds available quota (60s):
+  // without correct row-lock serialization the balance could go negative.
+  const t0 = performance.now();
+  const results = await Promise.all(sessionIds.map((sessionUsageId) =>
+    voice.stopVoiceSession({ studentId, sessionUsageId, listeningSecondsUsed: REQUEST_EACH, ttsSecondsUsed: 0 }),
+  ));
+  const elapsed = performance.now() - t0;
+
+  const debitedTotal = results.reduce((sum, r) => sum + r.billedSeconds, 0);
+  const finalBalance = await voice.getVoiceBalanceSeconds(studentId);
+  const debits = await client.voiceLedgerEntry.aggregate({
+    where: { studentId, type: 'DEBIT' },
+    _sum: { secondsDelta: true },
+  });
+  const ledgerDebitedTotal = Math.abs(debits._sum.secondsDelta ?? 0);
+  const settledSessions = await client.voiceSessionUsage.count({ where: { studentId, endedAt: { not: null } } });
+
+  const noOverspend = debitedTotal <= startingQuota;
+  const noNegative = finalBalance >= 0;
+  const reconciled = startingQuota - debitedTotal === finalBalance && ledgerDebitedTotal === debitedTotal;
+  const noDuplicate = settledSessions === SESSIONS;
+  console.log(JSON.stringify({
+    target: 'voice-quota-contention',
+    cardinality: SESSIONS,
+    startingQuotaSeconds: startingQuota,
+    requestedEachSeconds: REQUEST_EACH,
+    requestedTotalSeconds: SESSIONS * REQUEST_EACH,
+    debitedTotalSeconds: debitedTotal,
+    ledgerDebitedTotalSeconds: ledgerDebitedTotal,
+    finalBalanceSeconds: finalBalance,
+    settledSessions,
+    invariant: noOverspend && noNegative && reconciled && noDuplicate
+      ? 'PROVEN — REAL POSTGRESQL CONTENTION: quota cannot go negative or be overspent'
+      : 'FAILED',
+    elapsedMs: Number(elapsed.toFixed(1)),
+  }));
+
+  await client.$disconnect();
+}
+
 // ── main ────────────────────────────────────────────────────────────────
 const t0 = performance.now();
 main().catch((err) => {
@@ -715,6 +886,7 @@ async function main(): Promise<void> {
     else if (target === 'ai-reliab') await runAiReliab();
     else if (target === 'daily-obj') await runDailyObj();
     else if (target === 'evidence') await runEvidence();
+    else if (target === 'voice') await runVoice();
     else {
       console.error(`unknown target: ${target}`);
       process.exit(2);

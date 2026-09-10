@@ -50,6 +50,16 @@ export class DeterministicMarkingInvocationService {
       batch.completedAt = new Date().toISOString();
       batch.updatedAt = batch.completedAt;
       await this.batchRepo.update(batch);
+    } else if (markedItems.length > 0) {
+      batch.batchStatus = 'partially_completed';
+      batch.completedAt = new Date().toISOString();
+      batch.updatedAt = batch.completedAt;
+      await this.batchRepo.update(batch);
+    } else {
+      batch.batchStatus = 'failed';
+      batch.completedAt = new Date().toISOString();
+      batch.updatedAt = batch.completedAt;
+      await this.batchRepo.update(batch);
     }
 
     return { batch, markedItems, failedItems };

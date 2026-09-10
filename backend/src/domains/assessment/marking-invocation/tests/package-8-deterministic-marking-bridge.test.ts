@@ -105,4 +105,70 @@ describe('Package 8 Deterministic Marking Bridge', () => {
     const serviceContent = fs.readFileSync(path.resolve(__dirname, '../services/deterministicMarkingInvocationService.ts'), 'utf-8');
     expect(serviceContent).not.toContain('finalGrade');
   });
+
+  it('mixed success/failure batch terminates as partially_completed', async () => {
+    await batchRepo.create({
+      markingBatchId: 'batch-partial', schoolId: 'school-1', markingInvocationRequestId: 'req-1',
+      markingRunId: 'run-1', batchStatus: 'planned', batchMode: 'deterministic_only',
+      batchSequence: 1, totalItems: 10, deterministicItemCount: 10, teacherReviewItemCount: 0,
+      blockedItemCount: 0, safeBatchSummary: '', createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(), startedAt: null, completedAt: null,
+    });
+    for (let i = 0; i < 10; i++) {
+      await batchItemRepo.create({
+        markingBatchItemId: `partial-item-${i}`, schoolId: 'school-1', markingBatchId: 'batch-partial',
+        snapshotIntakeId: `intake-${i}`, submissionSnapshotId: `snap-${i}`, attemptId: `att-${i}`,
+        attemptQuestionSnapshotId: `aqs-${i}`, answerSubmissionId: `ans-${i}`, questionId: `q-${i}`,
+        questionVersionId: `qv-${i}`, paperQuestionId: `pq-${i}`, variantQuestionId: `vq-${i}`,
+        studentRef: `sr-${i}`, itemStatus: 'planned', itemMode: 'deterministic', marksAvailable: 5,
+        safeItemSummary: '', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+        completedAt: null,
+      });
+    }
+    const innerUpdate = batchItemRepo.update.bind(batchItemRepo);
+    batchItemRepo.update = (async (item: any) => {
+      if (item.markingBatchItemId === 'partial-item-9' && item.itemStatus === 'marked_deterministically') {
+        throw new Error('INJECTED_ITEM_FAILURE');
+      }
+      return innerUpdate(item);
+    }) as typeof batchItemRepo.update;
+    const result = await service.executeDeterministicBatch('batch-partial', 'run-1');
+    expect(result.markedItems).toHaveLength(9);
+    expect(result.failedItems).toHaveLength(1);
+    expect(result.batch.batchStatus).toBe('partially_completed');
+    expect(result.batch.completedAt).not.toBeNull();
+  });
+
+  it('all-failed batch terminates as failed', async () => {
+    await batchRepo.create({
+      markingBatchId: 'batch-allfailed', schoolId: 'school-1', markingInvocationRequestId: 'req-1',
+      markingRunId: 'run-1', batchStatus: 'planned', batchMode: 'deterministic_only',
+      batchSequence: 1, totalItems: 3, deterministicItemCount: 3, teacherReviewItemCount: 0,
+      blockedItemCount: 0, safeBatchSummary: '', createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(), startedAt: null, completedAt: null,
+    });
+    for (let i = 0; i < 3; i++) {
+      await batchItemRepo.create({
+        markingBatchItemId: `allfailed-item-${i}`, schoolId: 'school-1', markingBatchId: 'batch-allfailed',
+        snapshotIntakeId: `intake-${i}`, submissionSnapshotId: `snap-${i}`, attemptId: `att-${i}`,
+        attemptQuestionSnapshotId: `aqs-${i}`, answerSubmissionId: `ans-${i}`, questionId: `q-${i}`,
+        questionVersionId: `qv-${i}`, paperQuestionId: `pq-${i}`, variantQuestionId: `vq-${i}`,
+        studentRef: `sr-${i}`, itemStatus: 'planned', itemMode: 'deterministic', marksAvailable: 5,
+        safeItemSummary: '', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+        completedAt: null,
+      });
+    }
+    const innerUpdate = batchItemRepo.update.bind(batchItemRepo);
+    batchItemRepo.update = (async (item: any) => {
+      if (item.itemStatus === 'marked_deterministically') {
+        throw new Error('INJECTED_ITEM_FAILURE');
+      }
+      return innerUpdate(item);
+    }) as typeof batchItemRepo.update;
+    const result = await service.executeDeterministicBatch('batch-allfailed', 'run-1');
+    expect(result.markedItems).toHaveLength(0);
+    expect(result.failedItems).toHaveLength(3);
+    expect(result.batch.batchStatus).toBe('failed');
+    expect(result.batch.completedAt).not.toBeNull();
+  });
 });

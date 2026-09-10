@@ -7,6 +7,7 @@ import type { ResultReleaseApproval, CreateReleaseApprovalInput } from '../contr
 import type {
   ResultReleaseApprovalRepository,
   ResultReleasePacketRepository,
+  ResultReleaseApprovalAtomicCommitter,
 } from '../contracts/resultReleaseRepositoryContracts';
 import type { ResultReleaseAuditBridge } from './resultReleaseAuditBridge';
 import type { ResultReleaseIdempotencyService } from './resultReleaseIdempotencyService';
@@ -21,6 +22,7 @@ export class ResultReleaseApprovalService {
     private packetRepo: ResultReleasePacketRepository,
     private auditBridge: ResultReleaseAuditBridge,
     private idempotencyService: ResultReleaseIdempotencyService,
+    private atomicCommitter?: ResultReleaseApprovalAtomicCommitter,
   ) {}
 
   private envelope(ctx: ResultReleaseCommandContext, overrides: Partial<ResultReleaseSafeEnvelope>): ResultReleaseSafeEnvelope {
@@ -68,6 +70,37 @@ export class ResultReleaseApprovalService {
     if (!policyCheck.allowed) return this.envelope(ctx, { ok: false, safeMessage: policyCheck.safeMessage, reasonCode: policyCheck.reasonCode, policyDecision: policyCheck, status: 'blocked' });
 
     if (approval.approvalStatus !== 'draft') return this.envelope(ctx, { ok: false, safeMessage: 'Approval must be in draft status to approve', reasonCode: 'INVALID_STATUS', status: 'error' });
+
+    // R8-E closure repair: the canonical approval + packet + audit mutation
+    // commits as ONE transaction owned by the atomic committer. A packet
+    // persistence failure rolls the approval back (explicit error, never
+    // misleading success); a concurrent loser gets a stable conflict.
+    if (this.atomicCommitter) {
+      let outcome: Awaited<ReturnType<ResultReleaseApprovalAtomicCommitter['approvePacketAtomically']>>;
+      try {
+        outcome = await this.atomicCommitter.approvePacketAtomically({
+          schoolId: ctx.schoolId,
+          approvalId,
+          packetId: approval.resultReleasePacketId,
+          actorId: ctx.actorId,
+          actorRole: ctx.actorRole,
+          correlationId: ctx.correlationId,
+        });
+      } catch {
+        return this.envelope(ctx, { ok: false, safeMessage: 'Release packet could not be approved due to a packet persistence failure', reasonCode: 'PACKET_TRANSITION_FAILED', status: 'error' });
+      }
+      if (!outcome.ok) {
+        const current = await this.approvalRepo.getById(approvalId);
+        return this.envelope(ctx, {
+          ok: false,
+          safeMessage: outcome.reason === 'NOT_FOUND' ? 'Approval not found' : 'Approval must be in draft status to approve',
+          reasonCode: outcome.reason === 'NOT_FOUND' ? 'NOT_FOUND' : 'INVALID_STATUS',
+          status: outcome.reason === 'NOT_FOUND' ? 'not_found' : 'conflict',
+          ...(current ? { data: { approvalStatus: current.approvalStatus } } : {}),
+        });
+      }
+      return this.envelope(ctx, { resourceId: approvalId, status: 'approved', safeMessage: 'Release packet approved', nextAllowedActions: ['createDeliveryIntent'] });
+    }
 
     // R8-E concurrency repair: the draft → approved transition is performed
     // with a status-conditional guarded write so exactly one concurrent actor

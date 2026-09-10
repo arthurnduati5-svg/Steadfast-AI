@@ -17,9 +17,9 @@ R8-E — Performance, Scale & Reliability. Every claim cites source inspection, 
 | No duplicate/split canonical mastery state | `PrismaMasteryRepository.applyEvidenceAtomically` | PROVEN (concurrent same-evidence 2-way: 1 commit, 1 receipt, revision 1) |
 | No lost mastery update under interleaving | revision-conditional `updateMany` | PROVEN (20-revision chain: 20 commits, 20 change logs, final revision 20) |
 | Exactly-once evidence application | `canonicalMasteryEvidenceApplicationRecord` unique `evidenceId` | PROVEN (insert-conflict → `AtomicAbort` → `false`; 5-way create race: exactly 1 winner) |
-| Assessment canonical transition cannot double-fire | result-release approval `draft → approved` | FAILED — REPAIRED (was read-check-write; now status-conditional guarded transition) |
+| Assessment canonical transition cannot double-fire | result-release approval `draft → approved` | FAILED — REPAIRED (was read-check-write; guarded transition, then final atomic approval+packet+audit transaction, see Resolved R8-E Defects) |
 | Daily-objective settle exactly once | idempotency record + `acquireCompletingOwnership` | PROVEN (50/50 settle, 50/50 retry-identical result) |
-| Quota cannot be overspent | `voiceLedgerService` transaction + `FOR UPDATE` row locks | PROVEN (transactional source proof + focused test reuse per §7 T8) |
+| Quota cannot be overspent | `voiceLedgerService` transaction + `FOR UPDATE` row locks | PROVEN (real PostgreSQL contention: 3 concurrent settlements, 120 s requested vs 60 s quota → 60 s debited, 0 s final, ledger reconciled; see 09 §Voice Ledger Contention) |
 | No fake success on dependency failure | AI runtime fallback chain | PROVEN (breaker opens; retry stops at max attempts; non-retryable categories never retried) |
 | No cross-tenant state | canonical writers key on `schoolId`; evidence identity from verified server context | PROVEN (mastery tenant isolation T5 in existing R7.1 proof; evidence identity server-side post-`87ab25b3`) |
 
@@ -29,8 +29,8 @@ R8-E — Performance, Scale & Reliability. Every claim cites source inspection, 
 | --- | --- | --- | --- |
 | Canonical mastery state | `probabilisticMasteryRepository.ts` (single canonical writer) | `$transaction` + evidence-receipt uniqueness + `stateRevision` conditional write | PROVEN |
 | Mastery evidence application | same | unique `evidenceId` receipt claimed first inside the transaction | PROVEN |
-| Result-release approval | `resultReleaseApprovalService.ts` → approval repository | `transitionStatusFrom` status-conditional guarded write (R8-E repair) | FAILED — REPAIRED |
-| Release packet status | `packetRepo.updateStatus` | driven only by the approval winner post-repair | PROVEN WITH LIMIT (packet transition itself remains an unconditional update by design; gated by the single-winner approval) |
+| Result-release approval | `resultReleaseApprovalService.ts` → `PrismaResultReleaseApprovalAtomicCommitter` | ONE `$transaction`: conditional approval write + conditional packet write + audit insert; packet failure aborts all | FAILED — REPAIRED |
+| Release packet status | same atomic committer | conditional `ready_for_approval → approved_for_internal_release` write inside the same transaction; zero matches abort | PROVEN |
 | Daily-objective check session | `phase3DailyObjectiveCheckRepository` | version-checked `acquireCompletingOwnership` (sync maps mode + async Prisma `updateMany` with status/version WHERE) | PROVEN |
 | Voice quota settlement | `voiceLedgerService.ts` | `prisma.$transaction` + `SELECT … FOR UPDATE` row locks | PROVEN |
 | Learning evidence event stream | `prismaLearningEvidenceEventStoreRepository.appendEventAtomically` | `$transaction` + stream-sequence uniqueness; conflicts surface as `LearningEvidenceConcurrencyError` | PROVEN (source + existing focused tests `learning-evidence-concurrency.test.ts`) |
@@ -62,9 +62,9 @@ R8-E — Performance, Scale & Reliability. Every claim cites source inspection, 
 ## Concurrency
 
 - Canonical mastery: 2-way same-evidence, 20-revision chain, and 5-way create race all measured against real PostgreSQL — exactly-once, no lost update, no split state (see 09 §Canonical Mastery Concurrency). GAP-mastery-canonical-concurrency: **PROVEN**.
-- Result-release approval: pre-repair race reproduced (both actors approved; side-effects double-fired); repaired with status-conditional transition; post-repair exactly one winner and one audit event. GAP-questionbank-concurrency-locks (representative transition): **FAILED — REPAIRED**.
+- Result-release approval: pre-repair race reproduced (both actors approved; side-effects double-fired); first repaired with status-conditional transition, then finally with the atomic approval+packet+audit transaction (see Resolved R8-E Defects); post-repair exactly one winner and one audit event. GAP-questionbank-concurrency-locks (representative transition): **FAILED — REPAIRED**.
 - Daily objectives: concurrent settle serialized by ownership acquisition (`COMPLETING` status + version check); loser receives a retryable conflict or the completed result — never a duplicate settle. **PROVEN**.
-- Voice ledger: row-lock serialization inside `prisma.$transaction`; concurrent settlements cannot both debit the same remaining seconds. **PROVEN** (transactional proof reused per §7 T8).
+- Voice ledger: row-lock serialization inside `prisma.$transaction`; concurrent settlements cannot both debit the same remaining seconds. **PROVEN** (real PostgreSQL contention: 60 s quota, 120 s requested, 60 s debited, 0 s final).
 
 ## Restart / Recovery
 
@@ -94,7 +94,7 @@ R8-E — Performance, Scale & Reliability. Every claim cites source inspection, 
 
 ## Partial Batch Failure
 
-- Deterministic marking batch (10-item batch, 1 poisoned item): failed item marked `failed` and reported in `failedItems`; other 9 marked; batch not falsely completed; batch lifecycle proceeds to an honest partial state. No misleading success (R8E-R16).
+- Deterministic marking batch (10-item batch, 1 poisoned item): failed item marked `failed` and reported in `failedItems`; other 9 marked; batch terminates as `partially_completed` (closure correction — history preserved: the original text called the pre-repair `running` remainder honest; it was a defect, now repaired); all-failed batch terminates as `failed`. No misleading success (R8E-R16).
 - Daily-objective settle: step failures (evidence, mastery, weak-signal) return explicit errors with checkpointed progress for bounded retry; never a fabricated completion.
 
 ## Long-History Degradation
@@ -104,13 +104,14 @@ R8-E — Performance, Scale & Reliability. Every claim cites source inspection, 
 | `LearningEvidenceEvent` | linear in operations; canonical, hash-chained | storage growth only; reads bounded | NOT APPLICABLE for pruning — retention is a correctness/legal requirement (R8E-R20 respected; no deletion performed or proposed) |
 | `LearningEvidenceIdempotency` | 1 row per idempotent command; redundant post-commit | unbounded table growth | POLICY DECISION REQUIRED (retention period not invented) |
 | `DailyObjectiveCheckCompletionIdempotencyRecord` | 1 row per settled check session; no production purge | unbounded table growth | POLICY DECISION REQUIRED |
-| Process-local maps (daily objectives, AI limiter, breaker) | bounded by usage/window pruning (production paths) | none demonstrated in production mode | NOT APPLICABLE (maps-mode growth is test-only) |
+| Process-local maps (daily objectives, breaker) | bounded by usage/window pruning (production paths) | none demonstrated in production mode | NOT APPLICABLE (maps-mode growth is test-only) |
+| Process-local AI limiter `windows` Map | 1 entry per distinct actor key; closure correction: expired inactive keys were retained indefinitely (original "already bounded" claim was wrong) | unbounded key growth under one-time-actor streams | FAILED — REPAIRED (bounded opportunistic sweep: ≤1 full key iteration per 60 s window; ordinary limiter behavior unchanged) |
 
 ## Bounded Degradation
 
 - AI runtime: bounded retries, capped backoff, circuit breaker, budget guard — provider incidents degrade with explicit failure outcomes, bounded provider load.
-- Rate limiter: per-key window pruning keeps state bounded under finite traffic.
-- Marking batch: linear time growth; isolated item failures.
+- Rate limiter: per-key timestamp pruning plus the closure sweep that removes expired inactive keys (≤1 full key iteration per window; no per-request scan).
+- Marking batch: linear time growth; isolated item failures; truthful terminal states.
 - Roster dry-run: super-linear CPU growth on very large payloads — bounded degradation NOT established at arbitrary scale; see 09 §School Roster (`DECISION REQUIRED / REQUIRED BEFORE PRODUCTION`).
 - Redis: cooldown degradation, no crash.
 
@@ -121,8 +122,27 @@ R8-E — Performance, Scale & Reliability. Every claim cites source inspection, 
 - Root cause: `ResultReleaseApprovalService.approveReleasePacket` checked `approvalStatus !== 'draft'` against a stale read and then called the unconditional `updateStatus` writer. Two concurrent approvers could both pass the check; the packet side-effect and audit event double-fired.
 - Reproduction: real-PostgreSQL workload with an interleaved read-check-write — both actors wrote `approved` (see 09 §Question-Bank Concurrency, W2 before-repair).
 - Repair: added `transitionStatusFrom(approvalId, fromStatus, toStatus, safeSummary)` to the approval repository contract (status-conditional `updateMany` in Prisma; guarded check-and-set in-memory); service now performs the guarded transition, returns a stable `INVALID_STATUS`/`conflict` envelope to the loser, and fires packet/audit side-effects only for the winner.
-- Before: 2 approvals written, side-effects/audit double-fire. After: 1 winner, 1 conflict, 1 audit event, single status transition (winnerCounts [1,0]).
-- Regression guard: `package-11-approval-workflow.test.ts` new assertion (concurrent duplicate approve → exactly one winner, one conflict, one audit event); full file 16/16 passing; sibling package-11 tests 29/29 passing.
+- Before: 2 approvals written, side-effects/audit double-fire. After (guarded): 1 winner, 1 conflict, 1 audit event, single status transition (winnerCounts [1,0]).
+- Final closure (history preserved, not erased): the guarded transition still left approval and packet as separate steps, so `packetRepo.updateStatus()` returning `null` could leave `approval = approved` with the packet unapproved and API success. Repair: `ResultReleaseApprovalAtomicCommitter` port (`resultReleaseRepositoryContracts.ts`) + `PrismaResultReleaseApprovalAtomicCommitter` (ONE `prisma.$transaction`: conditional `draft → approved` school-scoped approval write, conditional `ready_for_approval → approved_for_internal_release` school-scoped packet write, in-transaction `RELEASE_PACKET_APPROVED` audit; packet failure aborts all). Service delegates the canonical mutation to the committer; composition wires it in `routes/resultRelease.ts`; in-memory tests use the small fake committer.
+- Regression guards: `package-11-approval-workflow.test.ts` keeps the concurrent-duplicate assertion (extended: 1 canonical approval, 1 packet approval, 1 audit) and adds the dependency-failure assertion (injected packet failure → operation fails, approval stays `draft`, packet unchanged, `RELEASE_PACKET_APPROVED` count = 0). Real-DB proof: `assessment-approval-atomic-commit` invariant PROVEN (commit path + sabotaged-packet rollback path). Full file 17/17 passing.
+
+### DEF-R8E-02 Marking partial-batch terminal state
+
+- Root cause: `executeDeterministicBatch` only handled the zero-failure case; any partial failure returned with the batch left `running`.
+- Repair: `failedItems.length === 0` → `completed`; some failed + some marked → `partially_completed`; all failed → `failed`, terminal timestamps set consistently.
+- Regression guard: new assertions in `package-8-deterministic-marking-bridge.test.ts` (9 marked + 1 failed → `partially_completed`; 3 failed + 0 marked → `failed`).
+
+### DEF-R8E-03 AI limiter stale-key retention
+
+- Root cause: window pruning removed expired timestamps per active window but never deleted inactive keys from the process-local `windows` Map.
+- Repair: bounded opportunistic sweep — at most one full key iteration per `WINDOW_MS`, expired empty windows deleted; no per-request scan, no per-actor timer, no new dependency; test reset clears sweep state.
+- Regression guard: new assertion in `ai-runtime-rate-limit-guard.test.ts` (50 stale keys → one post-window operation → stale removed, fresh semantics intact).
+
+### DEF-R8E-04 Voice ledger required-field defect (found by the live contention proof)
+
+- Root cause: durable writes omitted required fields (`StudentProfile.updatedAt`, `id` on `VoicePackageGrant` / `VoiceSessionUsage` / `VoiceLedgerEntry`), so the first real-PostgreSQL contention run failed with `PrismaClientValidationError` (the mocked focused test could never surface this).
+- Repair: minimal same-file additions only (`voiceLedgerService.ts`); no logic change.
+- Proof: `voice-quota-contention` PROVEN — REAL POSTGRESQL CONTENTION (60 s quota, 120 s requested across 3 concurrent settlements → 60 s debited, ledger reconciled, 0 s final, 3 settled, no duplicate).
 
 ## Remaining Required-Before-Production Risks
 
@@ -136,7 +156,7 @@ Carried from the accepted R8-D register (unchanged dispositions, not re-audited 
 New risks identified by R8-E measurement:
 
 - Multi-instance AI rate limiting is process-local by classification — global limits require an architecture decision (Redis-backed limiter) if cross-instance guarantees are required.
-- Voice ledger live concurrent stress numbers not measured (transactional invariant proven by source + existing proof) — optional R8-G acceptance run.
+- Voice ledger live concurrent contention now measured in the final closure (see 09 §Voice Ledger Contention) — no longer outstanding.
 
 ## R8-F Handoff
 
@@ -148,5 +168,4 @@ New risks identified by R8-E measurement:
 ## R8-G Handoff
 
 - Behavioral acceptance of repaired approval concurrency under realistic multi-actor flows.
-- Voice ledger live contention acceptance (optional; invariant already proven transactionally).
 - Retention policy decisions (evidence idempotency, daily-objective idempotency) require product/legal approval before any purge behavior is built or accepted.

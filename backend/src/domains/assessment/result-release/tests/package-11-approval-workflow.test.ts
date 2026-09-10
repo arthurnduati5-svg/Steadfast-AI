@@ -5,6 +5,7 @@ import {
   InMemoryResultReleaseApprovalRepository,
   InMemoryResultReleaseAuditRepository,
   InMemoryResultReleaseIdempotencyRepository,
+  InMemoryResultReleaseApprovalAtomicCommitter,
 } from '../repositories/inMemoryResultReleaseRepositories';
 import { ResultReleaseAuditBridge } from '../services/resultReleaseAuditBridge';
 import { ResultReleaseIdempotencyService } from '../services/resultReleaseIdempotencyService';
@@ -58,7 +59,8 @@ describe('Package 11 - Approval Workflow', () => {
   const auditBridge = new ResultReleaseAuditBridge(auditRepo);
   const idempotencyService = new ResultReleaseIdempotencyService(idempotencyRepo);
   const packetService = new ResultReleasePacketService(packetRepo, approvalRepo, auditBridge, idempotencyService);
-  const approvalService = new ResultReleaseApprovalService(approvalRepo, packetRepo, auditBridge, idempotencyService);
+  const atomicCommitter = new InMemoryResultReleaseApprovalAtomicCommitter(approvalRepo, packetRepo, auditRepo);
+  const approvalService = new ResultReleaseApprovalService(approvalRepo, packetRepo, auditBridge, idempotencyService, atomicCommitter);
 
   it('should create approval for packet ready_for_approval', async () => {
     const ctx = makeCtx({ idempotencyKey: `create-appr-${Date.now()}` });
@@ -224,10 +226,50 @@ describe('Package 11 - Approval Workflow', () => {
     // Canonical state: single approval, single final status.
     const finalApproval = await approvalRepo.getById(approvalId);
     expect(finalApproval?.approvalStatus).toBe('approved');
+    // Canonical packet: exactly one packet approval transition.
+    const finalPacket = await packetRepo.getById(packetId);
+    expect(finalPacket?.packetStatus).toBe('approved_for_internal_release');
     // Exactly one approval audit event for this approval.
     const events = await auditRepo.listBySchool('test-school');
     const approvalEvents = events.filter((e) => e.eventType === 'RELEASE_PACKET_APPROVED' && e.resultReleaseApprovalId === approvalId);
     expect(approvalEvents).toHaveLength(1);
+  });
+
+  // R8-E closure repair: a packet persistence failure must roll the whole
+  // atomic operation back — approval stays draft, packet unchanged, no audit.
+  it('rolls back approval when packet transition cannot complete', async () => {
+    const freshPacketRepo = new InMemoryResultReleasePacketRepository();
+    const freshApprovalRepo = new InMemoryResultReleaseApprovalRepository();
+    const freshAuditRepo = new InMemoryResultReleaseAuditRepository();
+    const freshIdempotencyRepo = new InMemoryResultReleaseIdempotencyRepository();
+    const freshAuditBridge = new ResultReleaseAuditBridge(freshAuditRepo);
+    const freshIdempotencyService = new ResultReleaseIdempotencyService(freshIdempotencyRepo);
+    const freshPacketService = new ResultReleasePacketService(freshPacketRepo, freshApprovalRepo, freshAuditBridge, freshIdempotencyService);
+    const failingCommitter = new InMemoryResultReleaseApprovalAtomicCommitter(freshApprovalRepo, freshPacketRepo, freshAuditRepo);
+    failingCommitter.failPacketTransition = true;
+    const freshApprovalService = new ResultReleaseApprovalService(freshApprovalRepo, freshPacketRepo, freshAuditBridge, freshIdempotencyService, failingCommitter);
+
+    const ctx = makeCtx({ idempotencyKey: `rollback-appr-${Date.now()}` });
+    const packetId = await createReadyPacket(freshPacketService, ctx);
+    const approval = await freshApprovalService.createReleaseApproval(ctx, {
+      resultReleasePacketId: packetId,
+      resultFinalizationDecisionId: 'fd-1',
+      studentRef: 'student-rollback',
+      approvalType: 'teacher_release_approval',
+      approvedAudience: 'student',
+      safeApprovalSummary: 'Rollback approval',
+    });
+    const approvalId = approval.resourceId!;
+    const result = await freshApprovalService.approveReleasePacket(ctx, approvalId);
+    expect(result.ok).toBe(false);
+    expect(result.reasonCode).toBe('PACKET_TRANSITION_FAILED');
+    const finalApproval = await freshApprovalRepo.getById(approvalId);
+    expect(finalApproval?.approvalStatus).toBe('draft');
+    const finalPacket = await freshPacketRepo.getById(packetId);
+    expect(finalPacket?.packetStatus).toBe('ready_for_approval');
+    const events = await freshAuditRepo.listBySchool('test-school');
+    const approvalEvents = events.filter((e) => e.eventType === 'RELEASE_PACKET_APPROVED' && e.resultReleaseApprovalId === approvalId);
+    expect(approvalEvents).toHaveLength(0);
   });
 
   it('should not send notifications in approval service', async () => {

@@ -94,10 +94,10 @@ Partial-item failure isolation (10-item batch, 1 poisoned item forced to fail):
 Interpretation:
 
 - Time growth is linear: ~11 µs/item at this scale; 500 items complete in ~5.5 ms against in-memory repos. With the production Prisma repos the per-item DB round trip dominates (~1–5 ms/item expected), so a 500-item batch is ~0.5–2.5 s — bounded and acceptable; a 10,000-item batch would be ~10–50 s, still linear, not explosive.
-- Failure isolation is real: one failed item is marked `failed`, reported in `failedItems`, other items still mark, and the batch does not report false completion (`batchStatus` stays `running` when `failedItems.length > 0`). No silent academic corruption observed.
+- Failure isolation is real: one failed item is marked `failed`, reported in `failedItems`, other items still mark, and the batch no longer reports a false `running` state. Closure correction (history preserved): the original R8-E text above described the pre-repair behavior as honest; in fact a finished partial batch incorrectly remained `running`. Repaired in the final R8-E closure (`deterministicMarkingInvocationService.ts`): `failedItems.length === 0` → `completed`; some failed + some marked → `partially_completed`; all failed → `failed`, with terminal timestamps set consistently. Proven by new assertions (9 marked + 1 failed → `partially_completed`; 3 failed + 0 marked → `failed`).
 - Input size is **not explicitly bounded** in source (`MARKING_INVOCATION_POLICY_DEFAULTS` gates execution mode, not size). Growth is linear, so an unbounded batch degrades gracefully rather than catastrophically.
 
-Decision: bounded at measured scale; linear growth; failure isolation proven. A declarative max batch size remains a hygiene item (R8-F handoff), not a demonstrated defect.
+Decision: bounded at measured scale; linear growth; failure isolation proven with truthful terminal states (`completed` / `partially_completed` / `failed`). A declarative max batch size remains a hygiene item (R8-F handoff), not a demonstrated defect.
 
 ## Canonical Mastery Concurrency
 
@@ -196,22 +196,28 @@ Production paths: `aiRuntimeRateLimitGuardService.ts`, `aiRuntimeRetryPolicyServ
 | Check | Result |
 | --- | --- |
 | Rate limit window (50 requests, limit 30/min) | 30 allowed, 20 rate-limited; allowed again after window expiry (pruned) |
-| Rate state boundedness | Per-actor window prunes timestamps older than 60 s → bounded per key; `windows` Map grows with distinct actor keys only |
+| Rate state boundedness | Closure correction (history preserved): the original claim that per-key pruning alone keeps state bounded was wrong — expired timestamps were pruned per window but inactive keys were retained in the process-local `windows` Map indefinitely. Repaired in the final R8-E closure: a bounded opportunistic sweep (at most one full key iteration per `WINDOW_MS`, never a per-request scan) deletes entries whose timestamps are all expired. Ordinary limiter behavior unchanged. Proven by new assertion (50 stale keys recorded at t0 → one normal operation beyond the window → stale keys removed, fresh key semantics intact) |
 | Retry boundedness | 6-attempt simulation: retries at attempts 1–2, stops at attempt 3 (`max_attempts_reached`) |
 | Backoff cap | Max observed delay 2.14 s (exp+1.25 s) ≤ 30 s cap; `retryAfterMs` path also capped at 30 s |
 | Circuit breaker | Opens after 5 provider-unavailable failures; calls stopped from iteration 6; cooldown probe allowed once; 2 successes close the circuit |
 | Redis loss classification | Limiter/breaker are process-local in-memory services; the existing Redis client (`src/lib/redis.ts`) degrades with cooldown rather than crashing — loss of Redis does not change limiter/breaker semantics |
 | Multi-instance classification | Process-local limiter: per-instance limits (each instance counts independently). Explicitly classified as a process-local limiter; global-rate guarantees across instances are NOT claimed |
 
-Interpretation: retries are bounded (3 attempts), backoff capped (30 s), breaker stops repeated provider calls and recovers via a single half-open probe, and rate state cannot grow without bound under a finite window (per-key pruning).
+Interpretation: retries are bounded (3 attempts), backoff capped (30 s), breaker stops repeated provider calls and recovers via a single half-open probe, and expired timestamps are pruned per key while expired inactive keys are now removed by the bounded opportunistic sweep (closure correction — see row above).
 
 Decision: AI runtime limiter/retry/breaker reliability PROVEN under controlled failure without real provider load (R8E-R14).
 
 ## Voice Ledger Contention
 
-Production path: `voiceLedgerService.ts` — `prisma.$transaction` with `SELECT ... FOR UPDATE` row locks on `StudentProfile` (`:144`) and `VoiceSessionUsage` (`:472`) (`:216` settle transaction). Accepted R8-D evidence already establishes transaction + row-lock serialization; per §7 T8 the existing focused production-path proof is reused rather than re-proven (`voiceLedgerService.test.ts`: balance from unexpired grants; debit consumes only unexpired grants; focused test passing in this tree).
+Production path: `voiceLedgerService.ts` — `prisma.$transaction` with `SELECT ... FOR UPDATE` row locks on `StudentProfile` (`:144`) and `VoiceSessionUsage` (`:472`) (`:216` settle transaction). Accepted R8-D evidence already establishes transaction + row-lock serialization.
 
-Critical invariant — quota cannot be overspent: the row lock serializes concurrent settlements on the same session/grant row; the debit loop runs inside the transaction, so concurrent requests cannot both read-and-reduce the same remaining seconds. Evidence classification: PROVEN (source + transactional proof + focused test reuse). A live concurrent contention workload against the test DB was not added because the existing transactional proof plus row-lock source evidence already establishes the invariant; a dedicated concurrency stress run is recorded as an R8-F/G candidate if acceptance requires it.
+Measured against real PostgreSQL (isolated test DB, `... --target voice`, production path — no mocked Prisma):
+
+| Workload | Result | Invariant |
+| --- | --- | --- |
+| Concurrent session settlement (3 concurrent `stopVoiceSession`, 40 s requested each = 120 s combined vs 60 s quota) | startingQuota=60 s, debitedTotal=60 s, ledgerDebitedTotal=60 s, finalBalance=0 s, settledSessions=3 | PROVEN — REAL POSTGRESQL CONTENTION: quota cannot go negative or be overspent; ledger totals reconcile; no duplicate settlement |
+
+Closure correction (history preserved): the original text reused the transactional source proof plus the mocked focused test and recorded a live contention run as an R8-G candidate. The live run has now been executed (see row above). Executing it exposed one real production defect in the same transaction path: `ensureStudentRowLocked` / grant / session / ledger writes omitted required fields (`StudentProfile.updatedAt`, `id` on `VoicePackageGrant` / `VoiceSessionUsage` / `VoiceLedgerEntry`), so the first live run failed with `PrismaClientValidationError`. Repaired minimally in `voiceLedgerService.ts` (same-file, same defect class only); the contention proof above ran after the repair. Critical invariant — quota cannot be overspent: the row lock serializes concurrent settlements; the debit loop runs inside the transaction with `min(requested, balance)` clamping, so concurrent requests cannot both read-and-reduce the same remaining seconds. Evidence classification: PROVEN (real contention measurement on the production transaction path).
 
 ## Query / Memory Hotspots
 
@@ -224,7 +230,11 @@ Critical invariant — quota cannot be overspent: the row lock serializes concur
 
 | Repair | Before | After |
 | --- | --- | --- |
-| `approveReleasePacket` guarded transition (T4) | Concurrent duplicate approve: both actors write `approved`; packet side-effect + audit event double-fire (reproduced, real PostgreSQL) | Exactly 1 winner, 1 stable `INVALID_STATUS` conflict, 1 audit event; single effective status transition (winnerCounts [1,0]); 16/16 focused tests pass incl. new regression assertion |
+| `approveReleasePacket` guarded transition (T4) | Concurrent duplicate approve: both actors write `approved`; packet side-effect + audit event double-fire (reproduced, real PostgreSQL) | Exactly 1 winner, 1 stable `INVALID_STATUS` conflict, 1 audit event; single effective status transition (winnerCounts [1,0]); focused tests pass incl. new regression assertion |
+| `approveReleasePacket` atomic commit (final closure) | Approval committed via guarded transition, then packet update + audit fired as separate steps — a packet persistence failure could leave `approval = approved` with packet not approved and API success | One `prisma.$transaction` commits approval (`draft → approved`) + packet (`ready_for_approval → approved_for_internal_release`) + `RELEASE_PACKET_APPROVED` audit, or none; sabotaged-packet run proves rollback (approval stays `draft`, 0 audits). Real-DB proof: `assessment-approval-atomic-commit` invariant PROVEN |
+| Marking partial-batch terminal state (final closure) | Finished partial batch remained `running` | `partially_completed` (mixed) / `failed` (all failed), terminal timestamps set; new assertions pass |
+| AI limiter stale-key retention (final closure) | Expired inactive actor keys retained in the process-local Map indefinitely | Bounded opportunistic sweep (≤1 full key iteration per `WINDOW_MS`); new assertion passes; limiter semantics unchanged |
+| Voice ledger required-field defect (final closure) | Live contention run failed: `PrismaClientValidationError` (missing `updatedAt`/`id` on durable writes) | Minimal same-file repair; real contention proof PROVEN (60 s quota, 120 s requested, 60 s debited, 0 s final) |
 
 No other production repairs were required: T3 mastery concurrency, T6 exactly-once settle, and T7 AI reliability were proven sound as-is; T1/T2 boundedness findings are degradation risks and policy items, not reproduced defects (see respective sections).
 
@@ -248,7 +258,6 @@ Derivation: budget = max(observed p95 × ~3–5, human-perceptible floor). These
 
 ## Unmeasured / Blocked Items
 
-- Voice ledger live concurrent stress workload — not measured (existing transactional/row-lock proof reused per §7 T8); candidate for R8-G if acceptance requires runtime contention numbers.
 - Global (cross-instance) AI rate limiting — architecture decision required; current limiter is explicitly process-local.
 - Production SLA figures — blocked on production-like environment (see Production Budget Status).
 - Roster input cap decision — `DECISION REQUIRED / REQUIRED BEFORE PRODUCTION` (see School Roster).
@@ -263,5 +272,4 @@ Derivation: budget = max(observed p95 × ~3–5, human-perceptible floor). These
 ## R8-G Handoff
 
 - Behavioral acceptance of the repaired release-approval concurrency semantics under realistic multi-actor flows.
-- Voice ledger live contention acceptance run, if required.
 - Long-history retention policy decisions (evidence idempotency, daily-objective idempotency) require product/legal input before any purge behavior is accepted.
