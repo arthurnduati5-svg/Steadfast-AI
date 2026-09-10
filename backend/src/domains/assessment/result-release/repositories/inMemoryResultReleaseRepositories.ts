@@ -126,6 +126,22 @@ export class InMemoryResultReleaseApprovalRepository implements ResultReleaseApp
     return updated;
   }
 
+  async transitionStatusFrom(id: string, fromStatus: string, toStatus: string, safeSummary?: string): Promise<ResultReleaseApproval | null> {
+    const r = this.store.get(id);
+    if (!r || r.approvalStatus !== fromStatus) return null;
+    const updated: ResultReleaseApproval = {
+      ...r,
+      approvalStatus: toStatus as ResultReleaseApproval['approvalStatus'],
+      ...(safeSummary !== undefined ? { safeApprovalSummary: safeSummary } : {}),
+      approvedAt: toStatus === 'approved' ? now() : r.approvedAt,
+      rejectedAt: toStatus === 'rejected' ? now() : r.rejectedAt,
+      voidedAt: toStatus === 'void' ? now() : r.voidedAt,
+      updatedAt: now(),
+    };
+    this.store.set(id, updated);
+    return updated;
+  }
+
   async blockApproval(id: string): Promise<ResultReleaseApproval | null> {
     const r = this.store.get(id);
     if (!r) return null;

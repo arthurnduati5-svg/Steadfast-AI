@@ -368,6 +368,24 @@ export class PrismaResultReleaseApprovalRepository implements ResultReleaseAppro
     return row ? mapApprovalFromPrisma(row) : null;
   }
 
+  async transitionStatusFrom(approvalId: string, fromStatus: string, toStatus: string, safeSummary?: string): Promise<ResultReleaseApproval | null> {
+    const data: any = { approvalStatus: toStatus };
+    if (safeSummary !== undefined) data.safeApprovalSummary = safeSummary;
+    if (toStatus === 'approved') data.approvedAt = new Date();
+    if (toStatus === 'rejected') data.rejectedAt = new Date();
+    if (toStatus === 'void') data.voidedAt = new Date();
+    // Status-conditional guarded transition: the WHERE clause carries the
+    // expected source status, so exactly one concurrent actor wins; the loser
+    // matches zero rows and must treat that as a conflict, never as success.
+    const result = await prisma.resultReleaseApprovalRecord.updateMany({
+      where: { resultReleaseApprovalId: approvalId, approvalStatus: fromStatus },
+      data,
+    }).catch(() => null);
+    if (!result || result.count === 0) return null;
+    const row = await prisma.resultReleaseApprovalRecord.findUnique({ where: { resultReleaseApprovalId: approvalId } }).catch(() => null);
+    return row ? mapApprovalFromPrisma(row) : null;
+  }
+
   async blockApproval(approvalId: string): Promise<ResultReleaseApproval | null> {
     const row = await prisma.resultReleaseApprovalRecord.update({
       where: { resultReleaseApprovalId: approvalId },

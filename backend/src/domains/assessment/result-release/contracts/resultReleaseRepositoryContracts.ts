@@ -61,6 +61,15 @@ export interface ResultReleaseApprovalRepository {
   listByReleasePacketId(packetId: string): Promise<ResultReleaseApproval[]>;
   listByStudentRef(studentRef: string): Promise<ResultReleaseApproval[]>;
   updateStatus(approvalId: string, status: string, safeSummary?: string): Promise<ResultReleaseApproval | null>;
+  /**
+   * Status-conditional durable transition (R8-E concurrency repair).
+   * Atomically moves the approval from `fromStatus` to `toStatus`.
+   * Returns the updated approval when this caller won the transition, or
+   * null when the approval does not exist OR is no longer in `fromStatus`
+   * (i.e. another actor already transitioned it). Callers must treat null
+   * as a conflict, never as success.
+   */
+  transitionStatusFrom(approvalId: string, fromStatus: string, toStatus: string, safeSummary?: string): Promise<ResultReleaseApproval | null>;
   blockApproval(approvalId: string): Promise<ResultReleaseApproval | null>;
   voidApproval(approvalId: string, voidedAt: string): Promise<ResultReleaseApproval | null>;
 }

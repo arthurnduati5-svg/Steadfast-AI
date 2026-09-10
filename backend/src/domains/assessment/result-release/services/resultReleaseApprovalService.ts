@@ -69,10 +69,24 @@ export class ResultReleaseApprovalService {
 
     if (approval.approvalStatus !== 'draft') return this.envelope(ctx, { ok: false, safeMessage: 'Approval must be in draft status to approve', reasonCode: 'INVALID_STATUS', status: 'error' });
 
-    const approvedAt = new Date().toISOString();
-    const updated = await this.approvalRepo.updateStatus(approvalId, 'approved', 'Approved by ' + ctx.actorRole);
-    if (updated) await this.packetRepo.updateStatus(approval.resultReleasePacketId, 'approved_for_internal_release');
-    await this.auditBridge.recordReleasePacketApproved(ctx, approval, ctx.actorId, ctx.actorRole);
+    // R8-E concurrency repair: the draft → approved transition is performed
+    // with a status-conditional guarded write so exactly one concurrent actor
+    // wins. The losing actor must observe a stable conflict, and packet
+    // side-effects plus the audit event fire only for the winning actor —
+    // never double-fire for a concurrent duplicate approval.
+    const updated = await this.approvalRepo.transitionStatusFrom(approvalId, 'draft', 'approved', 'Approved by ' + ctx.actorRole);
+    if (!updated) {
+      const current = await this.approvalRepo.getById(approvalId);
+      return this.envelope(ctx, {
+        ok: false,
+        safeMessage: 'Approval must be in draft status to approve',
+        reasonCode: 'INVALID_STATUS',
+        status: 'conflict',
+        ...(current ? { data: { approvalStatus: current.approvalStatus } } : {}),
+      });
+    }
+    await this.packetRepo.updateStatus(approval.resultReleasePacketId, 'approved_for_internal_release');
+    await this.auditBridge.recordReleasePacketApproved(ctx, updated, ctx.actorId, ctx.actorRole);
     return this.envelope(ctx, { resourceId: approvalId, status: 'approved', safeMessage: 'Release packet approved', nextAllowedActions: ['createDeliveryIntent'] });
   }
 

@@ -197,6 +197,39 @@ describe('Package 11 - Approval Workflow', () => {
     expect(BLOCKED_APPROVAL_ROLES).toEqual(['student', 'parent', 'guest', 'unknown']);
   });
 
+  // R8-E concurrency regression guard: a concurrent duplicate approve must
+  // produce exactly one winning transition and one audit event; the loser
+  // gets a stable conflict envelope, never a fake success.
+  it('should resolve concurrent duplicate approve to exactly one winner', async () => {
+    const ctxA = makeCtx({ actorRole: 'teacher', idempotencyKey: `race-a-${Date.now()}` });
+    const ctxB = makeCtx({ actorRole: 'teacher', idempotencyKey: `race-b-${Date.now()}` });
+    const packetId = await createReadyPacket(packetService, ctxA);
+    const approval = await approvalService.createReleaseApproval(ctxA, {
+      resultReleasePacketId: packetId,
+      resultFinalizationDecisionId: 'fd-1',
+      studentRef: 'student-race',
+      approvalType: 'teacher_release_approval',
+      approvedAudience: 'student',
+      safeApprovalSummary: 'Race approval',
+    });
+    const approvalId = approval.resourceId!;
+    const [a, b] = await Promise.all([
+      approvalService.approveReleasePacket(ctxA, approvalId),
+      approvalService.approveReleasePacket(ctxB, approvalId),
+    ]);
+    const winners = [a, b].filter((r) => r.ok && r.status === 'approved');
+    const conflicts = [a, b].filter((r) => !r.ok && r.reasonCode === 'INVALID_STATUS');
+    expect(winners).toHaveLength(1);
+    expect(conflicts).toHaveLength(1);
+    // Canonical state: single approval, single final status.
+    const finalApproval = await approvalRepo.getById(approvalId);
+    expect(finalApproval?.approvalStatus).toBe('approved');
+    // Exactly one approval audit event for this approval.
+    const events = await auditRepo.listBySchool('test-school');
+    const approvalEvents = events.filter((e) => e.eventType === 'RELEASE_PACKET_APPROVED' && e.resultReleaseApprovalId === approvalId);
+    expect(approvalEvents).toHaveLength(1);
+  });
+
   it('should not send notifications in approval service', async () => {
     const content = readBackendSrcFile('domains/assessment/result-release/services/resultReleaseApprovalService.ts');
     expect(content).not.toContain('notify');
