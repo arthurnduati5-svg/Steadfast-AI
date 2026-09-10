@@ -9,12 +9,17 @@ import { LearningEvidenceSeedService } from '../services/learningEvidenceSeedSer
 import type { EvidenceCommand, EvidenceActorContext } from '../contracts/learningEvidenceCommandContracts';
 import type { EvidenceSourceLineage, NormalizedEvidencePayload } from '../contracts/learningEvidenceEventStoreContracts';
 
+// Authoritative school/actor identity derives exclusively from the verified
+// server-side authentication context established by schoolAuthMiddleware and
+// requireVerifiedSchoolContext (req.schoolId, req.user.id, req.user.role).
+// Caller-controlled identity headers (x-school-id, x-actor-id, x-actor-role)
+// are never used as authoritative identity. Request/correlation headers remain
+// non-authoritative tracing metadata only.
 function getSchoolContext(req: Request): { schoolId: string; actorId: string; actorRole: string } {
-  return {
-    schoolId: (req.headers['x-school-id'] as string) || (req as any).schoolId || '',
-    actorId: (req.headers['x-actor-id'] as string) || 'anonymous',
-    actorRole: (req.headers['x-actor-role'] as string) || 'unknown',
-  };
+  const schoolId = (req as any).schoolId || '';
+  const actorId = req.user?.id || '';
+  const actorRole = req.user?.role || '';
+  return { schoolId, actorId, actorRole };
 }
 
 function makeActorContext(req: Request, learnerId?: string): EvidenceActorContext {
@@ -52,7 +57,7 @@ export function createLearningEvidenceRouter(
     try {
       const schoolCtx = getSchoolContext(req);
       if (!schoolCtx.schoolId) {
-        return errorEnvelope(res, 400, 'EVIDENCE_SCHOOL_CONTEXT_REQUIRED', 'School context required via x-school-id header', req.headers['x-request-id'] as string || '', req.headers['x-correlation-id'] as string || '');
+        return errorEnvelope(res, 400, 'EVIDENCE_SCHOOL_CONTEXT_REQUIRED', 'Verified school context required', req.headers['x-request-id'] as string || '', req.headers['x-correlation-id'] as string || '');
       }
 
       const { learnerId, sourceLineage, safePayload, idempotencyKey } = req.body;
