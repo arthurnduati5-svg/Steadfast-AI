@@ -1,6 +1,6 @@
 import { Prisma, VoiceSessionMode } from '@prisma/client';
 import { randomUUID } from 'crypto';
-import prisma from '../lib/prisma';
+import prisma from '../utils/prismaClient';
 
 type TxClient = Prisma.TransactionClient;
 

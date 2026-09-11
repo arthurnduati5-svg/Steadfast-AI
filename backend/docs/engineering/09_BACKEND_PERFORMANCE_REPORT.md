@@ -147,6 +147,8 @@ Also proven: concurrent duplicate approve at the service level yields exactly on
 
 Decision: representative question-bank transition concurrency **FAILED — REPAIRED**. The shared mechanism (status-conditional guarded write) is now recorded as the common owner pattern for assessment durable transitions (same mechanism is already used by daily-objective `acquireCompletingOwnershipAsync`). Remaining Exam*/Marking* transitions should adopt the same writer pattern — R8-F handoff, not new infrastructure.
 
+Result-release composition truth (closure correction): the Prisma atomic persistence mechanism (`PrismaResultReleaseApprovalAtomicCommitter`) is implemented and directly proven (see Before / After Repairs: approval `draft → approved` + packet `ready_for_approval → approved_for_internal_release` + `RELEASE_PACKET_APPROVED` audit in one transaction, with rollback proven). The active Package 11 HTTP route (`backend/src/routes/resultRelease.ts`) still uses in-memory result-release repository composition (`InMemoryResultRelease*Repository`, `InMemoryResultReleaseApprovalAtomicCommitter`). Durable HTTP repository composition therefore remains part of the existing `GAP-questionbank-model-writers` / R8-F-R8-G handoff. No Prisma route wiring is implemented here.
+
 ## Learning Evidence Long-History
 
 Production path: learning-evidence event store + idempotency models. Growth units are calculated from the actual model shape (no invented retention periods):
@@ -267,6 +269,7 @@ Derivation: budget = max(observed p95 × ~3–5, human-perceptible floor). These
 - Roster dry-run quadratic scan: bounded repair candidate — replace `some()` scans with `Set` lookups, or add a validated route-level payload cap (decision required first).
 - Marking batch declarative max batch size (hygiene; linear growth proven).
 - Question-bank state chain: adopt the status-conditional `transitionStatusFrom` writer pattern for remaining Exam*/Marking* transitions (common owner pattern established in R8-E).
+- Durable Package 11 HTTP repository composition: the Prisma atomic committer is PROVEN in isolation, but the active HTTP route still uses in-memory composition; wiring durable Prisma repositories into the HTTP route remains part of the existing `GAP-questionbank-model-writers` / R8-F-R8-G handoff. Not implemented in R8-E.
 - Structural candidates remain untouched per §24.
 
 ## R8-G Handoff
