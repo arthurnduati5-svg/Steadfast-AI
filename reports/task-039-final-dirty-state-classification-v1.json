@@ -1,0 +1,62 @@
+{
+  "taskId": "TASK-039",
+  "generatedAt": "2026-06-30T00:00:00.000Z",
+  "sourceCommands": [
+    "git status --short",
+    "git diff --stat",
+    "git diff --name-only"
+  ],
+  "summary": {
+    "totalDirtyPaths": 5,
+    "task039ControlledPaths": 5,
+    "preExistingOutsideScopePaths": 0,
+    "frontendDirtyPaths": 0,
+    "aiDirtyPaths": 0,
+    "generatedArtifactPaths": 0,
+    "trackedDeletedPaths": 1,
+    "unknownDirtyPaths": 0
+  },
+  "paths": [
+    {
+      "path": "backend/src/lib/schoolAuthVerifier.ts",
+      "gitStatus": " D",
+      "classification": "tracked_deleted_pre_existing",
+      "reason": "Legacy JWT-based auth verifier deleted in working tree. File existed in HEAD commit (uses jsonwebtoken for token verification). This deletion predates Task 039 and is part of broader backend cleanup. Task 039 does not depend on this file; the new school-system bridge uses schoolContextVerificationService instead.",
+      "task039Controlled": false,
+      "blocksTask039Acceptance": false
+    },
+    {
+      "path": "backend/src/contracts/schoolSystemBridgeContracts.ts",
+      "gitStatus": "M ",
+      "classification": "task039_changed",
+      "reason": "Task 039 contract file modified to fix ExternalSchoolIdentityPayload.role from SchoolActorRole to RawExternalSchoolRole (string) for proper external validation without as any casts.",
+      "task039Controlled": true,
+      "blocksTask039Acceptance": false
+    },
+    {
+      "path": "backend/src/services/mockSchoolSystemAdapter.ts",
+      "gitStatus": "M ",
+      "classification": "task039_changed",
+      "reason": "Task 039 service file modified to remove as any cast on invalid_role_xyz role assignment. Role is now a plain string per updated contract.",
+      "task039Controlled": true,
+      "blocksTask039Acceptance": false
+    },
+    {
+      "path": "backend/src/services/schoolConnectorNoBypassAuditService.ts",
+      "gitStatus": "M ",
+      "classification": "task039_changed",
+      "reason": "Task 039 service file rewritten to implement real source-scanning no-bypass audit instead of config-based expected findings.",
+      "task039Controlled": true,
+      "blocksTask039Acceptance": false
+    },
+    {
+      "path": "backend/src/tests/task-039-school-connector-no-bypass-audit.test.ts",
+      "gitStatus": "M ",
+      "classification": "task039_changed",
+      "reason": "Task 039 test file updated with synthetic bypass detection tests.",
+      "task039Controlled": true,
+      "blocksTask039Acceptance": false
+    }
+  ],
+  "unknownDirtyPaths": []
+}

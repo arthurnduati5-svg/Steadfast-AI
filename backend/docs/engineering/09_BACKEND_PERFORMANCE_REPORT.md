@@ -73,6 +73,31 @@ Decision:
 
 - Boundedness at whole-school scale: **NOT BOUNDED — demonstrated super-linear CPU growth (quadratic term), no input bound**. The dry-run remains seconds-fast up to 5000 students on this machine, so this is a degradation risk for very large payloads, not a proven current failure. Because the realistic school-size ceiling is a product decision (a hard input cap could reject legitimate whole-school syncs), this is recorded as `DECISION REQUIRED / REQUIRED BEFORE PRODUCTION` with two bounded options: (a) a validated maximum payload size at the route, or (b) replacing the `some()` scans with `Set` lookups (bounded O(n)) inside the existing contract. Either is task-compatible; option (b) is pure-internal and contract-preserving, but the measured path was left unchanged in R8-E because no current workload failure was reproduced within representative school sizes (no premature optimization, §14). Handed to R8-F as a bounded repair candidate.
 
+### R8-F repair (continuation — measured 2026-09-11, same harness `npx tsx tools/engineering/r8-e-workload.ts --target roster`)
+
+```text
+BEFORE — R8-E
+5000 dry-run ~403 ms p50 / ~589 ms p95 (500 dry-run ~3.8 ms p50)
+
+R8-F REPAIR
+pre-index student/class membership once
+replace repeated membership scans with Set.has()
+
+AFTER — measured now (5 samples each, DEVELOPMENT BASELINE, same machine class)
+500 dry-run 0.431 ms p50 / 0.83 ms p95
+5000 dry-run 5.222 ms p50 / 9.456 ms p95
+5000 reconcile 1.285 ms p50 (conflicts 0, decisions 5000 — behavior unchanged)
+500 -> 5000 scaling x12.1 for x10 input (was x106) — indexed O(n)-shape
+
+VERDICT
+quadratic membership hotspot = REPAIRED
+whole-roster input bound = still policy/unbounded concern
+```
+
+No roster size cap, batching, pagination, endpoint, persistence, cache, network,
+or live school call was introduced — algorithmic complexity repair only. The
+R8-E before-measurements above are preserved as historical truth.
+
 ## Assessment Marking Batch
 
 Production path: `DeterministicMarkingInvocationService.executeDeterministicBatch` (`src/domains/assessment/marking-invocation/services/deterministicMarkingInvocationService.ts`), sequential per-item marking.
@@ -237,6 +262,7 @@ Closure correction (history preserved): the original text reused the transaction
 | Marking partial-batch terminal state (final closure) | Finished partial batch remained `running` | `partially_completed` (mixed) / `failed` (all failed), terminal timestamps set; new assertions pass |
 | AI limiter stale-key retention (final closure) | Expired inactive actor keys retained in the process-local Map indefinitely | Bounded opportunistic sweep (≤1 full key iteration per `WINDOW_MS`); new assertion passes; limiter semantics unchanged |
 | Voice ledger required-field defect (final closure) | Live contention run failed: `PrismaClientValidationError` (missing `updatedAt`/`id` on durable writes) | Minimal same-file repair; real contention proof PROVEN (60 s quota, 120 s requested, 60 s debited, 0 s final) |
+| Roster dry-run quadratic membership scan (R8-F continuation) | 5000 dry-run 403.5 ms p50 / 588.8 ms p95; 500 → 5000 scaling ×106 (super-linear) | Pre-indexed `Set` membership lookup; 5000 dry-run 5.222 ms p50 / 9.456 ms p95; 500 → 5000 scaling ×12.1 (O(n)-shape); contracts/conflicts unchanged; no size cap invented |
 
 No other production repairs were required: T3 mastery concurrency, T6 exactly-once settle, and T7 AI reliability were proven sound as-is; T1/T2 boundedness findings are degradation risks and policy items, not reproduced defects (see respective sections).
 

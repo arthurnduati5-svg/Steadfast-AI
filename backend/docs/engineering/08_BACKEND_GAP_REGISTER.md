@@ -168,7 +168,7 @@ One gap: `GAP-evidence-header-identity` — an existing authorization/identity-p
 - WHY IT MATTERS: a large-school sync could exhaust request resources and leave a partial mapping state; dry-run exists (mitigation) but execution path is single-pass.
 - EVIDENCE: 06 roster algorithm records (UNBOUNDED_DATA flags, "flagged for R8-E batching review"); 07 §Teacher/School. CONFIDENCE: high.
 - SECURITY/PRIVACY: none. DATA INTEGRITY: moderate. RESTART: none. RETRY/CONCURRENCY: moderate. LONG-HISTORY: none.
-- CONSUMERS AFFECTED: school admins. R8-E HANDOFF: yes — batching/memory review (primary). R8-F HANDOFF: BLOCKED — `backend/src/services/rosterSyncDryRunService.ts` exists locally but is NOT tracked at the accepted baseline (absent from HEAD; contracts/tests also untracked), so R8-F committed no repair and invented no hard roster-size policy; indexed membership lookup remains for the owner-tasked follow-up (R8-G).
+- CONSUMERS AFFECTED: school admins. R8-E HANDOFF: yes — batching/memory review (primary). R8-F HANDOFF: REPAIRED (hotspot) — Task 039 provenance omission reconciled into Git. The demonstrated roster dry-run quadratic membership-scan hotspot was repaired in R8-F using pre-indexed membership lookup. No hard roster-size limit was invented. Whole-roster payloads remain potentially unbounded, and any future batching/recovery/partial-resume policy remains a separate R8-G acceptance/policy question.
 - DISPOSITION: REQUIRED BEFORE PRODUCTION. REASON: production launch with school-wide syncs needs bounded degradation; the mechanism is a static bound, not a performance claim.
 
 ### GAP-dailyobjectives-idempotency-lifecycle
