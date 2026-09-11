@@ -36,21 +36,22 @@ const SKILL_ID = 'r4-test-skill';
 const OBJECTIVE_ID = 'r4-test-objective';
 
 async function seedKgRecords() {
+  const now = new Date();
   await prisma.curriculumVersionRecord.upsert({
     where: { id: CURR_VERSION_ID }, update: {},
-    create: { id: CURR_VERSION_ID, curriculumFamily: 'r4-test-family', versionCode: 'v1', title: 'R4 Test Curriculum', status: 'active' },
+    create: { id: CURR_VERSION_ID, curriculumFamily: 'r4-test-family', versionCode: 'v1', title: 'R4 Test Curriculum', status: 'active', updatedAt: now },
   });
   await prisma.curriculumTopicRecord.upsert({
     where: { id: TOPIC_ID }, update: {},
-    create: { id: TOPIC_ID, curriculumVersionId: CURR_VERSION_ID, subject: 'math', title: 'R4 Test Topic', status: 'active' },
+    create: { id: TOPIC_ID, curriculumVersionId: CURR_VERSION_ID, subject: 'math', title: 'R4 Test Topic', status: 'active', updatedAt: now },
   });
   await prisma.curriculumSkillRecord.upsert({
     where: { id: SKILL_ID }, update: {},
-    create: { id: SKILL_ID, curriculumTopicId: TOPIC_ID, title: 'R4 Test Skill', status: 'active' },
+    create: { id: SKILL_ID, curriculumTopicId: TOPIC_ID, title: 'R4 Test Skill', status: 'active', updatedAt: now },
   });
   await prisma.learningObjectiveRecord.upsert({
     where: { id: OBJECTIVE_ID }, update: {},
-    create: { id: OBJECTIVE_ID, curriculumSkillId: SKILL_ID, title: 'R4 Test Objective', status: 'active' },
+    create: { id: OBJECTIVE_ID, curriculumSkillId: SKILL_ID, title: 'R4 Test Objective', status: 'active', updatedAt: now },
   });
 }
 

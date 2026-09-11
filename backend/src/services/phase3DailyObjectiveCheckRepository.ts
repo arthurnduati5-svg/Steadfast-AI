@@ -530,6 +530,7 @@ export class Phase3DailyObjectiveCheckRepository {
         }
         const created = await tx.dailyObjectiveCheckConfidenceRecord.create({
           data: {
+            checkpointId: generateId('cc'),
             checkSessionId: input.checkSessionId,
             schoolId: input.schoolId,
             studentId: input.studentId,
@@ -642,6 +643,7 @@ export class Phase3DailyObjectiveCheckRepository {
       const result = await prisma.$transaction(async (tx) => {
         const attempt = await tx.dailyObjectiveCheckAttemptRecord.create({
           data: {
+            attemptId: generateId('ca'),
             checkSessionId: input.checkSessionId,
             schoolId: input.schoolId,
             studentId: input.studentId,

@@ -61,6 +61,7 @@ export class PrismaLearningEvidenceEventStoreRepository implements LearningEvide
         update: {
           currentSequence: stream.currentSequence,
           latestEventHash: stream.latestEventHash,
+          updatedAt: new Date(),
         },
         create: {
           streamId: stream.streamId,
@@ -68,6 +69,7 @@ export class PrismaLearningEvidenceEventStoreRepository implements LearningEvide
           learnerId: stream.learnerId,
           currentSequence: stream.currentSequence,
           latestEventHash: stream.latestEventHash,
+          updatedAt: new Date(),
         },
       });
 
@@ -96,6 +98,7 @@ export class PrismaLearningEvidenceEventStoreRepository implements LearningEvide
             eligibilityReasonCodes: candidateProjection.eligibilityReasonCodes ?? [],
             latestSequence: candidateProjection.latestSequence,
             version: candidateProjection.version,
+            updatedAt: new Date(),
           },
           create: {
             evidenceCandidateId: candidateProjection.evidenceCandidateId,
@@ -122,6 +125,7 @@ export class PrismaLearningEvidenceEventStoreRepository implements LearningEvide
             eligibilityReasonCodes: candidateProjection.eligibilityReasonCodes ?? [],
             latestSequence: candidateProjection.latestSequence,
             version: candidateProjection.version,
+            updatedAt: new Date(),
           },
         });
       }
@@ -189,8 +193,10 @@ export class PrismaLearningEvidenceEventStoreRepository implements LearningEvide
             lastEventHash: checkpoint.lastEventHash,
             status: checkpoint.status,
             failureReason: checkpoint.failureReason,
+            updatedAt: new Date(),
           },
           create: {
+            id: `${checkpoint.projectionName}:${checkpoint.schoolId}:${checkpoint.partitionKey}`,
             projectionName: checkpoint.projectionName,
             schoolId: checkpoint.schoolId,
             partitionKey: checkpoint.partitionKey,
@@ -198,6 +204,7 @@ export class PrismaLearningEvidenceEventStoreRepository implements LearningEvide
             lastEventHash: checkpoint.lastEventHash,
             status: checkpoint.status,
             failureReason: checkpoint.failureReason,
+            updatedAt: new Date(),
           },
         });
       }
@@ -205,6 +212,7 @@ export class PrismaLearningEvidenceEventStoreRepository implements LearningEvide
       if (idempotencyKey && commandType && requestHash) {
         await tx.learningEvidenceIdempotency.create({
           data: {
+            id: `${event.schoolId}:${commandType}:${idempotencyKey}`,
             schoolId: event.schoolId,
             idempotencyKey,
             commandType,

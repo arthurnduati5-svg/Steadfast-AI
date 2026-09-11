@@ -131,6 +131,7 @@ async function upsertIdempotencyRecord(key: string, record: Partial<IdempotencyR
         weakSignalCreated: record.weakSignalCreated || false,
         completionStatus: record.completionStatus || null,
         result: record.result || null,
+        updatedAt: new Date(),
       },
     });
   } catch (e) {
