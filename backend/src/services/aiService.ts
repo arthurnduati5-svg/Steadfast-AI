@@ -1,4 +1,5 @@
 import prisma from '../lib/prisma';
+import { createChatMessage } from '../repositories/chatMessageRepository';
 import { getRedisClient } from '../lib/redis'; // Corrected import
 import pinecone from '../lib/pinecone';
 import { buildProfileSummary } from '../utils/buildProfileSummary';
@@ -131,22 +132,18 @@ export const aiService = {
       });
     }
 
-    const newMessage = await prisma.chatMessage.create({
-      data: {
-        sessionId: chatSession.id,
-        role: 'user',
-        content: message,
-        messageNumber: recentChatHistory.length + 1,
-      },
+    const newMessage = await createChatMessage({
+      sessionId: chatSession.id,
+      role: 'user',
+      content: message,
+      messageNumber: recentChatHistory.length + 1,
     });
 
-    const newAIResponse = await prisma.chatMessage.create({
-      data: {
-        sessionId: chatSession.id,
-        role: 'assistant',
-        content: aiResponse,
-        messageNumber: recentChatHistory.length + 2,
-      },
+    const newAIResponse = await createChatMessage({
+      sessionId: chatSession.id,
+      role: 'assistant',
+      content: aiResponse,
+      messageNumber: recentChatHistory.length + 2,
     });
 
     // 7. Store embeddings of the new conversation in Pinecone.

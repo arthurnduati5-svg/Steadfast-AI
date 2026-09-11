@@ -93,13 +93,13 @@ One gap: `GAP-evidence-header-identity` — an existing authorization/identity-p
 - LINKED LOGIC ID(S): LOGIC-voice-api-copilot-airoutes (chat write paths)
 - LINKED ALGORITHM ID(S): none
 - GAP TYPE: OWNERSHIP_AMBIGUITY; DUPLICATION_CANDIDATE; CONCURRENCY_GAP
-- CURRENT BEHAVIOR: `ChatMessage` has DUPLICATE_WRITER_CANDIDATE status — `src/routes/ai.ts` (10 write rows), `src/routes/ai/ai-chat.routes.ts`, `src/services/aiService.ts` write with no proven coordination boundary.
-- MISSING/PARTIAL: no canonical writer or coordination proof; concurrent writer semantics unknown.
+- CURRENT BEHAVIOR: `ChatMessage` has single canonical persistence owner `src/repositories/chatMessageRepository.ts` (R8-F) — confirmed live writes in `src/routes/ai.ts`, `src/services/aiService.ts` and `src/services/revisionLearningService.ts` (raw `INSERT INTO "ChatMessage"` proven same canonical object via schema) now delegate to `createChatMessage`/`updateChatMessage` with preserved sessionId/role/content/messageNumber/metadata/id/timestamp semantics and no role normalization. Unmounted untracked segmentation stub `src/routes/ai/ai-chat.routes.ts` is not live and was deliberately left untouched.
+- MISSING/PARTIAL: lock/version semantics for concurrent canonical writes remain unproven.
 - WHY IT MATTERS: chat history is learner-facing evidence; divergent writers can produce inconsistent histories.
-- EVIDENCE: 04 §Canonical Writers `ChatMessage` row. CONFIDENCE: high (status accepted; duplication itself is candidate-class).
+- EVIDENCE: 04 §Canonical Writers `ChatMessage` row (R8-F); R8-F focused repository test (6/6). CONFIDENCE: high.
 - SECURITY/PRIVACY: none. DATA INTEGRITY: moderate. RESTART: none. RETRY/CONCURRENCY: moderate. LONG-HISTORY: none.
-- CONSUMERS AFFECTED: tutor client, growth reader. R8-E HANDOFF: none. R8-F HANDOFF: consolidation candidate.
-- DISPOSITION: REQUIRED BEFORE PRODUCTION. REASON: canonical chat history durability/integrity should be single-owner before launch.
+- CONSUMERS AFFECTED: tutor client, growth reader. R8-E HANDOFF: none. R8-F HANDOFF: consolidated through canonical writer.
+- DISPOSITION: RESOLVED (R8-F). REASON: all confirmed live canonical ChatMessage writes now pass through one persistence owner.
 
 ### GAP-evidence-idempotency-lifecycle
 - LINKED LOGIC ID(S): LOGIC-memory-api-copilot-learning-evidence, LOGIC-memory-api-copilot-evidence
@@ -145,7 +145,7 @@ One gap: `GAP-evidence-header-identity` — an existing authorization/identity-p
 - WHY IT MATTERS: assessment is the highest-integrity domain; any state record silently unwritten breaks recovery, audit and result-release truth.
 - EVIDENCE: 04 §Canonical Writers (rows marked "No R8-A modelWriterGroups entry"); SOURCE_INSPECTION composition/resolver proving prisma-mode wiring exists. CONFIDENCE: medium.
 - SECURITY/PRIVACY: none. DATA INTEGRITY IMPACT: high. RESTART IMPACT: unknown. RETRY/CONCURRENCY: unknown. LONG-HISTORY: none.
-- CONSUMERS AFFECTED: teacher, student, parent projections. R8-E HANDOFF: none. R8-F HANDOFF: none.
+- CONSUMERS AFFECTED: teacher, student, parent projections. R8-E HANDOFF: none. R8-F HANDOFF: Package 11 result-release active HTTP durable composition = RESOLVED (mounted router defaults to Prisma repositories + PrismaResultReleaseApprovalAtomicCommitter; InMemory for explicit test injection only); other Exam*/Marking*/question-bank writer unknowns = REMAIN.
 - DISPOSITION: REQUIRED BEFORE PRODUCTION. REASON: exam/marking state durability must be writer-proven before launch.
 
 ### GAP-questionbank-concurrency-locks
@@ -168,7 +168,7 @@ One gap: `GAP-evidence-header-identity` — an existing authorization/identity-p
 - WHY IT MATTERS: a large-school sync could exhaust request resources and leave a partial mapping state; dry-run exists (mitigation) but execution path is single-pass.
 - EVIDENCE: 06 roster algorithm records (UNBOUNDED_DATA flags, "flagged for R8-E batching review"); 07 §Teacher/School. CONFIDENCE: high.
 - SECURITY/PRIVACY: none. DATA INTEGRITY: moderate. RESTART: none. RETRY/CONCURRENCY: moderate. LONG-HISTORY: none.
-- CONSUMERS AFFECTED: school admins. R8-E HANDOFF: yes — batching/memory review (primary). R8-F HANDOFF: none.
+- CONSUMERS AFFECTED: school admins. R8-E HANDOFF: yes — batching/memory review (primary). R8-F HANDOFF: BLOCKED — `backend/src/services/rosterSyncDryRunService.ts` exists locally but is NOT tracked at the accepted baseline (absent from HEAD; contracts/tests also untracked), so R8-F committed no repair and invented no hard roster-size policy; indexed membership lookup remains for the owner-tasked follow-up (R8-G).
 - DISPOSITION: REQUIRED BEFORE PRODUCTION. REASON: production launch with school-wide syncs needs bounded degradation; the mechanism is a static bound, not a performance claim.
 
 ### GAP-dailyobjectives-idempotency-lifecycle

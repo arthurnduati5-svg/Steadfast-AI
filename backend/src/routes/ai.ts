@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import { schoolAuthMiddleware } from '../middleware/schoolAuthMiddleware';
 import { rateLimiter } from '../middleware/rateLimiter';
 import prisma from '../utils/prismaClient';
+import { createChatMessage, updateChatMessage } from '../repositories/chatMessageRepository';
 import { getRedisClient } from '../lib/redis';
 import pinecone from '../lib/vectorClient';
 import { OpenAI } from 'openai';
@@ -4904,15 +4905,13 @@ router.post('/chat', schoolAuthMiddleware, aiLimiter, async (req: AuthedRequest,
 
     const savedUserMessage = existingEditedUserMessage || (
       shouldPersistUserMessage
-        ? await prisma.chatMessage.create({
-            data: {
-              sessionId,
-              role: 'user',
-              content: effectiveMessage,
-              timestamp: new Date(),
-              messageNumber: priorSessionMessages.length + 1,
-              metadata: toPrismaMetadata(userMessageMetadata),
-            },
+        ? await createChatMessage({
+            sessionId,
+            role: 'user',
+            content: effectiveMessage,
+            timestamp: new Date(),
+            messageNumber: priorSessionMessages.length + 1,
+            metadata: toPrismaMetadata(userMessageMetadata),
           })
         : null
     );
@@ -5185,16 +5184,13 @@ router.post('/chat', schoolAuthMiddleware, aiLimiter, async (req: AuthedRequest,
       (aiResult.state?.lastAttachmentContextSummary || aiResult.state?.lastAttachmentLabels?.length)
     ) {
       try {
-        await prisma.chatMessage.update({
-          where: { id: savedUserMessage.id },
-          data: {
-            metadata: {
-              ...((savedUserMessage.metadata as any) || {}),
-              attachmentContextSummary: aiResult.state?.lastAttachmentContextSummary,
-              attachmentLabels: aiResult.state?.lastAttachmentLabels || [],
-              tutorArtifacts: parsedArtifacts,
-            } as any,
-          },
+        await updateChatMessage(savedUserMessage.id, {
+          metadata: {
+            ...((savedUserMessage.metadata as any) || {}),
+            attachmentContextSummary: aiResult.state?.lastAttachmentContextSummary,
+            attachmentLabels: aiResult.state?.lastAttachmentLabels || [],
+            tutorArtifacts: parsedArtifacts,
+          } as any,
         });
       } catch (e) {
         logger.warn({ messageId: savedUserMessage.id, error: String(e) }, '[Backend] User attachment context metadata update failed');
@@ -5231,13 +5227,12 @@ router.post('/chat', schoolAuthMiddleware, aiLimiter, async (req: AuthedRequest,
     });
 
     // Write AI Response with Metadata
-    const savedAiMsg = await prisma.chatMessage.create({
-      data: {
-        sessionId,
-        role: 'model',
-        content: finalContent,
-        timestamp: new Date(),
-        messageNumber: priorSessionMessages.length + (savedUserMessage ? 2 : 1),
+    const savedAiMsg = await createChatMessage({
+      sessionId,
+      role: 'model',
+      content: finalContent,
+      timestamp: new Date(),
+      messageNumber: priorSessionMessages.length + (savedUserMessage ? 2 : 1),
         metadata: toPrismaMetadata({
           videoData: aiResult.videoData,
           video: aiResult.videoData,
@@ -5249,7 +5244,6 @@ router.post('/chat', schoolAuthMiddleware, aiLimiter, async (req: AuthedRequest,
           videoWhyRecommended: videoSnapshot.activeVideoWhyRecommended,
           ...assistantMetadata,
         }),
-      }
     });
     recordAssistantEnvelopeAnalytics({
       userId: studentId,
@@ -10306,13 +10300,12 @@ router.post('/voice-chat', schoolAuthMiddleware, sttLimiter, upload.single('audi
     await ttsDispatchChain;
 
     // 4. Persistence (Post-Stream)
-    const savedVoiceUserMessage = await prisma.chatMessage.create({
-      data: {
-        sessionId,
-        role: 'user',
-        content: userText,
-        timestamp: new Date(),
-        messageNumber: session.messages.length + 1,
+    const savedVoiceUserMessage = await createChatMessage({
+      sessionId,
+      role: 'user',
+      content: userText,
+      timestamp: new Date(),
+      messageNumber: session.messages.length + 1,
         metadata: toPrismaMetadata({
           language: buildMessageLanguageMetadata({
             text: userText,
@@ -10321,7 +10314,6 @@ router.post('/voice-chat', schoolAuthMiddleware, sttLimiter, upload.single('audi
           }),
           metacognition: mergedMetacognitiveState,
         }),
-      }
     });
 
     await createSafetyAlertIfNeeded({
@@ -10425,13 +10417,12 @@ router.post('/voice-chat', schoolAuthMiddleware, sttLimiter, upload.single('audi
       }),
       ...reflectionStatePatch,
     };
-    const savedVoiceAiMessage = await prisma.chatMessage.create({
-      data: {
-        sessionId,
-        role: 'model',
-        content: fullAiResponse || aiResult.processedText,
-        timestamp: new Date(),
-        messageNumber: session.messages.length + 2,
+    const savedVoiceAiMessage = await createChatMessage({
+      sessionId,
+      role: 'model',
+      content: fullAiResponse || aiResult.processedText,
+      timestamp: new Date(),
+      messageNumber: session.messages.length + 2,
         metadata: toPrismaMetadata({
           videoData: aiResult.videoData || null,
           video: aiResult.videoData || null,
@@ -10442,7 +10433,6 @@ router.post('/voice-chat', schoolAuthMiddleware, sttLimiter, upload.single('audi
           videoWhyRecommended: videoSnapshot.activeVideoWhyRecommended,
           ...assistantMetadata,
         }),
-      }
     });
     recordAssistantEnvelopeAnalytics({
       userId: studentId,

@@ -1,16 +1,28 @@
 import { Router, Request, Response } from 'express';
 import {
-  InMemoryResultReleasePacketRepository,
-  InMemoryResultReleaseApprovalRepository,
-  InMemoryResultAudienceProjectionRepository,
-  InMemoryStudentResultReportSnapshotRepository,
-  InMemoryParentSafeResultSummaryRepository,
-  InMemoryStudentSafeResultSummaryRepository,
-  InMemoryResultReleaseDeliveryIntentRepository,
-  InMemoryResultReleaseAuditRepository,
-  InMemoryResultReleaseIdempotencyRepository,
-  InMemoryResultReleaseApprovalAtomicCommitter,
-} from '../domains/assessment/result-release/repositories/inMemoryResultReleaseRepositories';
+  PrismaResultReleasePacketRepository,
+  PrismaResultReleaseApprovalRepository,
+  PrismaResultAudienceProjectionRepository,
+  PrismaStudentResultReportSnapshotRepository,
+  PrismaParentSafeResultSummaryRepository,
+  PrismaStudentSafeResultSummaryRepository,
+  PrismaResultReleaseDeliveryIntentRepository,
+  PrismaResultReleaseAuditRepository,
+  PrismaResultReleaseIdempotencyRepository,
+  PrismaResultReleaseApprovalAtomicCommitter,
+} from '../domains/assessment/result-release/repositories/prismaResultReleaseRepositories';
+import type {
+  ResultReleasePacketRepository,
+  ResultReleaseApprovalRepository,
+  ResultAudienceProjectionRepository,
+  StudentResultReportSnapshotRepository,
+  ParentSafeResultSummaryRepository,
+  StudentSafeResultSummaryRepository,
+  ResultReleaseDeliveryIntentRepository,
+  ResultReleaseAuditRepository,
+  ResultReleaseIdempotencyRepository,
+  ResultReleaseApprovalAtomicCommitter,
+} from '../domains/assessment/result-release/contracts/resultReleaseRepositoryContracts';
 import { ResultReleasePacketService } from '../domains/assessment/result-release/services/resultReleasePacketService';
 import { ResultReleaseBoundaryEnforcementService } from '../domains/assessment/result-release/services/resultReleaseBoundaryEnforcementService';
 import { ResultReleaseApprovalService } from '../domains/assessment/result-release/services/resultReleaseApprovalService';
@@ -24,21 +36,59 @@ import { ResultReleaseAuditBridge } from '../domains/assessment/result-release/s
 import { ResultReleaseIdempotencyService } from '../domains/assessment/result-release/services/resultReleaseIdempotencyService';
 import type { ResultReleaseCommandContext, ResultReleaseSafeEnvelope } from '../domains/assessment/result-release/contracts/resultReleaseContracts';
 
-const router = Router();
+/**
+ * R8-F production composition: the mounted HTTP router defaults to the
+ * existing durable Prisma repositories. In-memory repositories exist only
+ * for explicit test injection via `createResultReleaseRouter(dependencies)`.
+ * Production NEVER silently falls back from Prisma to in-memory persistence:
+ * a database failure remains an explicit failure.
+ */
+export interface ResultReleaseRouterDependencies {
+  packetRepo: ResultReleasePacketRepository;
+  approvalRepo: ResultReleaseApprovalRepository;
+  projectionRepo: ResultAudienceProjectionRepository;
+  reportSnapshotRepo: StudentResultReportSnapshotRepository;
+  parentSummaryRepo: ParentSafeResultSummaryRepository;
+  studentSummaryRepo: StudentSafeResultSummaryRepository;
+  deliveryIntentRepo: ResultReleaseDeliveryIntentRepository;
+  auditRepo: ResultReleaseAuditRepository;
+  idempotencyRepo: ResultReleaseIdempotencyRepository;
+  atomicCommitter: ResultReleaseApprovalAtomicCommitter;
+}
 
-const packetRepo = new InMemoryResultReleasePacketRepository();
-const approvalRepo = new InMemoryResultReleaseApprovalRepository();
-const projectionRepo = new InMemoryResultAudienceProjectionRepository();
-const reportSnapshotRepo = new InMemoryStudentResultReportSnapshotRepository();
-const parentSummaryRepo = new InMemoryParentSafeResultSummaryRepository();
-const studentSummaryRepo = new InMemoryStudentSafeResultSummaryRepository();
-const deliveryIntentRepo = new InMemoryResultReleaseDeliveryIntentRepository();
-const auditRepo = new InMemoryResultReleaseAuditRepository();
-const idempotencyRepo = new InMemoryResultReleaseIdempotencyRepository();
+export function buildProductionResultReleaseDependencies(): ResultReleaseRouterDependencies {
+  return {
+    packetRepo: new PrismaResultReleasePacketRepository(),
+    approvalRepo: new PrismaResultReleaseApprovalRepository(),
+    projectionRepo: new PrismaResultAudienceProjectionRepository(),
+    reportSnapshotRepo: new PrismaStudentResultReportSnapshotRepository(),
+    parentSummaryRepo: new PrismaParentSafeResultSummaryRepository(),
+    studentSummaryRepo: new PrismaStudentSafeResultSummaryRepository(),
+    deliveryIntentRepo: new PrismaResultReleaseDeliveryIntentRepository(),
+    auditRepo: new PrismaResultReleaseAuditRepository(),
+    idempotencyRepo: new PrismaResultReleaseIdempotencyRepository(),
+    atomicCommitter: new PrismaResultReleaseApprovalAtomicCommitter(),
+  };
+}
 
-const auditBridge = new ResultReleaseAuditBridge(auditRepo);
-const idempotencyService = new ResultReleaseIdempotencyService(idempotencyRepo);
-const atomicCommitter = new InMemoryResultReleaseApprovalAtomicCommitter(approvalRepo, packetRepo, auditRepo);
+export function createResultReleaseRouter(
+  dependencies: ResultReleaseRouterDependencies = buildProductionResultReleaseDependencies(),
+) {
+  const router = Router();
+
+  const packetRepo = dependencies.packetRepo;
+  const approvalRepo = dependencies.approvalRepo;
+  const projectionRepo = dependencies.projectionRepo;
+  const reportSnapshotRepo = dependencies.reportSnapshotRepo;
+  const parentSummaryRepo = dependencies.parentSummaryRepo;
+  const studentSummaryRepo = dependencies.studentSummaryRepo;
+  const deliveryIntentRepo = dependencies.deliveryIntentRepo;
+  const auditRepo = dependencies.auditRepo;
+  const idempotencyRepo = dependencies.idempotencyRepo;
+
+  const auditBridge = new ResultReleaseAuditBridge(auditRepo);
+  const idempotencyService = new ResultReleaseIdempotencyService(idempotencyRepo);
+  const atomicCommitter = dependencies.atomicCommitter;
 const packetService = new ResultReleasePacketService(packetRepo, approvalRepo, auditBridge, idempotencyService);
 const boundaryService = new ResultReleaseBoundaryEnforcementService();
 const approvalService = new ResultReleaseApprovalService(approvalRepo, packetRepo, auditBridge, idempotencyService, atomicCommitter);
@@ -410,5 +460,10 @@ router.get('/packets/:resultReleasePacketId/projection/parent-boundary', async (
   const projection = await projectionSafetyService.toParentBoundaryProjection(ctx, (packet.data as any) as Record<string, unknown>);
   sendEnvelope(res, projection);
 });
+
+  return router;
+}
+
+const router = createResultReleaseRouter();
 
 export default router;

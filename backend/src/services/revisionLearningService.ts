@@ -1,5 +1,6 @@
 import { randomUUID, createHash } from 'crypto';
 import prisma from '../lib/prisma';
+import { createChatMessage } from '../repositories/chatMessageRepository';
 import { createRevisionCollection } from './revisionService';
 import type {
   Message,
@@ -714,19 +715,20 @@ async function appendAssistantMessage(sessionId: string, content: string, metada
     sessionId
   );
   const id = randomUUID();
-  await prisma.$executeRawUnsafe(
-    `
-      INSERT INTO "ChatMessage" (
-        "id", "sessionId", "role", "content", "timestamp", "messageNumber", "metadata"
-      )
-      VALUES ($1, $2, 'model', $3, CURRENT_TIMESTAMP, $4, CAST($5 AS JSONB))
-    `,
+  // R8-F: same canonical ChatMessage persistence object as Prisma ChatMessage
+  // (schema: id/sessionId/role/content/timestamp/messageNumber/metadata),
+  // now written through the canonical writer with identical semantics.
+  // The previous raw SQL stored CAST(JSON.stringify(metadata) AS JSONB),
+  // i.e. a JSONB object; passing the object preserves that stored shape.
+  await createChatMessage({
     id,
     sessionId,
+    role: 'model',
     content,
-    Number(current?.messageNumber || 0) + 1,
-    JSON.stringify(metadata)
-  );
+    timestamp: new Date(),
+    messageNumber: Number(current?.messageNumber || 0) + 1,
+    metadata,
+  });
   return {
     id,
     role: 'model',
