@@ -145,9 +145,41 @@ describe('Package 7 - Attempt Capture', () => {
   });
 
   it('attempt can submit', async () => {
-    const attempt = await attemptService.submitAttempt(studentCtx, attemptId);
-    expect(attempt).not.toBeNull();
-    expect(attempt!.status).toBe('submitted');
+    const result = await attemptService.submitAttempt(studentCtx, attemptId);
+    expect(result.outcome).toBe('submitted');
+    if (result.outcome === 'submitted' || result.outcome === 'already_submitted') {
+      expect(result.attempt.status).toBe('submitted');
+    }
+  });
+
+  it('duplicate submit is idempotent and terminal-state submit conflicts', async () => {
+    // attemptId was already submitted above: retry must be an idempotent no-op.
+    const retry = await attemptService.submitAttempt(studentCtx, attemptId);
+    expect(retry.outcome).toBe('already_submitted');
+
+    // Fresh attempt on an isolated assignment: first submit wins, second is idempotent.
+    const { assignment: freshAssignment } = await assignmentService.assignVariantToStudent(teacherCtx, {
+      deliverySessionId: sessionId, paperId: 'paper1', paperVersionId: 'pv1',
+      variantId: 'variant1', studentRef: 'student2', learnerRefType: 'mock_student_ref',
+      assignmentStrategy: 'manual_teacher_assignment', safeAssignmentSummary: 'R8-G guard test',
+    });
+    const student2Ctx: ExamDeliveryCommandContext = {
+      schoolId, actorId: 'student2', actorRole: 'student', correlationId: uuid(), idempotencyKey: uuid(),
+    };
+    const started = await attemptService.startAttempt(student2Ctx, {
+      deliverySessionId: sessionId, variantAssignmentId: freshAssignment!.variantAssignmentId, studentRef: 'student2', durationSecondsAllowed: 3600,
+    });
+    expect(started.attempt).not.toBeNull();
+    const freshId = started.attempt!.attemptId;
+    const first = await attemptService.submitAttempt(student2Ctx, freshId);
+    const second = await attemptService.submitAttempt(student2Ctx, freshId);
+    expect(first.outcome).toBe('submitted');
+    expect(second.outcome).toBe('already_submitted');
+
+    // Terminal non-submitted state: explicit conflict, no silent transition.
+    await repos.attemptRepository.updateStatus(freshId, 'cancelled');
+    const afterCancel = await attemptService.submitAttempt(student2Ctx, freshId);
+    expect(afterCancel.outcome).toBe('conflict');
   });
 
   it('timing events can be recorded', async () => {

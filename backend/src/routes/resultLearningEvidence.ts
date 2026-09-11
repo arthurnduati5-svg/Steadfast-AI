@@ -1,4 +1,5 @@
 import { Router, Request, Response } from 'express';
+import { buildVerifiedActorContext } from '../lib/verifiedActorContext';
 import { randomUUID } from 'crypto';
 import { ResultEvidenceBridgeService } from '../domains/assessment/result-learning-evidence/services/resultEvidenceBridgeService';
 import { ObjectiveMasteryImpactService } from '../domains/assessment/result-learning-evidence/services/objectiveMasteryImpactService';
@@ -21,29 +22,110 @@ import {
   InMemoryResultLearningEvidenceAuditRepository,
   InMemoryResultLearningEvidenceIdempotencyRepository,
 } from '../domains/assessment/result-learning-evidence/repositories/inMemoryResultLearningEvidenceRepositories';
+import {
+  PrismaResultLearningEvidenceBridgeRepository,
+  PrismaResultMasteryMutationPlanRepository,
+  PrismaResultMasteryMutationEventRepository,
+  PrismaResultObjectiveMasteryImpactRepository,
+  PrismaResultRevisionSignalRepository,
+  PrismaResultGrowthSignalRepository,
+  PrismaResultLearningEvidenceAuditRepository,
+  PrismaResultLearningEvidenceIdempotencyRepository,
+} from '../domains/assessment/result-learning-evidence/repositories/prismaResultLearningEvidenceRepositories';
 
 const router = Router();
 
-const bridgeRepo = new InMemoryResultLearningEvidenceBridgeRepository();
-const planRepo = new InMemoryResultMasteryMutationPlanRepository();
-const eventRepo = new InMemoryResultMasteryMutationEventRepository();
-const impactRepo = new InMemoryResultObjectiveMasteryImpactRepository();
-const revisionSignalRepo = new InMemoryResultRevisionSignalRepository();
-const growthSignalRepo = new InMemoryResultGrowthSignalRepository();
-const auditRepo = new InMemoryResultLearningEvidenceAuditRepository();
-const idempotencyRepo = new InMemoryResultLearningEvidenceIdempotencyRepository();
+/**
+ * R8-G production composition: the mounted HTTP router defaults to the
+ * existing durable Prisma repositories. In-memory repositories exist only
+ * for explicit test injection via `useResultLearningEvidenceReposForTests`.
+ * Production NEVER silently falls back from Prisma to in-memory persistence.
+ */
+export interface ResultLearningEvidenceRouteRepos {
+  bridgeRepo: InMemoryResultLearningEvidenceBridgeRepository | PrismaResultLearningEvidenceBridgeRepository;
+  planRepo: InMemoryResultMasteryMutationPlanRepository | PrismaResultMasteryMutationPlanRepository;
+  eventRepo: InMemoryResultMasteryMutationEventRepository | PrismaResultMasteryMutationEventRepository;
+  impactRepo: InMemoryResultObjectiveMasteryImpactRepository | PrismaResultObjectiveMasteryImpactRepository;
+  revisionSignalRepo: InMemoryResultRevisionSignalRepository | PrismaResultRevisionSignalRepository;
+  growthSignalRepo: InMemoryResultGrowthSignalRepository | PrismaResultGrowthSignalRepository;
+  auditRepo: InMemoryResultLearningEvidenceAuditRepository | PrismaResultLearningEvidenceAuditRepository;
+  idempotencyRepo: InMemoryResultLearningEvidenceIdempotencyRepository | PrismaResultLearningEvidenceIdempotencyRepository;
+}
+
+export function buildProductionResultLearningEvidenceRepos(): ResultLearningEvidenceRouteRepos {
+  return {
+    bridgeRepo: new PrismaResultLearningEvidenceBridgeRepository(),
+    planRepo: new PrismaResultMasteryMutationPlanRepository(),
+    eventRepo: new PrismaResultMasteryMutationEventRepository(),
+    impactRepo: new PrismaResultObjectiveMasteryImpactRepository(),
+    revisionSignalRepo: new PrismaResultRevisionSignalRepository(),
+    growthSignalRepo: new PrismaResultGrowthSignalRepository(),
+    auditRepo: new PrismaResultLearningEvidenceAuditRepository(),
+    idempotencyRepo: new PrismaResultLearningEvidenceIdempotencyRepository(),
+  };
+}
+
+const routeRepos: ResultLearningEvidenceRouteRepos = buildProductionResultLearningEvidenceRepos();
+
+/**
+ * Explicit test-only injection seam. Never called in production.
+ */
+export function useResultLearningEvidenceReposForTests(repos: ResultLearningEvidenceRouteRepos): void {
+  routeRepos.bridgeRepo = repos.bridgeRepo;
+  routeRepos.planRepo = repos.planRepo;
+  routeRepos.eventRepo = repos.eventRepo;
+  routeRepos.impactRepo = repos.impactRepo;
+  routeRepos.revisionSignalRepo = repos.revisionSignalRepo;
+  routeRepos.growthSignalRepo = repos.growthSignalRepo;
+  routeRepos.auditRepo = repos.auditRepo;
+  routeRepos.idempotencyRepo = repos.idempotencyRepo;
+  rebuildResultLearningEvidenceServices();
+}
+
+
 
 const policyRegistry = new ResultLearningEvidencePolicyRegistry();
 
-const bridgeService = new ResultEvidenceBridgeService(bridgeRepo, policyRegistry);
-const impactService = new ObjectiveMasteryImpactService(impactRepo, policyRegistry);
-const planService = new MasteryMutationPlanService(planRepo, impactRepo, policyRegistry);
-const mutationService = new MasteryMutationApplicationService(planRepo, eventRepo, policyRegistry);
-const revisionSignalService = new RevisionSignalDispatchService(revisionSignalRepo, policyRegistry);
-const growthSignalService = new GrowthSignalDispatchService(growthSignalRepo, policyRegistry);
-const projectionSafetyService = new ResultLearningEvidenceProjectionSafetyService();
-const auditBridge = new ResultLearningEvidenceAuditBridge(auditRepo);
-const idempotencyService = new ResultLearningEvidenceIdempotencyService(idempotencyRepo);
+function buildResultLearningEvidenceServiceBundle() {
+  return {
+    bridgeService: new ResultEvidenceBridgeService(routeRepos.bridgeRepo, policyRegistry),
+    impactService: new ObjectiveMasteryImpactService(routeRepos.impactRepo, policyRegistry),
+    planService: new MasteryMutationPlanService(routeRepos.planRepo, routeRepos.impactRepo, policyRegistry),
+    mutationService: new MasteryMutationApplicationService(routeRepos.planRepo, routeRepos.eventRepo, policyRegistry),
+    revisionSignalService: new RevisionSignalDispatchService(routeRepos.revisionSignalRepo, policyRegistry),
+    growthSignalService: new GrowthSignalDispatchService(routeRepos.growthSignalRepo, policyRegistry),
+    projectionSafetyService: new ResultLearningEvidenceProjectionSafetyService(),
+  };
+}
+
+let serviceBundle = buildResultLearningEvidenceServiceBundle();
+
+function rebuildResultLearningEvidenceServices(): void {
+  serviceBundle = buildResultLearningEvidenceServiceBundle();
+  bridgeService = serviceBundle.bridgeService;
+  impactService = serviceBundle.impactService;
+  planService = serviceBundle.planService;
+  mutationService = serviceBundle.mutationService;
+  revisionSignalService = serviceBundle.revisionSignalService;
+  growthSignalService = serviceBundle.growthSignalService;
+  projectionSafetyService = serviceBundle.projectionSafetyService;
+  rebuildResultLearningEvidenceBridges();
+}
+
+let bridgeService = serviceBundle.bridgeService;
+let impactService = serviceBundle.impactService;
+let planService = serviceBundle.planService;
+let mutationService = serviceBundle.mutationService;
+let revisionSignalService = serviceBundle.revisionSignalService;
+let growthSignalService = serviceBundle.growthSignalService;
+let projectionSafetyService = serviceBundle.projectionSafetyService;
+let auditBridge = new ResultLearningEvidenceAuditBridge(routeRepos.auditRepo);
+let idempotencyService = new ResultLearningEvidenceIdempotencyService(routeRepos.idempotencyRepo);
+
+function rebuildResultLearningEvidenceBridges(): void {
+  auditBridge = new ResultLearningEvidenceAuditBridge(routeRepos.auditRepo);
+  idempotencyService = new ResultLearningEvidenceIdempotencyService(routeRepos.idempotencyRepo);
+}
 
 interface SafeResponseEnvelope {
   ok: boolean;
@@ -69,10 +151,10 @@ function createSafeResponseEnvelope(req: Request, overrides: Partial<SafeRespons
 }
 
 function extractActorContext(req: Request): { schoolId: string; actorId: string; role: string } {
-  const schoolId = (req as any).schoolId || (req.headers['x-school-id'] as string) || '';
-  const actorId = (req as any).actorId || (req.headers['x-actor-id'] as string) || '';
-  const role = (req as any).role || (req.headers['x-actor-role'] as string) || '';
-  return { schoolId, actorId, role };
+  // R8-G: authoritative identity derives exclusively from verified server-side
+  // context. Caller-controlled headers must never supply school/actor/role.
+  const verified = buildVerifiedActorContext(req);
+  return { schoolId: verified.schoolId, actorId: verified.actorId, role: verified.role };
 }
 
 function getIdempotencyKey(req: Request): string | null {
@@ -164,12 +246,12 @@ router.get('/bridges', safeHandler(async (req: Request, res: Response) => {
 }));
 
 router.post('/bridges/:resultLearningEvidenceBridgeId/run-source-checks', safeHandler(async (req: Request, res: Response) => {
-  const { role } = extractActorContext(req);
+  const { schoolId: verifiedSchoolId, actorId: verifiedActorId, role } = extractActorContext(req);
   const result = await bridgeService.runSourceIntegrityChecks(req.params.resultLearningEvidenceBridgeId, role);
   await auditBridge.recordSourceIntegrityChecked({
-    schoolId: (req as any).schoolId || '',
+    schoolId: verifiedSchoolId,
     resultLearningEvidenceBridgeId: req.params.resultLearningEvidenceBridgeId,
-    actorId: (req as any).actorId || '',
+    actorId: verifiedActorId,
     actorRole: role,
     allPassed: result.allChecksPassed,
     blockingReasonCodes: result.blockingReasonCodes,
@@ -290,9 +372,9 @@ router.post('/mastery-plans/:resultMasteryMutationPlanId/ready-for-approval', sa
 }));
 
 router.post('/mastery-plans/:resultMasteryMutationPlanId/approve', safeHandler(async (req: Request, res: Response) => {
-  const { actorId, role } = extractActorContext(req);
+  const { schoolId: verifiedSchoolId, actorId, role } = extractActorContext(req);
   const plan = await planService.approvePlan(req.params.resultMasteryMutationPlanId, actorId, role);
-  await auditBridge.recordMasteryPlanApproved({ schoolId: (req as any).schoolId || '', resultMasteryMutationPlanId: plan?.resultMasteryMutationPlanId || '', resultLearningEvidenceBridgeId: (req as any).resultLearningEvidenceBridgeId || '', actorId, actorRole: role });
+  await auditBridge.recordMasteryPlanApproved({ schoolId: verifiedSchoolId, resultMasteryMutationPlanId: plan?.resultMasteryMutationPlanId || '', resultLearningEvidenceBridgeId: (req as any).resultLearningEvidenceBridgeId || '', actorId, actorRole: role });
   res.json(createSafeResponseEnvelope(req, { resourceId: plan?.resultMasteryMutationPlanId, status: plan?.planStatus, safeMessage: 'Plan approved' }));
 }));
 
@@ -376,9 +458,9 @@ router.post('/revision-signals/:resultRevisionSignalId/ready', safeHandler(async
 }));
 
 router.post('/revision-signals/:resultRevisionSignalId/dispatch', safeHandler(async (req: Request, res: Response) => {
-  const { role } = extractActorContext(req);
+  const { schoolId, actorId, role } = extractActorContext(req);
   const signal = await revisionSignalService.dispatchRevisionSignal(req.params.resultRevisionSignalId, role);
-  await auditBridge.recordRevisionSignalDispatched({ schoolId: (req as any).schoolId || '', resultRevisionSignalId: signal?.resultRevisionSignalId || '', resultMasteryMutationPlanId: signal?.resultMasteryMutationPlanId || '', actorId: (req as any).actorId || '', actorRole: role });
+  await auditBridge.recordRevisionSignalDispatched({ schoolId, resultRevisionSignalId: signal?.resultRevisionSignalId || '', resultMasteryMutationPlanId: signal?.resultMasteryMutationPlanId || '', actorId, actorRole: role });
   res.json(createSafeResponseEnvelope(req, { resourceId: signal?.resultRevisionSignalId, status: signal?.signalStatus, safeMessage: signal?.signalStatus === 'dispatched' ? 'Revision signal dispatched' : 'Revision signal dispatch deferred/blocked' }));
 }));
 
@@ -428,9 +510,9 @@ router.post('/growth-signals/:resultGrowthSignalId/ready', safeHandler(async (re
 }));
 
 router.post('/growth-signals/:resultGrowthSignalId/dispatch', safeHandler(async (req: Request, res: Response) => {
-  const { role } = extractActorContext(req);
+  const { schoolId, actorId, role } = extractActorContext(req);
   const signal = await growthSignalService.dispatchGrowthSignal(req.params.resultGrowthSignalId, role);
-  await auditBridge.recordGrowthSignalDispatched({ schoolId: (req as any).schoolId || '', resultGrowthSignalId: signal?.resultGrowthSignalId || '', resultMasteryMutationPlanId: signal?.resultMasteryMutationPlanId || '', actorId: (req as any).actorId || '', actorRole: role });
+  await auditBridge.recordGrowthSignalDispatched({ schoolId, resultGrowthSignalId: signal?.resultGrowthSignalId || '', resultMasteryMutationPlanId: signal?.resultMasteryMutationPlanId || '', actorId, actorRole: role });
   res.json(createSafeResponseEnvelope(req, { resourceId: signal?.resultGrowthSignalId, status: signal?.signalStatus, safeMessage: signal?.signalStatus === 'dispatched' ? 'Growth signal dispatched' : 'Growth signal dispatch deferred/blocked' }));
 }));
 
@@ -496,7 +578,7 @@ router.get('/bridges/:resultLearningEvidenceBridgeId/projection/student-safe', s
 router.get('/bridges/:resultLearningEvidenceBridgeId/projection/parent-boundary', safeHandler(async (req: Request, res: Response) => {
   const bridge = await bridgeService.getEvidenceBridge(req.params.resultLearningEvidenceBridgeId);
   if (!bridge) throw new Error('NOT_FOUND: evidence bridge not found');
-  const projection = projectionSafetyService.toParentBoundaryProjection((req as any).actorId || '', bridge);
+  const projection = projectionSafetyService.toParentBoundaryProjection(buildVerifiedActorContext(req).actorId, bridge);
   if (!projection.notYetReleasedReason) {
     projection.notYetReleasedReason = 'Parent release is boundary-only. No scores, answer keys, or raw rubrics are released to parents.';
   }

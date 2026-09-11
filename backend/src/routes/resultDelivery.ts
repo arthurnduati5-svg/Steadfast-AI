@@ -1,4 +1,5 @@
 import { Router, Request, Response } from 'express';
+import { buildVerifiedActorContext } from '../lib/verifiedActorContext';
 import {
   InMemoryResultDeliveryJobRepository,
   InMemoryResultDeliveryRecipientRepository,
@@ -11,6 +12,18 @@ import {
   InMemoryResultDeliveryAuditRepository,
   InMemoryResultDeliveryIdempotencyRepository,
 } from '../domains/assessment/result-delivery/repositories/inMemoryResultDeliveryRepositories';
+import {
+  PrismaResultDeliveryJobRepository,
+  PrismaResultDeliveryRecipientRepository,
+  PrismaResultDeliveryChannelEnvelopeRepository,
+  PrismaResultDeliverySuppressionRepository,
+  PrismaResultDeliveryAttemptRepository,
+  PrismaResultDeliveryReceiptRepository,
+  PrismaResultDeliveryRetryPlanRepository,
+  PrismaResultDeliveryMockProviderRepository,
+  PrismaResultDeliveryAuditRepository,
+  PrismaResultDeliveryIdempotencyRepository,
+} from '../domains/assessment/result-delivery/repositories/prismaResultDeliveryRepositories';
 import { ResultDeliveryJobService } from '../domains/assessment/result-delivery/services/resultDeliveryJobService';
 import { ResultDeliveryRecipientResolver } from '../domains/assessment/result-delivery/services/resultDeliveryRecipientResolver';
 import { ResultDeliveryEnvelopeService } from '../domains/assessment/result-delivery/services/resultDeliveryEnvelopeService';
@@ -25,34 +38,100 @@ import type { ResultDeliveryCommandContext, ResultDeliverySafeEnvelope } from '.
 
 const router = Router();
 
-const jobRepo = new InMemoryResultDeliveryJobRepository();
-const recipientRepo = new InMemoryResultDeliveryRecipientRepository();
-const envelopeRepo = new InMemoryResultDeliveryChannelEnvelopeRepository();
-const suppressionRepo = new InMemoryResultDeliverySuppressionRepository();
-const attemptRepo = new InMemoryResultDeliveryAttemptRepository();
-const receiptRepo = new InMemoryResultDeliveryReceiptRepository();
-const retryPlanRepo = new InMemoryResultDeliveryRetryPlanRepository();
-const mockProviderRepo = new InMemoryResultDeliveryMockProviderRepository();
-const auditRepo = new InMemoryResultDeliveryAuditRepository();
-const idempotencyRepo = new InMemoryResultDeliveryIdempotencyRepository();
+/**
+ * R8-G production composition: the mounted HTTP router defaults to the
+ * existing durable Prisma repositories. In-memory repositories exist only
+ * for explicit test injection via `useResultDeliveryReposForTests`.
+ * Production NEVER silently falls back from Prisma to in-memory persistence.
+ */
+export interface ResultDeliveryRouteRepos {
+  jobRepo: InMemoryResultDeliveryJobRepository | PrismaResultDeliveryJobRepository;
+  recipientRepo: InMemoryResultDeliveryRecipientRepository | PrismaResultDeliveryRecipientRepository;
+  envelopeRepo: InMemoryResultDeliveryChannelEnvelopeRepository | PrismaResultDeliveryChannelEnvelopeRepository;
+  suppressionRepo: InMemoryResultDeliverySuppressionRepository | PrismaResultDeliverySuppressionRepository;
+  attemptRepo: InMemoryResultDeliveryAttemptRepository | PrismaResultDeliveryAttemptRepository;
+  receiptRepo: InMemoryResultDeliveryReceiptRepository | PrismaResultDeliveryReceiptRepository;
+  retryPlanRepo: InMemoryResultDeliveryRetryPlanRepository | PrismaResultDeliveryRetryPlanRepository;
+  mockProviderRepo: InMemoryResultDeliveryMockProviderRepository | PrismaResultDeliveryMockProviderRepository;
+  auditRepo: InMemoryResultDeliveryAuditRepository | PrismaResultDeliveryAuditRepository;
+  idempotencyRepo: InMemoryResultDeliveryIdempotencyRepository | PrismaResultDeliveryIdempotencyRepository;
+}
 
-const auditBridge = new ResultDeliveryAuditBridge(auditRepo);
-const idempotencyService = new ResultDeliveryIdempotencyService(idempotencyRepo);
-const deliveryJobService = new ResultDeliveryJobService(jobRepo, recipientRepo, envelopeRepo, suppressionRepo, attemptRepo, auditBridge, idempotencyService);
-const recipientResolver = new ResultDeliveryRecipientResolver(recipientRepo, auditBridge, idempotencyService);
-const envelopeService = new ResultDeliveryEnvelopeService(envelopeRepo, auditBridge, idempotencyService);
-const suppressionService = new ResultDeliverySuppressionService(suppressionRepo, auditBridge, idempotencyService);
-const mockDispatchService = new ResultDeliveryMockDispatchService(attemptRepo, envelopeRepo, suppressionRepo, auditBridge, idempotencyService);
-const receiptService = new ResultDeliveryReceiptService(receiptRepo, auditBridge, idempotencyService);
-const retryPlanService = new ResultDeliveryRetryPlanService(retryPlanRepo, auditBridge, idempotencyService);
-const projectionSafetyService = new ResultDeliveryProjectionSafetyService(jobRepo, envelopeRepo, attemptRepo, receiptRepo);
+export function buildProductionResultDeliveryRepos(): ResultDeliveryRouteRepos {
+  return {
+    jobRepo: new PrismaResultDeliveryJobRepository(),
+    recipientRepo: new PrismaResultDeliveryRecipientRepository(),
+    envelopeRepo: new PrismaResultDeliveryChannelEnvelopeRepository(),
+    suppressionRepo: new PrismaResultDeliverySuppressionRepository(),
+    attemptRepo: new PrismaResultDeliveryAttemptRepository(),
+    receiptRepo: new PrismaResultDeliveryReceiptRepository(),
+    retryPlanRepo: new PrismaResultDeliveryRetryPlanRepository(),
+    mockProviderRepo: new PrismaResultDeliveryMockProviderRepository(),
+    auditRepo: new PrismaResultDeliveryAuditRepository(),
+    idempotencyRepo: new PrismaResultDeliveryIdempotencyRepository(),
+  };
+}
+
+const routeRepos: ResultDeliveryRouteRepos = buildProductionResultDeliveryRepos();
+
+function buildResultDeliveryServiceBundle() {
+  const auditBridge = new ResultDeliveryAuditBridge(routeRepos.auditRepo);
+  const idempotencyService = new ResultDeliveryIdempotencyService(routeRepos.idempotencyRepo);
+  return {
+    auditBridge,
+    idempotencyService,
+    deliveryJobService: new ResultDeliveryJobService(routeRepos.jobRepo, routeRepos.recipientRepo, routeRepos.envelopeRepo, routeRepos.suppressionRepo, routeRepos.attemptRepo, auditBridge, idempotencyService),
+    recipientResolver: new ResultDeliveryRecipientResolver(routeRepos.recipientRepo, auditBridge, idempotencyService),
+    envelopeService: new ResultDeliveryEnvelopeService(routeRepos.envelopeRepo, auditBridge, idempotencyService),
+    suppressionService: new ResultDeliverySuppressionService(routeRepos.suppressionRepo, auditBridge, idempotencyService),
+    mockDispatchService: new ResultDeliveryMockDispatchService(routeRepos.attemptRepo, routeRepos.envelopeRepo, routeRepos.suppressionRepo, auditBridge, idempotencyService),
+    receiptService: new ResultDeliveryReceiptService(routeRepos.receiptRepo, auditBridge, idempotencyService),
+    retryPlanService: new ResultDeliveryRetryPlanService(routeRepos.retryPlanRepo, auditBridge, idempotencyService),
+    projectionSafetyService: new ResultDeliveryProjectionSafetyService(routeRepos.jobRepo, routeRepos.envelopeRepo, routeRepos.attemptRepo, routeRepos.receiptRepo),
+  };
+}
+
+let serviceBundle = buildResultDeliveryServiceBundle();
+
+/**
+ * Explicit test-only injection seam. Never called in production.
+ */
+export function useResultDeliveryReposForTests(repos: ResultDeliveryRouteRepos): void {
+  Object.assign(routeRepos, repos);
+  serviceBundle = buildResultDeliveryServiceBundle();
+  auditBridge = serviceBundle.auditBridge;
+  idempotencyService = serviceBundle.idempotencyService;
+  deliveryJobService = serviceBundle.deliveryJobService;
+  recipientResolver = serviceBundle.recipientResolver;
+  envelopeService = serviceBundle.envelopeService;
+  suppressionService = serviceBundle.suppressionService;
+  mockDispatchService = serviceBundle.mockDispatchService;
+  receiptService = serviceBundle.receiptService;
+  retryPlanService = serviceBundle.retryPlanService;
+  projectionSafetyService = serviceBundle.projectionSafetyService;
+}
+
+let auditBridge = serviceBundle.auditBridge;
+let idempotencyService = serviceBundle.idempotencyService;
+let deliveryJobService = serviceBundle.deliveryJobService;
+let recipientResolver = serviceBundle.recipientResolver;
+let envelopeService = serviceBundle.envelopeService;
+let suppressionService = serviceBundle.suppressionService;
+let mockDispatchService = serviceBundle.mockDispatchService;
+let receiptService = serviceBundle.receiptService;
+let retryPlanService = serviceBundle.retryPlanService;
+let projectionSafetyService = serviceBundle.projectionSafetyService;
 
 function extractContext(req: Request): ResultDeliveryCommandContext {
+  // R8-G: authoritative identity derives exclusively from verified server-side
+  // context. Previous hard-coded 'test-school'/'test-actor'/'admin' defaults
+  // are removed: missing verified identity fails closed downstream.
+  const verified = buildVerifiedActorContext(req);
   return {
-    schoolId: (req as any).schoolId || (req as any).user?.schoolId || 'test-school',
-    actorId: (req as any).user?.id || 'test-actor',
-    actorRole: (req as any).user?.role || 'admin',
-    correlationId: (req as any).correlationId || 'test-correlation',
+    schoolId: verified.schoolId,
+    actorId: verified.actorId,
+    actorRole: verified.role,
+    correlationId: (req as any).correlationId || (req.headers['x-correlation-id'] as string) || '',
     idempotencyKey: (req.headers['x-idempotency-key'] as string) || `auto-${Date.now()}`,
   };
 }

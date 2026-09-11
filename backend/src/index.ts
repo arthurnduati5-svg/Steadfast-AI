@@ -194,7 +194,7 @@ app.use('/api/copilot/growth', schoolAuthMiddleware, growthAggregateRoutes);
 app.use('/api', schoolAuthMiddleware, profileRoutes);
 app.use('/api/learner', schoolAuthMiddleware, learnerRecommendationRoutes);
 app.use('/api/learner', schoolAuthMiddleware, learnerPreferenceRoutes);
-app.use('/api/copilot', copilotHandoffRoutes);
+app.use('/api/copilot', schoolAuthMiddleware, requireVerifiedSchoolContext, copilotHandoffRoutes);
 app.use('/api/copilot', schoolAuthMiddleware, tutorPolicyEvaluateRoutes);
 app.use('/api/copilot', schoolAuthMiddleware, tutorSafeChatRoutes);
 app.use('/api/learner', schoolAuthMiddleware, requireVerifiedSchoolContext, learnerSessionRoutes);

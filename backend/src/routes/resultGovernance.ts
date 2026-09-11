@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { randomUUID } from 'crypto';
+import { buildVerifiedActorContext } from '../lib/verifiedActorContext';
 import { ResultFinalizationReviewService } from '../domains/assessment/result-governance/services/resultFinalizationReviewService';
 import { ResultFinalizationDecisionService } from '../domains/assessment/result-governance/services/resultFinalizationDecisionService';
 import { ResultReleaseReadinessService } from '../domains/assessment/result-governance/services/resultReleaseReadinessService';
@@ -20,29 +21,96 @@ import {
   InMemoryResultGovernanceAuditRepository,
   InMemoryResultGovernanceIdempotencyRepository,
 } from '../domains/assessment/result-governance/repositories/inMemoryResultGovernanceRepositories';
+import {
+  PrismaResultFinalizationReviewRepository,
+  PrismaResultFinalizationDecisionRepository,
+  PrismaResultReleaseReadinessRepository,
+  PrismaResultReleaseBoundaryRepository,
+  PrismaResultRegradeRequestRepository,
+  PrismaResultRegradeIntakeRepository,
+  PrismaResultGovernanceAuditRepository,
+  PrismaResultGovernanceIdempotencyRepository,
+} from '../domains/assessment/result-governance/repositories/prismaResultGovernanceRepositories';
+import prisma from '../lib/prisma';
 
 const router = Router();
 
-const reviewRepo = new InMemoryResultFinalizationReviewRepository();
-const decisionRepo = new InMemoryResultFinalizationDecisionRepository();
-const readinessRepo = new InMemoryResultReleaseReadinessRepository();
-const boundaryRepo = new InMemoryResultReleaseBoundaryRepository();
-const regradeRequestRepo = new InMemoryResultRegradeRequestRepository();
-const regradeIntakeRepo = new InMemoryResultRegradeIntakeRepository();
-const auditRepo = new InMemoryResultGovernanceAuditRepository();
-const idempotencyRepo = new InMemoryResultGovernanceIdempotencyRepository();
+/**
+ * R8-G production composition: the mounted HTTP router defaults to the
+ * existing durable Prisma repositories. In-memory repositories exist only
+ * for explicit test injection via `useResultGovernanceReposForTests`.
+ * Production NEVER silently falls back from Prisma to in-memory persistence.
+ */
+export interface ResultGovernanceRouteRepos {
+  reviewRepo: InMemoryResultFinalizationReviewRepository | PrismaResultFinalizationReviewRepository;
+  decisionRepo: InMemoryResultFinalizationDecisionRepository | PrismaResultFinalizationDecisionRepository;
+  readinessRepo: InMemoryResultReleaseReadinessRepository | PrismaResultReleaseReadinessRepository;
+  boundaryRepo: InMemoryResultReleaseBoundaryRepository | PrismaResultReleaseBoundaryRepository;
+  regradeRequestRepo: InMemoryResultRegradeRequestRepository | PrismaResultRegradeRequestRepository;
+  regradeIntakeRepo: InMemoryResultRegradeIntakeRepository | PrismaResultRegradeIntakeRepository;
+  auditRepo: InMemoryResultGovernanceAuditRepository | PrismaResultGovernanceAuditRepository;
+  idempotencyRepo: InMemoryResultGovernanceIdempotencyRepository | PrismaResultGovernanceIdempotencyRepository;
+}
+
+export function buildProductionResultGovernanceRepos(): ResultGovernanceRouteRepos {
+  return {
+    reviewRepo: new PrismaResultFinalizationReviewRepository(prisma),
+    decisionRepo: new PrismaResultFinalizationDecisionRepository(prisma),
+    readinessRepo: new PrismaResultReleaseReadinessRepository(prisma),
+    boundaryRepo: new PrismaResultReleaseBoundaryRepository(prisma),
+    regradeRequestRepo: new PrismaResultRegradeRequestRepository(prisma),
+    regradeIntakeRepo: new PrismaResultRegradeIntakeRepository(prisma),
+    auditRepo: new PrismaResultGovernanceAuditRepository(prisma),
+    idempotencyRepo: new PrismaResultGovernanceIdempotencyRepository(prisma),
+  };
+}
+
+const routeRepos: ResultGovernanceRouteRepos = buildProductionResultGovernanceRepos();
 
 const policyRegistry = new ResultGovernancePolicyRegistry();
 
-const reviewService = new ResultFinalizationReviewService(reviewRepo, policyRegistry);
-const decisionService = new ResultFinalizationDecisionService(decisionRepo, reviewRepo, policyRegistry);
-const readinessService = new ResultReleaseReadinessService(readinessRepo, decisionRepo, policyRegistry);
-const boundaryService = new ResultReleaseBoundaryService(boundaryRepo, readinessRepo, policyRegistry);
-const regradeRequestService = new ResultRegradeRequestService(regradeRequestRepo, policyRegistry);
-const regradeIntakeService = new ResultRegradeIntakeService(regradeIntakeRepo, regradeRequestRepo, policyRegistry);
-const projectionSafetyService = new ResultGovernanceProjectionSafetyService();
-const auditBridge = new ResultGovernanceAuditBridge(auditRepo);
-const idempotencyService = new ResultGovernanceIdempotencyService(idempotencyRepo);
+function buildResultGovernanceServiceBundle() {
+  return {
+    reviewService: new ResultFinalizationReviewService(routeRepos.reviewRepo, policyRegistry),
+    decisionService: new ResultFinalizationDecisionService(routeRepos.decisionRepo, routeRepos.reviewRepo, policyRegistry),
+    readinessService: new ResultReleaseReadinessService(routeRepos.readinessRepo, routeRepos.decisionRepo, policyRegistry),
+    boundaryService: new ResultReleaseBoundaryService(routeRepos.boundaryRepo, routeRepos.readinessRepo, policyRegistry),
+    regradeRequestService: new ResultRegradeRequestService(routeRepos.regradeRequestRepo, policyRegistry),
+    regradeIntakeService: new ResultRegradeIntakeService(routeRepos.regradeIntakeRepo, routeRepos.regradeRequestRepo, policyRegistry),
+    projectionSafetyService: new ResultGovernanceProjectionSafetyService(),
+    auditBridge: new ResultGovernanceAuditBridge(routeRepos.auditRepo),
+    idempotencyService: new ResultGovernanceIdempotencyService(routeRepos.idempotencyRepo),
+  };
+}
+
+let serviceBundle = buildResultGovernanceServiceBundle();
+
+/**
+ * Explicit test-only injection seam. Never called in production.
+ */
+export function useResultGovernanceReposForTests(repos: ResultGovernanceRouteRepos): void {
+  Object.assign(routeRepos, repos);
+  serviceBundle = buildResultGovernanceServiceBundle();
+  reviewService = serviceBundle.reviewService;
+  decisionService = serviceBundle.decisionService;
+  readinessService = serviceBundle.readinessService;
+  boundaryService = serviceBundle.boundaryService;
+  regradeRequestService = serviceBundle.regradeRequestService;
+  regradeIntakeService = serviceBundle.regradeIntakeService;
+  projectionSafetyService = serviceBundle.projectionSafetyService;
+  auditBridge = serviceBundle.auditBridge;
+  idempotencyService = serviceBundle.idempotencyService;
+}
+
+let reviewService = serviceBundle.reviewService;
+let decisionService = serviceBundle.decisionService;
+let readinessService = serviceBundle.readinessService;
+let boundaryService = serviceBundle.boundaryService;
+let regradeRequestService = serviceBundle.regradeRequestService;
+let regradeIntakeService = serviceBundle.regradeIntakeService;
+let projectionSafetyService = serviceBundle.projectionSafetyService;
+let auditBridge = serviceBundle.auditBridge;
+let idempotencyService = serviceBundle.idempotencyService;
 
 interface SafeResponseEnvelope {
   ok: boolean;
@@ -68,10 +136,10 @@ function createSafeResponseEnvelope(req: Request, overrides: Partial<SafeRespons
 }
 
 function extractActorContext(req: Request): { schoolId: string; actorId: string; role: string } {
-  const schoolId = (req as any).schoolId || (req.headers['x-school-id'] as string) || '';
-  const actorId = (req as any).actorId || (req.headers['x-actor-id'] as string) || '';
-  const role = (req as any).role || (req.headers['x-actor-role'] as string) || '';
-  return { schoolId, actorId, role };
+  // R8-G: authoritative identity derives exclusively from verified server-side
+  // context. Caller-controlled headers must never supply school/actor/role.
+  const verified = buildVerifiedActorContext(req);
+  return { schoolId: verified.schoolId, actorId: verified.actorId, role: verified.role };
 }
 
 function getIdempotencyKey(req: Request): string | null {

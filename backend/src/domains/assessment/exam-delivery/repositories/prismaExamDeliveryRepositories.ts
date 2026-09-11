@@ -116,7 +116,10 @@ export class PrismaExamDeliverySessionStateRepository implements ExamDeliverySes
   constructor(private prisma: PrismaClient) {}
 
   async create(data: Omit<ExamDeliverySessionState, 'createdAt' | 'updatedAt'>): Promise<ExamDeliverySessionState> {
-    const record = await this.prisma.examDeliverySessionStateRecord.create({ data });
+    // R8-G: schema requires updatedAt; set at the persistence boundary.
+    const record = await this.prisma.examDeliverySessionStateRecord.create({
+      data: { ...data, updatedAt: new Date() },
+    });
     return this.toDomain(record);
   }
 
@@ -164,12 +167,17 @@ export class PrismaExamVariantAssignmentRepository implements ExamVariantAssignm
   constructor(private prisma: PrismaClient) {}
 
   async create(data: Omit<ExamVariantAssignment, 'createdAt' | 'updatedAt'>): Promise<ExamVariantAssignment> {
-    const record = await this.prisma.examVariantAssignmentRecord.create({ data });
+    // R8-G: schema requires updatedAt; set at the persistence boundary.
+    const record = await this.prisma.examVariantAssignmentRecord.create({
+      data: { ...data, updatedAt: new Date() },
+    });
     return this.toDomain(record);
   }
 
   async createMany(data: Omit<ExamVariantAssignment, 'createdAt' | 'updatedAt'>[]): Promise<ExamVariantAssignment[]> {
-    await this.prisma.examVariantAssignmentRecord.createMany({ data });
+    await this.prisma.examVariantAssignmentRecord.createMany({
+      data: data.map((entry) => ({ ...entry, updatedAt: new Date() })),
+    });
     return this.listByDeliverySessionId(data[0]?.deliverySessionId ?? '');
   }
 
@@ -230,7 +238,10 @@ export class PrismaExamAttemptRepository implements ExamAttemptRepository {
   constructor(private prisma: PrismaClient) {}
 
   async create(data: Omit<ExamAttempt, 'createdAt' | 'updatedAt'>): Promise<ExamAttempt> {
-    const record = await this.prisma.examAttemptRecord.create({ data });
+    // R8-G: schema requires updatedAt; set at the persistence boundary.
+    const record = await this.prisma.examAttemptRecord.create({
+      data: { ...data, updatedAt: new Date() },
+    });
     return this.toDomain(record);
   }
 
@@ -280,6 +291,22 @@ export class PrismaExamAttemptRepository implements ExamAttemptRepository {
       data: { status: 'submitted', submittedAt: new Date(submittedAt), updatedAt: new Date() },
     });
     return this.toDomain(record);
+  }
+
+  async transitionSubmittedFrom(
+    attemptId: string,
+    submittedAt: string,
+    expectedStatus: ExamAttemptStatus,
+  ): Promise<ExamAttempt | null> {
+    // R8-G: single guarded compare-and-set. Concurrent submitters race on the
+    // status predicate; exactly one wins, the loser observes zero matches.
+    const write = await this.prisma.examAttemptRecord.updateMany({
+      where: { attemptId, status: expectedStatus },
+      data: { status: 'submitted', submittedAt: new Date(submittedAt), updatedAt: new Date() },
+    });
+    if (write.count === 0) return null;
+    const record = await this.prisma.examAttemptRecord.findUnique({ where: { attemptId } });
+    return record ? this.toDomain(record) : null;
   }
 
   private toDomain(r: any): ExamAttempt {
@@ -559,7 +586,10 @@ export class PrismaExamDeliveryIdempotencyRepository implements ExamDeliveryIdem
   constructor(private prisma: PrismaClient) {}
 
   async create(data: Omit<ExamDeliveryIdempotencyEntry, 'createdAt' | 'updatedAt'>): Promise<ExamDeliveryIdempotencyEntry> {
-    const record = await this.prisma.examDeliveryIdempotencyRecord.create({ data });
+    // R8-G: schema requires updatedAt; set at the persistence boundary.
+    const record = await this.prisma.examDeliveryIdempotencyRecord.create({
+      data: { ...data, updatedAt: new Date() },
+    });
     return this.toDomain(record);
   }
 

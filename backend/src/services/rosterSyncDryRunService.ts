@@ -5,8 +5,42 @@ import type {
   RosterSyncDryRunSummary,
 } from '../contracts/schoolSystemBridgeContracts';
 import { randomUUID } from 'crypto';
+import { checkRosterBound, countRosterRecords, getR8GBoundsConfig } from '../config/r8gBackendBounds';
 
 export function performRosterSyncDryRun(input: RosterSyncInput): RosterSyncDryRunResult {
+  // R8-G: reject over-bound payloads BEFORE expensive reconciliation work.
+  // Unconfigured bound preserves normal valid roster semantics.
+  const { total, counts } = countRosterRecords(input);
+  const bound = checkRosterBound(total, getR8GBoundsConfig().config.rosterMaxRecords);
+  if (!bound.allowed) {
+    const emptySummary: RosterSyncDryRunSummary = {
+      totalStudents: counts.students,
+      totalTeachers: counts.teachers,
+      totalClasses: counts.classes,
+      totalSubjects: counts.subjects,
+      totalEnrollments: counts.enrollments,
+      totalTeacherAssignments: counts.teacherAssignments,
+      wouldCreate: 0,
+      wouldUpdate: 0,
+      wouldDeactivate: 0,
+      conflicts: 0,
+      warnings: 0,
+      blocked: 0,
+    };
+    return {
+      dryRunId: `dry-run-${randomUUID()}`,
+      summary: emptySummary,
+      conflicts: [],
+      blocked: true,
+      safeToApplyLater: false,
+      reasonCodes: [
+        'roster_payload_too_large',
+        `received:${bound.total}`,
+        `limit:${bound.limit}`,
+      ],
+    };
+  }
+
   const conflicts: RosterSyncConflict[] = [];
   let warnings = 0;
 

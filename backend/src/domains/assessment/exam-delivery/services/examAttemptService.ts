@@ -8,6 +8,12 @@ import { ExamDeliveryCommandContext, ExamDeliveryPolicyDecision } from '../contr
 import { ExamDeliveryAllRepositories } from '../contracts/examDeliveryRepositoryContracts';
 import { assertAttemptStartPolicy } from '../policies/examDeliveryPolicyDefinitions';
 
+export type AttemptSubmitOutcome =
+  | { outcome: 'submitted'; attempt: ExamAttempt }
+  | { outcome: 'already_submitted'; attempt: ExamAttempt }
+  | { outcome: 'not_found' }
+  | { outcome: 'conflict'; currentStatus: string };
+
 export class ExamAttemptService {
   constructor(private repos: ExamDeliveryAllRepositories) {}
 
@@ -121,8 +127,22 @@ export class ExamAttemptService {
   async submitAttempt(
     ctx: ExamDeliveryCommandContext,
     attemptId: string,
-  ): Promise<ExamAttempt | null> {
-    return this.repos.attemptRepository.updateSubmitted(attemptId, new Date().toISOString());
+  ): Promise<AttemptSubmitOutcome> {
+    // R8-G: one-shot guarded transition. Exactly one concurrent submitter
+    // wins; retries after success are idempotent; any other state is an
+    // explicit conflict — never a silent double submit.
+    const transitioned = await this.repos.attemptRepository.transitionSubmittedFrom(
+      attemptId,
+      new Date().toISOString(),
+      'in_progress',
+    );
+    if (transitioned) return { outcome: 'submitted', attempt: transitioned };
+    const current = await this.repos.attemptRepository.getById(attemptId);
+    if (!current) return { outcome: 'not_found' };
+    if (current.status === 'submitted' || current.status === 'auto_submitted') {
+      return { outcome: 'already_submitted', attempt: current };
+    }
+    return { outcome: 'conflict', currentStatus: current.status };
   }
 
   async autoSubmitAttempt(

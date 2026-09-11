@@ -1,6 +1,10 @@
 import { Router, Request, Response } from 'express';
 import { v4 as uuid } from 'uuid';
+import { buildVerifiedActorContext } from '../lib/verifiedActorContext';
 import { createInMemoryExamDeliveryRepositories } from '../domains/assessment/exam-delivery/repositories/inMemoryExamDeliveryRepositories';
+import { createPrismaExamDeliveryRepositories } from '../domains/assessment/exam-delivery/repositories/prismaExamDeliveryRepositories';
+import type { ExamDeliveryAllRepositories } from '../domains/assessment/exam-delivery/contracts/examDeliveryRepositoryContracts';
+import prisma from '../lib/prisma';
 import { ExamDeliverySessionService } from '../domains/assessment/exam-delivery/services/examDeliverySessionService';
 import { ExamDeliveryActivationService } from '../domains/assessment/exam-delivery/services/examDeliveryActivationService';
 import { ExamVariantAssignmentService } from '../domains/assessment/exam-delivery/services/examVariantAssignmentService';
@@ -19,18 +23,71 @@ import {
 
 const router = Router();
 
-const repos = createInMemoryExamDeliveryRepositories();
+/**
+ * R8-G production composition: the mounted HTTP router defaults to the
+ * existing durable Prisma repositories. In-memory repositories exist only
+ * for explicit test injection via `useExamDeliveryReposForTests`.
+ * Production NEVER silently falls back from Prisma to in-memory persistence:
+ * a database failure remains an explicit failure.
+ */
+export function buildProductionExamDeliveryRepositories(): ExamDeliveryAllRepositories {
+  return createPrismaExamDeliveryRepositories(prisma);
+}
 
-const sessionService = new ExamDeliverySessionService(repos);
-const activationService = new ExamDeliveryActivationService(repos);
-const assignmentService = new ExamVariantAssignmentService(repos);
-const attemptService = new ExamAttemptService(repos);
-const questionSnapshotService = new ExamAttemptQuestionSnapshotService(repos);
-const answerService = new ExamAnswerSubmissionService(repos);
-const timingService = new ExamTimingService(repos);
-const submissionSnapshotService = new ExamSubmissionSnapshotService(repos);
-const projectionService = new ExamDeliveryProjectionSafetyService(repos);
-const auditBridge = new ExamDeliveryAuditBridge(repos);
+const compositionHolder: { repos: ExamDeliveryAllRepositories } = {
+  repos: buildProductionExamDeliveryRepositories(),
+};
+
+/**
+ * Explicit test-only injection seam (mirrors the R8-F result-release
+ * `createResultReleaseRouter(dependencies)` seam). Never called in production.
+ */
+export function useExamDeliveryReposForTests(repos: ExamDeliveryAllRepositories): void {
+  compositionHolder.repos = repos;
+  rebuildExamDeliveryServices();
+}
+
+function buildExamDeliveryServiceBundle(repos: ExamDeliveryAllRepositories) {
+  return {
+    sessionService: new ExamDeliverySessionService(repos),
+    activationService: new ExamDeliveryActivationService(repos),
+    assignmentService: new ExamVariantAssignmentService(repos),
+    attemptService: new ExamAttemptService(repos),
+    questionSnapshotService: new ExamAttemptQuestionSnapshotService(repos),
+    answerService: new ExamAnswerSubmissionService(repos),
+    timingService: new ExamTimingService(repos),
+    submissionSnapshotService: new ExamSubmissionSnapshotService(repos),
+    projectionService: new ExamDeliveryProjectionSafetyService(repos),
+    auditBridge: new ExamDeliveryAuditBridge(repos),
+  };
+}
+
+let services = buildExamDeliveryServiceBundle(compositionHolder.repos);
+
+function rebuildExamDeliveryServices(): void {
+  services = buildExamDeliveryServiceBundle(compositionHolder.repos);
+  sessionService = services.sessionService;
+  activationService = services.activationService;
+  assignmentService = services.assignmentService;
+  attemptService = services.attemptService;
+  questionSnapshotService = services.questionSnapshotService;
+  answerService = services.answerService;
+  timingService = services.timingService;
+  submissionSnapshotService = services.submissionSnapshotService;
+  projectionService = services.projectionService;
+  auditBridge = services.auditBridge;
+}
+
+let sessionService = services.sessionService;
+let activationService = services.activationService;
+let assignmentService = services.assignmentService;
+let attemptService = services.attemptService;
+let questionSnapshotService = services.questionSnapshotService;
+let answerService = services.answerService;
+let timingService = services.timingService;
+let submissionSnapshotService = services.submissionSnapshotService;
+let projectionService = services.projectionService;
+let auditBridge = services.auditBridge;
 
 function defaultPolicyDecision(): ExamDeliveryPolicyDecision {
   return { allowed: true, reasonCode: 'OK', safeMessage: 'Operation permitted', blockedOperation: '' };
@@ -56,10 +113,11 @@ function buildSafeEnvelope(
 }
 
 function extractActorContext(req: Request): { schoolId: string; actorId: string; actorRole: string } {
-  const schoolId = (req.headers['x-school-id'] as string) ?? '';
-  const actorId = (req.headers['x-actor-id'] as string) ?? '';
-  const actorRole = (req.headers['x-actor-role'] as string) ?? '';
-  return { schoolId, actorId, actorRole };
+  // R8-G: authoritative identity derives exclusively from verified server-side
+  // context (schoolAuthMiddleware + requireVerifiedSchoolContext). Caller-
+  // controlled headers must never supply school/actor/role (spoofing).
+  const verified = buildVerifiedActorContext(req);
+  return { schoolId: verified.schoolId, actorId: verified.actorId, actorRole: verified.role };
 }
 
 function buildCommandContext(req: Request): ExamDeliveryCommandContext {
@@ -562,11 +620,16 @@ router.post('/attempts/:attemptId/submit', async (req: Request, res: Response) =
     if (!requireIdempotencyKey(req, res)) return;
     const ctx = buildCommandContext(req);
     const { attemptId } = req.params;
-    const attempt = await attemptService.submitAttempt(ctx, attemptId);
-    if (!attempt) {
+    const submitResult = await attemptService.submitAttempt(ctx, attemptId);
+    if (submitResult.outcome === 'not_found') {
       res.status(404).json(buildSafeEnvelope(req, { ok: false, correlationId: ctx.correlationId, safeMessage: 'Attempt not found', reasonCode: 'NOT_FOUND' }));
       return;
     }
+    if (submitResult.outcome === 'conflict') {
+      res.status(409).json(buildSafeEnvelope(req, { ok: false, correlationId: ctx.correlationId, safeMessage: `Attempt cannot be submitted from status ${submitResult.currentStatus}`, reasonCode: 'SUBMIT_CONFLICT' }));
+      return;
+    }
+    const attempt = submitResult.attempt;
     await timingService.recordSubmitted(ctx.schoolId, attemptId, attempt.deliverySessionId, attempt.durationSecondsUsed, 0);
     await auditBridge.recordAttemptSubmitted(ctx, attempt.deliverySessionId, attemptId);
     res.json(buildSafeEnvelope(req, {

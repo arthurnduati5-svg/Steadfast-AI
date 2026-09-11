@@ -77,6 +77,18 @@ export interface ExamAttemptRepository {
   updateStatus(attemptId: string, status: ExamAttemptStatus): Promise<ExamAttempt>;
   updateTiming(attemptId: string, lastSeenAt: string, durationSecondsUsed: number): Promise<ExamAttempt>;
   updateSubmitted(attemptId: string, submittedAt: string): Promise<ExamAttempt>;
+  /**
+   * R8-G guarded one-shot transition: moves the attempt to `submitted` only
+   * when its current status equals `expectedStatus` (compare-and-set).
+   * Returns the updated attempt, or null when the attempt is missing or
+   * already in a different status (caller maps to 404 vs 409 explicitly —
+   * never a silent double submit).
+   */
+  transitionSubmittedFrom(
+    attemptId: string,
+    submittedAt: string,
+    expectedStatus: ExamAttemptStatus,
+  ): Promise<ExamAttempt | null>;
 }
 
 // ── ExamAttemptQuestionSnapshotRepository ──

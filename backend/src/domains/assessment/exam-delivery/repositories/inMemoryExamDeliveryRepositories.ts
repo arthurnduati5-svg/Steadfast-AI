@@ -229,6 +229,20 @@ export class InMemoryExamAttemptRepository implements ExamAttemptRepository {
     this.store.set(attemptId, updated);
     return updated;
   }
+
+  async transitionSubmittedFrom(
+    attemptId: string,
+    submittedAt: string,
+    expectedStatus: ExamAttemptStatus,
+  ): Promise<ExamAttempt | null> {
+    // R8-G: same compare-and-set semantics as the Prisma implementation so
+    // explicit test-injection behavior matches production.
+    const existing = this.store.get(attemptId);
+    if (!existing || existing.status !== expectedStatus) return null;
+    const updated = { ...existing, status: 'submitted' as ExamAttemptStatus, submittedAt, updatedAt: new Date().toISOString() };
+    this.store.set(attemptId, updated);
+    return updated;
+  }
 }
 
 // ── In-Memory: ExamAttemptQuestionSnapshotRepository ──
