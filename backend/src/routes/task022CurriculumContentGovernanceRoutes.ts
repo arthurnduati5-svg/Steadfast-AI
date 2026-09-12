@@ -105,7 +105,8 @@ router.get('/health', (_req: Request, res: Response) => {
 });
 
 // ─── Sources: Register (admin/internal) ──────────────────────────
-router.post('/sources/register', (req: Request, res: Response) => {
+// R8-G.3A-D2: async — durable canonical Approved Source ownership.
+router.post('/sources/register', async (req: Request, res: Response) => {
   if (!requireRole(req, res, ADMIN_INTERNAL_ROLES)) return;
   if (!requireSchoolContext(req, res)) return;
   try {
@@ -160,21 +161,22 @@ router.post('/sources/register', (req: Request, res: Response) => {
       updatedAt: new Date().toISOString(),
     };
 
-    approvedSourceRegistryService.registerSource(source as any);
-    contentGovernanceAuditService.recordSourceAction('source_approved', source.id, actor.role);
+    const durableSource = await approvedSourceRegistryService.registerSourceDurable(source as any);
+    await contentGovernanceAuditService.recordSourceActionDurable('source_approved', durableSource.id, actor.role);
 
-    res.status(201).json({ success: true, source: safeSource(source) });
+    res.status(201).json({ success: true, source: safeSource(durableSource) });
   } catch {
     res.status(500).json({ success: false, message: 'Failed to register source.' });
   }
 });
 
 // ─── Sources: List ──────────────────────────────────────────────
-router.get('/sources', (req: Request, res: Response) => {
+// R8-G.3A-D2: reads durable canonical source state.
+router.get('/sources', async (req: Request, res: Response) => {
   if (!requireRole(req, res, TEACHER_ADMIN_ROLES)) return;
   try {
     const actor = getReqActor(req);
-    const allSources = approvedSourceRegistryService.getAllSources();
+    const allSources = await approvedSourceRegistryService.getAllSourcesDurable();
     const schoolSources = actor.schoolId
       ? allSources.filter(s => !s.schoolId || s.schoolId === actor.schoolId)
       : allSources;
@@ -186,11 +188,12 @@ router.get('/sources', (req: Request, res: Response) => {
 });
 
 // ─── Sources: Get by ID ──────────────────────────────────────────
-router.get('/sources/:sourceId', (req: Request, res: Response) => {
+// R8-G.3A-D2: reads durable canonical source state.
+router.get('/sources/:sourceId', async (req: Request, res: Response) => {
   if (!requireRole(req, res, TEACHER_ADMIN_ROLES)) return;
   try {
     const { sourceId } = req.params;
-    const source = approvedSourceRegistryService.getSource(sourceId);
+    const source = await approvedSourceRegistryService.getSourceDurable(sourceId);
     if (!source) {
       res.status(404).json({ success: false, message: 'Source not found.' });
       return;
@@ -202,14 +205,15 @@ router.get('/sources/:sourceId', (req: Request, res: Response) => {
 });
 
 // ─── Sources: Approval Request ──────────────────────────────────
-router.post('/sources/:sourceId/approval/request', (req: Request, res: Response) => {
+// R8-G.3A-D2: reads durable canonical source state.
+router.post('/sources/:sourceId/approval/request', async (req: Request, res: Response) => {
   if (!requireRole(req, res, TEACHER_ADMIN_DEEN_ROLES)) return;
   if (!requireSchoolContext(req, res)) return;
   try {
     const actor = getReqActor(req);
     const { sourceId } = req.params;
 
-    const source = approvedSourceRegistryService.getSource(sourceId);
+    const source = await approvedSourceRegistryService.getSourceDurable(sourceId);
     if (!source) {
       res.status(404).json({ success: false, message: 'Source not found.' });
       return;
@@ -220,7 +224,7 @@ router.post('/sources/:sourceId/approval/request', (req: Request, res: Response)
       return;
     }
 
-    const decision = sourceApprovalWorkflowService.proposeSource(source, actor.role as any);
+    const decision = await sourceApprovalWorkflowService.proposeSourceDurable(source, actor.role as any);
 
     res.json({
       success: true,
@@ -236,7 +240,8 @@ router.post('/sources/:sourceId/approval/request', (req: Request, res: Response)
 });
 
 // ─── Sources: Approval Decision (admin/internal) ────────────────
-router.post('/sources/:sourceId/approval/decide', (req: Request, res: Response) => {
+// R8-G.3A-D2: durable lifecycle mutation + awaited required audit.
+router.post('/sources/:sourceId/approval/decide', async (req: Request, res: Response) => {
   if (!requireRole(req, res, ADMIN_INTERNAL_ROLES)) return;
   try {
     const actor = getReqActor(req);
@@ -249,7 +254,7 @@ router.post('/sources/:sourceId/approval/decide', (req: Request, res: Response) 
       return;
     }
 
-    const source = approvedSourceRegistryService.getSource(sourceId);
+    const source = await approvedSourceRegistryService.getSourceDurable(sourceId);
     if (!source) {
       res.status(404).json({ success: false, message: 'Source not found.' });
       return;
@@ -263,19 +268,22 @@ router.post('/sources/:sourceId/approval/decide', (req: Request, res: Response) 
         res.status(403).json({ success: false, message: 'Deen-sensitive source requires Deen reviewer role.' });
         return;
       }
-      success = sourceApprovalWorkflowService.approveSource(sourceId, actor.role as any);
-      if (success) {
-        contentGovernanceAuditService.recordSourceAction('source_approved', sourceId, actor.role);
+      const approved = await sourceApprovalWorkflowService.approveSourceDurable(sourceId, actor.role as any);
+      if (approved) {
+        success = true;
+        await contentGovernanceAuditService.recordSourceActionDurable('source_approved', sourceId, actor.role);
       }
     } else if (actionStr === 'reject') {
-      success = sourceApprovalWorkflowService.rejectSource(sourceId, actor.role as any);
-      if (success) {
-        contentGovernanceAuditService.recordSourceAction('source_rejected', sourceId, actor.role);
+      const rejected = await sourceApprovalWorkflowService.rejectSourceDurable(sourceId, actor.role as any);
+      if (rejected) {
+        success = true;
+        await contentGovernanceAuditService.recordSourceActionDurable('source_rejected', sourceId, actor.role);
       }
     } else if (actionStr === 'block') {
-      success = sourceApprovalWorkflowService.blockSource(sourceId, actor.role as any);
-      if (success) {
-        contentGovernanceAuditService.recordSourceAction('source_deprecated', sourceId, actor.role);
+      const blocked = await sourceApprovalWorkflowService.blockSourceDurable(sourceId, actor.role as any);
+      if (blocked) {
+        success = true;
+        await contentGovernanceAuditService.recordSourceActionDurable('source_deprecated', sourceId, actor.role);
       }
     }
 
@@ -631,7 +639,8 @@ router.post('/objectives/govern', (req: Request, res: Response) => {
 });
 
 // ─── Grounding: Decide ──────────────────────────────────────────
-router.post('/grounding/decide', (req: Request, res: Response) => {
+router.post('/grounding/decide', async (req: Request, res: Response) => {
+  // R8-G.3A-D2: durable approval truth, fail-closed + awaited required audit.
   if (!requireRole(req, res, TEACHER_ADMIN_ROLES)) return;
   if (!requireSchoolContext(req, res)) return;
   try {
@@ -655,7 +664,7 @@ router.post('/grounding/decide', (req: Request, res: Response) => {
       return;
     }
 
-    const result = contentGroundingService.check({
+    const result = await contentGroundingService.checkDurable({
       curriculumFamily: curriculumFamily as CurriculumFamily,
       subject: subject as string | undefined,
       topic: topic as string | undefined,
@@ -667,11 +676,11 @@ router.post('/grounding/decide', (req: Request, res: Response) => {
     });
 
     if (result.decision === 'grounded') {
-      contentGovernanceAuditService.recordContentGrounding('content_grounding_allowed', curriculumFamily as CurriculumFamily, actor.role, result.reasonCodes);
+      await contentGovernanceAuditService.recordContentGroundingDurable('content_grounding_allowed', curriculumFamily as CurriculumFamily, actor.role, result.reasonCodes);
     } else if (result.decision === 'referral_required') {
-      contentGovernanceAuditService.recordDeenReferral(actor.role, curriculumFamily as CurriculumFamily, result.reasonCodes);
+      await contentGovernanceAuditService.recordDeenReferralDurable(actor.role, curriculumFamily as CurriculumFamily, result.reasonCodes);
     } else {
-      contentGovernanceAuditService.recordContentGrounding('content_grounding_denied', curriculumFamily as CurriculumFamily, actor.role, result.reasonCodes);
+      await contentGovernanceAuditService.recordContentGroundingDurable('content_grounding_denied', curriculumFamily as CurriculumFamily, actor.role, result.reasonCodes);
     }
 
     res.json({
@@ -690,7 +699,8 @@ router.post('/grounding/decide', (req: Request, res: Response) => {
 });
 
 // ─── Gaps: Detect ──────────────────────────────────────────────
-router.post('/gaps/detect', (req: Request, res: Response) => {
+// R8-G.3A-D2: durable gap persistence + awaited required audit.
+router.post('/gaps/detect', async (req: Request, res: Response) => {
   if (!requireRole(req, res, TEACHER_ADMIN_ROLES)) return;
   try {
     const actor = getReqActor(req);
@@ -702,7 +712,7 @@ router.post('/gaps/detect', (req: Request, res: Response) => {
       return;
     }
 
-    const gap = contentGapDetectionService.detectGap(
+    const gap = await contentGapDetectionService.detectGapDurable(
       curriculumFamily as CurriculumFamily,
       subject as string | undefined,
       topic as string | undefined,
@@ -711,7 +721,7 @@ router.post('/gaps/detect', (req: Request, res: Response) => {
     );
 
     if (gap) {
-      contentGovernanceAuditService.recordGapDetected(actor.role, curriculumFamily as CurriculumFamily, gap.reasonCodes);
+      await contentGovernanceAuditService.recordGapDetectedDurable(actor.role, curriculumFamily as CurriculumFamily, gap.reasonCodes);
     }
 
     res.json({
@@ -778,7 +788,7 @@ router.post('/retrieval/query', (req: Request, res: Response) => {
 });
 
 // ─── Imports: Dry Run (admin/internal) ─────────────────────────
-router.post('/imports/dry-run', (req: Request, res: Response) => {
+router.post('/imports/dry-run', async (req: Request, res: Response) => {
   if (!requireRole(req, res, ADMIN_INTERNAL_ROLES)) return;
   try {
     const actor = getReqActor(req);
@@ -796,7 +806,7 @@ router.post('/imports/dry-run', (req: Request, res: Response) => {
     }
 
     const result = curriculumImportDryRunService.validate(proposal);
-    contentGovernanceAuditService.record({
+    await contentGovernanceAuditService.recordDurable({
       actorRole: actor.role,
       eventType: 'curriculum_import_dry_run',
       curriculumFamily: proposal.curriculumFamily,
@@ -823,7 +833,8 @@ router.post('/imports/dry-run', (req: Request, res: Response) => {
 });
 
 // ─── Cambridge: Decide (teacher/admin/internal) ────────────────
-router.post('/cambridge/decide', (req: Request, res: Response) => {
+// R8-G.3A-D2: durable approval truth, fail-closed.
+router.post('/cambridge/decide', async (req: Request, res: Response) => {
   if (!requireRole(req, res, TEACHER_ADMIN_ROLES)) return;
   if (!requireSchoolContext(req, res)) return;
   try {
@@ -831,7 +842,7 @@ router.post('/cambridge/decide', (req: Request, res: Response) => {
     const body = sanitizePayload(req.body);
     const { subject, topic, skill, routePurpose, text } = body;
 
-    const result = contentGroundingService.check({
+    const result = await contentGroundingService.checkDurable({
       curriculumFamily: 'cambridge_academic',
       subject: subject as string | undefined,
       topic: topic as string | undefined,
@@ -901,7 +912,8 @@ router.post('/deen/decide', (req: Request, res: Response) => {
 });
 
 // ─── Challenge Remediation: Decide (teacher/admin/internal) ────
-router.post('/challenge-remediation/decide', (req: Request, res: Response) => {
+// R8-G.3A-D2: durable approval truth, fail-closed.
+router.post('/challenge-remediation/decide', async (req: Request, res: Response) => {
   if (!requireRole(req, res, TEACHER_ADMIN_ROLES)) return;
   if (!requireSchoolContext(req, res)) return;
   try {
@@ -917,7 +929,7 @@ router.post('/challenge-remediation/decide', (req: Request, res: Response) => {
     const isLearnerFacing = learnerFacing === true;
     const routePurpose = challengeType === 'remediation' ? 'remediation_planning' : 'challenge_generation';
 
-    const groundingResult = contentGroundingService.check({
+    const groundingResult = await contentGroundingService.checkDurable({
       curriculumFamily: curriculumFamily as CurriculumFamily,
       subject: subject as string | undefined,
       topic: topic as string | undefined,
@@ -955,11 +967,11 @@ router.post('/challenge-remediation/decide', (req: Request, res: Response) => {
 });
 
 // ─── Diagnostics (admin/internal) ──────────────────────────────
-router.get('/diagnostics', (req: Request, res: Response) => {
+router.get('/diagnostics', async (req: Request, res: Response) => {
   if (!requireRole(req, res, ADMIN_INTERNAL_ROLES)) return;
   try {
     const diagnostics = contentGovernanceDiagnosticsService.getDiagnostics();
-    const auditRecordCount = contentGovernanceAuditService.getTotalRecordCount();
+    const auditRecordCount = await contentGovernanceAuditService.getTotalRecordCountDurable();
     res.json({
       success: true,
       diagnostics,
@@ -972,7 +984,7 @@ router.get('/diagnostics', (req: Request, res: Response) => {
 });
 
 // ─── Audit (admin/internal) ────────────────────────────────────
-router.get('/audit', (req: Request, res: Response) => {
+router.get('/audit', async (req: Request, res: Response) => {
   if (!requireRole(req, res, ADMIN_INTERNAL_ROLES)) return;
   try {
     const { eventType, schoolId, limit } = req.query;
@@ -981,8 +993,8 @@ router.get('/audit', (req: Request, res: Response) => {
     if (schoolId) options.schoolId = schoolId;
     if (limit) options.limit = parseInt(limit as string, 10);
 
-    const records = contentGovernanceAuditService.getRecords(options);
-    const eventTypeCounts = contentGovernanceAuditService.getEventCountByType();
+    const records = await contentGovernanceAuditService.getRecordsDurable(options);
+    const eventTypeCounts = await contentGovernanceAuditService.getEventCountByTypeDurable();
 
     const safeRecords = records.map(r => ({
       id: r.id,
@@ -996,7 +1008,7 @@ router.get('/audit', (req: Request, res: Response) => {
 
     res.json({
       success: true,
-      totalRecords: contentGovernanceAuditService.getTotalRecordCount(),
+      totalRecords: await contentGovernanceAuditService.getTotalRecordCountDurable(),
       returnedCount: safeRecords.length,
       records: safeRecords,
       eventTypeCounts,
