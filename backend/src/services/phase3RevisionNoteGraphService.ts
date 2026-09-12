@@ -8,6 +8,7 @@ import {
   Phase3RevisionSafeEvidenceRef,
 } from '../contracts/phase3LivingRevisionContracts';
 import { phase3LivingRevisionRepository } from './phase3LivingRevisionRepository';
+import { phase3LivingRevisionDurableRepository } from './phase3LivingRevisionRepository';
 import { dedupeRevisionEdges } from './phase3RevisionEdgeService';
 
 export function getLearnerRevisionNoteGraph(
@@ -294,6 +295,56 @@ export function buildEmptyRevisionGraph(schoolId: string, studentId: string): Ph
     safeEvidenceRefs: [],
     safeReasonCodes: [],
     safeSummary: 'No revision nodes yet. Start by saving a note or completing a learning session.',
+  };
+}
+
+export async function getDurableLearnerRevisionNoteGraph(
+  schoolId: string,
+  studentId: string,
+  includeArchived = false,
+  topicId?: string,
+  objectiveId?: string,
+): Promise<Phase3RevisionNoteGraph> {
+  // R8-G.3A-D1: DERIVED_VIEW reconstructed from durable records only.
+  // Holds no process-local state; a fresh call after restart returns the
+  // same graph. No persistent graph model exists by design.
+  const state = await phase3LivingRevisionDurableRepository.loadDurableRevisionState(
+    schoolId,
+    studentId,
+  );
+
+  let nodes = state.nodes;
+  if (topicId) {
+    nodes = nodes.filter((n) => n.topicId === topicId);
+  }
+  if (objectiveId) {
+    nodes = nodes.filter((n) => n.objectiveId === objectiveId);
+  }
+  if (!includeArchived) {
+    nodes = nodes.filter((n) => !n.isArchived);
+  }
+  const rankedNodes = rankRevisionNodes(nodes);
+
+  const nodeIds = new Set(rankedNodes.map((n) => n.nodeId));
+  const edges = dedupeRevisionEdges(
+    state.edges.filter((e) => nodeIds.has(e.sourceNodeId) || nodeIds.has(e.targetNodeId)),
+  );
+  const dueItems = state.openDueItems.filter((d) => nodeIds.has(d.nodeId));
+  const connectionSuggestions = buildRevisionConnectionSuggestions(rankedNodes, edges);
+  const safeEvidenceRefs = collectAllSafeEvidenceRefs(rankedNodes, edges);
+  const safeReasonCodes = collectAllSafeReasonCodes(rankedNodes, edges);
+
+  return {
+    schoolId,
+    studentId,
+    generatedAt: new Date().toISOString(),
+    nodes: rankedNodes,
+    edges,
+    dueItems,
+    connectionSuggestions,
+    safeEvidenceRefs,
+    safeReasonCodes,
+    safeSummary: `Revision graph with ${rankedNodes.length} nodes and ${edges.length} connections.`,
   };
 }
 

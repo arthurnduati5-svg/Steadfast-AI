@@ -12030,3 +12030,123 @@ model CanonicalMasteryChangeRecord {
 
   @@index([schoolId, learnerId, targetNodeId])
 }
+
+// -----------------------------------------------------------------------------
+// R8-G.3A-D1: durable Tutor snapshot + Living Revision canonical records.
+// TutorStateSnapshotRecord is the durable production owner of StoredSnapshot
+// (snapshot/history is later-retrieval state, NOT cache).
+// Phase3RevisionNodeRecord / Phase3RevisionEdgeRecord /
+// Phase3RevisionDueItemRecord / Phase3RevisionAuditRecord are the durable
+// production owners of Living Revision state. The revision graph itself is a
+// DERIVED_VIEW (nodes + edges + due state) reconstructed from these records
+// after restart. No persistent graph model exists by design.
+// Phase3RevisionDueItemRecord.openDedupeKey enforces at most one OPEN due
+// item per learner node (nullable unique: NULL on completion, so historical
+// completed rows never block future revision cycles).
+// -----------------------------------------------------------------------------
+model TutorStateSnapshotRecord {
+  id              String   @id @default(cuid())
+  schoolId        String
+  studentId       String
+  stateVersion    Int
+  snapshot        Json
+  reason          String?
+  domainsIncluded Json     @default("[]")
+  topic           String?
+  createdAt       DateTime @default(now())
+
+  @@index([schoolId, studentId, createdAt])
+}
+
+model Phase3RevisionNodeRecord {
+  id                String   @id @default(cuid())
+  schoolId          String
+  studentId         String?
+  nodeType          String
+  status            String   @default("active")
+  priority          String   @default("medium")
+  subjectId         String?
+  topicId           String?
+  skillId           String?
+  objectiveId       String?
+  safeTitle         String
+  safeSummary       String
+  learnerVisibleText String?
+  sourceAnchorTitle String?
+  approvedSourceRef String?
+  sourceTruth       Json
+  safeEvidenceRefs  Json     @default("[]")
+  safeReasonCodes   Json     @default("[]")
+  connectionCount   Int      @default(0)
+  isPinned          Boolean  @default(false)
+  isArchived        Boolean  @default(false)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@index([schoolId, studentId])
+  @@index([schoolId])
+}
+
+model Phase3RevisionEdgeRecord {
+  id               String   @id @default(cuid())
+  schoolId         String
+  studentId        String?
+  edgeType         String
+  sourceNodeId     String
+  targetNodeId     String
+  safeEvidenceRefs Json     @default("[]")
+  safeReasonCodes  Json     @default("[]")
+  createdAt        DateTime @default(now())
+
+  @@index([schoolId, studentId])
+  @@index([sourceNodeId])
+  @@index([targetNodeId])
+}
+
+model Phase3RevisionDueItemRecord {
+  id                 String   @id @default(cuid())
+  schoolId           String
+  studentId          String
+  nodeId             String
+  edgeId             String?
+  priority           String   @default("medium")
+  signalType         String
+  safeTitle          String
+  safeSummary        String
+  recommendedAction  String
+  sourceTruthStatus  String
+  objectiveId        String?
+  topicId            String?
+  skillId            String?
+  isCompleted        Boolean  @default(false)
+  openDedupeKey      String?  @unique
+  safeEvidenceRefs   Json     @default("[]")
+  safeReasonCodes    Json     @default("[]")
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  @@index([schoolId, studentId])
+  @@index([schoolId, studentId, isCompleted])
+  @@index([nodeId])
+}
+
+model Phase3RevisionAuditRecord {
+  id               String   @id @default(cuid())
+  schoolId         String
+  actorId          String
+  actorRole        String
+  studentId        String?
+  teacherId        String?
+  classId          String?
+  nodeId           String?
+  edgeId           String?
+  objectiveId      String?
+  topicId          String?
+  skillId          String?
+  eventType        String
+  safeReasonCodes  Json     @default("[]")
+  safeEvidenceRefs Json     @default("[]")
+  createdAt        DateTime @default(now())
+
+  @@index([schoolId, createdAt])
+}
