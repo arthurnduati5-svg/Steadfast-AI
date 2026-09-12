@@ -6,17 +6,19 @@ import {
   Phase3RevisionDueItem,
   Phase3RevisionSafeEvidenceRef,
 } from '../contracts/phase3LivingRevisionContracts';
-import { phase3LivingRevisionRepository } from './phase3LivingRevisionRepository';
+import {
+  phase3LivingRevisionRepository,
+  phase3LivingRevisionDurableRepository,
+} from './phase3LivingRevisionRepository';
 
-export function getTeacherRevisionOverview(
+function buildTeacherOverviewFromState(
   schoolId: string,
   teacherId: string,
+  allNodes: Phase3RevisionNode[],
+  allDueItems: Phase3RevisionDueItem[],
   classId?: string,
   subjectId?: string,
 ): Phase3RevisionTeacherOverview {
-  const allNodes = phase3LivingRevisionRepository.listAllNodesForSchool(schoolId);
-  const allDueItems = phase3LivingRevisionRepository.listAllDueItemsForSchool(schoolId);
-  const allEdges = phase3LivingRevisionRepository.listAllEdgesForSchool(schoolId);
 
   const learnerMap = new Map<string, Phase3RevisionNode[]>();
   for (const node of allNodes) {
@@ -135,23 +137,34 @@ export function getTeacherRevisionOverview(
   };
 }
 
-export function getClassRevisionOverview(
+export function getTeacherRevisionOverview(
   schoolId: string,
   teacherId: string,
-  classId: string,
+  classId?: string,
+  subjectId?: string,
 ): Phase3RevisionTeacherOverview {
-  return getTeacherRevisionOverview(schoolId, teacherId, classId);
+  const allNodes = phase3LivingRevisionRepository.listAllNodesForSchool(schoolId);
+  const allDueItems = phase3LivingRevisionRepository.listAllDueItemsForSchool(schoolId);
+  return buildTeacherOverviewFromState(schoolId, teacherId, allNodes, allDueItems, classId, subjectId);
 }
 
-export function getLearnerRevisionTeacherSummary(
+export async function getTeacherRevisionOverviewDurable(
   schoolId: string,
   teacherId: string,
-  studentId: string,
-): Phase3RevisionTeacherLearnerRow | null {
-  const nodes = phase3LivingRevisionRepository.listRevisionNodesForLearner(schoolId, studentId);
-  if (nodes.length === 0) return null;
+  classId?: string,
+  subjectId?: string,
+): Promise<Phase3RevisionTeacherOverview> {
+  const allNodes = await phase3LivingRevisionDurableRepository.listAllNodesForSchool(schoolId);
+  const allDueItems = await phase3LivingRevisionDurableRepository.listAllDueItemsForSchool(schoolId);
+  return buildTeacherOverviewFromState(schoolId, teacherId, allNodes, allDueItems, classId, subjectId);
+}
 
-  const allDueItems = phase3LivingRevisionRepository.listAllDueItemsForSchool(schoolId);
+function buildLearnerTeacherSummaryFromState(
+  studentId: string,
+  nodes: Phase3RevisionNode[],
+  allDueItems: Phase3RevisionDueItem[],
+): Phase3RevisionTeacherLearnerRow | null {
+  if (nodes.length === 0) return null;
   const dueItems = allDueItems.filter((d) => d.studentId === studentId && !d.isCompleted);
   const sourceRequired = nodes.filter(
     (n) => n.sourceTruth.status === 'source_required' || n.sourceTruth.status === 'content_gap',
@@ -175,12 +188,8 @@ export function getLearnerRevisionTeacherSummary(
   };
 }
 
-export function getRevisionDueSupportQueue(
-  schoolId: string,
-  teacherId: string,
-): Phase3RevisionDueItem[] {
-  const allDueItems = phase3LivingRevisionRepository.listAllDueItemsForSchool(schoolId);
-  return allDueItems
+function sortDueQueue(items: Phase3RevisionDueItem[]): Phase3RevisionDueItem[] {
+  return items
     .filter((d) => !d.isCompleted)
     .sort((a, b) => {
       const order: Record<string, number> = { urgent: 0, high: 1, medium: 2, low: 3 };
@@ -188,11 +197,73 @@ export function getRevisionDueSupportQueue(
     });
 }
 
+export function getClassRevisionOverview(
+  schoolId: string,
+  teacherId: string,
+  classId: string,
+): Phase3RevisionTeacherOverview {
+  return getTeacherRevisionOverview(schoolId, teacherId, classId);
+}
+
+export async function getClassRevisionOverviewDurable(
+  schoolId: string,
+  teacherId: string,
+  classId: string,
+): Promise<Phase3RevisionTeacherOverview> {
+  return getTeacherRevisionOverviewDurable(schoolId, teacherId, classId);
+}
+
+export function getLearnerRevisionTeacherSummary(
+  schoolId: string,
+  teacherId: string,
+  studentId: string,
+): Phase3RevisionTeacherLearnerRow | null {
+  const nodes = phase3LivingRevisionRepository.listRevisionNodesForLearner(schoolId, studentId);
+  const allDueItems = phase3LivingRevisionRepository.listAllDueItemsForSchool(schoolId);
+  return buildLearnerTeacherSummaryFromState(studentId, nodes, allDueItems);
+}
+
+export async function getLearnerRevisionTeacherSummaryDurable(
+  schoolId: string,
+  teacherId: string,
+  studentId: string,
+): Promise<Phase3RevisionTeacherLearnerRow | null> {
+  const nodes = await phase3LivingRevisionDurableRepository.listRevisionNodesForLearner(schoolId, studentId);
+  const allDueItems = await phase3LivingRevisionDurableRepository.listAllDueItemsForSchool(schoolId);
+  return buildLearnerTeacherSummaryFromState(studentId, nodes, allDueItems);
+}
+
+export function getRevisionDueSupportQueue(
+  schoolId: string,
+  teacherId: string,
+): Phase3RevisionDueItem[] {
+  const allDueItems = phase3LivingRevisionRepository.listAllDueItemsForSchool(schoolId);
+  return sortDueQueue(allDueItems);
+}
+
+export async function getRevisionDueSupportQueueDurable(
+  schoolId: string,
+  teacherId: string,
+): Promise<Phase3RevisionDueItem[]> {
+  const allDueItems = await phase3LivingRevisionDurableRepository.listAllDueItemsForSchool(schoolId);
+  return sortDueQueue(allDueItems);
+}
+
 export function getRevisionSourceRequiredQueue(
   schoolId: string,
   teacherId: string,
 ): Phase3RevisionNode[] {
   const allNodes = phase3LivingRevisionRepository.listAllNodesForSchool(schoolId);
+  return allNodes.filter(
+    (n) => n.sourceTruth.status === 'source_required' || n.sourceTruth.status === 'content_gap',
+  );
+}
+
+export async function getRevisionSourceRequiredQueueDurable(
+  schoolId: string,
+  teacherId: string,
+): Promise<Phase3RevisionNode[]> {
+  const allNodes = await phase3LivingRevisionDurableRepository.listAllNodesForSchool(schoolId);
   return allNodes.filter(
     (n) => n.sourceTruth.status === 'source_required' || n.sourceTruth.status === 'content_gap',
   );
@@ -208,12 +279,31 @@ export function getTeacherSupportRevisionQueue(
   );
 }
 
+export async function getTeacherSupportRevisionQueueDurable(
+  schoolId: string,
+  teacherId: string,
+): Promise<Phase3RevisionNode[]> {
+  const allNodes = await phase3LivingRevisionDurableRepository.listAllNodesForSchool(schoolId);
+  return allNodes.filter(
+    (n) => n.status === 'needs_teacher_support' || n.sourceTruth.status === 'blocked',
+  );
+}
+
 export function getRevisionTopicSummary(
   schoolId: string,
   teacherId: string,
   topicId: string,
 ): Phase3RevisionTeacherTopicRow | null {
   const overview = getTeacherRevisionOverview(schoolId, teacherId);
+  return overview.topicRows.find((t) => t.topicId === topicId) || null;
+}
+
+export async function getRevisionTopicSummaryDurable(
+  schoolId: string,
+  teacherId: string,
+  topicId: string,
+): Promise<Phase3RevisionTeacherTopicRow | null> {
+  const overview = await getTeacherRevisionOverviewDurable(schoolId, teacherId);
   return overview.topicRows.find((t) => t.topicId === topicId) || null;
 }
 
@@ -225,11 +315,27 @@ export function getRevisionMistakeRepairSummary(
   return allNodes.filter((n) => n.nodeType === 'mistake_pattern_anchor');
 }
 
+export async function getRevisionMistakeRepairSummaryDurable(
+  schoolId: string,
+  teacherId: string,
+): Promise<Phase3RevisionNode[]> {
+  const allNodes = await phase3LivingRevisionDurableRepository.listAllNodesForSchool(schoolId);
+  return allNodes.filter((n) => n.nodeType === 'mistake_pattern_anchor');
+}
+
 export function getTeacherRecommendedRevisionActions(
   schoolId: string,
   teacherId: string,
 ): string[] {
   const overview = getTeacherRevisionOverview(schoolId, teacherId);
+  return overview.recommendedTeacherActions;
+}
+
+export async function getTeacherRecommendedRevisionActionsDurable(
+  schoolId: string,
+  teacherId: string,
+): Promise<string[]> {
+  const overview = await getTeacherRevisionOverviewDurable(schoolId, teacherId);
   return overview.recommendedTeacherActions;
 }
 

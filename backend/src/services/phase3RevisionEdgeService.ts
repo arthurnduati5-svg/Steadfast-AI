@@ -5,7 +5,10 @@ import {
   Phase3RevisionEdgeCreateInput,
   Phase3RevisionSafeEvidenceRef,
 } from '../contracts/phase3LivingRevisionContracts';
-import { phase3LivingRevisionRepository } from './phase3LivingRevisionRepository';
+import {
+  phase3LivingRevisionRepository,
+  phase3LivingRevisionDurableRepository,
+} from './phase3LivingRevisionRepository';
 import { validateRevisionEdgeCreateInput } from '../lib/phase3LivingRevisionValidation';
 
 export function createRevisionEdge(
@@ -245,4 +248,101 @@ export function dedupeRevisionEdges(edges: Phase3RevisionEdge[]): Phase3Revision
     }
   }
   return result;
+}
+
+// ─────────────────────────────────────────────────────────────
+// R8-G.3A-D1C durable async production counterparts.
+// Source/target validation reads through the durable repository.
+// Ranking/deduplication intentionally unchanged.
+// ─────────────────────────────────────────────────────────────
+
+export async function createRevisionEdgeDurable(
+  schoolId: string,
+  studentId: string | undefined,
+  edgeType: Phase3RevisionEdgeType,
+  sourceNodeId: string,
+  targetNodeId: string,
+  safeEvidenceRefs?: Phase3RevisionSafeEvidenceRef[],
+  safeReasonCodes?: string[],
+): Promise<Phase3RevisionEdge> {
+  const sourceNode = await phase3LivingRevisionDurableRepository.getRevisionNode(sourceNodeId, schoolId);
+  if (!sourceNode) {
+    throw new Error('Source revision node not found.');
+  }
+  const targetNode = await phase3LivingRevisionDurableRepository.getRevisionNode(targetNodeId, schoolId);
+  if (!targetNode) {
+    throw new Error('Target revision node not found.');
+  }
+
+  if (sourceNode.schoolId !== targetNode.schoolId) {
+    throw new Error('Cross-school revision edges are forbidden.');
+  }
+  if (sourceNode.schoolId !== schoolId || targetNode.schoolId !== schoolId) {
+    throw new Error('School identity mismatch for revision edge.');
+  }
+
+  if (studentId) {
+    if (sourceNode.studentId && sourceNode.studentId !== studentId) {
+      throw new Error('Cross-learner revision edges are forbidden.');
+    }
+    if (targetNode.studentId && targetNode.studentId !== studentId) {
+      throw new Error('Cross-learner revision edges are forbidden.');
+    }
+  }
+
+  if (sourceNode.nodeId === targetNode.nodeId) {
+    throw new Error('Cannot create a self-referencing revision edge.');
+  }
+
+  const input: Phase3RevisionEdgeCreateInput = {
+    schoolId,
+    studentId,
+    edgeType,
+    sourceNodeId,
+    targetNodeId,
+    safeEvidenceRefs: safeEvidenceRefs || [],
+    safeReasonCodes: safeReasonCodes || [],
+  };
+
+  const validationErr = validateRevisionEdgeCreateInput(input);
+  if (validationErr) {
+    throw new Error(validationErr.message);
+  }
+
+  return phase3LivingRevisionDurableRepository.createRevisionEdge(input);
+}
+
+export async function listNodeConnectionsDurable(
+  nodeId: string,
+  schoolId: string,
+): Promise<Phase3RevisionEdge[]> {
+  return phase3LivingRevisionDurableRepository.listRevisionEdgesForNode(nodeId, schoolId);
+}
+
+export async function listEdgesForNodeDurable(
+  nodeId: string,
+  schoolId: string,
+): Promise<Phase3RevisionEdge[]> {
+  return phase3LivingRevisionDurableRepository.listRevisionEdgesForNode(nodeId, schoolId);
+}
+
+export async function listEdgesForLearnerDurable(
+  schoolId: string,
+  studentId: string,
+): Promise<Phase3RevisionEdge[]> {
+  return phase3LivingRevisionDurableRepository.listRevisionEdgesForLearner(schoolId, studentId);
+}
+
+export async function listLearnerConnectionsDurable(
+  schoolId: string,
+  studentId: string,
+): Promise<Phase3RevisionEdge[]> {
+  return phase3LivingRevisionDurableRepository.listRevisionEdgesForLearner(schoolId, studentId);
+}
+
+export async function removeRevisionEdgeDurable(
+  edgeId: string,
+  schoolId: string,
+): Promise<boolean> {
+  return phase3LivingRevisionDurableRepository.deleteRevisionEdge(edgeId, schoolId);
 }

@@ -348,6 +348,26 @@ export async function getDurableLearnerRevisionNoteGraph(
   };
 }
 
+// R8-G.3A-D1C production alias: the mounted route must reconstruct the
+// graph from durable state only (DERIVED_VIEW). Sync helpers above remain
+// for explicit legacy/test compatibility.
+export async function getLearnerRevisionNoteGraphDurable(
+  schoolId: string,
+  studentId: string,
+  includeArchived = false,
+  topicId?: string,
+  objectiveId?: string,
+): Promise<Phase3RevisionNoteGraph> {
+  return getDurableLearnerRevisionNoteGraph(schoolId, studentId, includeArchived, topicId, objectiveId);
+}
+
+export async function refreshRevisionGraphForLearnerDurable(
+  schoolId: string,
+  studentId: string,
+): Promise<Phase3RevisionNoteGraph> {
+  return getDurableLearnerRevisionNoteGraph(schoolId, studentId, false);
+}
+
 function collectAllSafeEvidenceRefs(
   nodes: Phase3RevisionNode[],
   edges: Phase3RevisionEdge[],

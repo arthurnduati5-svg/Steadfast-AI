@@ -6,9 +6,8 @@
 // Production default is fail-closed: when the database is unreachable,
 // canonical writes/reads throw instead of silently succeeding against
 // process-local memory. In-memory storage remains ONLY as explicit
-// test/dev injection (NODE_ENV !== 'production', or
-// TUTORSTATE_ALLOW_MEMORY_FALLBACK=1). Set TUTORSTATE_REQUIRE_DURABLE=1
-// to force strict mode anywhere.
+// test injection (TUTORSTATE_ALLOW_MEMORY_FALLBACK=1).
+// Set TUTORSTATE_REQUIRE_DURABLE=1 to force strict mode anywhere.
 // Never stores raw artifact text, OCR, transcripts, answer keys,
 // or hidden prompts.
 // ─────────────────────────────────────────────────────────────
@@ -58,9 +57,11 @@ export interface TutorSnapshotClientLike {
 // state. Outside test/dev, persistence failures throw (fail-closed).
 
 export function isTutorSnapshotMemoryFallbackAllowed(): boolean {
-  if (process.env.TUTORSTATE_ALLOW_MEMORY_FALLBACK === '1') return true;
+  // R8-G.3A-D1C: canonical memory fallback requires explicit opt-in.
+  // Strict/durable flag wins over fallback. NODE_ENV alone never enables
+  // memory; legacy tests must set TUTORSTATE_ALLOW_MEMORY_FALLBACK=1.
   if (process.env.TUTORSTATE_REQUIRE_DURABLE === '1') return false;
-  return process.env.NODE_ENV !== 'production';
+  return process.env.TUTORSTATE_ALLOW_MEMORY_FALLBACK === '1';
 }
 
 // ── In-memory store: EXPLICIT TEST INJECTION ONLY ──

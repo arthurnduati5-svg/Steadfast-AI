@@ -1,5 +1,4 @@
 import { Router, Request, Response } from 'express';
-import { phase3LivingRevisionRepository } from '../services/phase3LivingRevisionRepository';
 import * as revisionNodeService from '../services/phase3RevisionNodeService';
 import * as revisionEdgeService from '../services/phase3RevisionEdgeService';
 import * as revisionNoteGraphService from '../services/phase3RevisionNoteGraphService';
@@ -15,6 +14,11 @@ import {
   rejectForbiddenRevisionPayloadFields,
 } from '../lib/phase3LivingRevisionValidation';
 
+// R8-G.3A-D1C: canonical production runtime is durable (PostgreSQL) only.
+// This mounted route uses ONLY async durable service functions backed by
+// the canonical durable singleton. The legacy synchronous Map-backed store
+// remains as explicit test compatibility and MUST NOT be imported here.
+
 const router = Router();
 
 function getSchoolContext(req: any): { schoolId: string; studentId?: string; teacherId?: string; role?: string } {
@@ -28,7 +32,7 @@ function getSchoolContext(req: any): { schoolId: string; studentId?: string; tea
 
 // ─── Learner Routes ───────────────────────────────────────────
 
-router.get('/learner', (req: Request, res: Response) => {
+router.get('/learner', async (req: Request, res: Response) => {
   try {
     const ctx = getSchoolContext(req);
     const ctxErr = validateRevisionContext(ctx);
@@ -37,8 +41,8 @@ router.get('/learner', (req: Request, res: Response) => {
       return;
     }
 
-    const nodes = revisionNodeService.listLearnerRevisionNodes(ctx.schoolId, ctx.studentId || '');
-    const dueItems = revisionDueResolverService.deriveDueRevisionItems(ctx.schoolId, ctx.studentId || '');
+    const nodes = await revisionNodeService.listLearnerRevisionNodesDurable(ctx.schoolId, ctx.studentId || '');
+    const dueItems = await revisionDueResolverService.deriveDueRevisionItemsDurable(ctx.schoolId, ctx.studentId || '');
     const view = revisionLearnerResponseService.buildLearnerRevisionView(
       ctx.schoolId,
       ctx.studentId || '',
@@ -46,7 +50,7 @@ router.get('/learner', (req: Request, res: Response) => {
       dueItems,
     );
 
-    revisionAuditService.recordRevisionAuditEvent({
+    await revisionAuditService.recordRevisionAuditEventDurable({
       schoolId: ctx.schoolId,
       actorId: ctx.studentId || 'unknown',
       actorRole: ctx.role || 'student',
@@ -61,7 +65,7 @@ router.get('/learner', (req: Request, res: Response) => {
   }
 });
 
-router.get('/learner/graph', (req: Request, res: Response) => {
+router.get('/learner/graph', async (req: Request, res: Response) => {
   try {
     const ctx = getSchoolContext(req);
     const ctxErr = validateRevisionContext(ctx);
@@ -80,7 +84,7 @@ router.get('/learner/graph', (req: Request, res: Response) => {
       return;
     }
 
-    const graph = revisionNoteGraphService.getLearnerRevisionNoteGraph(
+    const graph = await revisionNoteGraphService.getDurableLearnerRevisionNoteGraph(
       ctx.schoolId,
       query.studentId,
       req.query.includeArchived === 'true',
@@ -90,7 +94,7 @@ router.get('/learner/graph', (req: Request, res: Response) => {
 
     const view = revisionLearnerResponseService.buildLearnerRevisionGraphView(graph);
 
-    revisionAuditService.recordRevisionAuditEvent({
+    await revisionAuditService.recordRevisionAuditEventDurable({
       schoolId: ctx.schoolId,
       actorId: ctx.studentId || 'unknown',
       actorRole: ctx.role || 'student',
@@ -105,7 +109,7 @@ router.get('/learner/graph', (req: Request, res: Response) => {
   }
 });
 
-router.get('/learner/nodes', (req: Request, res: Response) => {
+router.get('/learner/nodes', async (req: Request, res: Response) => {
   try {
     const ctx = getSchoolContext(req);
     const ctxErr = validateRevisionContext(ctx);
@@ -114,14 +118,14 @@ router.get('/learner/nodes', (req: Request, res: Response) => {
       return;
     }
 
-    const nodes = revisionNodeService.listLearnerRevisionNodes(ctx.schoolId, ctx.studentId || '');
+    const nodes = await revisionNodeService.listLearnerRevisionNodesDurable(ctx.schoolId, ctx.studentId || '');
     res.json({ nodes });
   } catch (err: any) {
     res.status(500).json({ error: err.message || 'Failed to list revision nodes.' });
   }
 });
 
-router.post('/learner/nodes', (req: Request, res: Response) => {
+router.post('/learner/nodes', async (req: Request, res: Response) => {
   try {
     const ctx = getSchoolContext(req);
     const ctxErr = validateRevisionContext(ctx);
@@ -142,9 +146,9 @@ router.post('/learner/nodes', (req: Request, res: Response) => {
       return;
     }
 
-    const node = phase3LivingRevisionRepository.createRevisionNode(input);
+    const node = await revisionNodeService.createRevisionNodeDurable(input);
 
-    revisionAuditService.recordRevisionAuditEvent({
+    await revisionAuditService.recordRevisionAuditEventDurable({
       schoolId: ctx.schoolId,
       actorId: ctx.studentId || 'unknown',
       actorRole: ctx.role || 'student',
@@ -160,7 +164,7 @@ router.post('/learner/nodes', (req: Request, res: Response) => {
   }
 });
 
-router.get('/learner/nodes/:nodeId', (req: Request, res: Response) => {
+router.get('/learner/nodes/:nodeId', async (req: Request, res: Response) => {
   try {
     const ctx = getSchoolContext(req);
     const ctxErr = validateRevisionContext(ctx);
@@ -169,7 +173,7 @@ router.get('/learner/nodes/:nodeId', (req: Request, res: Response) => {
       return;
     }
 
-    const node = revisionNodeService.getRevisionNode(req.params.nodeId);
+    const node = await revisionNodeService.getRevisionNodeDurable(req.params.nodeId, ctx.schoolId);
     if (!node) {
       res.status(404).json({ error: 'Revision node not found.' });
       return;
@@ -184,7 +188,7 @@ router.get('/learner/nodes/:nodeId', (req: Request, res: Response) => {
       return;
     }
 
-    revisionAuditService.recordRevisionAuditEvent({
+    await revisionAuditService.recordRevisionAuditEventDurable({
       schoolId: ctx.schoolId,
       actorId: ctx.studentId || 'unknown',
       actorRole: ctx.role || 'student',
@@ -199,7 +203,7 @@ router.get('/learner/nodes/:nodeId', (req: Request, res: Response) => {
   }
 });
 
-router.post('/learner/nodes/:nodeId/pin', (req: Request, res: Response) => {
+router.post('/learner/nodes/:nodeId/pin', async (req: Request, res: Response) => {
   try {
     const ctx = getSchoolContext(req);
     const ctxErr = validateRevisionContext(ctx);
@@ -208,7 +212,7 @@ router.post('/learner/nodes/:nodeId/pin', (req: Request, res: Response) => {
       return;
     }
 
-    const node = revisionNodeService.getRevisionNode(req.params.nodeId);
+    const node = await revisionNodeService.getRevisionNodeDurable(req.params.nodeId, ctx.schoolId);
     if (!node) {
       res.status(404).json({ error: 'Revision node not found.' });
       return;
@@ -222,10 +226,10 @@ router.post('/learner/nodes/:nodeId/pin', (req: Request, res: Response) => {
       return;
     }
 
-    const updated = revisionNodeService.pinRevisionNode(req.params.nodeId);
+    const updated = await revisionNodeService.pinRevisionNodeDurable(req.params.nodeId, ctx.schoolId);
 
     if (updated) {
-      revisionAuditService.recordRevisionAuditEvent({
+      await revisionAuditService.recordRevisionAuditEventDurable({
         schoolId: ctx.schoolId,
         actorId: ctx.studentId || 'unknown',
         actorRole: ctx.role || 'student',
@@ -241,7 +245,7 @@ router.post('/learner/nodes/:nodeId/pin', (req: Request, res: Response) => {
   }
 });
 
-router.post('/learner/nodes/:nodeId/complete', (req: Request, res: Response) => {
+router.post('/learner/nodes/:nodeId/complete', async (req: Request, res: Response) => {
   try {
     const ctx = getSchoolContext(req);
     const ctxErr = validateRevisionContext(ctx);
@@ -250,7 +254,7 @@ router.post('/learner/nodes/:nodeId/complete', (req: Request, res: Response) => 
       return;
     }
 
-    const node = revisionNodeService.getRevisionNode(req.params.nodeId);
+    const node = await revisionNodeService.getRevisionNodeDurable(req.params.nodeId, ctx.schoolId);
     if (!node) {
       res.status(404).json({ error: 'Revision node not found.' });
       return;
@@ -264,10 +268,10 @@ router.post('/learner/nodes/:nodeId/complete', (req: Request, res: Response) => 
       return;
     }
 
-    const updated = revisionNodeService.completeRevisionNode(req.params.nodeId);
+    const updated = await revisionNodeService.completeRevisionNodeDurable(req.params.nodeId, ctx.schoolId);
 
     if (updated) {
-      revisionAuditService.recordRevisionAuditEvent({
+      await revisionAuditService.recordRevisionAuditEventDurable({
         schoolId: ctx.schoolId,
         actorId: ctx.studentId || 'unknown',
         actorRole: ctx.role || 'student',
@@ -283,7 +287,7 @@ router.post('/learner/nodes/:nodeId/complete', (req: Request, res: Response) => 
   }
 });
 
-router.post('/learner/nodes/:nodeId/snooze', (req: Request, res: Response) => {
+router.post('/learner/nodes/:nodeId/snooze', async (req: Request, res: Response) => {
   try {
     const ctx = getSchoolContext(req);
     const ctxErr = validateRevisionContext(ctx);
@@ -292,7 +296,7 @@ router.post('/learner/nodes/:nodeId/snooze', (req: Request, res: Response) => {
       return;
     }
 
-    const node = revisionNodeService.getRevisionNode(req.params.nodeId);
+    const node = await revisionNodeService.getRevisionNodeDurable(req.params.nodeId, ctx.schoolId);
     if (!node) {
       res.status(404).json({ error: 'Revision node not found.' });
       return;
@@ -306,10 +310,10 @@ router.post('/learner/nodes/:nodeId/snooze', (req: Request, res: Response) => {
       return;
     }
 
-    const updated = revisionNodeService.snoozeRevisionNode(req.params.nodeId);
+    const updated = await revisionNodeService.snoozeRevisionNodeDurable(req.params.nodeId, ctx.schoolId);
 
     if (updated) {
-      revisionAuditService.recordRevisionAuditEvent({
+      await revisionAuditService.recordRevisionAuditEventDurable({
         schoolId: ctx.schoolId,
         actorId: ctx.studentId || 'unknown',
         actorRole: ctx.role || 'student',
@@ -325,7 +329,7 @@ router.post('/learner/nodes/:nodeId/snooze', (req: Request, res: Response) => {
   }
 });
 
-router.post('/learner/nodes/:nodeId/archive', (req: Request, res: Response) => {
+router.post('/learner/nodes/:nodeId/archive', async (req: Request, res: Response) => {
   try {
     const ctx = getSchoolContext(req);
     const ctxErr = validateRevisionContext(ctx);
@@ -334,7 +338,7 @@ router.post('/learner/nodes/:nodeId/archive', (req: Request, res: Response) => {
       return;
     }
 
-    const node = revisionNodeService.getRevisionNode(req.params.nodeId);
+    const node = await revisionNodeService.getRevisionNodeDurable(req.params.nodeId, ctx.schoolId);
     if (!node) {
       res.status(404).json({ error: 'Revision node not found.' });
       return;
@@ -348,10 +352,10 @@ router.post('/learner/nodes/:nodeId/archive', (req: Request, res: Response) => {
       return;
     }
 
-    const updated = revisionNodeService.archiveRevisionNode(req.params.nodeId);
+    const updated = await revisionNodeService.archiveRevisionNodeDurable(req.params.nodeId, ctx.schoolId);
 
     if (updated) {
-      revisionAuditService.recordRevisionAuditEvent({
+      await revisionAuditService.recordRevisionAuditEventDurable({
         schoolId: ctx.schoolId,
         actorId: ctx.studentId || 'unknown',
         actorRole: ctx.role || 'student',
@@ -367,7 +371,7 @@ router.post('/learner/nodes/:nodeId/archive', (req: Request, res: Response) => {
   }
 });
 
-router.get('/learner/nodes/:nodeId/connections', (req: Request, res: Response) => {
+router.get('/learner/nodes/:nodeId/connections', async (req: Request, res: Response) => {
   try {
     const ctx = getSchoolContext(req);
     const ctxErr = validateRevisionContext(ctx);
@@ -376,7 +380,7 @@ router.get('/learner/nodes/:nodeId/connections', (req: Request, res: Response) =
       return;
     }
 
-    const node = revisionNodeService.getRevisionNode(req.params.nodeId);
+    const node = await revisionNodeService.getRevisionNodeDurable(req.params.nodeId, ctx.schoolId);
     if (!node) {
       res.status(404).json({ error: 'Revision node not found.' });
       return;
@@ -390,14 +394,14 @@ router.get('/learner/nodes/:nodeId/connections', (req: Request, res: Response) =
       return;
     }
 
-    const connections = revisionEdgeService.listNodeConnections(req.params.nodeId);
+    const connections = await revisionEdgeService.listNodeConnectionsDurable(req.params.nodeId, ctx.schoolId);
     res.json({ connections });
   } catch (err: any) {
     res.status(500).json({ error: err.message || 'Failed to list connections.' });
   }
 });
 
-router.get('/learner/due', (req: Request, res: Response) => {
+router.get('/learner/due', async (req: Request, res: Response) => {
   try {
     const ctx = getSchoolContext(req);
     const ctxErr = validateRevisionContext(ctx);
@@ -406,14 +410,14 @@ router.get('/learner/due', (req: Request, res: Response) => {
       return;
     }
 
-    const dueItems = revisionDueResolverService.deriveDueRevisionItems(ctx.schoolId, ctx.studentId || '');
+    const dueItems = await revisionDueResolverService.deriveDueRevisionItemsDurable(ctx.schoolId, ctx.studentId || '');
     res.json({ dueItems });
   } catch (err: any) {
     res.status(500).json({ error: err.message || 'Failed to get due items.' });
   }
 });
 
-router.post('/learner/due/:dueItemId/complete', (req: Request, res: Response) => {
+router.post('/learner/due/:dueItemId/complete', async (req: Request, res: Response) => {
   try {
     const ctx = getSchoolContext(req);
     const ctxErr = validateRevisionContext(ctx);
@@ -422,13 +426,13 @@ router.post('/learner/due/:dueItemId/complete', (req: Request, res: Response) =>
       return;
     }
 
-    const completed = revisionDueResolverService.markRevisionDueItemCompleted(req.params.dueItemId);
+    const completed = await revisionDueResolverService.markRevisionDueItemCompletedDurable(req.params.dueItemId, ctx.schoolId);
     if (!completed) {
       res.status(404).json({ error: 'Revision due item not found.' });
       return;
     }
 
-    revisionAuditService.recordRevisionAuditEvent({
+    await revisionAuditService.recordRevisionAuditEventDurable({
       schoolId: ctx.schoolId,
       actorId: ctx.studentId || 'unknown',
       actorRole: ctx.role || 'student',
@@ -443,7 +447,7 @@ router.post('/learner/due/:dueItemId/complete', (req: Request, res: Response) =>
   }
 });
 
-router.get('/learner/actions', (req: Request, res: Response) => {
+router.get('/learner/actions', async (req: Request, res: Response) => {
   try {
     const ctx = getSchoolContext(req);
     const ctxErr = validateRevisionContext(ctx);
@@ -452,7 +456,7 @@ router.get('/learner/actions', (req: Request, res: Response) => {
       return;
     }
 
-    const nodes = revisionNodeService.listLearnerRevisionNodes(ctx.schoolId, ctx.studentId || '');
+    const nodes = await revisionNodeService.listLearnerRevisionNodesDurable(ctx.schoolId, ctx.studentId || '');
     const actions = nodes.map((n) => ({
       nodeId: n.nodeId,
       safeTitle: n.safeTitle,
@@ -465,7 +469,7 @@ router.get('/learner/actions', (req: Request, res: Response) => {
   }
 });
 
-router.get('/learner/suggestions', (req: Request, res: Response) => {
+router.get('/learner/suggestions', async (req: Request, res: Response) => {
   try {
     const ctx = getSchoolContext(req);
     const ctxErr = validateRevisionContext(ctx);
@@ -474,7 +478,7 @@ router.get('/learner/suggestions', (req: Request, res: Response) => {
       return;
     }
 
-    const graph = revisionNoteGraphService.getLearnerRevisionNoteGraph(ctx.schoolId, ctx.studentId || '');
+    const graph = await revisionNoteGraphService.getDurableLearnerRevisionNoteGraph(ctx.schoolId, ctx.studentId || '');
     const view = revisionLearnerResponseService.buildLearnerRevisionGraphView(graph);
 
     res.json({ suggestions: view.connectionSuggestions, dueItems: view.dueItems });
@@ -485,7 +489,7 @@ router.get('/learner/suggestions', (req: Request, res: Response) => {
 
 // ─── Teacher Routes ───────────────────────────────────────────
 
-router.get('/teacher/overview', (req: Request, res: Response) => {
+router.get('/teacher/overview', async (req: Request, res: Response) => {
   try {
     const ctx = getSchoolContext(req);
     const ctxErr = validateRevisionContext(ctx);
@@ -499,14 +503,14 @@ router.get('/teacher/overview', (req: Request, res: Response) => {
       return;
     }
 
-    const overview = revisionTeacherOverviewService.getTeacherRevisionOverview(
+    const overview = await revisionTeacherOverviewService.getTeacherRevisionOverviewDurable(
       ctx.schoolId,
       ctx.teacherId || '',
       req.query.classId as string | undefined,
       req.query.subjectId as string | undefined,
     );
 
-    revisionAuditService.recordRevisionAuditEvent({
+    await revisionAuditService.recordRevisionAuditEventDurable({
       schoolId: ctx.schoolId,
       actorId: ctx.teacherId || ctx.studentId || 'unknown',
       actorRole: ctx.role || 'unknown',
@@ -521,7 +525,7 @@ router.get('/teacher/overview', (req: Request, res: Response) => {
   }
 });
 
-router.get('/teacher/learners/:studentId', (req: Request, res: Response) => {
+router.get('/teacher/learners/:studentId', async (req: Request, res: Response) => {
   try {
     const ctx = getSchoolContext(req);
     const ctxErr = validateRevisionContext(ctx);
@@ -535,7 +539,7 @@ router.get('/teacher/learners/:studentId', (req: Request, res: Response) => {
       return;
     }
 
-    const summary = revisionTeacherOverviewService.getLearnerRevisionTeacherSummary(
+    const summary = await revisionTeacherOverviewService.getLearnerRevisionTeacherSummaryDurable(
       ctx.schoolId,
       ctx.teacherId || '',
       req.params.studentId,
@@ -552,7 +556,7 @@ router.get('/teacher/learners/:studentId', (req: Request, res: Response) => {
   }
 });
 
-router.get('/teacher/due', (req: Request, res: Response) => {
+router.get('/teacher/due', async (req: Request, res: Response) => {
   try {
     const ctx = getSchoolContext(req);
     const ctxErr = validateRevisionContext(ctx);
@@ -566,14 +570,14 @@ router.get('/teacher/due', (req: Request, res: Response) => {
       return;
     }
 
-    const queue = revisionTeacherOverviewService.getRevisionDueSupportQueue(ctx.schoolId, ctx.teacherId || '');
+    const queue = await revisionTeacherOverviewService.getRevisionDueSupportQueueDurable(ctx.schoolId, ctx.teacherId || '');
     res.json({ dueItems: queue });
   } catch (err: any) {
     res.status(500).json({ error: err.message || 'Failed to get due queue.' });
   }
 });
 
-router.get('/teacher/source-required', (req: Request, res: Response) => {
+router.get('/teacher/source-required', async (req: Request, res: Response) => {
   try {
     const ctx = getSchoolContext(req);
     const ctxErr = validateRevisionContext(ctx);
@@ -587,14 +591,14 @@ router.get('/teacher/source-required', (req: Request, res: Response) => {
       return;
     }
 
-    const queue = revisionTeacherOverviewService.getRevisionSourceRequiredQueue(ctx.schoolId, ctx.teacherId || '');
+    const queue = await revisionTeacherOverviewService.getRevisionSourceRequiredQueueDurable(ctx.schoolId, ctx.teacherId || '');
     res.json({ nodes: queue });
   } catch (err: any) {
     res.status(500).json({ error: err.message || 'Failed to get source-required queue.' });
   }
 });
 
-router.get('/teacher/support-needed', (req: Request, res: Response) => {
+router.get('/teacher/support-needed', async (req: Request, res: Response) => {
   try {
     const ctx = getSchoolContext(req);
     const ctxErr = validateRevisionContext(ctx);
@@ -608,14 +612,14 @@ router.get('/teacher/support-needed', (req: Request, res: Response) => {
       return;
     }
 
-    const queue = revisionTeacherOverviewService.getTeacherSupportRevisionQueue(ctx.schoolId, ctx.teacherId || '');
+    const queue = await revisionTeacherOverviewService.getTeacherSupportRevisionQueueDurable(ctx.schoolId, ctx.teacherId || '');
     res.json({ nodes: queue });
   } catch (err: any) {
     res.status(500).json({ error: err.message || 'Failed to get support needed queue.' });
   }
 });
 
-router.get('/teacher/mistake-repair', (req: Request, res: Response) => {
+router.get('/teacher/mistake-repair', async (req: Request, res: Response) => {
   try {
     const ctx = getSchoolContext(req);
     const ctxErr = validateRevisionContext(ctx);
@@ -629,14 +633,14 @@ router.get('/teacher/mistake-repair', (req: Request, res: Response) => {
       return;
     }
 
-    const nodes = revisionTeacherOverviewService.getRevisionMistakeRepairSummary(ctx.schoolId, ctx.teacherId || '');
+    const nodes = await revisionTeacherOverviewService.getRevisionMistakeRepairSummaryDurable(ctx.schoolId, ctx.teacherId || '');
     res.json({ nodes });
   } catch (err: any) {
     res.status(500).json({ error: err.message || 'Failed to get mistake repair summary.' });
   }
 });
 
-router.get('/teacher/topics/:topicId', (req: Request, res: Response) => {
+router.get('/teacher/topics/:topicId', async (req: Request, res: Response) => {
   try {
     const ctx = getSchoolContext(req);
     const ctxErr = validateRevisionContext(ctx);
@@ -650,7 +654,7 @@ router.get('/teacher/topics/:topicId', (req: Request, res: Response) => {
       return;
     }
 
-    const overview = revisionTeacherOverviewService.getTeacherRevisionOverview(
+    const overview = await revisionTeacherOverviewService.getTeacherRevisionOverviewDurable(
       ctx.schoolId,
       ctx.teacherId || '',
     );

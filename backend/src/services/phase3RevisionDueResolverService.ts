@@ -7,7 +7,10 @@ import {
   Phase3RevisionSafeEvidenceRef,
   Phase3RevisionNode,
 } from '../contracts/phase3LivingRevisionContracts';
-import { phase3LivingRevisionRepository } from './phase3LivingRevisionRepository';
+import {
+  phase3LivingRevisionRepository,
+  phase3LivingRevisionDurableRepository,
+} from './phase3LivingRevisionRepository';
 
 export function resolveDueStatus(
   node: Phase3RevisionNode,
@@ -378,4 +381,39 @@ export function limitRevisionDueItems(
 
 export function markRevisionDueItemCompleted(dueItemId: string): Phase3RevisionDueItem | null {
   return phase3LivingRevisionRepository.markRevisionDueItemCompleted(dueItemId);
+}
+
+// ─────────────────────────────────────────────────────────────
+// R8-G.3A-D1C durable async production counterparts.
+// Pure calculations above remain pure; state read/write below uses
+// the durable repository. Priority/signal/source-truth/
+// recommended-action/completion semantics are preserved.
+// ─────────────────────────────────────────────────────────────
+
+export async function deriveDueRevisionItemsDurable(
+  schoolId: string,
+  studentId: string,
+): Promise<Phase3RevisionDueItem[]> {
+  return phase3LivingRevisionDurableRepository.listDueRevisionItemsForLearner(schoolId, studentId);
+}
+
+export async function listDueRevisionItemsForLearnerDurable(
+  schoolId: string,
+  studentId: string,
+): Promise<Phase3RevisionDueItem[]> {
+  return phase3LivingRevisionDurableRepository.listRevisionDueItemsForLearner(schoolId, studentId);
+}
+
+export async function markRevisionDueItemCompletedDurable(
+  dueItemId: string,
+  schoolId: string,
+): Promise<Phase3RevisionDueItem | null> {
+  return phase3LivingRevisionDurableRepository.markRevisionDueItemCompleted(dueItemId, schoolId);
+}
+
+export async function completeDueRevisionItemDurable(
+  dueItemId: string,
+  schoolId: string,
+): Promise<Phase3RevisionDueItem | null> {
+  return phase3LivingRevisionDurableRepository.completeDueRevisionItem(dueItemId, schoolId);
 }

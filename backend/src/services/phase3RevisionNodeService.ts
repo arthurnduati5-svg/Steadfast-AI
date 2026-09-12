@@ -6,7 +6,10 @@ import {
   Phase3RevisionSafeEvidenceRef,
   Phase3RevisionNodeStatus,
 } from '../contracts/phase3LivingRevisionContracts';
-import { phase3LivingRevisionRepository } from './phase3LivingRevisionRepository';
+import {
+  phase3LivingRevisionRepository,
+  phase3LivingRevisionDurableRepository,
+} from './phase3LivingRevisionRepository';
 import { validateRevisionNodeCreateInput } from '../lib/phase3LivingRevisionValidation';
 
 export function createLearnerRevisionNode(
@@ -332,4 +335,232 @@ export function buildLearnerSafeNodeSummary(nodeType: Phase3RevisionNodeType, ba
     return 'Your teacher can help confirm this part.';
   }
   return baseSummary;
+}
+
+// ─────────────────────────────────────────────────────────────
+// R8-G.3A-D1C durable async production counterparts.
+// Same validation/input-building as the sync legacy variants; the only
+// ownership difference is the durable repository (PostgreSQL).
+// Legacy sync exports above remain for explicit test compatibility.
+// ─────────────────────────────────────────────────────────────
+
+async function createNodeDurable(input: Phase3RevisionNodeCreateInput): Promise<Phase3RevisionNode> {
+  const validationErr = validateRevisionNodeCreateInput(input);
+  if (validationErr) {
+    throw new Error(validationErr.message);
+  }
+  return phase3LivingRevisionDurableRepository.createRevisionNode(input);
+}
+
+export async function createRevisionNodeDurable(
+  input: Phase3RevisionNodeCreateInput,
+): Promise<Phase3RevisionNode> {
+  return createNodeDurable(input);
+}
+
+export async function createLearnerRevisionNodeDurable(
+  schoolId: string,
+  studentId: string,
+  safeTitle: string,
+  safeSummary: string,
+  learnerVisibleText?: string,
+): Promise<Phase3RevisionNode> {
+  return createNodeDurable({
+    schoolId,
+    studentId,
+    nodeType: 'learner_note',
+    safeTitle,
+    safeSummary,
+    learnerVisibleText,
+    sourceTruth: { status: 'learner_created_visible' },
+    safeReasonCodes: ['saved_by_learner'],
+  });
+}
+
+export async function createObjectiveRevisionNodeDurable(
+  schoolId: string,
+  studentId: string,
+  objectiveId: string,
+  safeTitle: string,
+  safeSummary: string,
+  sourceTruth: Phase3RevisionSourceTruth,
+): Promise<Phase3RevisionNode> {
+  return createNodeDurable({
+    schoolId,
+    studentId,
+    nodeType: 'objective_anchor',
+    objectiveId,
+    safeTitle,
+    safeSummary,
+    sourceTruth,
+    safeReasonCodes: ['created_from_objective'],
+  });
+}
+
+export async function createDailyCheckRevisionNodeDurable(
+  schoolId: string,
+  studentId: string,
+  objectiveId: string,
+  safeTitle: string,
+  safeSummary: string,
+  sourceTruth: Phase3RevisionSourceTruth,
+): Promise<Phase3RevisionNode> {
+  return createNodeDurable({
+    schoolId,
+    studentId,
+    nodeType: 'daily_check_anchor',
+    objectiveId,
+    safeTitle,
+    safeSummary,
+    sourceTruth,
+    safeReasonCodes: ['created_from_daily_check'],
+  });
+}
+
+export async function createStudyPlanRevisionNodeDurable(
+  schoolId: string,
+  studentId: string,
+  safeTitle: string,
+  safeSummary: string,
+  sourceTruth: Phase3RevisionSourceTruth,
+): Promise<Phase3RevisionNode> {
+  return createNodeDurable({
+    schoolId,
+    studentId,
+    nodeType: 'study_plan_anchor',
+    safeTitle,
+    safeSummary,
+    sourceTruth,
+    safeReasonCodes: ['created_from_study_plan'],
+  });
+}
+
+export async function createGrowthPageRevisionNodeDurable(
+  schoolId: string,
+  studentId: string,
+  safeTitle: string,
+  safeSummary: string,
+  sourceTruth: Phase3RevisionSourceTruth,
+): Promise<Phase3RevisionNode> {
+  return createNodeDurable({
+    schoolId,
+    studentId,
+    nodeType: 'growth_page_anchor',
+    safeTitle,
+    safeSummary,
+    sourceTruth,
+    safeReasonCodes: ['created_from_growth_page'],
+  });
+}
+
+export async function createMistakePatternRevisionNodeDurable(
+  schoolId: string,
+  studentId: string,
+  safeTitle: string,
+  safeSummary: string,
+  sourceTruth: Phase3RevisionSourceTruth,
+): Promise<Phase3RevisionNode> {
+  return createNodeDurable({
+    schoolId,
+    studentId,
+    nodeType: 'mistake_pattern_anchor',
+    safeTitle,
+    safeSummary,
+    sourceTruth,
+    safeReasonCodes: ['created_from_mistake_pattern'],
+  });
+}
+
+export async function createWeakTopicRevisionNodeDurable(
+  schoolId: string,
+  studentId: string,
+  safeTitle: string,
+  safeSummary: string,
+  sourceTruth: Phase3RevisionSourceTruth,
+): Promise<Phase3RevisionNode> {
+  return createNodeDurable({
+    schoolId,
+    studentId,
+    nodeType: 'weak_topic_anchor',
+    safeTitle,
+    safeSummary,
+    sourceTruth,
+    safeReasonCodes: ['created_from_weak_topic'],
+  });
+}
+
+export async function createSourceRequiredPlaceholderNodeDurable(
+  schoolId: string,
+  studentId: string,
+  safeTitle: string,
+  safeSummary: string,
+): Promise<Phase3RevisionNode> {
+  return createNodeDurable({
+    schoolId,
+    studentId,
+    nodeType: 'source_required_placeholder',
+    safeTitle,
+    safeSummary,
+    sourceTruth: { status: 'source_required' },
+    safeReasonCodes: ['source_required'],
+  });
+}
+
+export async function createTeacherSupportPlaceholderNodeDurable(
+  schoolId: string,
+  studentId: string,
+  safeTitle: string,
+  safeSummary: string,
+): Promise<Phase3RevisionNode> {
+  return createNodeDurable({
+    schoolId,
+    studentId,
+    nodeType: 'teacher_support_placeholder',
+    safeTitle,
+    safeSummary,
+    sourceTruth: { status: 'blocked' },
+    safeReasonCodes: ['teacher_support_required'],
+  });
+}
+
+export async function getRevisionNodeDurable(
+  nodeId: string,
+  schoolId: string,
+): Promise<Phase3RevisionNode | null> {
+  return phase3LivingRevisionDurableRepository.getRevisionNode(nodeId, schoolId);
+}
+
+export async function listLearnerRevisionNodesDurable(
+  schoolId: string,
+  studentId: string,
+): Promise<Phase3RevisionNode[]> {
+  return phase3LivingRevisionDurableRepository.listRevisionNodesForLearner(schoolId, studentId);
+}
+
+export async function pinRevisionNodeDurable(
+  nodeId: string,
+  schoolId: string,
+): Promise<Phase3RevisionNode | null> {
+  return phase3LivingRevisionDurableRepository.pinRevisionNode(nodeId, schoolId);
+}
+
+export async function archiveRevisionNodeDurable(
+  nodeId: string,
+  schoolId: string,
+): Promise<Phase3RevisionNode | null> {
+  return phase3LivingRevisionDurableRepository.archiveRevisionNode(nodeId, schoolId);
+}
+
+export async function completeRevisionNodeDurable(
+  nodeId: string,
+  schoolId: string,
+): Promise<Phase3RevisionNode | null> {
+  return phase3LivingRevisionDurableRepository.completeRevisionNode(nodeId, schoolId);
+}
+
+export async function snoozeRevisionNodeDurable(
+  nodeId: string,
+  schoolId: string,
+): Promise<Phase3RevisionNode | null> {
+  return phase3LivingRevisionDurableRepository.snoozeRevisionNode(nodeId, schoolId);
 }

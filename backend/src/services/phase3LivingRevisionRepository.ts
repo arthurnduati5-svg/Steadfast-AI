@@ -29,11 +29,12 @@ import {
 // ─────────────────────────────────────────────────────────────
 
 export function isRevisionMemoryFallbackAllowed(): boolean {
+  // R8-G.3A-D1C: canonical memory fallback requires explicit opt-in.
+  // Strict/durable flags always win over fallback. NODE_ENV alone never
+  // enables memory; legacy tests must set REVISION_ALLOW_MEMORY_FALLBACK=1.
   if (process.env.REVISION_REQUIRE_DURABLE === '1') return false;
-  if (process.env.REVISION_ALLOW_MEMORY_FALLBACK === '1') return true;
   if (process.env.TUTORSTATE_REQUIRE_DURABLE === '1') return false;
-  if (process.env.TUTORSTATE_ALLOW_MEMORY_FALLBACK === '1') return true;
-  return process.env.NODE_ENV !== 'production';
+  return process.env.REVISION_ALLOW_MEMORY_FALLBACK === '1';
 }
 
 function guardMemoryTestInjection(caller: string): void {
