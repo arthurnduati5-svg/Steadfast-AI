@@ -21,7 +21,7 @@ import {
  * Scope is deliberately narrow: Action Readiness mutation + Package-20
  * idempotency + Package-20 audit inside ONE Prisma transaction. No generic
  * transaction framework, no locks, no event bus. PostgreSQL uniqueness on
- * (schoolId, operation, idempotencyKey) wins concurrency races.
+ * (schoolId, idempotencyKey) wins concurrency races.
  *
  * Idempotency semantics:
  * - new key: create in_progress claim, mutate resource, write audit,

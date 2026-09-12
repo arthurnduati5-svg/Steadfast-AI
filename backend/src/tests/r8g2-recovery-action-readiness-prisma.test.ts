@@ -356,4 +356,111 @@ describe('R8-G.2 Action Readiness Prisma durability (real DB)', () => {
     expect(suppressed.success).toBe(true);
     expect(suppressed.data?.readinessStatus).toBe('suppressed');
   });
+
+  it('P7 — database owns school/key uniqueness across different operations', async () => {
+    const { idempotencyRepo } = buildService();
+    const key = `${RUN}-xop-claim`;
+    const now = new Date();
+    const claim = (operation: string, idempotencyId: string) =>
+      idempotencyRepo.create({
+        idempotencyId,
+        schoolId: SCHOOL_A,
+        operation,
+        idempotencyKey: key,
+        requestHash: `${RUN}-hash-${operation}`,
+        status: 'in_progress',
+        createdAt: now,
+      });
+    const results = await Promise.allSettled([
+      claim('createActionReadiness', `${RUN}-claim-1`),
+      claim('markActionReadinessReviewReady', `${RUN}-claim-2`),
+    ]);
+    const won = results.filter((r) => r.status === 'fulfilled');
+    const lost = results.filter((r) => r.status === 'rejected');
+    expect(won).toHaveLength(1);
+    expect(lost).toHaveLength(1);
+    expect(((lost[0] as PromiseRejectedResult).reason as { code?: string }).code).toBe('P2002');
+
+    const rows = await prisma.recoveryOutcomeActionIdempotencyRecord.findMany({
+      where: { schoolId: SCHOOL_A, idempotencyKey: key },
+    });
+    expect(rows).toHaveLength(1);
+  });
+
+  it('P8 — concurrent atomic mutations on one school/key elect one owner across operations', async () => {
+    const { atomicStore } = buildService();
+    const key = `${RUN}-xop-atomic`;
+    const studentA = `${RUN}-student-xop-a`;
+    const studentB = `${RUN}-student-xop-b`;
+    const auditsBefore = await countCreationAudits(SCHOOL_A);
+    const buildReadiness = (tag: string, studentRef: string) => {
+      const now = new Date();
+      return {
+        actionReadinessId: `${RUN}-readiness-xop-${tag}`,
+        schoolId: SCHOOL_A,
+        studentRef,
+        resultRecoveryPlanId: `${RUN}-plan`,
+        recoveryOutcomeDecisionReadinessId: `${RUN}-decision-readiness`,
+        readinessStatus: 'draft' as const,
+        safeReadinessSummary: `xop ${tag}`,
+        readinessChecksJson: {},
+        blockedReasonCodesJson: [] as string[],
+        sourceRefsJson: {},
+        createdByActorId: 'r8g2-actor',
+        createdByRole: 'teacher',
+        createdAt: now,
+        updatedAt: now,
+      };
+    };
+    const attemptA = atomicStore.createWithGuards({
+      schoolId: SCHOOL_A,
+      operation: 'createActionReadiness',
+      idempotencyKey: key,
+      canonicalInput: { studentRef: studentA },
+      readiness: buildReadiness('a', studentA),
+      audit: {
+        eventType: 'ACTION_READINESS_CREATED',
+        decision: 'created',
+        safeSummary: 'xop a',
+        actorId: 'r8g2-actor',
+        actorRole: 'teacher',
+        correlationId: `${RUN}-corr`,
+      },
+    });
+    const attemptB = atomicStore.createWithGuards({
+      schoolId: SCHOOL_A,
+      operation: 'markActionReadinessReviewReady',
+      idempotencyKey: key,
+      canonicalInput: { studentRef: studentB },
+      readiness: buildReadiness('b', studentB),
+      audit: {
+        eventType: 'ACTION_READINESS_CREATED',
+        decision: 'created',
+        safeSummary: 'xop b',
+        actorId: 'r8g2-actor',
+        actorRole: 'teacher',
+        correlationId: `${RUN}-corr`,
+      },
+    });
+    const results = await Promise.allSettled([attemptA, attemptB]);
+    const won = results.filter((r) => r.status === 'fulfilled');
+    const lost = results.filter((r) => r.status === 'rejected');
+    expect(won).toHaveLength(1);
+    expect(lost).toHaveLength(1);
+    const loser = (lost[0] as PromiseRejectedResult).reason as { status?: number; code?: string };
+    expect(loser.status).toBe(409);
+    expect(['IDEMPOTENCY_CONFLICT', 'IDEMPOTENCY_IN_PROGRESS']).toContain(loser.code);
+
+    const resources = await prisma.recoveryOutcomeActionReadinessRecord.findMany({
+      where: { schoolId: SCHOOL_A, studentRef: { in: [studentA, studentB] } },
+    });
+    expect(resources).toHaveLength(1);
+    const claims = await prisma.recoveryOutcomeActionIdempotencyRecord.findMany({
+      where: { schoolId: SCHOOL_A, idempotencyKey: key },
+    });
+    expect(claims).toHaveLength(1);
+    expect(claims[0].status).toBe('completed');
+    expect(claims[0].resourceId).toBe(resources[0].actionReadinessId);
+    expect(await countCreationAudits(SCHOOL_A)).toBe(auditsBefore + 1);
+  });
 });

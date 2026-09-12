@@ -6472,6 +6472,7 @@ model RecoveryOutcomeActionIdempotencyRecord {
   expiresAt           DateTime?
 
   @@unique([schoolId, operation, idempotencyKey])
+  @@unique([schoolId, idempotencyKey], map: "r8g2_roa_idem_school_key_uq")
   @@index([createdAt])
   @@index([expiresAt])
   @@index([idempotencyKey])
