@@ -31,6 +31,7 @@ import {
   InMemoryRecoveryCaseTriageIdempotencyRepository,
 } from '../domains/assessment/recovery-case-triage/repositories/inMemoryRecoveryCaseTriageRepositories';
 import { RecoveryCaseTriageCommandContext } from '../domains/assessment/recovery-case-triage/contracts/recoveryCaseTriageContracts';
+import { buildVerifiedActorContext, getVerifiedSchoolId } from '../lib/verifiedActorContext';
 
 const router = Router();
 
@@ -70,10 +71,14 @@ const duplicateSuppressionService = new RecoveryCaseDuplicateSuppressionService(
 const triageSummaryService = new RecoveryCaseTriageSummaryService(triageSummaryRepo);
 
 function buildContext(req: Request): RecoveryCaseTriageCommandContext {
+  // R8-G.2: authoritative caller identity comes from verified server context
+  // only. Caller-controlled x-school-id/x-user-id/x-user-role fallbacks are
+  // removed; x-correlation-id/x-idempotency-key remain as non-authority inputs.
+  const verified = buildVerifiedActorContext(req);
   return {
-    schoolId: (req as any).schoolId || (req.headers['x-school-id'] as string) || '',
-    actorId: (req as any).userId || (req.headers['x-user-id'] as string) || '',
-    actorRole: (req as any).userRole || (req.headers['x-user-role'] as string) || '',
+    schoolId: verified.schoolId,
+    actorId: verified.actorId,
+    actorRole: verified.role,
     correlationId: (req.headers['x-correlation-id'] as string) || `corr-${Date.now()}`,
     idempotencyKey: (req.headers['x-idempotency-key'] as string) || `ik-${Date.now()}`,
     sourceRefsJson: req.body?.sourceRefsJson,
@@ -81,7 +86,7 @@ function buildContext(req: Request): RecoveryCaseTriageCommandContext {
 }
 
 function extractSchoolId(req: Request): string {
-  return (req as any).schoolId || (req.headers['x-school-id'] as string) || '';
+  return getVerifiedSchoolId(req);
 }
 
 function sendResponse(res: Response, result: any) {

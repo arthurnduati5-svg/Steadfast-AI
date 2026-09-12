@@ -144,3 +144,10 @@ All tests pass. TypeScript compilation passes with zero errors.
 ```
 STEADFAST_QBANK_PACKAGE_20_RECOVERY_OUTCOME_ACTION_PREPARATION_ACCEPTED_READY
 ```
+
+## R8-G.2 Production-Hardening Addendum (2026-09-12)
+
+- Action Readiness production composition is now Prisma durable.
+- Its audit/idempotency lifecycle is transactionally durable.
+- Verified route actor identity no longer trusts x-user/x-school headers.
+- The remaining 11 Package-20 entity repositories are NOT yet claimed production-durable.

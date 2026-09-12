@@ -33,6 +33,7 @@ import type {
   RecoveryCaseAdjudicationAuditRepository,
   RecoveryCaseAdjudicationIdempotencyRepository,
 } from '../domains/assessment/recovery-case-adjudication/contracts/recoveryCaseAdjudicationRepositoryContracts';
+import { buildVerifiedActorContext, getVerifiedSchoolId } from '../lib/verifiedActorContext';
 
 export function createRecoveryCaseAdjudicationRouter(
   readinessRepo: RecoveryCaseAdjudicationReadinessRepository,
@@ -70,10 +71,12 @@ export function createRecoveryCaseAdjudicationRouter(
   const idempotencyService = new RecoveryCaseAdjudicationIdempotencyService(idempotencyRepo);
 
 function buildContext(req: Request): any {
+  // R8-G.2: verified server context is the only authoritative caller identity.
+  const verified = buildVerifiedActorContext(req);
   return {
-    schoolId: (req as any).schoolId || (req.headers['x-school-id'] as string) || '',
-    actorId: (req as any).userId || (req.headers['x-user-id'] as string) || '',
-    actorRole: (req as any).userRole || (req.headers['x-user-role'] as string) || '',
+    schoolId: verified.schoolId,
+    actorId: verified.actorId,
+    actorRole: verified.role,
     correlationId: (req.headers['x-correlation-id'] as string) || `corr-${Date.now()}`,
     idempotencyKey: (req.headers['x-idempotency-key'] as string) || `ik-${Date.now()}`,
     sourceRefsJson: req.body?.sourceRefsJson ?? {},
@@ -81,7 +84,7 @@ function buildContext(req: Request): any {
 }
 
 function extractSchoolId(req: Request): string {
-  return (req as any).schoolId || (req.headers['x-school-id'] as string) || '';
+  return getVerifiedSchoolId(req);
 }
 
 function sendResponse(res: Response, result: any) {

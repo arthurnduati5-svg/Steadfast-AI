@@ -11,6 +11,7 @@ export interface RecoveryOutcomeActionSafeEnvelope<T> {
   success: boolean;
   data?: T;
   status: string;
+  code?: string;
   message?: string;
   metadata?: Record<string, unknown>;
   blockedReasonCodes?: string[];

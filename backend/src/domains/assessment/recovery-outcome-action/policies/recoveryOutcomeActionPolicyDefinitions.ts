@@ -8,7 +8,7 @@ export interface PolicyDefinition {
   failClosed: boolean;
 }
 
-const ALLOWED_ROLES = ['teacher', 'lead_teacher', 'department_head', 'admin', 'system_job'];
+const ALLOWED_ROLES = ['teacher', 'lead_teacher', 'department_head', 'admin', 'school_admin', 'system_job'];
 const BLOCKED_ROLES = ['student', 'parent', 'guest', 'unknown'];
 
 function definePolicy(name: string, description: string, overrides?: Partial<PolicyDefinition>): PolicyDefinition {

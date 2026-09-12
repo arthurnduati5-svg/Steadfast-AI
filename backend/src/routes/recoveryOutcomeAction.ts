@@ -15,7 +15,6 @@ import { RecoveryOutcomeRollbackPlanService } from '../domains/assessment/recove
 import { RecoveryOutcomeSuppressionRuleService } from '../domains/assessment/recovery-outcome-action/services/recoveryOutcomeSuppressionRuleService';
 import { RecoveryOutcomeActionSummaryService } from '../domains/assessment/recovery-outcome-action/services/recoveryOutcomeActionSummaryService';
 import {
-  InMemoryRecoveryOutcomeActionReadinessRepository,
   InMemoryRecoveryOutcomeActionBundleRepository,
   InMemoryRecoveryContinuationActionDraftRepository,
   InMemoryRecoveryIntensificationActionDraftRepository,
@@ -31,6 +30,15 @@ import {
   InMemoryRecoveryOutcomeActionIdempotencyRepository,
 } from '../domains/assessment/recovery-outcome-action/repositories/inMemoryRecoveryOutcomeActionRepositories';
 import { RecoveryOutcomeActionCommandContext } from '../domains/assessment/recovery-outcome-action/contracts/recoveryOutcomeActionContracts';
+import { buildVerifiedActorContext, getVerifiedSchoolId } from '../lib/verifiedActorContext';
+import prisma from '../lib/prisma';
+import type { PrismaClient } from '@prisma/client';
+import {
+  PrismaRecoveryOutcomeActionAuditRepository,
+  PrismaRecoveryOutcomeActionIdempotencyRepository,
+  PrismaRecoveryOutcomeActionReadinessRepository,
+} from '../domains/assessment/recovery-outcome-action/repositories/prismaRecoveryOutcomeActionRepositories';
+import { PrismaRecoveryOutcomeActionReadinessAtomicStore } from '../domains/assessment/recovery-outcome-action/repositories/prismaRecoveryOutcomeActionReadinessAtomicStore';
 
 const router = Router();
 
@@ -41,7 +49,33 @@ const safety = new RecoveryOutcomeActionSafetyService();
 const audit = new RecoveryOutcomeActionAuditBridge(auditRepo);
 const idempotency = new RecoveryOutcomeActionIdempotencyService(idempotencyRepo);
 
-const readinessRepo = new InMemoryRecoveryOutcomeActionReadinessRepository();
+/**
+ * R8-G.2 production composition for the Action Readiness lifecycle.
+ *
+ * Readiness + its audit/idempotency chain are Prisma-durable and mutate
+ * atomically via PrismaRecoveryOutcomeActionReadinessAtomicStore. All other
+ * Package-20 families intentionally keep their existing in-memory
+ * composition until their canonical repositories are productionized later.
+ */
+export function createProductionReadinessService(client: PrismaClient): RecoveryOutcomeActionReadinessService {
+  const readinessRepo = new PrismaRecoveryOutcomeActionReadinessRepository(client);
+  const readinessAuditRepo = new PrismaRecoveryOutcomeActionAuditRepository(client);
+  const readinessIdempotencyRepo = new PrismaRecoveryOutcomeActionIdempotencyRepository(client);
+  const readinessSafety = new RecoveryOutcomeActionSafetyService();
+  const readinessAudit = new RecoveryOutcomeActionAuditBridge(readinessAuditRepo);
+  const readinessIdempotency = new RecoveryOutcomeActionIdempotencyService(readinessIdempotencyRepo);
+  const atomicStore = new PrismaRecoveryOutcomeActionReadinessAtomicStore(client);
+  return new RecoveryOutcomeActionReadinessService(
+    readinessRepo,
+    readinessSafety,
+    readinessAudit,
+    readinessIdempotency,
+    atomicStore,
+  );
+}
+
+const productionReadinessService = createProductionReadinessService(prisma);
+
 const bundleRepo = new InMemoryRecoveryOutcomeActionBundleRepository();
 const continuationDraftRepo = new InMemoryRecoveryContinuationActionDraftRepository();
 const intensificationDraftRepo = new InMemoryRecoveryIntensificationActionDraftRepository();
@@ -54,7 +88,7 @@ const rollbackRepo = new InMemoryRecoveryOutcomeRollbackPlanRepository();
 const suppressionRepo = new InMemoryRecoveryOutcomeSuppressionRuleRepository();
 const summaryRepo = new InMemoryRecoveryOutcomeActionSummaryRepository();
 
-const readinessService = new RecoveryOutcomeActionReadinessService(readinessRepo, safety, audit, idempotency);
+const readinessService = productionReadinessService;
 const bundleService = new RecoveryOutcomeActionBundleService(bundleRepo, safety, audit, idempotency);
 const continuationDraftService = new RecoveryContinuationActionDraftService(continuationDraftRepo, safety, audit, idempotency);
 const intensificationDraftService = new RecoveryIntensificationActionDraftService(intensificationDraftRepo, safety, audit, idempotency);
@@ -68,10 +102,14 @@ const suppressionService = new RecoveryOutcomeSuppressionRuleService(suppression
 const summaryService = new RecoveryOutcomeActionSummaryService(summaryRepo, safety, audit, idempotency);
 
 function buildContext(req: Request): RecoveryOutcomeActionCommandContext {
+  // R8-G.2: authoritative caller identity comes from verified server context
+  // only. Caller-controlled x-school-id/x-user-id/x-user-role fallbacks are
+  // removed; x-correlation-id/x-idempotency-key remain as non-authority inputs.
+  const verified = buildVerifiedActorContext(req);
   return {
-    schoolId: (req as any).schoolId || (req.headers['x-school-id'] as string) || '',
-    actorId: (req as any).userId || (req.headers['x-user-id'] as string) || '',
-    actorRole: (req as any).userRole || (req.headers['x-user-role'] as string) || '',
+    schoolId: verified.schoolId,
+    actorId: verified.actorId,
+    actorRole: verified.role,
     correlationId: (req.headers['x-correlation-id'] as string) || `corr-${Date.now()}`,
     idempotencyKey: (req.headers['x-idempotency-key'] as string) || `ik-${Date.now()}`,
     sourceRefsJson: req.body?.sourceRefsJson,
@@ -80,8 +118,12 @@ function buildContext(req: Request): RecoveryOutcomeActionCommandContext {
 
 function sendResponse(res: Response, result: any) {
   if (result.success) return res.status(200).json(result);
-  if (result.status === 'DUPLICATE') return res.status(409).json(result);
+  if (result.status === 'DUPLICATE' || result.status === 'CONFLICT') return res.status(409).json(result);
   if (result.status === 'NOT_FOUND') return res.status(404).json(result);
+  if (result.status === 'DENIED') {
+    if (result.code === 'VERIFIED_IDENTITY_REQUIRED') return res.status(401).json(result);
+    return res.status(403).json(result);
+  }
   if (result.status === 'error') return res.status(400).json(result);
   return res.status(200).json(result);
 }
@@ -94,7 +136,7 @@ router.post('/action-readiness', async (req: Request, res: Response) => {
 });
 
 router.get('/action-readiness', async (req: Request, res: Response) => {
-  const schoolId = (req as any).schoolId || (req.headers['x-school-id'] as string) || '';
+  const schoolId = getVerifiedSchoolId(req);
   const { studentRef, planId, status } = req.query;
   if (studentRef) { sendResponse(res, await readinessService.listActionReadinessForStudent(schoolId, studentRef as string)); return; }
   if (planId) { sendResponse(res, await readinessService.listActionReadinessForPlan(schoolId, planId as string)); return; }
@@ -103,7 +145,7 @@ router.get('/action-readiness', async (req: Request, res: Response) => {
 });
 
 router.get('/action-readiness/:id', async (req: Request, res: Response) => {
-  sendResponse(res, await readinessService.getActionReadiness(req.params.id));
+  sendResponse(res, await readinessService.getActionReadiness(req.params.id, getVerifiedSchoolId(req)));
 });
 
 router.post('/action-readiness/:id/review-ready', async (req: Request, res: Response) => {
@@ -132,7 +174,7 @@ router.post('/action-bundles', async (req: Request, res: Response) => {
 });
 
 router.get('/action-bundles', async (req: Request, res: Response) => {
-  const schoolId = (req as any).schoolId || (req.headers['x-school-id'] as string) || '';
+  const schoolId = getVerifiedSchoolId(req);
   const { studentRef, planId, status } = req.query;
   if (studentRef) { sendResponse(res, await bundleService.listActionBundlesForStudent(schoolId, studentRef as string)); return; }
   if (planId) { sendResponse(res, await bundleService.listActionBundlesForPlan(schoolId, planId as string)); return; }
@@ -170,7 +212,7 @@ router.post('/continuation-action-drafts', async (req: Request, res: Response) =
 });
 
 router.get('/continuation-action-drafts', async (req: Request, res: Response) => {
-  const schoolId = (req as any).schoolId || (req.headers['x-school-id'] as string) || '';
+  const schoolId = getVerifiedSchoolId(req);
   const { planId, studentRef, status } = req.query;
   if (planId) { sendResponse(res, await continuationDraftService.listActionDraftsForPlan(schoolId, planId as string)); return; }
   if (studentRef) { sendResponse(res, await continuationDraftService.listActionDraftsForStudent(schoolId, studentRef as string)); return; }
@@ -208,7 +250,7 @@ router.post('/intensification-action-drafts', async (req: Request, res: Response
 });
 
 router.get('/intensification-action-drafts', async (req: Request, res: Response) => {
-  const schoolId = (req as any).schoolId || (req.headers['x-school-id'] as string) || '';
+  const schoolId = getVerifiedSchoolId(req);
   const { planId, studentRef, status } = req.query;
   if (planId) { sendResponse(res, await intensificationDraftService.listActionDraftsForPlan(schoolId, planId as string)); return; }
   if (studentRef) { sendResponse(res, await intensificationDraftService.listActionDraftsForStudent(schoolId, studentRef as string)); return; }
@@ -245,7 +287,7 @@ router.post('/pause-action-drafts', async (req: Request, res: Response) => {
 });
 
 router.get('/pause-action-drafts', async (req: Request, res: Response) => {
-  const schoolId = (req as any).schoolId || (req.headers['x-school-id'] as string) || '';
+  const schoolId = getVerifiedSchoolId(req);
   const { planId, studentRef, status } = req.query;
   if (planId) { sendResponse(res, await pauseDraftService.listActionDraftsForPlan(schoolId, planId as string)); return; }
   if (studentRef) { sendResponse(res, await pauseDraftService.listActionDraftsForStudent(schoolId, studentRef as string)); return; }
@@ -282,7 +324,7 @@ router.post('/closure-action-drafts', async (req: Request, res: Response) => {
 });
 
 router.get('/closure-action-drafts', async (req: Request, res: Response) => {
-  const schoolId = (req as any).schoolId || (req.headers['x-school-id'] as string) || '';
+  const schoolId = getVerifiedSchoolId(req);
   const { planId, studentRef, status } = req.query;
   if (planId) { sendResponse(res, await closureDraftService.listActionDraftsForPlan(schoolId, planId as string)); return; }
   if (studentRef) { sendResponse(res, await closureDraftService.listActionDraftsForStudent(schoolId, studentRef as string)); return; }
@@ -320,7 +362,7 @@ router.post('/approval-gates', async (req: Request, res: Response) => {
 });
 
 router.get('/approval-gates', async (req: Request, res: Response) => {
-  const schoolId = (req as any).schoolId || (req.headers['x-school-id'] as string) || '';
+  const schoolId = getVerifiedSchoolId(req);
   const { planId, studentRef, status } = req.query;
   if (planId) { sendResponse(res, await approvalGateService.listApprovalGatesForPlan(schoolId, planId as string)); return; }
   if (studentRef) { sendResponse(res, await approvalGateService.listApprovalGatesForStudent(schoolId, studentRef as string)); return; }
@@ -350,7 +392,7 @@ router.post('/mock-activation-queue', async (req: Request, res: Response) => {
 });
 
 router.get('/mock-activation-queue', async (req: Request, res: Response) => {
-  const schoolId = (req as any).schoolId || (req.headers['x-school-id'] as string) || '';
+  const schoolId = getVerifiedSchoolId(req);
   const { planId, status } = req.query;
   if (planId) { sendResponse(res, await mockQueueService.listQueueItemsForPlan(schoolId, planId as string)); return; }
   if (status) { sendResponse(res, await mockQueueService.listQueueItemsByStatus(schoolId, status as any)); return; }
@@ -383,7 +425,7 @@ router.post('/dry-run-receipts', async (req: Request, res: Response) => {
 });
 
 router.get('/dry-run-receipts', async (req: Request, res: Response) => {
-  const schoolId = (req as any).schoolId || (req.headers['x-school-id'] as string) || '';
+  const schoolId = getVerifiedSchoolId(req);
   const { queueItemId, planId, result } = req.query;
   if (queueItemId) { sendResponse(res, await dryRunService.listReceiptsForQueueItem(queueItemId as string)); return; }
   if (planId) { sendResponse(res, await dryRunService.listReceiptsForPlan(schoolId, planId as string)); return; }
@@ -405,7 +447,7 @@ router.post('/rollback-plans', async (req: Request, res: Response) => {
 });
 
 router.get('/rollback-plans', async (req: Request, res: Response) => {
-  const schoolId = (req as any).schoolId || (req.headers['x-school-id'] as string) || '';
+  const schoolId = getVerifiedSchoolId(req);
   const { planId, status } = req.query;
   if (planId) { sendResponse(res, await rollbackService.listRollbackPlansForPlan(schoolId, planId as string)); return; }
   if (status) { sendResponse(res, await rollbackService.listRollbackPlansByStatus(schoolId, status as any)); return; }
@@ -442,7 +484,7 @@ router.post('/suppression-rules', async (req: Request, res: Response) => {
 });
 
 router.get('/suppression-rules', async (req: Request, res: Response) => {
-  const schoolId = (req as any).schoolId || (req.headers['x-school-id'] as string) || '';
+  const schoolId = getVerifiedSchoolId(req);
   const { planId, status } = req.query;
   if (planId) { sendResponse(res, await suppressionService.listSuppressionRulesForPlan(schoolId, planId as string)); return; }
   if (status) { sendResponse(res, await suppressionService.listSuppressionRulesByStatus(schoolId, status as any)); return; }
@@ -475,7 +517,7 @@ router.post('/summaries', async (req: Request, res: Response) => {
 });
 
 router.get('/summaries', async (req: Request, res: Response) => {
-  const schoolId = (req as any).schoolId || (req.headers['x-school-id'] as string) || '';
+  const schoolId = getVerifiedSchoolId(req);
   const { studentRef, planId, status } = req.query;
   if (studentRef) { sendResponse(res, await summaryService.listActionSummariesForStudent(schoolId, studentRef as string)); return; }
   if (planId) { sendResponse(res, await summaryService.listActionSummariesForPlan(schoolId, planId as string)); return; }

@@ -21,6 +21,7 @@ import {
   InMemoryRecoveryExecutionAuthorizationPreviewRepositories,
 } from '../domains/assessment/recovery-execution-authorization-preview/repositories/inMemoryRecoveryExecutionAuthorizationPreviewRepositories';
 import { RecoveryExecutionAuthorizationPreviewCommandContext } from '../domains/assessment/recovery-execution-authorization-preview/contracts/recoveryExecutionAuthorizationPreviewContracts';
+import { buildVerifiedActorContext, getVerifiedSchoolId } from '../lib/verifiedActorContext';
 
 const router = Router();
 
@@ -43,10 +44,12 @@ const mockReceiptService = new RecoveryExecutionMockAuthorizationReceiptService(
 const summaryService = new RecoveryExecutionAuthorizationSummaryService(repos.authorizationSummary, audit, idempotency);
 
 function buildContext(req: Request): RecoveryExecutionAuthorizationPreviewCommandContext {
+  // R8-G.2: verified server context is the only authoritative caller identity.
+  const verified = buildVerifiedActorContext(req);
   return {
-    schoolId: (req as any).schoolId || (req.headers['x-school-id'] as string) || '',
-    actorId: (req as any).userId || (req.headers['x-user-id'] as string) || '',
-    actorRole: (req as any).userRole || (req.headers['x-user-role'] as string) || '',
+    schoolId: verified.schoolId,
+    actorId: verified.actorId,
+    actorRole: verified.role,
     correlationId: (req.headers['x-correlation-id'] as string) || `corr-${Date.now()}`,
     idempotencyKey: (req.headers['x-idempotency-key'] as string) || `ik-${Date.now()}`,
     sourceRefsJson: req.body?.sourceRefsJson,
@@ -54,7 +57,7 @@ function buildContext(req: Request): RecoveryExecutionAuthorizationPreviewComman
 }
 
 function extractSchoolId(req: Request): string {
-  return (req as any).schoolId || (req.headers['x-school-id'] as string) || '';
+  return getVerifiedSchoolId(req);
 }
 
 function sendResponse(res: Response, result: any) {

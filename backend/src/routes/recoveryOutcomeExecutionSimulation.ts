@@ -16,6 +16,7 @@ import {
   RecoveryOutcomeExecutionSimulationAuditBridge,
   RecoveryOutcomeExecutionSimulationIdempotencyService,
 } from '../domains/assessment/recovery-outcome-execution-simulation/services';
+import { buildVerifiedActorContext, getVerifiedSchoolId } from '../lib/verifiedActorContext';
 import {
   InMemorySimulationReadinessRepository,
   InMemorySimulationPlanRepository,
@@ -71,10 +72,12 @@ const verdictService = new RecoveryOutcomeExecutionReadinessVerdictService(verdi
 const summaryService = new RecoveryOutcomeExecutionSimulationSummaryService(summaryRepo, safety, audit, idempotency);
 
 function buildContext(req: Request): RecoveryOutcomeExecutionSimulationCommandContext {
+  // R8-G.2: verified server context is the only authoritative caller identity.
+  const verified = buildVerifiedActorContext(req);
   return {
-    schoolId: (req as any).schoolId || (req.headers['x-school-id'] as string) || '',
-    actorId: (req as any).userId || (req.headers['x-user-id'] as string) || '',
-    actorRole: (req as any).userRole || (req.headers['x-user-role'] as string) || '',
+    schoolId: verified.schoolId,
+    actorId: verified.actorId,
+    actorRole: verified.role,
     correlationId: (req.headers['x-correlation-id'] as string) || `corr-${Date.now()}`,
     idempotencyKey: (req.headers['x-idempotency-key'] as string) || `ik-${Date.now()}`,
     sourceRefsJson: req.body?.sourceRefsJson,
@@ -82,7 +85,7 @@ function buildContext(req: Request): RecoveryOutcomeExecutionSimulationCommandCo
 }
 
 function extractSchoolId(req: Request): string {
-  return (req as any).schoolId || (req.headers['x-school-id'] as string) || '';
+  return getVerifiedSchoolId(req);
 }
 
 function sendResponse(res: Response, result: any) {

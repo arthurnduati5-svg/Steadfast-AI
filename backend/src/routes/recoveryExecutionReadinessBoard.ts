@@ -31,6 +31,7 @@ import type { RecoveryExecutionReadinessBoardRefreshJobRepository } from '../dom
 import type { RecoveryExecutionReadinessBoardSummaryRepository } from '../domains/assessment/recovery-execution-readiness-board/contracts/recoveryExecutionReadinessBoardRepositoryContracts';
 import type { RecoveryExecutionReadinessBoardAuditRepository } from '../domains/assessment/recovery-execution-readiness-board/contracts/recoveryExecutionReadinessBoardRepositoryContracts';
 import type { RecoveryExecutionReadinessBoardIdempotencyRepository } from '../domains/assessment/recovery-execution-readiness-board/contracts/recoveryExecutionReadinessBoardRepositoryContracts';
+import { buildVerifiedActorContext, getVerifiedSchoolId } from '../lib/verifiedActorContext';
 
 export function createRecoveryExecutionReadinessBoardRouter(
   snapshotRepo: RecoveryExecutionReadinessBoardSnapshotRepository,
@@ -68,10 +69,12 @@ const auditBridge = new RecoveryExecutionReadinessBoardAuditBridge(auditRepo);
 const idempotencyService = new RecoveryExecutionReadinessBoardIdempotencyService(idempotencyRepo);
 
 function buildContext(req: Request): any {
+  // R8-G.2: verified server context is the only authoritative caller identity.
+  const verified = buildVerifiedActorContext(req);
   return {
-    schoolId: (req as any).schoolId || (req.headers['x-school-id'] as string) || '',
-    actorId: (req as any).userId || (req.headers['x-user-id'] as string) || '',
-    actorRole: (req as any).userRole || (req.headers['x-user-role'] as string) || '',
+    schoolId: verified.schoolId,
+    actorId: verified.actorId,
+    actorRole: verified.role,
     correlationId: (req.headers['x-correlation-id'] as string) || '',
     idempotencyKey: (req.headers['x-idempotency-key'] as string) || '',
     sourceRefsJson: req.body?.sourceRefsJson ?? {},
@@ -79,7 +82,7 @@ function buildContext(req: Request): any {
 }
 
 function extractSchoolId(req: Request): string {
-  return (req as any).schoolId || (req.headers['x-school-id'] as string) || '';
+  return getVerifiedSchoolId(req);
 }
 
 function sendResponse(res: Response, result: any) {

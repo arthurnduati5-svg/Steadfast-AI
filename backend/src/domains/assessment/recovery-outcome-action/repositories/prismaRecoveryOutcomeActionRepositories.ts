@@ -1,4 +1,5 @@
 import { PrismaClient } from '@prisma/client';
+import { randomUUID } from 'crypto';
 import {
   RecoveryOutcomeActionReadiness,
   RecoveryOutcomeActionReadinessStatus,
@@ -271,4 +272,148 @@ export class PrismaRecoveryOutcomeActionSummaryRepository implements RecoveryOut
   async refresh(id: string, data: Partial<RecoveryOutcomeActionSummary>): Promise<RecoveryOutcomeActionSummary> { throw new Error('Not implemented in stub'); }
   async block(id: string): Promise<RecoveryOutcomeActionSummary> { throw new Error('Not implemented in stub'); }
   async void(id: string): Promise<RecoveryOutcomeActionSummary> { throw new Error('Not implemented in stub'); }
+}
+
+// ─── R8-G.2 production implementations ─────────────────────────────
+// Only the Action Readiness family (readiness + audit + idempotency) is
+// productionized. All other Prisma repositories above remain stubs.
+
+function toPrismaAudit(data: RecoveryOutcomeActionAuditEvent): Record<string, unknown> {
+  return {
+    auditEventId: data.auditEventId && data.auditEventId.trim() !== '' ? data.auditEventId : randomUUID(),
+    schoolId: data.schoolId,
+    actionReadinessId: data.actionReadinessId ?? null,
+    actionBundleId: data.actionBundleId ?? null,
+    continuationActionDraftId: data.continuationActionDraftId ?? null,
+    intensificationActionDraftId: data.intensificationActionDraftId ?? null,
+    pauseActionDraftId: data.pauseActionDraftId ?? null,
+    closureActionDraftId: data.closureActionDraftId ?? null,
+    approvalGateId: data.approvalGateId ?? null,
+    mockActivationQueueItemId: data.mockActivationQueueItemId ?? null,
+    dryRunReceiptId: data.dryRunReceiptId ?? null,
+    rollbackPlanId: data.rollbackPlanId ?? null,
+    suppressionRuleId: data.suppressionRuleId ?? null,
+    actionSummaryId: data.actionSummaryId ?? null,
+    actorId: data.actorId,
+    actorRole: data.actorRole,
+    eventType: data.eventType,
+    decision: data.decision,
+    safeSummary: data.safeSummary,
+    reasonCodesJson: data.reasonCodesJson ?? {},
+    metadataJson: data.metadataJson ?? {},
+    requestId: data.requestId ?? null,
+    correlationId: data.correlationId ?? null,
+  };
+}
+
+function fromPrismaAudit(row: Record<string, any>): RecoveryOutcomeActionAuditEvent {
+  return {
+    auditEventId: row.auditEventId,
+    schoolId: row.schoolId,
+    actionReadinessId: row.actionReadinessId ?? undefined,
+    actionBundleId: row.actionBundleId ?? undefined,
+    continuationActionDraftId: row.continuationActionDraftId ?? undefined,
+    intensificationActionDraftId: row.intensificationActionDraftId ?? undefined,
+    pauseActionDraftId: row.pauseActionDraftId ?? undefined,
+    closureActionDraftId: row.closureActionDraftId ?? undefined,
+    approvalGateId: row.approvalGateId ?? undefined,
+    mockActivationQueueItemId: row.mockActivationQueueItemId ?? undefined,
+    dryRunReceiptId: row.dryRunReceiptId ?? undefined,
+    rollbackPlanId: row.rollbackPlanId ?? undefined,
+    suppressionRuleId: row.suppressionRuleId ?? undefined,
+    actionSummaryId: row.actionSummaryId ?? undefined,
+    actorId: row.actorId,
+    actorRole: row.actorRole,
+    eventType: row.eventType,
+    decision: row.decision,
+    safeSummary: row.safeSummary,
+    reasonCodesJson: (row.reasonCodesJson ?? {}) as Record<string, unknown>,
+    metadataJson: (row.metadataJson ?? {}) as Record<string, unknown>,
+    requestId: row.requestId ?? undefined,
+    correlationId: row.correlationId ?? undefined,
+    createdAt: row.createdAt instanceof Date ? row.createdAt : new Date(row.createdAt),
+  };
+}
+
+export class PrismaRecoveryOutcomeActionAuditRepository implements RecoveryOutcomeActionAuditRepository {
+  constructor(private prisma: PrismaClient) {}
+
+  async create(data: RecoveryOutcomeActionAuditEvent): Promise<RecoveryOutcomeActionAuditEvent> {
+    const created = await this.prisma.recoveryOutcomeActionAuditRecord.create({ data: toPrismaAudit(data) as any });
+    return fromPrismaAudit(created as unknown as Record<string, any>);
+  }
+
+  async listBySchool(schoolId: string): Promise<RecoveryOutcomeActionAuditEvent[]> {
+    const rows = await this.prisma.recoveryOutcomeActionAuditRecord.findMany({
+      where: { schoolId },
+      orderBy: { createdAt: 'asc' },
+    });
+    return rows.map(r => fromPrismaAudit(r as unknown as Record<string, any>));
+  }
+
+  async listByEventType(schoolId: string, eventType: string): Promise<RecoveryOutcomeActionAuditEvent[]> {
+    const rows = await this.prisma.recoveryOutcomeActionAuditRecord.findMany({
+      where: { schoolId, eventType },
+      orderBy: { createdAt: 'asc' },
+    });
+    return rows.map(r => fromPrismaAudit(r as unknown as Record<string, any>));
+  }
+}
+
+function toPrismaIdempotency(data: RecoveryOutcomeActionIdempotencyEntry): Record<string, unknown> {
+  const now = new Date();
+  return {
+    actionIdempotencyId: data.idempotencyId && data.idempotencyId.trim() !== '' ? data.idempotencyId : randomUUID(),
+    schoolId: data.schoolId,
+    operation: data.operation,
+    idempotencyKey: data.idempotencyKey,
+    requestHash: data.requestHash,
+    status: data.status,
+    resourceType: data.resourceType ?? null,
+    resourceId: data.resourceId ?? null,
+    safeResultSummary: null,
+    createdAt: data.createdAt ?? now,
+    updatedAt: now,
+    expiresAt: data.expiresAt ?? null,
+  };
+}
+
+function fromPrismaIdempotency(row: Record<string, any>): RecoveryOutcomeActionIdempotencyEntry {
+  return {
+    idempotencyId: row.actionIdempotencyId,
+    schoolId: row.schoolId,
+    operation: row.operation,
+    idempotencyKey: row.idempotencyKey,
+    requestHash: row.requestHash,
+    status: row.status,
+    resourceType: row.resourceType ?? undefined,
+    resourceId: row.resourceId ?? undefined,
+    createdAt: row.createdAt instanceof Date ? row.createdAt : new Date(row.createdAt),
+    expiresAt: row.expiresAt ? (row.expiresAt instanceof Date ? row.expiresAt : new Date(row.expiresAt)) : undefined,
+  };
+}
+
+export class PrismaRecoveryOutcomeActionIdempotencyRepository implements RecoveryOutcomeActionIdempotencyRepository {
+  constructor(private prisma: PrismaClient) {}
+
+  async create(data: RecoveryOutcomeActionIdempotencyEntry): Promise<RecoveryOutcomeActionIdempotencyEntry> {
+    const created = await this.prisma.recoveryOutcomeActionIdempotencyRecord.create({ data: toPrismaIdempotency(data) as any });
+    return fromPrismaIdempotency(created as unknown as Record<string, any>);
+  }
+
+  async getByKey(schoolId: string, idempotencyKey: string): Promise<RecoveryOutcomeActionIdempotencyEntry | null> {
+    const found = await this.prisma.recoveryOutcomeActionIdempotencyRecord.findFirst({
+      where: { schoolId, idempotencyKey },
+      orderBy: { createdAt: 'asc' },
+    });
+    return found ? fromPrismaIdempotency(found as unknown as Record<string, any>) : null;
+  }
+
+  async markCompleted(id: string, resourceType: string, resourceId: string): Promise<RecoveryOutcomeActionIdempotencyEntry> {
+    const updated = await this.prisma.recoveryOutcomeActionIdempotencyRecord.update({
+      where: { actionIdempotencyId: id },
+      data: { status: 'completed', resourceType, resourceId, updatedAt: new Date() },
+    });
+    return fromPrismaIdempotency(updated as unknown as Record<string, any>);
+  }
 }
