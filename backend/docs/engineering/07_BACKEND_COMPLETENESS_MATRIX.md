@@ -375,3 +375,14 @@ No retention/archive/compaction policy was found for high-write event/idempotenc
 - Static scale flags carried from R8-C unchanged: AI rate-limit window arrays, roster payload size, marking batch size, daily-objective process Map growth, external video cache, unbounded feed input (P0=14 P1=14 P2=2 queue preserved).
 - R8-D adds: unbounded event/idempotency/ledger growth families (07 §Long-History) as scale-observability input; no latency/throughput claim is made anywhere in this artifact.
 - Dependency cycles (5 accepted) and memory-hotspot candidates remain inputs to R8-E load/reliability analysis.
+
+## R8-G.3A Reconciliation (2026-09-12, HEAD a0a3feac1e545f383a36f4b7bf73c1635ce61154)
+
+Append-only; prior questions preserved. Resolutions proven by focused R8-G.3A traces and `src/tests/r8g3a-*` suites (17 tests, 0 real-DB executions):
+
+1. Growth* writer UNKNOWN (question 1, partial): for the `/api/phase3/growth-page` path the question is closed — growth page is a DERIVED_VIEW with no Growth* writes; no Growth* writer is required on this path (GAP-mastery-growth-writers PROVEN NOT A GAP). Canonical Growth* writers remain solely in `growthIntelligenceService` (unchanged). No competing mastery truth introduced.
+2. MediaAsset writer UNKNOWN (question 1, partial): closed — durable canonical owner is `mediaAssetService` (Prisma); video learning routes proven to be consumers, not owners.
+3. Study planning readiness UNKNOWN (question 5): closed — study plans are DURABLE_CANONICAL persistent authored snapshots (StudyPlan/StudyGoal Prisma rows via `studySupportService`); only `GET /priorities` is derived.
+4. Tutor-state durability (GAP-tutorcore-persistence-unresolved, partial): closed for the state object — `tutorStateService` production default is Prisma-backed fail-closed (R8-G.3A repair); snapshots/history remain process-local (CONTRADICTION, needs schema decision).
+5. Living-revision and governance-audit durability UNKNOWNs: NOT closed — recorded CONTRADICTION (process-local canonical state with no mechanically completable durable composition; architecture decisions required). No fake durability claimed.
+6. Provenance: remote HEAD imports 10 R8-G.3A route files it does not track; 6 surfaces restored (62-file union), 4 stopped as provenance CONTRADICTION. Full tracked import closure for all active target routes is therefore NOT established — R8-G.4 compile-integrity input.

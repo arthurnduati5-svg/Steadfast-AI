@@ -2435,3 +2435,28 @@ UNRESOLVED_INTERNAL_IMPORT | 1 | sole unresolved import; identify only (see Logi
 
 Total findings carried as evidence (no dispositions): 9610.
 
+## R8-G.3A Ownership Reconciliation (2026-09-12, HEAD a0a3feac1e545f383a36f4b7bf73c1635ce61154)
+
+Append-only. One verdict per target state object (R8-G.3A §9). No UNKNOWN for active production-critical state.
+
+| CAPABILITY | STATE | VERDICT | CANONICAL OWNER | RESTART BEHAVIOR | PROOF |
+| --- | --- | --- | --- | --- | --- |
+| Tutor Handoff | identity mapping + copilot session | DURABLE_CANONICAL | Prisma TutorLearnerIdentityMap + TutorSession (via copilotHandoffService/tutorSessionContinuityService) | survives restart | route→service→Prisma chain, no Map (r8g3a trace; r8g-handoff-mount-guard accepted test) |
+| Tutor Actions | decision/hint-ladder/effectiveness | DERIVED_VIEW / REQUEST_EPHEMERAL | none (pure compute per request) | stateless; nothing to lose | explicit not-persisted envelopes in route; no Prisma models |
+| Tutor State | learner tutor state | DURABLE_CANONICAL (repaired) | Prisma TutorState row (tutorStateService, strict fail-closed default) | survives restart; DB-down writes/reads throw | r8g3a-tutor-state-durability.test.ts (4 tests) |
+| Tutor State Snapshots/History | v1 snapshots | DEFECT_PROCESS_LOCAL_CANONICAL | none (snapshotStore Map) | lost on restart | source inspection; CONTRADICTION (no schema; architecture decision) |
+| Tutor Turn | turn orchestration + telemetry | REQUEST_EPHEMERAL + CACHE_ONLY | none (per-request compute; telemetry array) | telemetry lost; safely recomputed | no repository; no Prisma models |
+| Tutor Conversation | session state + events | DURABLE_CANONICAL | Prisma StudentLearningSessionState/Event (raw SQL) + R8-F chatMessageRepository | survives restart | chain inspection; idempotency Map is CACHE_ONLY (loss → safe retry) |
+| Growth | growth page view | DERIVED_VIEW | canonical mastery/evidence (via DailyFeed/StudyPlan/Evidence adapters) | recomputed; snapshot Map is CACHE_ONLY | r8g3a-growth-derived-view.test.ts (3 tests); GAP-mastery-growth-writers PROVEN NOT A GAP for this path |
+| Living Revision | nodes/edges/due/graphs/audit | DEFECT_PROCESS_LOCAL_CANONICAL | none (phase3LivingRevisionRepository Maps) | total loss on restart | r8g3a-revision-durability-defect.test.ts (defect lock); CONTRADICTION (no suitable schema) |
+| Study Planning | plans + goals | DURABLE_CANONICAL | Prisma StudyPlan/StudyGoal rows (studySupportService) | survives restart | r8g3a-studyplan-durable-canonical.test.ts (2 tests); priorities endpoint DERIVED_VIEW |
+| MediaAsset | asset metadata | DURABLE_CANONICAL | mediaAssetService (Prisma) | survives restart | r8g3a-media-ownership.test.ts; video routes proven non-owners |
+| Video Learning Session | session/progress/checkpoints | DURABLE_CANONICAL | TutorState row videoLearningSession object + LearningEvent mirror | survives restart (inherits TutorState repair) | chain via videoLearningSessionStateService→tutorStateService |
+| Video Learning Analytics | aggregates/scores | DERIVED_VIEW | durable VideoLearningAnalyticsEvent entries in TutorState row (bounded 200) | recomputed from events | aggregation/scoring pure; no metric persistence invented |
+| Approved Source | approval state | DEFECT_PROCESS_LOCAL_CANONICAL | none durable (ApprovedSourceRegistryService Map; Prisma repo exists, unwired) | lost on restart; fail-closed (unknown = not approved) | r8g3a-governance-failclosed.test.ts; CONTRADICTION (composition redesign required) |
+| Content Gap | gap records | DEFECT_PROCESS_LOCAL_CANONICAL | none durable (Map; Prisma repo exists, unwired) | lost; every unknown re-derives as gap (fail-closed) | defect lock test; CONTRADICTION |
+| Moderation Decision | moderation outcomes | DEFECT_PROCESS_LOCAL_CANONICAL (default composition) | Prisma repo exists (prismaMarkingRepositories), default InMemory | lost on restart in default composition | defect lock; CONTRADICTION |
+| Governance Audit | audit trail | DEFECT_PROCESS_LOCAL_CANONICAL | none durable (records array; Prisma repo exists, unwired) | lost on restart; decisions do not gate on audit success | defect lock; CONTRADICTION |
+
+Provenance: 6 surfaces restored as ACCEPTED_PROVENANCE_OMISSION (62-file union); 4 surfaces stopped as provenance CONTRADICTION (tutorState 30, tutorStateEndpoint 39, tutorConversation 148, phase3GrowthPageRoutes 33 untracked value-closure files each).
+

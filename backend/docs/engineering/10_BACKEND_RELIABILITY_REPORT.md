@@ -170,3 +170,19 @@ New risks identified by R8-E measurement:
 
 - Behavioral acceptance of repaired approval concurrency under realistic multi-actor flows.
 - Retention policy decisions (evidence idempotency, daily-objective idempotency) require product/legal approval before any purge behavior is built or accepted.
+
+## R8-G.3A Closure (2026-09-12, HEAD a0a3feac1e545f383a36f4b7bf73c1635ce61154)
+
+### DEF-R8G3A-01 TutorState silent Prisma→memory fallback (GAP-tutorcore-persistence-unresolved, state object)
+
+- Root cause: `tutorStateService.getTutorStateForLearner/upsertTutorStateForLearner` always wrote the module `memoryStore` Map and returned memory success when Prisma was unreachable (plus a process-lifetime `_prismaAvailable=false` latch), so canonical learner/tutor/video-session state could be silently volatile while the API reported success.
+- Repair (1 production file, `backend/src/services/tutorStateService.ts`): production default (`NODE_ENV=production`, overridable per-direction via `TUTORSTATE_REQUIRE_DURABLE=1` / `TUTORSTATE_ALLOW_MEMORY_FALLBACK=1`) is Prisma-backed fail-closed — unreachable-database reads/writes throw instead of serving memory; the Map remains solely as explicit test/dev injection (`NODE_ENV!==production` behavior unchanged). `patchTutorStateForLearner`/`touchLastResolvedAt` and the video session/analytics chains inherit the guard via get/upsert.
+- Regression guard: `src/tests/r8g3a-tutor-state-durability.test.ts` (4 tests: legacy injection preserved, strict write throws, strict read throws, strict never serves seeded memory). No real-DB execution; global test Prisma mock models unreachability.
+- Restart behavior after repair: durable rows survive restart; outage-time requests fail loudly (no misleading success). No tutoring policy/AI behavior changed.
+
+### Remaining R8-G.3A risks (recorded CONTRADICTION, not repaired)
+
+- Living-revision canonical mutations on a heap repository (total restart loss; no suitable schema) — architecture decision required before this surface may claim durability.
+- Task022 governance singletons + moderation default composition process-local (fail-closed direction preserved and locked by test) — durable composition redesign required.
+- TutorState snapshots/history (`snapshotStore` Map) process-local — schema decision required.
+- Provenance: 4 active target route surfaces without tracked import closure (tutorState 30, tutorStateEndpoint 39, tutorConversation 148, phase3GrowthPageRoutes 33 untracked value-closure files) — bulk restoration refused per budget law; R8-G.4 compile-integrity input. Remote HEAD cannot boot these mounts until closed.
