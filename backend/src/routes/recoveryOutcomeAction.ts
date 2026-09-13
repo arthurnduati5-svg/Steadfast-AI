@@ -14,16 +14,6 @@ import { RecoveryOutcomeDryRunReceiptService } from '../domains/assessment/recov
 import { RecoveryOutcomeRollbackPlanService } from '../domains/assessment/recovery-outcome-action/services/recoveryOutcomeRollbackPlanService';
 import { RecoveryOutcomeSuppressionRuleService } from '../domains/assessment/recovery-outcome-action/services/recoveryOutcomeSuppressionRuleService';
 import { RecoveryOutcomeActionSummaryService } from '../domains/assessment/recovery-outcome-action/services/recoveryOutcomeActionSummaryService';
-import {
-  InMemoryRecoveryOutcomeApprovalGateRepository,
-  InMemoryRecoveryOutcomeMockActivationQueueRepository,
-  InMemoryRecoveryOutcomeDryRunReceiptRepository,
-  InMemoryRecoveryOutcomeRollbackPlanRepository,
-  InMemoryRecoveryOutcomeSuppressionRuleRepository,
-  InMemoryRecoveryOutcomeActionSummaryRepository,
-  InMemoryRecoveryOutcomeActionAuditRepository,
-  InMemoryRecoveryOutcomeActionIdempotencyRepository,
-} from '../domains/assessment/recovery-outcome-action/repositories/inMemoryRecoveryOutcomeActionRepositories';
 import { RecoveryOutcomeActionCommandContext } from '../domains/assessment/recovery-outcome-action/contracts/recoveryOutcomeActionContracts';
 import { buildVerifiedActorContext, getVerifiedSchoolId } from '../lib/verifiedActorContext';
 import prisma from '../lib/prisma';
@@ -37,6 +27,12 @@ import {
   PrismaRecoveryIntensificationActionDraftRepository,
   PrismaRecoveryPauseActionDraftRepository,
   PrismaRecoveryClosureActionDraftRepository,
+  PrismaRecoveryOutcomeApprovalGateRepository,
+  PrismaRecoveryOutcomeMockActivationQueueRepository,
+  PrismaRecoveryOutcomeDryRunReceiptRepository,
+  PrismaRecoveryOutcomeRollbackPlanRepository,
+  PrismaRecoveryOutcomeSuppressionRuleRepository,
+  PrismaRecoveryOutcomeActionSummaryRepository,
 } from '../domains/assessment/recovery-outcome-action/repositories/prismaRecoveryOutcomeActionRepositories';
 import { PrismaRecoveryOutcomeActionReadinessAtomicStore } from '../domains/assessment/recovery-outcome-action/repositories/prismaRecoveryOutcomeActionReadinessAtomicStore';
 import { PrismaRecoveryOutcomeActionPreparationAtomicStore } from '../domains/assessment/recovery-outcome-action/repositories/prismaRecoveryOutcomeActionPreparationAtomicStore';
@@ -44,19 +40,18 @@ import { PrismaRecoveryOutcomeActionPreparationAtomicStore } from '../domains/as
 const router = Router();
 
 // ─── Repository Instances ────────────────────────────────────────────
-const auditRepo = new InMemoryRecoveryOutcomeActionAuditRepository();
-const idempotencyRepo = new InMemoryRecoveryOutcomeActionIdempotencyRepository();
+// R8-G.3B-B: ALL Package-20 resource families, plus Package-20 audit and
+// idempotency, are Prisma-backed in production. No in-memory Package-20
+// repository is constructed here.
 const safety = new RecoveryOutcomeActionSafetyService();
-const audit = new RecoveryOutcomeActionAuditBridge(auditRepo);
-const idempotency = new RecoveryOutcomeActionIdempotencyService(idempotencyRepo);
 
 /**
  * R8-G.2 production composition for the Action Readiness lifecycle.
  *
  * Readiness + its audit/idempotency chain are Prisma-durable and mutate
- * atomically via PrismaRecoveryOutcomeActionReadinessAtomicStore. All other
- * Package-20 families intentionally keep their existing in-memory
- * composition until their canonical repositories are productionized later.
+ * atomically via PrismaRecoveryOutcomeActionReadinessAtomicStore. All
+ * Package-20 families are Prisma-backed (G.3B-A five families + G.3B-B six
+ * special families via the shared preparation atomic store).
  */
 export function createProductionReadinessService(client: PrismaClient): RecoveryOutcomeActionReadinessService {
   const readinessRepo = new PrismaRecoveryOutcomeActionReadinessRepository(client);
@@ -77,13 +72,6 @@ export function createProductionReadinessService(client: PrismaClient): Recovery
 
 const productionReadinessService = createProductionReadinessService(prisma);
 
-const approvalGateRepo = new InMemoryRecoveryOutcomeApprovalGateRepository();
-const mockQueueRepo = new InMemoryRecoveryOutcomeMockActivationQueueRepository();
-const dryRunRepo = new InMemoryRecoveryOutcomeDryRunReceiptRepository();
-const rollbackRepo = new InMemoryRecoveryOutcomeRollbackPlanRepository();
-const suppressionRepo = new InMemoryRecoveryOutcomeSuppressionRuleRepository();
-const summaryRepo = new InMemoryRecoveryOutcomeActionSummaryRepository();
-
 const readinessService = productionReadinessService;
 
 /**
@@ -91,8 +79,7 @@ const readinessService = productionReadinessService;
  *
  * Bundle + four draft families are Prisma-durable with Prisma audit and
  * Prisma idempotency, mutating atomically through the shared
- * PrismaRecoveryOutcomeActionPreparationAtomicStore. The six R8-G.3B-B
- * families intentionally remain in-memory until their slice.
+ * PrismaRecoveryOutcomeActionPreparationAtomicStore.
  */
 function createProductionBundleService(client: PrismaClient): RecoveryOutcomeActionBundleService {
   const bundlePrismaRepo = new PrismaRecoveryOutcomeActionBundleRepository(client);
@@ -132,17 +119,48 @@ function createProductionDraftService<TRepo, TService>(
   );
 }
 
+/**
+ * R8-G.3B-B production composition for the six special Package-20 families.
+ *
+ * Each family is wired Prisma resource + Prisma audit + Prisma idempotency
+ * and mutates atomically through the shared
+ * PrismaRecoveryOutcomeActionPreparationAtomicStore.
+ */
+function createProductionSpecialService<TRepo, TService>(
+  client: PrismaClient,
+  repoClass: new (c: PrismaClient) => TRepo,
+  serviceClass: new (
+    repo: TRepo,
+    safety: RecoveryOutcomeActionSafetyService,
+    audit: RecoveryOutcomeActionAuditBridge,
+    idempotency: RecoveryOutcomeActionIdempotencyService,
+    atomicStore: PrismaRecoveryOutcomeActionPreparationAtomicStore,
+  ) => TService,
+): TService {
+  const specialRepo = new repoClass(client);
+  const specialAuditRepo = new PrismaRecoveryOutcomeActionAuditRepository(client);
+  const specialIdempotencyRepo = new PrismaRecoveryOutcomeActionIdempotencyRepository(client);
+  const specialAtomicStore = new PrismaRecoveryOutcomeActionPreparationAtomicStore(client);
+  return new serviceClass(
+    specialRepo,
+    safety,
+    new RecoveryOutcomeActionAuditBridge(specialAuditRepo),
+    new RecoveryOutcomeActionIdempotencyService(specialIdempotencyRepo),
+    specialAtomicStore,
+  );
+}
+
 const bundleService = createProductionBundleService(prisma);
 const continuationDraftService = createProductionDraftService(prisma, PrismaRecoveryContinuationActionDraftRepository, RecoveryContinuationActionDraftService);
 const intensificationDraftService = createProductionDraftService(prisma, PrismaRecoveryIntensificationActionDraftRepository, RecoveryIntensificationActionDraftService);
 const pauseDraftService = createProductionDraftService(prisma, PrismaRecoveryPauseActionDraftRepository, RecoveryPauseActionDraftService);
 const closureDraftService = createProductionDraftService(prisma, PrismaRecoveryClosureActionDraftRepository, RecoveryClosureActionDraftService);
-const approvalGateService = new RecoveryOutcomeApprovalGateService(approvalGateRepo, safety, audit, idempotency);
-const mockQueueService = new RecoveryOutcomeMockActivationQueueService(mockQueueRepo, safety, audit, idempotency);
-const dryRunService = new RecoveryOutcomeDryRunReceiptService(dryRunRepo, safety, audit, idempotency);
-const rollbackService = new RecoveryOutcomeRollbackPlanService(rollbackRepo, safety, audit, idempotency);
-const suppressionService = new RecoveryOutcomeSuppressionRuleService(suppressionRepo, safety, audit, idempotency);
-const summaryService = new RecoveryOutcomeActionSummaryService(summaryRepo, safety, audit, idempotency);
+const approvalGateService = createProductionSpecialService(prisma, PrismaRecoveryOutcomeApprovalGateRepository, RecoveryOutcomeApprovalGateService);
+const mockQueueService = createProductionSpecialService(prisma, PrismaRecoveryOutcomeMockActivationQueueRepository, RecoveryOutcomeMockActivationQueueService);
+const dryRunService = createProductionSpecialService(prisma, PrismaRecoveryOutcomeDryRunReceiptRepository, RecoveryOutcomeDryRunReceiptService);
+const rollbackService = createProductionSpecialService(prisma, PrismaRecoveryOutcomeRollbackPlanRepository, RecoveryOutcomeRollbackPlanService);
+const suppressionService = createProductionSpecialService(prisma, PrismaRecoveryOutcomeSuppressionRuleRepository, RecoveryOutcomeSuppressionRuleService);
+const summaryService = createProductionSpecialService(prisma, PrismaRecoveryOutcomeActionSummaryRepository, RecoveryOutcomeActionSummaryService);
 
 function buildContext(req: Request): RecoveryOutcomeActionCommandContext {
   // R8-G.2: authoritative caller identity comes from verified server context
@@ -414,7 +432,7 @@ router.get('/approval-gates', async (req: Request, res: Response) => {
 });
 
 router.get('/approval-gates/:id', async (req: Request, res: Response) => {
-  sendResponse(res, await approvalGateService.getApprovalGate(req.params.id));
+  sendResponse(res, await approvalGateService.getApprovalGate(req.params.id, getVerifiedSchoolId(req)));
 });
 
 router.post('/approval-gates/:id/satisfied', async (req: Request, res: Response) => {
@@ -443,7 +461,7 @@ router.get('/mock-activation-queue', async (req: Request, res: Response) => {
 });
 
 router.get('/mock-activation-queue/:id', async (req: Request, res: Response) => {
-  sendResponse(res, await mockQueueService.getMockActivationQueueItem(req.params.id));
+  sendResponse(res, await mockQueueService.getMockActivationQueueItem(req.params.id, getVerifiedSchoolId(req)));
 });
 
 router.post('/mock-activation-queue/:id/dry-run-ready', async (req: Request, res: Response) => {
@@ -470,14 +488,14 @@ router.post('/dry-run-receipts', async (req: Request, res: Response) => {
 router.get('/dry-run-receipts', async (req: Request, res: Response) => {
   const schoolId = getVerifiedSchoolId(req);
   const { queueItemId, planId, result } = req.query;
-  if (queueItemId) { sendResponse(res, await dryRunService.listReceiptsForQueueItem(queueItemId as string)); return; }
+  if (queueItemId) { sendResponse(res, await dryRunService.listReceiptsForQueueItem(queueItemId as string, schoolId)); return; }
   if (planId) { sendResponse(res, await dryRunService.listReceiptsForPlan(schoolId, planId as string)); return; }
   if (result) { sendResponse(res, await dryRunService.listReceiptsByResult(schoolId, result as any)); return; }
   sendResponse(res, { success: false, status: 'error', message: 'Provide queueItemId, planId, or result query' });
 });
 
 router.get('/dry-run-receipts/:id', async (req: Request, res: Response) => {
-  sendResponse(res, await dryRunService.getDryRunReceipt(req.params.id));
+  sendResponse(res, await dryRunService.getDryRunReceipt(req.params.id, getVerifiedSchoolId(req)));
 });
 
 router.post('/dry-run-receipts/:id/void', async (req: Request, res: Response) => {
@@ -498,7 +516,7 @@ router.get('/rollback-plans', async (req: Request, res: Response) => {
 });
 
 router.get('/rollback-plans/:id', async (req: Request, res: Response) => {
-  sendResponse(res, await rollbackService.getRollbackPlan(req.params.id));
+  sendResponse(res, await rollbackService.getRollbackPlan(req.params.id, getVerifiedSchoolId(req)));
 });
 
 router.post('/rollback-plans/:id/review-ready', async (req: Request, res: Response) => {
@@ -535,7 +553,7 @@ router.get('/suppression-rules', async (req: Request, res: Response) => {
 });
 
 router.get('/suppression-rules/:id', async (req: Request, res: Response) => {
-  sendResponse(res, await suppressionService.getSuppressionRule(req.params.id));
+  sendResponse(res, await suppressionService.getSuppressionRule(req.params.id, getVerifiedSchoolId(req)));
 });
 
 router.post('/suppression-rules/:id/activate', async (req: Request, res: Response) => {
@@ -568,7 +586,7 @@ router.get('/summaries', async (req: Request, res: Response) => {
 });
 
 router.get('/summaries/:id', async (req: Request, res: Response) => {
-  sendResponse(res, await summaryService.getActionSummary(req.params.id));
+  sendResponse(res, await summaryService.getActionSummary(req.params.id, getVerifiedSchoolId(req)));
 });
 
 router.post('/summaries/:id/refresh', async (req: Request, res: Response) => {

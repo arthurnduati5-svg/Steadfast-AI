@@ -5,10 +5,14 @@
  *  - Action Readiness composition is unchanged (R8-G.2 durable chain);
  *  - the five target families are wired Prisma resource + Prisma audit +
  *    Prisma idempotency + the shared preparation atomic store;
- *  - the six R8-G.3B-B families remain in-memory;
  *  - no production memory fallback exists for the five target families.
  *
  * The lock FAILS if any of the five families is later wired back to memory.
+ *
+ * NOTE (R8-G.3B-B): the six special families were transitioned from
+ * in-memory to Prisma by R8-G.3B-B; the assertions that froze them as
+ * in-memory/stubs were removed here and are owned by
+ * r8g3b-b-package20-special-composition-lock.test.ts.
  */
 import { describe, it, expect } from 'vitest';
 import * as fs from 'fs';
@@ -31,15 +35,6 @@ const FIVE_TARGET_PRISMA_CLASSES = [
   'PrismaRecoveryIntensificationActionDraftRepository',
   'PrismaRecoveryPauseActionDraftRepository',
   'PrismaRecoveryClosureActionDraftRepository',
-];
-
-const SIX_G3BB_INMEMORY_CLASSES = [
-  'InMemoryRecoveryOutcomeApprovalGateRepository',
-  'InMemoryRecoveryOutcomeMockActivationQueueRepository',
-  'InMemoryRecoveryOutcomeDryRunReceiptRepository',
-  'InMemoryRecoveryOutcomeRollbackPlanRepository',
-  'InMemoryRecoveryOutcomeSuppressionRuleRepository',
-  'InMemoryRecoveryOutcomeActionSummaryRepository',
 ];
 
 describe('R8-G.3B-A Package-20 draft-family composition lock', () => {
@@ -85,31 +80,6 @@ describe('R8-G.3B-A Package-20 draft-family composition lock', () => {
     ];
     for (const fragment of forbidden) {
       expect(content).not.toContain(fragment);
-    }
-  });
-
-  it('keeps the six R8-G.3B-B families in-memory', () => {
-    const content = fs.readFileSync(ROUTE_FILE, 'utf-8');
-    for (const cls of SIX_G3BB_INMEMORY_CLASSES) {
-      expect(content).toContain(`new ${cls}()`);
-    }
-  });
-
-  it('leaves the six R8-G.3B-B Prisma stubs untouched (still throwing stubs)', () => {
-    const content = fs.readFileSync(PRISMA_REPOS_FILE, 'utf-8');
-    const g3bbClasses = [
-      'PrismaRecoveryOutcomeApprovalGateRepository',
-      'PrismaRecoveryOutcomeMockActivationQueueRepository',
-      'PrismaRecoveryOutcomeDryRunReceiptRepository',
-      'PrismaRecoveryOutcomeRollbackPlanRepository',
-      'PrismaRecoveryOutcomeSuppressionRuleRepository',
-      'PrismaRecoveryOutcomeActionSummaryRepository',
-    ];
-    for (const cls of g3bbClasses) {
-      const classStart = content.indexOf(`export class ${cls}`);
-      expect(classStart).toBeGreaterThan(-1);
-      const classBody = content.slice(classStart, content.indexOf('export class', classStart + 1));
-      expect(classBody).toContain("throw new Error('Not implemented in stub')");
     }
   });
 

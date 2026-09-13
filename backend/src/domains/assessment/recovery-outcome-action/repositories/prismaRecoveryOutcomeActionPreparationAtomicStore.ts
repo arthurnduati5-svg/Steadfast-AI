@@ -24,11 +24,16 @@ export {
 };
 
 /**
- * R8-G.3B-A Package-20 preparation atomic store.
+ * R8-G.3B Package-20 preparation atomic store.
  *
  * One small production primitive (NOT a generic UnitOfWork): coordinates
  * { resource mutation, Package-20 audit event, Package-20 idempotency claim }
- * for the five target draft/bundle families inside ONE Prisma transaction.
+ * for ALL eleven Package-20 resource families inside ONE Prisma transaction.
+ *
+ * R8-G.3B-A added the five draft/bundle families; R8-G.3B-B extends the
+ * accepted type union and audit-ref mapping with the six special families
+ * (approval gate, mock activation queue, dry-run receipt, rollback plan,
+ * suppression rule, action summary). No new atomic infrastructure was added.
  *
  * Reuses the accepted R8-G.2 idempotency primitives (request hash, conflict
  * and in-progress errors) and the existing UNIQUE(schoolId, idempotencyKey)
@@ -40,7 +45,13 @@ export type Package20ResourceType =
   | 'RecoveryContinuationActionDraft'
   | 'RecoveryIntensificationActionDraft'
   | 'RecoveryPauseActionDraft'
-  | 'RecoveryClosureActionDraft';
+  | 'RecoveryClosureActionDraft'
+  | 'RecoveryOutcomeApprovalGate'
+  | 'RecoveryOutcomeMockActivationQueueItem'
+  | 'RecoveryOutcomeDryRunReceipt'
+  | 'RecoveryOutcomeRollbackPlan'
+  | 'RecoveryOutcomeSuppressionRule'
+  | 'RecoveryOutcomeActionSummary';
 
 export interface Package20PreparationAuditInput {
   eventType: string;
@@ -99,6 +110,12 @@ function toAuditEvent(
     ...(refs?.intensificationActionDraftId ? { intensificationActionDraftId: refs.intensificationActionDraftId } : {}),
     ...(refs?.pauseActionDraftId ? { pauseActionDraftId: refs.pauseActionDraftId } : {}),
     ...(refs?.closureActionDraftId ? { closureActionDraftId: refs.closureActionDraftId } : {}),
+    ...(refs?.approvalGateId ? { approvalGateId: refs.approvalGateId } : {}),
+    ...(refs?.mockActivationQueueItemId ? { mockActivationQueueItemId: refs.mockActivationQueueItemId } : {}),
+    ...(refs?.dryRunReceiptId ? { dryRunReceiptId: refs.dryRunReceiptId } : {}),
+    ...(refs?.rollbackPlanId ? { rollbackPlanId: refs.rollbackPlanId } : {}),
+    ...(refs?.suppressionRuleId ? { suppressionRuleId: refs.suppressionRuleId } : {}),
+    ...(refs?.actionSummaryId ? { actionSummaryId: refs.actionSummaryId } : {}),
     createdAt: new Date(),
   };
 }
@@ -235,5 +252,17 @@ function auditRefFieldFor(resourceType: Package20ResourceType): string {
       return 'pauseActionDraftId';
     case 'RecoveryClosureActionDraft':
       return 'closureActionDraftId';
+    case 'RecoveryOutcomeApprovalGate':
+      return 'approvalGateId';
+    case 'RecoveryOutcomeMockActivationQueueItem':
+      return 'mockActivationQueueItemId';
+    case 'RecoveryOutcomeDryRunReceipt':
+      return 'dryRunReceiptId';
+    case 'RecoveryOutcomeRollbackPlan':
+      return 'rollbackPlanId';
+    case 'RecoveryOutcomeSuppressionRule':
+      return 'suppressionRuleId';
+    case 'RecoveryOutcomeActionSummary':
+      return 'actionSummaryId';
   }
 }
