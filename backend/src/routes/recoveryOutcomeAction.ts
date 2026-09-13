@@ -15,11 +15,6 @@ import { RecoveryOutcomeRollbackPlanService } from '../domains/assessment/recove
 import { RecoveryOutcomeSuppressionRuleService } from '../domains/assessment/recovery-outcome-action/services/recoveryOutcomeSuppressionRuleService';
 import { RecoveryOutcomeActionSummaryService } from '../domains/assessment/recovery-outcome-action/services/recoveryOutcomeActionSummaryService';
 import {
-  InMemoryRecoveryOutcomeActionBundleRepository,
-  InMemoryRecoveryContinuationActionDraftRepository,
-  InMemoryRecoveryIntensificationActionDraftRepository,
-  InMemoryRecoveryPauseActionDraftRepository,
-  InMemoryRecoveryClosureActionDraftRepository,
   InMemoryRecoveryOutcomeApprovalGateRepository,
   InMemoryRecoveryOutcomeMockActivationQueueRepository,
   InMemoryRecoveryOutcomeDryRunReceiptRepository,
@@ -37,8 +32,14 @@ import {
   PrismaRecoveryOutcomeActionAuditRepository,
   PrismaRecoveryOutcomeActionIdempotencyRepository,
   PrismaRecoveryOutcomeActionReadinessRepository,
+  PrismaRecoveryOutcomeActionBundleRepository,
+  PrismaRecoveryContinuationActionDraftRepository,
+  PrismaRecoveryIntensificationActionDraftRepository,
+  PrismaRecoveryPauseActionDraftRepository,
+  PrismaRecoveryClosureActionDraftRepository,
 } from '../domains/assessment/recovery-outcome-action/repositories/prismaRecoveryOutcomeActionRepositories';
 import { PrismaRecoveryOutcomeActionReadinessAtomicStore } from '../domains/assessment/recovery-outcome-action/repositories/prismaRecoveryOutcomeActionReadinessAtomicStore';
+import { PrismaRecoveryOutcomeActionPreparationAtomicStore } from '../domains/assessment/recovery-outcome-action/repositories/prismaRecoveryOutcomeActionPreparationAtomicStore';
 
 const router = Router();
 
@@ -76,11 +77,6 @@ export function createProductionReadinessService(client: PrismaClient): Recovery
 
 const productionReadinessService = createProductionReadinessService(prisma);
 
-const bundleRepo = new InMemoryRecoveryOutcomeActionBundleRepository();
-const continuationDraftRepo = new InMemoryRecoveryContinuationActionDraftRepository();
-const intensificationDraftRepo = new InMemoryRecoveryIntensificationActionDraftRepository();
-const pauseDraftRepo = new InMemoryRecoveryPauseActionDraftRepository();
-const closureDraftRepo = new InMemoryRecoveryClosureActionDraftRepository();
 const approvalGateRepo = new InMemoryRecoveryOutcomeApprovalGateRepository();
 const mockQueueRepo = new InMemoryRecoveryOutcomeMockActivationQueueRepository();
 const dryRunRepo = new InMemoryRecoveryOutcomeDryRunReceiptRepository();
@@ -89,11 +85,58 @@ const suppressionRepo = new InMemoryRecoveryOutcomeSuppressionRuleRepository();
 const summaryRepo = new InMemoryRecoveryOutcomeActionSummaryRepository();
 
 const readinessService = productionReadinessService;
-const bundleService = new RecoveryOutcomeActionBundleService(bundleRepo, safety, audit, idempotency);
-const continuationDraftService = new RecoveryContinuationActionDraftService(continuationDraftRepo, safety, audit, idempotency);
-const intensificationDraftService = new RecoveryIntensificationActionDraftService(intensificationDraftRepo, safety, audit, idempotency);
-const pauseDraftService = new RecoveryPauseActionDraftService(pauseDraftRepo, safety, audit, idempotency);
-const closureDraftService = new RecoveryClosureActionDraftService(closureDraftRepo, safety, audit, idempotency);
+
+/**
+ * R8-G.3B-A production composition for the five Package-20 target families.
+ *
+ * Bundle + four draft families are Prisma-durable with Prisma audit and
+ * Prisma idempotency, mutating atomically through the shared
+ * PrismaRecoveryOutcomeActionPreparationAtomicStore. The six R8-G.3B-B
+ * families intentionally remain in-memory until their slice.
+ */
+function createProductionBundleService(client: PrismaClient): RecoveryOutcomeActionBundleService {
+  const bundlePrismaRepo = new PrismaRecoveryOutcomeActionBundleRepository(client);
+  const bundleAuditRepo = new PrismaRecoveryOutcomeActionAuditRepository(client);
+  const bundleIdempotencyRepo = new PrismaRecoveryOutcomeActionIdempotencyRepository(client);
+  const bundleAtomicStore = new PrismaRecoveryOutcomeActionPreparationAtomicStore(client);
+  return new RecoveryOutcomeActionBundleService(
+    bundlePrismaRepo,
+    safety,
+    new RecoveryOutcomeActionAuditBridge(bundleAuditRepo),
+    new RecoveryOutcomeActionIdempotencyService(bundleIdempotencyRepo),
+    bundleAtomicStore,
+  );
+}
+
+function createProductionDraftService<TRepo, TService>(
+  client: PrismaClient,
+  repoClass: new (c: PrismaClient) => TRepo,
+  serviceClass: new (
+    repo: TRepo,
+    safety: RecoveryOutcomeActionSafetyService,
+    audit: RecoveryOutcomeActionAuditBridge,
+    idempotency: RecoveryOutcomeActionIdempotencyService,
+    atomicStore: PrismaRecoveryOutcomeActionPreparationAtomicStore,
+  ) => TService,
+): TService {
+  const draftPrismaRepo = new repoClass(client);
+  const draftAuditRepo = new PrismaRecoveryOutcomeActionAuditRepository(client);
+  const draftIdempotencyRepo = new PrismaRecoveryOutcomeActionIdempotencyRepository(client);
+  const draftAtomicStore = new PrismaRecoveryOutcomeActionPreparationAtomicStore(client);
+  return new serviceClass(
+    draftPrismaRepo,
+    safety,
+    new RecoveryOutcomeActionAuditBridge(draftAuditRepo),
+    new RecoveryOutcomeActionIdempotencyService(draftIdempotencyRepo),
+    draftAtomicStore,
+  );
+}
+
+const bundleService = createProductionBundleService(prisma);
+const continuationDraftService = createProductionDraftService(prisma, PrismaRecoveryContinuationActionDraftRepository, RecoveryContinuationActionDraftService);
+const intensificationDraftService = createProductionDraftService(prisma, PrismaRecoveryIntensificationActionDraftRepository, RecoveryIntensificationActionDraftService);
+const pauseDraftService = createProductionDraftService(prisma, PrismaRecoveryPauseActionDraftRepository, RecoveryPauseActionDraftService);
+const closureDraftService = createProductionDraftService(prisma, PrismaRecoveryClosureActionDraftRepository, RecoveryClosureActionDraftService);
 const approvalGateService = new RecoveryOutcomeApprovalGateService(approvalGateRepo, safety, audit, idempotency);
 const mockQueueService = new RecoveryOutcomeMockActivationQueueService(mockQueueRepo, safety, audit, idempotency);
 const dryRunService = new RecoveryOutcomeDryRunReceiptService(dryRunRepo, safety, audit, idempotency);
@@ -183,7 +226,7 @@ router.get('/action-bundles', async (req: Request, res: Response) => {
 });
 
 router.get('/action-bundles/:id', async (req: Request, res: Response) => {
-  sendResponse(res, await bundleService.getActionBundle(req.params.id));
+  sendResponse(res, await bundleService.getActionBundle(req.params.id, getVerifiedSchoolId(req)));
 });
 
 router.post('/action-bundles/:id/review-ready', async (req: Request, res: Response) => {
@@ -221,7 +264,7 @@ router.get('/continuation-action-drafts', async (req: Request, res: Response) =>
 });
 
 router.get('/continuation-action-drafts/:id', async (req: Request, res: Response) => {
-  sendResponse(res, await continuationDraftService.getActionDraft(req.params.id));
+  sendResponse(res, await continuationDraftService.getActionDraft(req.params.id, getVerifiedSchoolId(req)));
 });
 
 router.post('/continuation-action-drafts/:id/review-ready', async (req: Request, res: Response) => {
@@ -258,7 +301,7 @@ router.get('/intensification-action-drafts', async (req: Request, res: Response)
 });
 
 router.get('/intensification-action-drafts/:id', async (req: Request, res: Response) => {
-  sendResponse(res, await intensificationDraftService.getActionDraft(req.params.id));
+  sendResponse(res, await intensificationDraftService.getActionDraft(req.params.id, getVerifiedSchoolId(req)));
 });
 
 router.post('/intensification-action-drafts/:id/review-ready', async (req: Request, res: Response) => {
@@ -295,7 +338,7 @@ router.get('/pause-action-drafts', async (req: Request, res: Response) => {
 });
 
 router.get('/pause-action-drafts/:id', async (req: Request, res: Response) => {
-  sendResponse(res, await pauseDraftService.getActionDraft(req.params.id));
+  sendResponse(res, await pauseDraftService.getActionDraft(req.params.id, getVerifiedSchoolId(req)));
 });
 
 router.post('/pause-action-drafts/:id/review-ready', async (req: Request, res: Response) => {
@@ -333,7 +376,7 @@ router.get('/closure-action-drafts', async (req: Request, res: Response) => {
 });
 
 router.get('/closure-action-drafts/:id', async (req: Request, res: Response) => {
-  sendResponse(res, await closureDraftService.getActionDraft(req.params.id));
+  sendResponse(res, await closureDraftService.getActionDraft(req.params.id, getVerifiedSchoolId(req)));
 });
 
 router.post('/closure-action-drafts/:id/review-ready', async (req: Request, res: Response) => {

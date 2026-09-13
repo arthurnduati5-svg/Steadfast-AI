@@ -115,7 +115,7 @@ describe('Package 20 - Action Drafts Safety', () => {
     const cont = new RecoveryContinuationActionDraftService(
       new InMemoryRecoveryContinuationActionDraftRepository(), safety, audit, idempotency);
     const contResult = await cont.createContinuationActionDraft({ ...ctx, idempotencyKey: 'ik-cont' }, {
-      schoolId: 's-1', studentRef: 'st-1', resultRecoveryPlanId: 'p-1',
+      schoolId: 'school-1', studentRef: 'st-1', resultRecoveryPlanId: 'p-1',
       recoveryContinuationDecisionDraftId: 'd-1', safeActionSummary: 'Test', actionDetailsJson: {},
       createdByActorId: 'a-1', createdByRole: 'teacher',
     });
@@ -124,7 +124,7 @@ describe('Package 20 - Action Drafts Safety', () => {
     const intens = new RecoveryIntensificationActionDraftService(
       new InMemoryRecoveryIntensificationActionDraftRepository(), safety, audit, idempotency);
     const intResult = await intens.createIntensificationActionDraft({ ...ctx, idempotencyKey: 'ik-int' }, {
-      schoolId: 's-1', studentRef: 'st-1', resultRecoveryPlanId: 'p-1',
+      schoolId: 'school-1', studentRef: 'st-1', resultRecoveryPlanId: 'p-1',
       recoveryIntensificationDecisionDraftId: 'd-1', safeActionSummary: 'Test', intensificationDetailsJson: {},
       createdByActorId: 'a-1', createdByRole: 'teacher',
     });
@@ -133,7 +133,7 @@ describe('Package 20 - Action Drafts Safety', () => {
     const pause = new RecoveryPauseActionDraftService(
       new InMemoryRecoveryPauseActionDraftRepository(), safety, audit, idempotency);
     const pauseResult = await pause.createPauseActionDraft({ ...ctx, idempotencyKey: 'ik-pause' }, {
-      schoolId: 's-1', studentRef: 'st-1', resultRecoveryPlanId: 'p-1',
+      schoolId: 'school-1', studentRef: 'st-1', resultRecoveryPlanId: 'p-1',
       recoveryPauseDecisionDraftId: 'd-1', safeActionSummary: 'Test', pauseDetailsJson: {},
       createdByActorId: 'a-1', createdByRole: 'teacher',
     });
@@ -142,7 +142,7 @@ describe('Package 20 - Action Drafts Safety', () => {
     const closure = new RecoveryClosureActionDraftService(
       new InMemoryRecoveryClosureActionDraftRepository(), safety, audit, idempotency);
     const closeResult = await closure.createClosureActionDraft({ ...ctx, idempotencyKey: 'ik-closure' }, {
-      schoolId: 's-1', studentRef: 'st-1', resultRecoveryPlanId: 'p-1',
+      schoolId: 'school-1', studentRef: 'st-1', resultRecoveryPlanId: 'p-1',
       recoveryClosureDecisionDraftId: 'd-1', safeActionSummary: 'Test', closureDetailsJson: {}, closureType: 'graduation',
       createdByActorId: 'a-1', createdByRole: 'teacher',
     });

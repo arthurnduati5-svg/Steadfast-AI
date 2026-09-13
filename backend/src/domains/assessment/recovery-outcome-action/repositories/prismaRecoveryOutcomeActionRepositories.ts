@@ -112,86 +112,221 @@ export class PrismaRecoveryOutcomeActionReadinessRepository implements RecoveryO
   }
 }
 
-// Additional Prisma repository classes follow the same pattern
-// For brevity, stubs are provided for the remaining 13 repositories
-// Full implementations would mirror the in-memory pattern with Prisma client calls
+// R8-G.3B-A: the five Package-20 target families below are productionized
+// against the canonical Prisma models. The remaining six repositories are
+// intentionally left as stubs owned by R8-G.3B-B.
+
+function passthroughJson(value: unknown): unknown {
+  return value;
+}
+
+/**
+ * Shared lifecycle helpers for the five target family repositories.
+ * Json columns are stored/returned as native Prisma Json (no stringify),
+ * status vocabulary and timestamp fields mirror the in-memory oracle.
+ */
+function familyTimestampPatch(data: Record<string, unknown>): Record<string, unknown> {
+  const patch: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(data)) patch[k] = passthroughJson(v);
+  return patch;
+}
 
 export class PrismaRecoveryOutcomeActionBundleRepository implements RecoveryOutcomeActionBundleRepository {
   constructor(private prisma: PrismaClient) {}
-  async create(data: RecoveryOutcomeActionBundle): Promise<RecoveryOutcomeActionBundle> { throw new Error('Not implemented in stub'); }
-  async getById(id: string): Promise<RecoveryOutcomeActionBundle | null> { throw new Error('Not implemented in stub'); }
-  async listBySchool(schoolId: string): Promise<RecoveryOutcomeActionBundle[]> { throw new Error('Not implemented in stub'); }
-  async listByStudentRef(schoolId: string, studentRef: string): Promise<RecoveryOutcomeActionBundle[]> { throw new Error('Not implemented in stub'); }
-  async listByPlanId(schoolId: string, planId: string): Promise<RecoveryOutcomeActionBundle[]> { throw new Error('Not implemented in stub'); }
-  async listByStatus(schoolId: string, status: ActionBundleStatus): Promise<RecoveryOutcomeActionBundle[]> { throw new Error('Not implemented in stub'); }
-  async listByType(schoolId: string, bundleType: ActionBundleType): Promise<RecoveryOutcomeActionBundle[]> { throw new Error('Not implemented in stub'); }
-  async update(id: string, data: Partial<RecoveryOutcomeActionBundle>): Promise<RecoveryOutcomeActionBundle> { throw new Error('Not implemented in stub'); }
-  async markReviewReady(id: string): Promise<RecoveryOutcomeActionBundle> { throw new Error('Not implemented in stub'); }
-  async approveForFutureUse(id: string): Promise<RecoveryOutcomeActionBundle> { throw new Error('Not implemented in stub'); }
-  async suppress(id: string): Promise<RecoveryOutcomeActionBundle> { throw new Error('Not implemented in stub'); }
-  async block(id: string): Promise<RecoveryOutcomeActionBundle> { throw new Error('Not implemented in stub'); }
-  async void(id: string): Promise<RecoveryOutcomeActionBundle> { throw new Error('Not implemented in stub'); }
+
+  private fromPrisma(row: Record<string, any>): RecoveryOutcomeActionBundle {
+    return { ...row } as RecoveryOutcomeActionBundle;
+  }
+
+  async create(data: RecoveryOutcomeActionBundle): Promise<RecoveryOutcomeActionBundle> {
+    const created = await this.prisma.recoveryOutcomeActionBundleRecord.create({ data: { ...data } as any });
+    return this.fromPrisma(created as unknown as Record<string, any>);
+  }
+
+  async getById(id: string): Promise<RecoveryOutcomeActionBundle | null> {
+    const found = await this.prisma.recoveryOutcomeActionBundleRecord.findUnique({ where: { actionBundleId: id } });
+    return found ? this.fromPrisma(found as unknown as Record<string, any>) : null;
+  }
+
+  async listBySchool(schoolId: string): Promise<RecoveryOutcomeActionBundle[]> {
+    const rows = await this.prisma.recoveryOutcomeActionBundleRecord.findMany({ where: { schoolId } });
+    return rows.map(r => this.fromPrisma(r as unknown as Record<string, any>));
+  }
+
+  async listByStudentRef(schoolId: string, studentRef: string): Promise<RecoveryOutcomeActionBundle[]> {
+    const rows = await this.prisma.recoveryOutcomeActionBundleRecord.findMany({ where: { schoolId, studentRef } });
+    return rows.map(r => this.fromPrisma(r as unknown as Record<string, any>));
+  }
+
+  async listByPlanId(schoolId: string, planId: string): Promise<RecoveryOutcomeActionBundle[]> {
+    const rows = await this.prisma.recoveryOutcomeActionBundleRecord.findMany({ where: { schoolId, resultRecoveryPlanId: planId } });
+    return rows.map(r => this.fromPrisma(r as unknown as Record<string, any>));
+  }
+
+  async listByStatus(schoolId: string, status: ActionBundleStatus): Promise<RecoveryOutcomeActionBundle[]> {
+    const rows = await this.prisma.recoveryOutcomeActionBundleRecord.findMany({ where: { schoolId, bundleStatus: status } });
+    return rows.map(r => this.fromPrisma(r as unknown as Record<string, any>));
+  }
+
+  async listByType(schoolId: string, bundleType: ActionBundleType): Promise<RecoveryOutcomeActionBundle[]> {
+    const rows = await this.prisma.recoveryOutcomeActionBundleRecord.findMany({ where: { schoolId, bundleType } });
+    return rows.map(r => this.fromPrisma(r as unknown as Record<string, any>));
+  }
+
+  async update(id: string, data: Partial<RecoveryOutcomeActionBundle>): Promise<RecoveryOutcomeActionBundle> {
+    const { actionBundleId: _ignored, ...rest } = data as Record<string, any>;
+    void _ignored;
+    const updated = await this.prisma.recoveryOutcomeActionBundleRecord.update({
+      where: { actionBundleId: id },
+      data: { ...familyTimestampPatch(rest), updatedAt: new Date() } as any,
+    });
+    return this.fromPrisma(updated as unknown as Record<string, any>);
+  }
+
+  async markReviewReady(id: string): Promise<RecoveryOutcomeActionBundle> {
+    return this.update(id, { bundleStatus: 'review_ready', reviewReadyAt: new Date() } as any);
+  }
+  async approveForFutureUse(id: string): Promise<RecoveryOutcomeActionBundle> {
+    return this.update(id, { bundleStatus: 'approved_for_future_use', approvedForFutureUseAt: new Date() } as any);
+  }
+  async suppress(id: string): Promise<RecoveryOutcomeActionBundle> {
+    return this.update(id, { bundleStatus: 'suppressed', suppressedAt: new Date() } as any);
+  }
+  async block(id: string): Promise<RecoveryOutcomeActionBundle> {
+    return this.update(id, { bundleStatus: 'blocked', blockedAt: new Date() } as any);
+  }
+  async void(id: string): Promise<RecoveryOutcomeActionBundle> {
+    return this.update(id, { bundleStatus: 'voided', voidedAt: new Date() } as any);
+  }
+}
+
+const DRAFT_TRANSITION_FIELDS = {
+  review_ready: { field: 'draftStatus', ts: 'reviewReadyAt' },
+  approved_for_future_use: { field: 'draftStatus', ts: 'approvedForFutureUseAt' },
+  suppressed: { field: 'draftStatus', ts: 'suppressedAt' },
+  blocked: { field: 'draftStatus', ts: 'blockedAt' },
+  voided: { field: 'draftStatus', ts: 'voidedAt' },
+} as const;
+
+type DraftTransitionStatus = keyof typeof DRAFT_TRANSITION_FIELDS;
+
+class PrismaDraftFamilyDelegate {
+  constructor(
+    private prisma: PrismaClient,
+    private model: 'recoveryContinuationActionDraftRecord' | 'recoveryIntensificationActionDraftRecord' | 'recoveryPauseActionDraftRecord' | 'recoveryClosureActionDraftRecord',
+    private idField: string,
+  ) {}
+
+  private delegate(): any {
+    return (this.prisma as any)[this.model];
+  }
+
+  private fromPrisma(row: Record<string, any>): any {
+    return { ...row };
+  }
+
+  async create(data: any): Promise<any> {
+    const created = await this.delegate().create({ data: { ...data } });
+    return this.fromPrisma(created);
+  }
+
+  async getById(id: string): Promise<any | null> {
+    const found = await this.delegate().findUnique({ where: { [this.idField]: id } });
+    return found ? this.fromPrisma(found) : null;
+  }
+
+  async listWhere(where: Record<string, unknown>): Promise<any[]> {
+    const rows = await this.delegate().findMany({ where });
+    return rows.map((r: Record<string, any>) => this.fromPrisma(r));
+  }
+
+  async update(id: string, data: Record<string, unknown>): Promise<any> {
+    const { [this.idField]: _ignored, ...rest } = data;
+    void _ignored;
+    const updated = await this.delegate().update({
+      where: { [this.idField]: id },
+      data: { ...familyTimestampPatch(rest), updatedAt: new Date() },
+    });
+    return this.fromPrisma(updated);
+  }
+
+  async transition(id: string, status: DraftTransitionStatus): Promise<any> {
+    const spec = DRAFT_TRANSITION_FIELDS[status];
+    return this.update(id, { [spec.field]: status, [spec.ts]: new Date() });
+  }
 }
 
 export class PrismaRecoveryContinuationActionDraftRepository implements RecoveryContinuationActionDraftRepository {
-  constructor(private prisma: PrismaClient) {}
-  async create(data: RecoveryContinuationActionDraft): Promise<RecoveryContinuationActionDraft> { throw new Error('Not implemented in stub'); }
-  async getById(id: string): Promise<RecoveryContinuationActionDraft | null> { throw new Error('Not implemented in stub'); }
-  async listByPlanId(schoolId: string, planId: string): Promise<RecoveryContinuationActionDraft[]> { throw new Error('Not implemented in stub'); }
-  async listByStudentRef(schoolId: string, studentRef: string): Promise<RecoveryContinuationActionDraft[]> { throw new Error('Not implemented in stub'); }
-  async listByStatus(schoolId: string, status: any): Promise<RecoveryContinuationActionDraft[]> { throw new Error('Not implemented in stub'); }
-  async update(id: string, data: Partial<RecoveryContinuationActionDraft>): Promise<RecoveryContinuationActionDraft> { throw new Error('Not implemented in stub'); }
-  async markReviewReady(id: string): Promise<RecoveryContinuationActionDraft> { throw new Error('Not implemented in stub'); }
-  async approveForFutureUse(id: string): Promise<RecoveryContinuationActionDraft> { throw new Error('Not implemented in stub'); }
-  async suppress(id: string): Promise<RecoveryContinuationActionDraft> { throw new Error('Not implemented in stub'); }
-  async block(id: string): Promise<RecoveryContinuationActionDraft> { throw new Error('Not implemented in stub'); }
-  async void(id: string): Promise<RecoveryContinuationActionDraft> { throw new Error('Not implemented in stub'); }
+  private d: PrismaDraftFamilyDelegate;
+  constructor(prisma: PrismaClient) {
+    this.d = new PrismaDraftFamilyDelegate(prisma, 'recoveryContinuationActionDraftRecord', 'continuationActionDraftId');
+  }
+  async create(data: RecoveryContinuationActionDraft): Promise<RecoveryContinuationActionDraft> { return this.d.create(data); }
+  async getById(id: string): Promise<RecoveryContinuationActionDraft | null> { return this.d.getById(id); }
+  async listByPlanId(schoolId: string, planId: string): Promise<RecoveryContinuationActionDraft[]> { return this.d.listWhere({ schoolId, resultRecoveryPlanId: planId }); }
+  async listByStudentRef(schoolId: string, studentRef: string): Promise<RecoveryContinuationActionDraft[]> { return this.d.listWhere({ schoolId, studentRef }); }
+  async listByStatus(schoolId: string, status: any): Promise<RecoveryContinuationActionDraft[]> { return this.d.listWhere({ schoolId, draftStatus: status }); }
+  async update(id: string, data: Partial<RecoveryContinuationActionDraft>): Promise<RecoveryContinuationActionDraft> { return this.d.update(id, data as Record<string, unknown>); }
+  async markReviewReady(id: string): Promise<RecoveryContinuationActionDraft> { return this.d.transition(id, 'review_ready'); }
+  async approveForFutureUse(id: string): Promise<RecoveryContinuationActionDraft> { return this.d.transition(id, 'approved_for_future_use'); }
+  async suppress(id: string): Promise<RecoveryContinuationActionDraft> { return this.d.transition(id, 'suppressed'); }
+  async block(id: string): Promise<RecoveryContinuationActionDraft> { return this.d.transition(id, 'blocked'); }
+  async void(id: string): Promise<RecoveryContinuationActionDraft> { return this.d.transition(id, 'voided'); }
 }
 
 export class PrismaRecoveryIntensificationActionDraftRepository implements RecoveryIntensificationActionDraftRepository {
-  constructor(private prisma: PrismaClient) {}
-  async create(data: RecoveryIntensificationActionDraft): Promise<RecoveryIntensificationActionDraft> { throw new Error('Not implemented in stub'); }
-  async getById(id: string): Promise<RecoveryIntensificationActionDraft | null> { throw new Error('Not implemented in stub'); }
-  async listByPlanId(schoolId: string, planId: string): Promise<RecoveryIntensificationActionDraft[]> { throw new Error('Not implemented in stub'); }
-  async listByStudentRef(schoolId: string, studentRef: string): Promise<RecoveryIntensificationActionDraft[]> { throw new Error('Not implemented in stub'); }
-  async listByStatus(schoolId: string, status: any): Promise<RecoveryIntensificationActionDraft[]> { throw new Error('Not implemented in stub'); }
-  async update(id: string, data: Partial<RecoveryIntensificationActionDraft>): Promise<RecoveryIntensificationActionDraft> { throw new Error('Not implemented in stub'); }
-  async markReviewReady(id: string): Promise<RecoveryIntensificationActionDraft> { throw new Error('Not implemented in stub'); }
-  async approveForFutureUse(id: string): Promise<RecoveryIntensificationActionDraft> { throw new Error('Not implemented in stub'); }
-  async suppress(id: string): Promise<RecoveryIntensificationActionDraft> { throw new Error('Not implemented in stub'); }
-  async block(id: string): Promise<RecoveryIntensificationActionDraft> { throw new Error('Not implemented in stub'); }
-  async void(id: string): Promise<RecoveryIntensificationActionDraft> { throw new Error('Not implemented in stub'); }
+  private d: PrismaDraftFamilyDelegate;
+  constructor(prisma: PrismaClient) {
+    this.d = new PrismaDraftFamilyDelegate(prisma, 'recoveryIntensificationActionDraftRecord', 'intensificationActionDraftId');
+  }
+  async create(data: RecoveryIntensificationActionDraft): Promise<RecoveryIntensificationActionDraft> { return this.d.create(data); }
+  async getById(id: string): Promise<RecoveryIntensificationActionDraft | null> { return this.d.getById(id); }
+  async listByPlanId(schoolId: string, planId: string): Promise<RecoveryIntensificationActionDraft[]> { return this.d.listWhere({ schoolId, resultRecoveryPlanId: planId }); }
+  async listByStudentRef(schoolId: string, studentRef: string): Promise<RecoveryIntensificationActionDraft[]> { return this.d.listWhere({ schoolId, studentRef }); }
+  async listByStatus(schoolId: string, status: any): Promise<RecoveryIntensificationActionDraft[]> { return this.d.listWhere({ schoolId, draftStatus: status }); }
+  async update(id: string, data: Partial<RecoveryIntensificationActionDraft>): Promise<RecoveryIntensificationActionDraft> { return this.d.update(id, data as Record<string, unknown>); }
+  async markReviewReady(id: string): Promise<RecoveryIntensificationActionDraft> { return this.d.transition(id, 'review_ready'); }
+  async approveForFutureUse(id: string): Promise<RecoveryIntensificationActionDraft> { return this.d.transition(id, 'approved_for_future_use'); }
+  async suppress(id: string): Promise<RecoveryIntensificationActionDraft> { return this.d.transition(id, 'suppressed'); }
+  async block(id: string): Promise<RecoveryIntensificationActionDraft> { return this.d.transition(id, 'blocked'); }
+  async void(id: string): Promise<RecoveryIntensificationActionDraft> { return this.d.transition(id, 'voided'); }
 }
 
 export class PrismaRecoveryPauseActionDraftRepository implements RecoveryPauseActionDraftRepository {
-  constructor(private prisma: PrismaClient) {}
-  async create(data: RecoveryPauseActionDraft): Promise<RecoveryPauseActionDraft> { throw new Error('Not implemented in stub'); }
-  async getById(id: string): Promise<RecoveryPauseActionDraft | null> { throw new Error('Not implemented in stub'); }
-  async listByPlanId(schoolId: string, planId: string): Promise<RecoveryPauseActionDraft[]> { throw new Error('Not implemented in stub'); }
-  async listByStudentRef(schoolId: string, studentRef: string): Promise<RecoveryPauseActionDraft[]> { throw new Error('Not implemented in stub'); }
-  async listByStatus(schoolId: string, status: any): Promise<RecoveryPauseActionDraft[]> { throw new Error('Not implemented in stub'); }
-  async update(id: string, data: Partial<RecoveryPauseActionDraft>): Promise<RecoveryPauseActionDraft> { throw new Error('Not implemented in stub'); }
-  async markReviewReady(id: string): Promise<RecoveryPauseActionDraft> { throw new Error('Not implemented in stub'); }
-  async approveForFutureUse(id: string): Promise<RecoveryPauseActionDraft> { throw new Error('Not implemented in stub'); }
-  async suppress(id: string): Promise<RecoveryPauseActionDraft> { throw new Error('Not implemented in stub'); }
-  async block(id: string): Promise<RecoveryPauseActionDraft> { throw new Error('Not implemented in stub'); }
-  async void(id: string): Promise<RecoveryPauseActionDraft> { throw new Error('Not implemented in stub'); }
+  private d: PrismaDraftFamilyDelegate;
+  constructor(prisma: PrismaClient) {
+    this.d = new PrismaDraftFamilyDelegate(prisma, 'recoveryPauseActionDraftRecord', 'pauseActionDraftId');
+  }
+  async create(data: RecoveryPauseActionDraft): Promise<RecoveryPauseActionDraft> { return this.d.create(data); }
+  async getById(id: string): Promise<RecoveryPauseActionDraft | null> { return this.d.getById(id); }
+  async listByPlanId(schoolId: string, planId: string): Promise<RecoveryPauseActionDraft[]> { return this.d.listWhere({ schoolId, resultRecoveryPlanId: planId }); }
+  async listByStudentRef(schoolId: string, studentRef: string): Promise<RecoveryPauseActionDraft[]> { return this.d.listWhere({ schoolId, studentRef }); }
+  async listByStatus(schoolId: string, status: any): Promise<RecoveryPauseActionDraft[]> { return this.d.listWhere({ schoolId, draftStatus: status }); }
+  async update(id: string, data: Partial<RecoveryPauseActionDraft>): Promise<RecoveryPauseActionDraft> { return this.d.update(id, data as Record<string, unknown>); }
+  async markReviewReady(id: string): Promise<RecoveryPauseActionDraft> { return this.d.transition(id, 'review_ready'); }
+  async approveForFutureUse(id: string): Promise<RecoveryPauseActionDraft> { return this.d.transition(id, 'approved_for_future_use'); }
+  async suppress(id: string): Promise<RecoveryPauseActionDraft> { return this.d.transition(id, 'suppressed'); }
+  async block(id: string): Promise<RecoveryPauseActionDraft> { return this.d.transition(id, 'blocked'); }
+  async void(id: string): Promise<RecoveryPauseActionDraft> { return this.d.transition(id, 'voided'); }
 }
 
 export class PrismaRecoveryClosureActionDraftRepository implements RecoveryClosureActionDraftRepository {
-  constructor(private prisma: PrismaClient) {}
-  async create(data: RecoveryClosureActionDraft): Promise<RecoveryClosureActionDraft> { throw new Error('Not implemented in stub'); }
-  async getById(id: string): Promise<RecoveryClosureActionDraft | null> { throw new Error('Not implemented in stub'); }
-  async listByPlanId(schoolId: string, planId: string): Promise<RecoveryClosureActionDraft[]> { throw new Error('Not implemented in stub'); }
-  async listByStudentRef(schoolId: string, studentRef: string): Promise<RecoveryClosureActionDraft[]> { throw new Error('Not implemented in stub'); }
-  async listByStatus(schoolId: string, status: any): Promise<RecoveryClosureActionDraft[]> { throw new Error('Not implemented in stub'); }
-  async listByClosureType(schoolId: string, closureType: string): Promise<RecoveryClosureActionDraft[]> { throw new Error('Not implemented in stub'); }
-  async update(id: string, data: Partial<RecoveryClosureActionDraft>): Promise<RecoveryClosureActionDraft> { throw new Error('Not implemented in stub'); }
-  async markReviewReady(id: string): Promise<RecoveryClosureActionDraft> { throw new Error('Not implemented in stub'); }
-  async approveForFutureUse(id: string): Promise<RecoveryClosureActionDraft> { throw new Error('Not implemented in stub'); }
-  async suppress(id: string): Promise<RecoveryClosureActionDraft> { throw new Error('Not implemented in stub'); }
-  async block(id: string): Promise<RecoveryClosureActionDraft> { throw new Error('Not implemented in stub'); }
-  async void(id: string): Promise<RecoveryClosureActionDraft> { throw new Error('Not implemented in stub'); }
+  private d: PrismaDraftFamilyDelegate;
+  constructor(prisma: PrismaClient) {
+    this.d = new PrismaDraftFamilyDelegate(prisma, 'recoveryClosureActionDraftRecord', 'closureActionDraftId');
+  }
+  async create(data: RecoveryClosureActionDraft): Promise<RecoveryClosureActionDraft> { return this.d.create(data); }
+  async getById(id: string): Promise<RecoveryClosureActionDraft | null> { return this.d.getById(id); }
+  async listByPlanId(schoolId: string, planId: string): Promise<RecoveryClosureActionDraft[]> { return this.d.listWhere({ schoolId, resultRecoveryPlanId: planId }); }
+  async listByStudentRef(schoolId: string, studentRef: string): Promise<RecoveryClosureActionDraft[]> { return this.d.listWhere({ schoolId, studentRef }); }
+  async listByStatus(schoolId: string, status: any): Promise<RecoveryClosureActionDraft[]> { return this.d.listWhere({ schoolId, draftStatus: status }); }
+  async listByClosureType(schoolId: string, closureType: string): Promise<RecoveryClosureActionDraft[]> { return this.d.listWhere({ schoolId, closureType }); }
+  async update(id: string, data: Partial<RecoveryClosureActionDraft>): Promise<RecoveryClosureActionDraft> { return this.d.update(id, data as Record<string, unknown>); }
+  async markReviewReady(id: string): Promise<RecoveryClosureActionDraft> { return this.d.transition(id, 'review_ready'); }
+  async approveForFutureUse(id: string): Promise<RecoveryClosureActionDraft> { return this.d.transition(id, 'approved_for_future_use'); }
+  async suppress(id: string): Promise<RecoveryClosureActionDraft> { return this.d.transition(id, 'suppressed'); }
+  async block(id: string): Promise<RecoveryClosureActionDraft> { return this.d.transition(id, 'blocked'); }
+  async void(id: string): Promise<RecoveryClosureActionDraft> { return this.d.transition(id, 'voided'); }
 }
 
 export class PrismaRecoveryOutcomeApprovalGateRepository implements RecoveryOutcomeApprovalGateRepository {
