@@ -2533,3 +2533,7 @@ Final Package-20 ownership statements:
 
 Accepted durability evidence — REUSED ACCEPTED EVIDENCE, not rerun by this reconciliation: R8-G.2 Action Readiness real-PostgreSQL proof; R8-G.3B-A final PostgreSQL production proof 12/12 PASS; R8-G.3B-B composition proof 22/22 PASS, seven focused Package-20 suites 38/38 PASS, P1–P12 FULLY PROVEN (P11 PASS after targeted acceptance probe). Process exceptions recorded truthfully: G.3B-A actual PostgreSQL executions = 3 (budget 2); G.3B-B actual PostgreSQL invocations = 3 (initial 2 + authorized post-stop P11 probe 1); G.3B-B preparation atomic store mechanically extended (resource-type union, audit resource-ref mapping) as AUTHORIZED ARCHITECTURE NECESSITY + PROCESS FILE-CEILING EXCEPTION — no transaction algorithm redesign, no new atomic store.
 
+
+## R8-G.4 Note (2026-09-13, baseline b17a01cc2c7c036e588501e000827e7795d5e7bc)
+
+No ownership verdict in this matrix is changed by R8-G.4. The four deferred provenance items (tutorState, tutorStateEndpoint, tutorConversation, phase3GrowthPageRoutes Git tracking) are RESOLVED — see 08_BACKEND_GAP_REGISTER.md §R8-G.4 for exact evidence (clean-candidate index proof, MISSING_INTERNAL_RUNTIME_IMPORTS = 0). Canonical compile integrity is registered OPEN (GAP-r8g4-canonical-compile-type-debt) and does not alter any DURABLE_CANONICAL / DERIVED_VIEW / DURABLE_EVENT / DURABLE_CONTROL_LEDGER verdict recorded above.

@@ -407,3 +407,12 @@ Authoritative completeness truth for Package 20 (recovery-outcome-action) produc
 | Live recovery execution | NOT COMPLETE AS PART OF PACKAGE-20 — Package-20 remains preparation-only; live recovery execution belongs to a different package/lane/stage |
 
 Package-20 product philosophy is unchanged (preparation-only; no live execution claimed). Full ownership-verdict table: see 04_BACKEND_DATA_OWNERSHIP_MATRIX.md §R8-G.3B PACKAGE-20 FINAL OWNERSHIP RECONCILIATION. Gap closure: see 08_BACKEND_GAP_REGISTER.md §R8-G.3B Package-20 Production Ownership Closure.
+
+## R8-G.4 Provenance Reconciliation (2026-09-13, baseline b17a01cc2c7c036e588501e000827e7795d5e7bc)
+
+Supersedes the provenance rows/notes above (including item 6's "remain Git-untracked" note) as current-state truth:
+
+- tutorState / tutorStateEndpoint / tutorConversation / phase3GrowthPageRoutes provenance = RESOLVED — all four route roots plus their complete runtime import closure (250-file four-root union; 888 additional files under the owner-authorized full-backend expansion) are tracked production source at b17a01c + the G.4 provenance commit; clean-candidate index proof: MISSING_INTERNAL_RUNTIME_IMPORTS = 0 for all four roots (method: TS compiler-API closure vs `git ls-files --cached`).
+- Canonical backend TypeScript compile = FAIL (990 pre-existing type errors: 905 production + 85 test in tracked backend source, 5 cross-lane in tracked AI/useVoiceController.ts; Prisma client verified current). Registered OPEN as GAP-r8g4-canonical-compile-type-debt; compile budget STOP honored (2/2 runs).
+- R8-G backend correctness closure = NOT COMPLETE (provenance closure COMPLETE; compile integrity OPEN).
+- R8-H algorithm optimization = NOT YET EXECUTED. No algorithm-performance claim is made here.

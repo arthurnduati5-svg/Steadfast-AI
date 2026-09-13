@@ -1,0 +1,81 @@
+import type { SubjectSeed } from '../subjectTopicMapContracts';
+
+export const madrasaDeenSubjectSeeds: SubjectSeed[] = [
+  {
+    subjectId: 'deen_arabic',
+    name: 'Arabic',
+    aliases: ['arabic language', 'arabic letters', 'arabic vocabulary', 'arabic grammar', 'nahw', 'sarf'],
+    category: 'language',
+    curriculumTrack: 'madrasa_deen',
+  },
+  {
+    subjectId: 'deen_quran',
+    name: 'Qur\'an',
+    aliases: ['quran', 'quran recitation', 'tajweed', 'quran memorization', 'hifdh', 'qira\'ah'],
+    category: 'deen',
+    curriculumTrack: 'madrasa_deen',
+  },
+  {
+    subjectId: 'deen_hadith',
+    name: 'Hadith',
+    aliases: ['ahadith', 'prophetic traditions', 'sunnah', 'hadith studies'],
+    category: 'deen',
+    curriculumTrack: 'madrasa_deen',
+  },
+  {
+    subjectId: 'deen_seerah',
+    name: 'Seerah',
+    aliases: ['prophet biography', 'life of the prophet', 'sirah', 'prophet muhammad'],
+    category: 'deen',
+    curriculumTrack: 'madrasa_deen',
+  },
+  {
+    subjectId: 'deen_fiqh',
+    name: 'Fiqh',
+    aliases: ['islamic jurisprudence', 'worship rulings', 'fiqh basics', 'islamic law basics'],
+    category: 'deen',
+    curriculumTrack: 'madrasa_deen',
+  },
+  {
+    subjectId: 'deen_tawheed',
+    name: 'Tawheed',
+    aliases: ['aqeedah', 'islamic creed', 'belief in allah', 'oneness of allah', 'islamic theology basics'],
+    category: 'deen',
+    curriculumTrack: 'madrasa_deen',
+  },
+  {
+    subjectId: 'deen_tafsir',
+    name: 'Tafsir',
+    aliases: ['quran commentary', 'quran explanation', 'quran interpretation'],
+    category: 'deen',
+    curriculumTrack: 'madrasa_deen',
+  },
+  {
+    subjectId: 'deen_tadabbur',
+    name: 'Tadabbur',
+    aliases: ['quran reflection', 'contemplation', 'deep reflection', 'quran pondering'],
+    category: 'deen',
+    curriculumTrack: 'madrasa_deen',
+  },
+  {
+    subjectId: 'deen_adab',
+    name: 'Adab',
+    aliases: ['islamic manners', 'etiquette', 'character', 'akhlaq', 'islamic character'],
+    category: 'deen',
+    curriculumTrack: 'madrasa_deen',
+  },
+  {
+    subjectId: 'deen_dua',
+    name: 'Du\'a',
+    aliases: ['dua', 'supplication', 'prayers', 'daily duas', 'islamic supplications'],
+    category: 'deen',
+    curriculumTrack: 'madrasa_deen',
+  },
+  {
+    subjectId: 'deen_islamic_manners',
+    name: 'Islamic Manners and Character',
+    aliases: ['islamic manners', 'character in islam', 'akhlaq', 'good character', 'manners'],
+    category: 'deen',
+    curriculumTrack: 'madrasa_deen',
+  },
+];

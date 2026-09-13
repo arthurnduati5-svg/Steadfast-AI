@@ -377,3 +377,33 @@ No exact historical Package-20 gap row/identifier existed in this register (the 
   - Production InMemory resource owner count = 0.
 - PROCESS EXCEPTIONS (recorded truthfully, not relabeled): G.3B-A actual PostgreSQL executions = 3 (budget 2); G.3B-B actual PostgreSQL invocations = 3 (initial 2 + authorized post-stop P11 probe 1); G.3B-B preparation atomic store mechanically extended beyond the original production-file ceiling (resource-type union, audit resource-ref mapping) as AUTHORIZED ARCHITECTURE NECESSITY + PROCESS FILE-CEILING EXCEPTION — no transaction algorithm redesign, no new atomic store.
 - SCOPE NOTE: this closure covers Package-20 production ownership only. Live recovery execution is NOT closed here — Package-20 remains preparation-only and live execution belongs to a different package/lane/stage. The Exam*/Marking* writer unknowns tracked under GAP-questionbank-model-writers REMAIN unchanged.
+
+## R8-G.4 Provenance Closure and Compile-Gate STOP (2026-09-13, baseline b17a01cc2c7c036e588501e000827e7795d5e7bc)
+
+The four deferred R8-G.4 provenance inputs are RESOLVED with exact Git evidence. The canonical compile gate FAILED and was STOPPED per the frozen run budget; the compile-defect class is registered OPEN below. No ownership/durability verdict above is reopened or altered.
+
+### Four-route provenance closure — RESOLVED
+
+| Route root | Prior state | Final state | Evidence |
+| --- | --- | --- | --- |
+| src/routes/tutorState.ts | Git-untracked, imported by src/index.ts:12 | RESOLVED — tracked production source | staged in clean candidate at b17a01c; provenance checker over `git ls-files --cached`: MISSING_INTERNAL_RUNTIME_IMPORTS = 0 |
+| src/routes/tutorStateEndpoint.ts | Git-untracked, imported by src/index.ts:13 | RESOLVED — tracked production source | same method |
+| src/routes/tutorConversation.ts | Git-untracked, imported by src/index.ts:36 (mount :201) | RESOLVED — tracked production source | same method |
+| src/routes/phase3GrowthPageRoutes.ts | Git-untracked, imported by src/index.ts:584-585 | RESOLVED — tracked production source | same method |
+
+Method (all evidence from a disposable detached clean worktree at b17a01c — NOT the dirty primary tree): TypeScript compiler-API import extraction with BFS closure over ./, ../, @/ alias and index resolution; staged content read back via the Git index; closure proof operates on `git ls-files --cached`, not filesystem existence. Four-root deduplicated union = 250 newly tracked production files (includes the 4 roots); index closure size = 309 files; missing internal runtime imports = 0.
+
+### Authorized scope expansion — full tracked-backend provenance closure — RESOLVED
+
+With owner authorization, the same method was extended to the entire tracked backend: the full tracked-backend import closure required 888 additional untracked production files (all under backend/src; zero test/generated files). All 888 were restored and staged; after staging, no tracked backend importer references a Git-absent internal module (compile attempt 2 TS2307 count collapsed from 383 specifiers to 2, both test-fixture/generated paths).
+
+### Canonical compile gate — FAIL, STOPPED (new OPEN register entry)
+
+- NEW GAP — GAP-r8g4-canonical-compile-type-debt: OPEN. Canonical `npx tsc -p tsconfig.json --noEmit` (backend tsconfig, unchanged, includes ../AI/**) FAILS at baseline b17a01c in every tree (dirty primary: 1,491 errors; clean candidate with complete provenance: 990 errors). Classification: 905 production + 85 test-file errors in tracked backend source (pre-existing type debt — Prisma payload/strict-mode classes dominate; the generated Prisma client was verified CURRENT vs the tracked schema via `diff -w` = 0) plus 5 errors in tracked ../AI/useVoiceController.ts vs tracked AI/lib/types.ts (CROSS-LANE: R8-G.4 is forbidden from editing AI). Compile runs used: 2 of 2; third run forbidden. This gap is NOT resolvable by provenance restoration; it requires a dedicated backend type-debt repair task (proposed R8-G.5) plus an AI-lane decision for useVoiceController.ts.
+- The four provenance items above are therefore RESOLVED as PROVENANCE matters only; GAP-r8g4-canonical-compile-type-debt keeps R8-G backend correctness closure from being declared COMPLETE. No acceptance report (13_BACKEND_ENGINEERING_ACCEPTANCE_REPORT.md) was created because required gates did not pass.
+
+### R8-G.4 process exceptions (recorded truthfully, not relabeled)
+
+- G.4-A baseline reconciliation: origin/main was behind local HEAD (67c5656 vs b17a01c). With explicit owner authorization, b17a01c was pushed to origin/main so the frozen baseline (local HEAD = origin/main = b17a01c, parent 67c5656) held before G.4 started.
+- G.4-C authorized scope expansion: the frozen four-root closure (250 files) did not make the compile gate reachable because tracked backend importers referenced ~888 Git-absent production files; the owner authorized expanding G.4 to the full tracked-backend closure. Recorded as an authorized expansion, not silent scope creep.
+- Compile run budget: 2 attempts used of 2 maximum; STOP honored after attempt 2 (no third run).

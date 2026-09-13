@@ -1,0 +1,38 @@
+import type { Task033AggregateMonitoringSnapshot } from '../contracts/task033CanaryObservationContracts';
+
+export function generateTask033AggregateMonitoringSnapshot(overrides?: Partial<Task033AggregateMonitoringSnapshot>): Task033AggregateMonitoringSnapshot {
+  return {
+    observationRunId: overrides?.observationRunId || 'observation_run_task033_safe',
+    canaryRunId: overrides?.canaryRunId || 'canary_run_task032_safe',
+    schoolId: overrides?.schoolId || 'school_task032_canary_safe',
+    cohortId: overrides?.cohortId || 'canary_cohort_task032_safe',
+    generatedAt: overrides?.generatedAt || new Date().toISOString(),
+    windowStart: overrides?.windowStart || new Date(Date.now() - 86400000).toISOString(),
+    windowEnd: overrides?.windowEnd || new Date().toISOString(),
+    approvedCanaryStudentCount: overrides?.approvedCanaryStudentCount ?? 0,
+    activeCanaryStudentCount: overrides?.activeCanaryStudentCount ?? 0,
+    canarySessionCount: overrides?.canarySessionCount ?? 0,
+    successfulSessionCount: overrides?.successfulSessionCount ?? 0,
+    safeDenialCount: overrides?.safeDenialCount ?? 0,
+    errorCount: overrides?.errorCount ?? 0,
+    schoolAuthDenialCount: overrides?.schoolAuthDenialCount ?? 0,
+    cohortMembershipDenialCount: overrides?.cohortMembershipDenialCount ?? 0,
+    curriculumGateDenialCount: overrides?.curriculumGateDenialCount ?? 0,
+    sourceGateDenialCount: overrides?.sourceGateDenialCount ?? 0,
+    socraticGateDenialCount: overrides?.socraticGateDenialCount ?? 0,
+    deenGateDenialCount: overrides?.deenGateDenialCount ?? 0,
+    privacyGateDenialCount: overrides?.privacyGateDenialCount ?? 0,
+    aiBeforeGateBlockCount: overrides?.aiBeforeGateBlockCount ?? 0,
+    memoryBeforeGateBlockCount: overrides?.memoryBeforeGateBlockCount ?? 0,
+    teacherFeedbackCount: overrides?.teacherFeedbackCount ?? 0,
+    studentSafeFeedbackCount: overrides?.studentSafeFeedbackCount ?? 0,
+    incidentSignalCount: overrides?.incidentSignalCount ?? 0,
+    rollbackReady: overrides?.rollbackReady ?? true,
+    pauseActive: overrides?.pauseActive ?? false,
+    killSwitchActive: overrides?.killSwitchActive ?? false,
+    schoolWideRolloutPerformed: overrides?.schoolWideRolloutPerformed ?? false,
+    openRolloutPerformed: overrides?.openRolloutPerformed ?? false,
+    rawPrivateDataExposed: overrides?.rawPrivateDataExposed ?? false,
+    safeEventSummaries: overrides?.safeEventSummaries || [],
+  };
+}
