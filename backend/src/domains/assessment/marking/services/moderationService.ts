@@ -1,6 +1,5 @@
 import { ModerationDecision } from '../contracts/moderationContracts';
 import { ModerationDecisionRepository, MarkingResultVersionRepository } from '../contracts/markingRepositoryContracts';
-import { InMemoryModerationDecisionRepository, InMemoryMarkingResultVersionRepository } from '../repositories/inMemoryMarkingRepositories';
 import { PrismaModerationDecisionRepository, PrismaMarkingResultVersionRepository } from '../repositories/prismaMarkingRepositories';
 import prisma from '../../../../lib/prisma';
 
@@ -16,12 +15,12 @@ export interface CreateModerationParams {
 }
 
 /**
- * R8-G.3A-D2 moderation composition (R8G3A-D2-R12: DURABLE_CANONICAL).
+ * R8-G.3A-D2C moderation composition (R8G3A-D2-R12: DURABLE_CANONICAL).
  *
- * Production default → Prisma moderation repository (no silent memory fallback).
- * Explicit test compatibility only via ASSESSMENT_MODERATION_ALLOW_MEMORY=1,
- * which must never be set in production. Direct repository injection remains
- * supported for focused tests.
+ * Production default → Prisma moderation repositories. There is NO
+ * environment-controlled memory fallback: production composition must never
+ * depend on env state or NODE_ENV. Test isolation is achieved exclusively by
+ * explicit constructor repository injection.
  */
 export class ModerationService {
   constructor(
@@ -30,16 +29,10 @@ export class ModerationService {
   ) {}
 
   private static createDefaultModerationRepo(): ModerationDecisionRepository {
-    if (process.env.ASSESSMENT_MODERATION_ALLOW_MEMORY === '1') {
-      return new InMemoryModerationDecisionRepository();
-    }
     return new PrismaModerationDecisionRepository(prisma as any);
   }
 
   private static createDefaultResultRepo(): MarkingResultVersionRepository {
-    if (process.env.ASSESSMENT_MODERATION_ALLOW_MEMORY === '1') {
-      return new InMemoryMarkingResultVersionRepository();
-    }
     return new PrismaMarkingResultVersionRepository(prisma as any);
   }
 

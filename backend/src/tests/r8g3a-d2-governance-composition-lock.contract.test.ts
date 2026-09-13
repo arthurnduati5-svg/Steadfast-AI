@@ -96,12 +96,27 @@ describe('R8-G.3A-D2 governance composition lock', () => {
   });
 
   // ── Moderation ───────────────────────────────────────────────────────────
-  it('moderation production composition is Prisma, memory only via explicit opt-in flag', () => {
+  it('moderation production composition is Prisma with no environment memory fallback', () => {
     const svc = readFile('domains/assessment/marking/services/moderationService.ts');
+    // Default composition must construct the Prisma repositories.
     expect(svc).toContain('PrismaModerationDecisionRepository');
-    expect(svc).toContain('ASSESSMENT_MODERATION_ALLOW_MEMORY');
-    // Default constructor path resolves through the Prisma default factory.
+    expect(svc).toContain('PrismaMarkingResultVersionRepository');
+    // Default factories resolve through the Prisma default path.
     expect(svc).toContain('createDefaultModerationRepo');
+    expect(svc).toContain('createDefaultResultRepo');
+    // No environment-controlled memory fallback may exist in production composition.
+    expect(svc).not.toContain('ASSESSMENT_MODERATION_ALLOW_MEMORY');
+    expect(svc).not.toContain('ASSESSMENT_MODERATION_ALLOW_MEMORY_FALLBACK');
+    expect(svc).not.toMatch(/NODE_ENV\s*!==?\s*['"]production['"]/);
+    expect(svc).not.toContain('InMemoryModerationDecisionRepository');
+    expect(svc).not.toContain('InMemoryMarkingResultVersionRepository');
+    // Explicit constructor injection remains the only memory test seam.
+    expect(svc).toMatch(/constructor\(\s*private moderationRepo:\s*ModerationDecisionRepository\s*=\s*ModerationService\.createDefaultModerationRepo\(\),\s*private resultRepo:\s*MarkingResultVersionRepository\s*=\s*ModerationService\.createDefaultResultRepo\(\),?\s*\)/);
+  });
+
+  it('mounted marking route constructs the production-default ModerationService', () => {
+    const route = readFile('routes/marking.ts');
+    expect(route).toContain('new ModerationService()');
   });
 
   it('memory fallback requires explicit domain-specific opt-in (never NODE_ENV-based)', () => {
