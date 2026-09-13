@@ -2503,3 +2503,33 @@ Accepted durability evidence — PREVIOUSLY EXECUTED / REUSED ACCEPTED EVIDENCE,
 
 Provenance (R8-G.4 compile/provenance input — NOT an ownership verdict): `src/routes/tutorState.ts`, `src/routes/tutorStateEndpoint.ts`, `src/routes/tutorConversation.ts`, `src/routes/phase3GrowthPageRoutes.ts` remain Git-untracked while directly imported by `src/index.ts` (verified 2026-09-13: `git ls-files` empty for all four; import sites src/index.ts:12-13,36,584). These do not reopen any of the six ownership/durability gaps.
 
+## R8-G.3B PACKAGE-20 FINAL OWNERSHIP RECONCILIATION (2026-09-13, HEAD 67c56565c8167df631d51668dadf29d7dc8cce04)
+
+Authoritative final ownership truth for the fourteen Package-20 records (twelve resource families + Audit + Idempotency). This section supersedes the historical R8-B scanner snapshot rows above (marked `UNRESOLVED | R8A_STRUCTURAL` — those rows are preserved as R8-B-era evidence and were accurate when written). Exactly ONE verdict per state object.
+
+| STATE | CLASSIFICATION | PRODUCTION OWNER | TRANSACTION OWNER | RESTART BEHAVIOR | SOURCE OF IDENTITY | LIVE-EXECUTION RELATION |
+| --- | --- | --- | --- | --- | --- | --- |
+| RecoveryOutcomeActionReadiness | DURABLE_CANONICAL | `PrismaRecoveryOutcomeActionReadinessRepository` | dedicated `PrismaRecoveryOutcomeActionReadinessAtomicStore` (accepted R8-G.2 transaction boundary, unchanged) | survives restart | verified school + actor ownership (server-side identity; no x-user/x-school header trust) | preparation-only; no live execution |
+| RecoveryOutcomeActionBundle | DURABLE_CANONICAL | Prisma resource repository | shared `PrismaRecoveryOutcomeActionPreparationAtomicStore` | survives restart | verified school + actor ownership | preparation-only; no live execution |
+| RecoveryContinuationActionDraft | DURABLE_CANONICAL | Prisma resource repository | shared `PrismaRecoveryOutcomeActionPreparationAtomicStore` | survives restart | verified school + actor ownership | preparation-only; no live execution |
+| RecoveryIntensificationActionDraft | DURABLE_CANONICAL | Prisma resource repository | shared `PrismaRecoveryOutcomeActionPreparationAtomicStore` | survives restart | verified school + actor ownership | preparation-only; no live execution |
+| RecoveryPauseActionDraft | DURABLE_CANONICAL | Prisma resource repository | shared `PrismaRecoveryOutcomeActionPreparationAtomicStore` | survives restart | verified school + actor ownership | preparation-only; no live execution |
+| RecoveryClosureActionDraft | DURABLE_CANONICAL | Prisma resource repository | shared `PrismaRecoveryOutcomeActionPreparationAtomicStore` | survives restart | verified school + actor ownership | preparation-only; no live execution |
+| RecoveryOutcomeApprovalGate | DURABLE_CANONICAL | Prisma resource repository | shared `PrismaRecoveryOutcomeActionPreparationAtomicStore` | survives restart | verified school + actor ownership | preparation-only; no live execution |
+| RecoveryOutcomeMockActivationQueue | DURABLE_CANONICAL | Prisma resource repository | shared `PrismaRecoveryOutcomeActionPreparationAtomicStore` | survives restart | verified school + actor ownership | preparation-only; no live execution |
+| RecoveryOutcomeDryRunReceipt | DURABLE_CANONICAL | Prisma resource repository | shared `PrismaRecoveryOutcomeActionPreparationAtomicStore` | survives restart | verified school + actor ownership | preparation-only; no live execution |
+| RecoveryOutcomeRollbackPlan | DURABLE_CANONICAL | Prisma resource repository | shared `PrismaRecoveryOutcomeActionPreparationAtomicStore` | survives restart | verified school + actor ownership | preparation-only; no live execution |
+| RecoveryOutcomeSuppressionRule | DURABLE_CANONICAL | Prisma resource repository | shared `PrismaRecoveryOutcomeActionPreparationAtomicStore` | survives restart | verified school + actor ownership | preparation-only; no live execution |
+| RecoveryOutcomeActionSummary | DURABLE_MATERIALIZED_READ_MODEL | Prisma resource repository | shared `PrismaRecoveryOutcomeActionPreparationAtomicStore` | survives restart | verified school + actor ownership | durable materialized read model; created/refreshed/marked stale/blocked/voided only; NO authority over underlying action facts; a summary refresh cannot rewrite canonical resource identity |
+| RecoveryOutcomeActionAuditRecord | DURABLE_EVENT | Prisma Package-20 audit | same transaction boundary (per-family atomic store) | survives restart | verified server-side identity | append-only operational evidence; not a user/domain resource family |
+| RecoveryOutcomeActionIdempotencyRecord | DURABLE_CONTROL_LEDGER | Prisma Package-20 idempotency | same transaction boundary (per-family atomic store) | survives restart | verified server-side identity | durable mutation-control state; not a user/domain resource family |
+
+Final Package-20 ownership statements:
+
+- **Package-20 production InMemory resource owner count = 0** — all 12 production resource families are Prisma-backed; zero Package-20 production resource family remains process-local.
+- Action Readiness keeps its dedicated accepted transaction boundary (R8-G.2) and is NOT rewritten to the preparation atomic store.
+- Action Summary is canonical only as its own persisted summary/materialization lifecycle; its underlying action facts remain owned by the underlying Package-20 records.
+- Package-20 remains PREPARATION ONLY — durability does not introduce live execution (no score/grade/mastery mutation, no live recovery activation/completion/closure, no live notification sending, no assignment creation, no calendar mutation, no portal publishing, no live rollback execution, no live suppression enforcement, no external provider execution, no AI-generated live action execution).
+
+Accepted durability evidence — REUSED ACCEPTED EVIDENCE, not rerun by this reconciliation: R8-G.2 Action Readiness real-PostgreSQL proof; R8-G.3B-A final PostgreSQL production proof 12/12 PASS; R8-G.3B-B composition proof 22/22 PASS, seven focused Package-20 suites 38/38 PASS, P1–P12 FULLY PROVEN (P11 PASS after targeted acceptance probe). Process exceptions recorded truthfully: G.3B-A actual PostgreSQL executions = 3 (budget 2); G.3B-B actual PostgreSQL invocations = 3 (initial 2 + authorized post-stop P11 probe 1); G.3B-B preparation atomic store mechanically extended (resource-type union, audit resource-ref mapping) as AUTHORIZED ARCHITECTURE NECESSITY + PROCESS FILE-CEILING EXCEPTION — no transaction algorithm redesign, no new atomic store.
+

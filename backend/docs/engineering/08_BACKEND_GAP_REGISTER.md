@@ -145,7 +145,7 @@ One gap: `GAP-evidence-header-identity` — an existing authorization/identity-p
 - WHY IT MATTERS: assessment is the highest-integrity domain; any state record silently unwritten breaks recovery, audit and result-release truth.
 - EVIDENCE: 04 §Canonical Writers (rows marked "No R8-A modelWriterGroups entry"); SOURCE_INSPECTION composition/resolver proving prisma-mode wiring exists. CONFIDENCE: medium.
 - SECURITY/PRIVACY: none. DATA INTEGRITY IMPACT: high. RESTART IMPACT: unknown. RETRY/CONCURRENCY: unknown. LONG-HISTORY: none.
-- CONSUMERS AFFECTED: teacher, student, parent projections. R8-E HANDOFF: none. R8-F HANDOFF: Package 11 result-release active HTTP durable composition = RESOLVED (mounted router defaults to Prisma repositories + PrismaResultReleaseApprovalAtomicCommitter; InMemory for explicit test injection only); other Exam*/Marking*/question-bank writer unknowns = REMAIN.
+- CONSUMERS AFFECTED: teacher, student, parent projections. R8-E HANDOFF: none. R8-F HANDOFF: Package 11 result-release active HTTP durable composition = RESOLVED (mounted router defaults to Prisma repositories + PrismaResultReleaseApprovalAtomicCommitter; InMemory for explicit test injection only); other Exam*/Marking*/question-bank writer unknowns = REMAIN. (Package-20 recovery-outcome-action writer unknowns are NOT part of this remainder — closed by R8-G.3B; see §R8-G.3B Package-20 Production Ownership Closure below.)
 - DISPOSITION: REQUIRED BEFORE PRODUCTION. REASON: exam/marking state durability must be writer-proven before launch.
 
 ### GAP-questionbank-concurrency-locks
@@ -360,3 +360,20 @@ Supersedes every intermediate R8-G.3A closure status above. Final gap statuses �
 Accepted durability evidence — PREVIOUSLY EXECUTED / REUSED ACCEPTED EVIDENCE, not rerun: D1 (`4f0a6d2`) 10/10 real PostgreSQL; D1C (`449d17b`) 16/16 focused composition/strict-history + 1/1 real-PostgreSQL HTTP route; D2 (`bcf9fb4`) final 16/16 real PostgreSQL (run 1 15/16 was a test-expectation defect, not production); D2C (`7b2e404`) composition lock 8/8 + package-5 teacher review/moderation 11/11.
 
 Provenance (R8-G.4 compile/provenance input — NOT an ownership verdict): `src/routes/tutorState.ts`, `src/routes/tutorStateEndpoint.ts`, `src/routes/tutorConversation.ts`, `src/routes/phase3GrowthPageRoutes.ts` remain Git-untracked while directly imported by `src/index.ts` (re-verified 2026-09-13 against the current local chain: `git ls-files` empty for all four; import sites src/index.ts:12-13,36,584). These are carried as R8-G.4 compile/provenance inputs and do NOT reopen the six ownership/durability gaps.
+
+## R8-G.3B Package-20 Production Ownership Closure (2026-09-13, HEAD 67c56565c8167df631d51668dadf29d7dc8cce04)
+
+No exact historical Package-20 gap row/identifier existed in this register (the question-bank writer-unknown class was Exam*/Marking*-scoped and never named the Package-20 recovery-outcome-action families). No legacy gap ID is invented here; this is a clearly labelled closure entry.
+
+- GAP TARGET: Package-20 (recovery-outcome-action) production ownership/durability — all twelve resource families + Audit + Idempotency.
+- FINAL STATE: **RESOLVED**.
+- EVIDENCE:
+  - Action Readiness durable in R8-G.2 (dedicated Readiness atomic store; accepted real-PostgreSQL proof).
+  - R8-G.3B-A: Action Bundle + Continuation/Intensification/Pause/Closure Drafts durable (final PostgreSQL production proof 12/12 PASS).
+  - R8-G.3B-B: six remaining special families durable — Approval Gate, Mock Activation Queue, Dry-Run Receipt, Rollback Plan, Suppression Rule, Action Summary (composition proof 22/22 PASS; seven focused Package-20 suites 38/38 PASS; P1–P12 FULLY PROVEN).
+  - 12/12 production resources Prisma-backed.
+  - Audit durable (`RecoveryOutcomeActionAuditRecord` = DURABLE_EVENT).
+  - Idempotency durable (`RecoveryOutcomeActionIdempotencyRecord` = DURABLE_CONTROL_LEDGER).
+  - Production InMemory resource owner count = 0.
+- PROCESS EXCEPTIONS (recorded truthfully, not relabeled): G.3B-A actual PostgreSQL executions = 3 (budget 2); G.3B-B actual PostgreSQL invocations = 3 (initial 2 + authorized post-stop P11 probe 1); G.3B-B preparation atomic store mechanically extended beyond the original production-file ceiling (resource-type union, audit resource-ref mapping) as AUTHORIZED ARCHITECTURE NECESSITY + PROCESS FILE-CEILING EXCEPTION — no transaction algorithm redesign, no new atomic store.
+- SCOPE NOTE: this closure covers Package-20 production ownership only. Live recovery execution is NOT closed here — Package-20 remains preparation-only and live execution belongs to a different package/lane/stage. The Exam*/Marking* writer unknowns tracked under GAP-questionbank-model-writers REMAIN unchanged.

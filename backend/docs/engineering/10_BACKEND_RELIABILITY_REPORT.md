@@ -204,3 +204,37 @@ Durability posture of the repaired surfaces (all restart-durable, fail-closed; n
 Accepted durability evidence — PREVIOUSLY EXECUTED / REUSED ACCEPTED EVIDENCE, not rerun: D1 (`4f0a6d2`) 10/10 real PostgreSQL first run; D1C (`449d17b`) 16/16 focused composition/strict-history + 1/1 real-PostgreSQL HTTP production-route proof; D2 (`bcf9fb4`) final 16/16 real PostgreSQL (run 1 15/16 was a test-expectation defect, not production); D2C (`7b2e404`) composition lock 8/8 + package-5 teacher review/moderation 11/11.
 
 Provenance remains the only open item and is explicitly separated as an R8-G.4 compile/provenance input (see final section in 04_BACKEND_DATA_OWNERSHIP_MATRIX.md and 08_BACKEND_GAP_REGISTER.md).
+
+## R8-G.3B PACKAGE-20 FINAL RELIABILITY RECONCILIATION (2026-09-13, HEAD 67c56565c8167df631d51668dadf29d7dc8cce04)
+
+Final reliability model for Package 20 (recovery-outcome-action controlled action preparation). Supersedes any earlier Package-20 reliability statements (the original "InMemory repositories used by default" posture) for current production behavior. Product philosophy unchanged: Package 20 remains PREPARATION ONLY.
+
+| Reliability property | Package-20 final state |
+| --- | --- |
+| Verified identity | PROVEN — route + hardened service derive actor identity from verified server-side context; no x-user/x-school header trust |
+| School-scoped resource access | PROVEN — verified school ownership + actor ownership; cross-school access returns safe NOT_FOUND; body school mismatch rejected |
+| Restart durability | PROVEN — all 12 resource families + audit + idempotency are Prisma-backed; durable rows survive restart |
+| Transactional resource/audit/idempotency mutation | PROVEN — resource mutation + required audit + idempotency completion share one established transaction boundary (dedicated Readiness atomic store or shared preparation atomic store) |
+| Deterministic idempotency replay | PROVEN — same-request replay returns the deterministic recorded result |
+| Conflict semantics | PROVEN — different-request conflicts surface as explicit conflicts, never silent overwrite |
+| In-progress fail-closed semantics | PROVEN — in-progress mutation state fails closed rather than double-executing |
+| DB-unique concurrency authority | PROVEN — database-unique constraints are the concurrency authority |
+| Audit rollback | PROVEN — audit insert failure rolls back the whole transaction (audit rollback atomicity) |
+| No process locks | PROVEN — no process-lock mechanism introduced |
+| No production memory fallback | PROVEN — production Package-20 resource InMemory owner count = 0; in-memory repositories are explicit test-compatible implementations only |
+| Preparation-only boundary | PRESERVED — durability does NOT mean live execution: no score/grade/mastery mutation, no live recovery activation/completion/closure, no live notification sending, no assignment creation, no calendar mutation, no portal publishing, no live rollback execution, no live suppression enforcement, no external provider execution, no AI-generated live action execution |
+
+### Accepted Evidence Ledger (distinguishing EXECUTED vs REUSED ACCEPTED EVIDENCE)
+
+- **REUSED ACCEPTED EVIDENCE** — R8-G.2 Action Readiness: accepted real-PostgreSQL proof (not rerun).
+- **REUSED ACCEPTED EVIDENCE** — R8-G.3B-A: composition/focused proof PASS; final PostgreSQL production proof 12/12 PASS; historical process exception: actual PostgreSQL executions = 3.
+- **REUSED ACCEPTED EVIDENCE** — R8-G.3B-B non-DB: composition proof 22/22 PASS; seven existing focused Package-20 suites 38/38 PASS. Database: P1–P10 PASS, P11 PASS (after targeted acceptance probe), P12 PASS — therefore P1–P12 FULLY PROVEN. Historical process exception: actual PostgreSQL invocations = 3.
+- **EXECUTED EVIDENCE (this reconciliation)** — ONE non-DB Vitest invocation: `r8g3b-a-package20-draft-composition-lock.test.ts` + `r8g3b-b-package20-special-composition-lock.test.ts` = 22/22 PASS (draft lock 10/10, special lock 12/12), proving the pushed current composition: Action Readiness = Prisma; G.3B-A five = Prisma + preparation atomic store; G.3B-B six = Prisma + preparation atomic store; production Package-20 InMemory resource construction = 0. PostgreSQL runs = 0.
+
+### Process Exceptions (recorded truthfully)
+
+- **R8-G.3B-A database-run budget**: planned maximum = 2; actual executions = 3 — PROCESS EXCEPTION. Reason: two defects were discovered during execution (one production integration defect and one test defect); the final implementation passed its production proof, but the execution exceeded the frozen run budget. Production correctness = PASS. The budget is NOT relabeled as passed, and the old production defect is NOT portrayed as test-only.
+- **R8-G.3B-B DB budget**: initial full G.3B-B DB runs = 2; authorized post-stop targeted P11 probe = 1; actual G.3B-B PostgreSQL invocations = 3 — PROCESS EXCEPTION. Reason: the original two-run cap correctly forced STOP; verification strategy was changed afterward to one isolated P11 probe, not a repeated full-suite run. Production correctness = PASS. The actual invocation count is NOT rewritten to 2.
+- **G.3B-B production file ceiling**: the accepted atomic store encoded only the five G.3B-A resource types while G.3B-B simultaneously required the same atomic store for six more families AND no second transaction framework. Resolution: mechanically extend the existing store (resource-type union, audit resource-ref mapping) — no transaction algorithm redesign, no new atomic store. Classification: AUTHORIZED ARCHITECTURE NECESSITY + PROCESS FILE-CEILING EXCEPTION (not silent scope expansion). Architecture correctness = PASS.
+
+No other process exception is evidenced for R8-G.3B. Package-20 production ownership gap status: RESOLVED (see 08_BACKEND_GAP_REGISTER.md §R8-G.3B Package-20 Production Ownership Closure).

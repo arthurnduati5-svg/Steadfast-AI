@@ -135,7 +135,17 @@ Package 16 (Follow-up Cases) ──> Package 17 (Recovery Planner)
 13. School context required for all operations
 14. Idempotency key prevents duplicate operations
 15. Full audit trail for all entity state transitions
-16. InMemory repositories used by default (no accidental production data mutation)
+16. Production resource repositories use Prisma; in-memory repositories remain only explicit test-compatible implementations and are not production canonical ownership (R8-G.3B reconciliation — see Production Durability below; this supersedes the original "InMemory by default" guarantee)
+
+## Production Durability (R8-G.3B Reconciliation, 2026-09-13)
+
+Supersedes the original "InMemory repositories used by default" safety guarantee for current production behavior. Product philosophy is unchanged: Package 20 remains a preparation-only layer.
+
+- **Production resource repositories use Prisma**: all 12 Package-20 resource families are Prisma-backed in production (`PrismaRecoveryOutcomeActionReadinessRepository` for Action Readiness; Prisma resource repositories for the other eleven families). Package-20 production resource InMemory count = 0.
+- **In-memory repositories remain only explicit test-compatible implementations** and are not production canonical ownership.
+- **Established transaction boundary**: resource mutation + required audit + idempotency completion share the established transaction boundary for hardened production mutations — the dedicated Readiness atomic store (`PrismaRecoveryOutcomeActionReadinessAtomicStore`) for Action Readiness, or the shared preparation atomic store (`PrismaRecoveryOutcomeActionPreparationAtomicStore`) for the other eleven families, according to family.
+- **Audit and idempotency are durable Prisma state** (`RecoveryOutcomeActionAuditRecord` = DURABLE_EVENT; `RecoveryOutcomeActionIdempotencyRecord` = DURABLE_CONTROL_LEDGER).
+- **Package-20 remains preparation-only**: durability does NOT introduce live execution. No score/grade/mastery mutation, no live recovery activation/completion/closure, no live notification sending, no assignment creation, no calendar mutation, no portal publishing, no live rollback execution, no live suppression enforcement, no external provider execution, no AI-generated live action execution.
 
 ## Key Design Decisions
 
