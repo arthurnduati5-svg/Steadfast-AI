@@ -2,11 +2,14 @@ import { describe, it, expect } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
 
-// R8-G.3A Governance — fail-closed preservation proof + durability defect lock.
+// R8-G.3A Governance — fail-closed preservation proof + final durable-state lock.
 // Safety direction is preserved (unknown/pending sources are never treated
-// as approved), while durable composition of the task022 singletons is
-// NOT mechanically completable (sync Map APIs consumed across the
-// codebase; Prisma repos exist but unwired) — recorded CONTRADICTION.
+// as approved). The earlier intermediate "process-local defect lock" has
+// been SUPERSEDED BY R8-G.3A FINAL RECONCILIATION: D2/D2C made the four
+// governance record families durable (ApprovedSourceRecord,
+// ContentGapRecord, ModerationDecisionRecord = DURABLE_CANONICAL;
+// ContentGovernanceAuditRecord = DURABLE_EVENT) with a Prisma fail-closed
+// production default and explicit opt-in memory test compatibility only.
 import { ApprovedSourceRegistryService } from '../services/task022ApprovedSourceRegistryService';
 
 const SRC = path.resolve(__dirname, '..');
@@ -47,15 +50,43 @@ describe('R8-G.3A governance fail-closed behavior', () => {
     expect(moderation).toContain('moderationDecisionRecord');
   });
 
-  it('task022 registry/audit/gap singletons remain process-local (defect lock)', () => {
-    for (const rel of [
-      'services/task022ApprovedSourceRegistryService.ts',
-      'services/task022ContentGovernanceAuditService.ts',
-      'services/task022ContentGapDetectionService.ts',
-    ]) {
-      const content = fs.readFileSync(path.join(SRC, rel), 'utf-8');
-      expect(content, `${rel} must not fake durability`).toMatch(/new Map|private records/);
-      expect(content).not.toContain('../lib/prisma');
-    }
+  it('R8-G.3A-D2 final state: registry/audit/gap canonical ownership is durable (supersedes defect lock)', () => {
+    // Final-state contract (R8-G.3A final reconciliation): the Prisma
+    // repositories are the production default; the legacy in-memory
+    // structures remain ONLY as explicit test compatibility behind the
+    // explicit domain-specific opt-in flag, never as canonical truth.
+    const approved = fs.readFileSync(
+      path.join(SRC, 'services/task022ApprovedSourceRegistryService.ts'),
+      'utf-8',
+    );
+    expect(approved).toContain('PrismaApprovedSourceRepository');
+    expect(approved).toContain('CONTENT_GOVERNANCE_REQUIRE_DURABLE');
+    expect(approved).toContain("CONTENT_GOVERNANCE_ALLOW_MEMORY_FALLBACK === '1'");
+    expect(approved).toMatch(/new Map/); // legacy test-compatibility structures only
+
+    const audit = fs.readFileSync(
+      path.join(SRC, 'services/task022ContentGovernanceAuditService.ts'),
+      'utf-8',
+    );
+    expect(audit).toContain('PrismaContentGovernanceAuditRepository');
+    expect(audit).toContain('recordDurable');
+    expect(audit).toContain('isApprovedSourceMemoryFallbackAllowed');
+    expect(audit).not.toContain('ASSESSMENT_MODERATION_ALLOW_MEMORY');
+
+    const gap = fs.readFileSync(
+      path.join(SRC, 'services/task022ContentGapDetectionService.ts'),
+      'utf-8',
+    );
+    expect(gap).toContain('PrismaContentGapRepository');
+    expect(gap).toContain('detectGapDurable');
+  });
+
+  it('durable governance reads fail closed: a failed durable read is never approved', () => {
+    const approved = fs.readFileSync(
+      path.join(SRC, 'services/task022ApprovedSourceRegistryService.ts'),
+      'utf-8',
+    );
+    expect(approved).toContain('a failed durable read is NEVER equivalent to');
+    expect(approved).toContain('isApprovedDurable');
   });
 });

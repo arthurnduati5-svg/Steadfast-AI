@@ -286,12 +286,12 @@ One gap: `GAP-evidence-header-identity` — an existing authorization/identity-p
 - GAP-evidence-header-identity (REQUIRED NOW — proven authorization/identity-provenance defect: verified JWT role ignored in favor of caller-controlled `x-actor-role`)
 - GAP-identity-rolecheck-coverage (REQUIRED BEFORE PRODUCTION)
 - GAP-identity-mountless-authz (REQUIRED BEFORE PRODUCTION)
-- GAP-safety-audit-writers (UNKNOWN)
+- GAP-safety-audit-writers (RESOLVED — R8-G.3A final reconciliation: durable governance record families, Prisma fail-closed production default, no environment memory fallback; the R8-D UNKNOWN disposition above is preserved as history).
 No other REQUIRED NOW security/privacy/safeguarding gap was proven; GAP-evidence-header-identity is the single proven current violation.
 
 ## Data Integrity / Durability Gaps
 
-- GAP-tutorcore-persistence-unresolved, GAP-sessions-chatmessage-writer-duplication, GAP-mastery-canonical-concurrency, GAP-mastery-growth-writers, GAP-questionbank-model-writers, GAP-questionbank-concurrency-locks (all REQUIRED BEFORE PRODUCTION); GAP-revision-writer-durability-unknown, GAP-media-writer-unknown, GAP-studyplanning-ownership-unknown (UNKNOWN).
+- GAP-tutorcore-persistence-unresolved, GAP-sessions-chatmessage-writer-duplication, GAP-mastery-canonical-concurrency, GAP-mastery-growth-writers, GAP-questionbank-model-writers, GAP-questionbank-concurrency-locks (all REQUIRED BEFORE PRODUCTION); GAP-revision-writer-durability-unknown, GAP-media-writer-unknown, GAP-studyplanning-ownership-unknown (UNKNOWN). — CURRENT: GAP-tutorcore-persistence-unresolved RESOLVED, GAP-revision-writer-durability-unknown RESOLVED, GAP-media-writer-unknown RESOLVED, GAP-studyplanning-ownership-unknown RESOLVED, GAP-mastery-growth-writers PROVEN NOT A GAP for the growth-page path (R8-G.3A final reconciliation; see below). The R8-D dispositions remain as history.
 
 ## Retry / Concurrency / Recovery Gaps
 
@@ -333,6 +333,8 @@ Classified per §21; no destructive action taken; no completeness impact assigne
 
 ## R8-G.3A Reconciliation (2026-09-12, HEAD a0a3feac1e545f383a36f4b7bf73c1635ce61154)
 
+> SUPERSEDED BY R8-G.3A FINAL RECONCILIATION (final section below). The intermediate closure statuses below — in particular the CONTRADICTION verdicts for GAP-tutorcore-persistence-unresolved remainder, GAP-revision-writer-durability-unknown, and GAP-safety-audit-writers — were repaired by D1/D1C/D2/D2C (commits `4f0a6d2`, `449d17b`, `bcf9fb4`, `7b2e404`) and are historical evidence, not current truth.
+
 Append-only record. R8-D dispositions above are preserved; the statuses below are R8-G.3A closure states per that task's §40 (RESOLVED | PROVEN NOT A GAP | NOT ACTIVE | CONTRADICTION). No UNKNOWN remains for the six R8-G.3A families' active critical paths.
 
 - GAP-tutorcore-persistence-unresolved → PARTIALLY RESOLVED, REMAINDER CONTRADICTION (provenance). Handoff DURABLE_CANONICAL (TutorLearnerIdentityMap + TutorSession, Prisma, no memory). Tutor actions stateless decision compute — PROVEN NOT A GAP (no invented TutorAction writer). Tutor-turn orchestration stateless; telemetry array CACHE_ONLY — PROVEN NOT A GAP (no invented TutorTurn records; downstream durable owner is TutorState/session state). Tutor conversation session state DURABLE_CANONICAL (StudentLearningSessionState/Event, Prisma raw SQL; R8-F chatMessageRepository consolidation untouched). TutorState + video session/analytics durability REPAIRED: `tutorStateService.ts` production default is now Prisma-backed fail-closed (silent Prisma→memory success removed; memory fallback is explicit test/dev injection only). Remainder: `tutorState.ts`, `tutorStateEndpoint.ts`, `tutorConversation.ts` route provenance exceeds the 15-file restoration budget (30/39/148 untracked value-closure files) — STOP surfaces, tracked import closure NOT restored, CONTRADICTION reported for provenance (R8G3A-R27-contradiction).
@@ -343,3 +345,18 @@ Append-only record. R8-D dispositions above are preserved; the statuses below ar
 - GAP-safety-audit-writers → CONTRADICTION on durable composition; fail-closed behavior PROVEN preserved. ApprovedSourceRecord/ContentGapRecord/ContentGovernanceAuditRecord task022 singletons and ModerationDecision default composition remain process-local (sync Map APIs consumed codebase-wide; Prisma repos exist but wiring them is redesign, not mechanical). Fail-closed direction proven and locked by test (`pending_review`/unknown never approved; grounding emits gap/denied). `privacyGovernance` + `task020` routes proven disjoint from the four models (no duplicate writers invented). Provenance RESTORED for `privacyGovernance.ts` + 14-file value closure.
 
 Provenance (R8-G.3A §26–§28): remote HEAD imports 10 route files it does not track. RESTORED as ACCEPTED_PROVENANCE_OMISSION (62-file union, each surface ≤15 untracked value-closure files): copilotHandoff(5), tutorActionRoutes(12), phase3LivingRevisionRoutes(11), videoLearningSessions(10), videoLearningAnalytics(10), privacyGovernance(15). STOPPED (tracked closure not restored; contradiction): tutorState(30), tutorStateEndpoint(39), tutorConversation(148), phase3GrowthPageRoutes(33). No historical tests/docs/features bulk-staged.
+
+## R8-G.3A FINAL RECONCILIATION (2026-09-13, HEAD 7b2e4047cf9f3a1ecd82afed73255021f35e2a3b)
+
+Supersedes every intermediate R8-G.3A closure status above. Final gap statuses — no UNKNOWN, no PARTIALLY RESOLVED, no active CONTRADICTION remains for the six R8-G.3A ownership/durability gaps:
+
+- GAP-tutorcore-persistence-unresolved → RESOLVED. Handoff, Tutor State, Tutor State Snapshots/History, and Conversation are DURABLE_CANONICAL; Actions and Turn are REQUEST_EPHEMERAL by design (telemetry CACHE_ONLY). Snapshots/history durable via `TutorStateSnapshotRecord` (D1, restart-proven real PostgreSQL 10/10).
+- GAP-mastery-growth-writers → PROVEN NOT A GAP for the `/api/phase3/growth-page` path. Growth page is a DERIVED_VIEW over canonical mastery/evidence/study inputs; no Growth* writer required; canonical Growth* writers remain solely in `growthIntelligenceService` (unchanged); no competing mastery truth.
+- GAP-revision-writer-durability-unknown → RESOLVED. Revision Nodes/Edges/Due State are DURABLE_CANONICAL (`Phase3RevisionNodeRecord`/`EdgeRecord`/`DueItemRecord`), Revision Audit is DURABLE_EVENT (`Phase3RevisionAuditRecord`, append-only, awaited), Revision Graph is DERIVED_VIEW. Restart-proven in D1 (real PostgreSQL 10/10); production route composition proven in D1C (HTTP→PostgreSQL 1/1).
+- GAP-studyplanning-ownership-unknown → RESOLVED. Study Plans/Goals DURABLE_CANONICAL (Prisma `StudyPlan`/`StudyGoal` via `studySupportService`); Study Priority View DERIVED_VIEW.
+- GAP-media-writer-unknown → RESOLVED. MediaAsset DURABLE_CANONICAL (`mediaAssetService`/Prisma); Video Learning Session DURABLE_CANONICAL (TutorState-backed session state + LearningEvent mirror); Video Learning Analytics DERIVED_VIEW.
+- GAP-safety-audit-writers → RESOLVED. ApprovedSourceRecord, ContentGapRecord, ModerationDecisionRecord are DURABLE_CANONICAL; ContentGovernanceAuditRecord is DURABLE_EVENT. Production default is Prisma fail-closed; `new ModerationService()` → `PrismaModerationDecisionRepository`/`PrismaMarkingResultVersionRepository` with NO environment-controlled memory fallback (D2C removed `ASSESSMENT_MODERATION_ALLOW_MEMORY`); memory is explicit constructor/flag opt-in only. Required audit failure cannot be reported as successful governance completion.
+
+Accepted durability evidence — PREVIOUSLY EXECUTED / REUSED ACCEPTED EVIDENCE, not rerun: D1 (`4f0a6d2`) 10/10 real PostgreSQL; D1C (`449d17b`) 16/16 focused composition/strict-history + 1/1 real-PostgreSQL HTTP route; D2 (`bcf9fb4`) final 16/16 real PostgreSQL (run 1 15/16 was a test-expectation defect, not production); D2C (`7b2e404`) composition lock 8/8 + package-5 teacher review/moderation 11/11.
+
+Provenance (R8-G.4 compile/provenance input — NOT an ownership verdict): `src/routes/tutorState.ts`, `src/routes/tutorStateEndpoint.ts`, `src/routes/tutorConversation.ts`, `src/routes/phase3GrowthPageRoutes.ts` remain Git-untracked while directly imported by `src/index.ts` (re-verified 2026-09-13 against the current local chain: `git ls-files` empty for all four; import sites src/index.ts:12-13,36,584). These are carried as R8-G.4 compile/provenance inputs and do NOT reopen the six ownership/durability gaps.

@@ -126,7 +126,7 @@ All other capabilities were assessed from accepted R8-B/R8-C evidence without re
 - LONG-HISTORY: NOT_APPLICABLE (stateless decision layer mostly). OBSERVABILITY: UNRESOLVED per R8-B.
 - CONSUMERS: copilot client. HTTP: mounts above. INTERNAL: context builders, privacy guards, access policies.
 - EXTERNAL / AI-LANE DECISION BOUNDARY: backend owns validated request, identity, context assembly, policy gate, safe-response assembly; model reasoning is delegated to the AI lane (06 ALGORITHM_DELEGATED states). Backend contract evaluated only here.
-- CURRENT COMPLETENESS: PRESENT_BUT_PARTIAL. KNOWN GAPS: GAP-tutorcore-handoff-unauthenticated, GAP-tutorcore-persistence-unresolved.
+- CURRENT COMPLETENESS: PRESENT_BUT_PARTIAL. KNOWN GAPS: GAP-tutorcore-handoff-unauthenticated. (GAP-tutorcore-persistence-unresolved — including TutorState snapshots/history durability — is RESOLVED by R8-G.3A final reconciliation; see FINAL RECONCILIATION section. SUPERSEDED BY R8-G.3A FINAL RECONCILIATION for the persistence dimension.)
 - EVIDENCE: 05 Learning Core section (all 6 capabilities); 06 coverage rows; SOURCE_INSPECTION `src/index.ts:197` via 05 citation. CONFIDENCE: medium.
 
 ## Learning Evidence
@@ -151,7 +151,7 @@ All other capabilities were assessed from accepted R8-B/R8-C evidence without re
 - PERSISTENCE: PROVEN for canonical mastery. RESTART: PROVEN durable. RETRY: PROVEN for daily-objective settlement (idempotency record + service logic); UNKNOWN for mastery mutation from result bridges. CONCURRENCY: UNKNOWN for canonical state updates (no lock/version evidence in accepted artifacts). PARTIAL FAILURE: UNKNOWN. DEPENDENCY FAILURE: UNKNOWN.
 - LONG-HISTORY: mastery inference bounded (n<=40 events, R8-C); spaced-review interval clamped [1,90] (BOUNDED). Growth trend states accumulation over years: UNKNOWN lifecycle.
 - CONSUMERS: growth page, recommendations, revision, study plans, tutor next-action. HTTP: mounts above. INTERNAL: mastery aggregation, weak-topic detection, spaced review planner.
-- CURRENT COMPLETENESS: PRESENT_BUT_PARTIAL. KNOWN GAPS: GAP-mastery-canonical-concurrency, GAP-mastery-growth-writers.
+- CURRENT COMPLETENESS: PRESENT_BUT_PARTIAL. KNOWN GAPS: GAP-mastery-canonical-concurrency. (GAP-mastery-growth-writers is PROVEN NOT A GAP for the `/api/phase3/growth-page` path by R8-G.3A final reconciliation — growth page is a DERIVED_VIEW with no Growth* writes required. SUPERSEDED BY R8-G.3A FINAL RECONCILIATION for the growth-writers dimension.)
 - EVIDENCE: 04 mastery family + canonical writers; 05 Mastery section; 06 algorithm records. CONFIDENCE: medium.
 
 ## Learner Memory
@@ -201,7 +201,7 @@ All other capabilities were assessed from accepted R8-B/R8-C evidence without re
 - PERSISTENCE: PostgreSQL via Prisma where writers exist; production writer set UNKNOWN → DURABILITY UNKNOWN. RESTART/RETRY/CONCURRENCY/FAILURE: UNKNOWN.
 - LONG-HISTORY: revision items per learner accumulate; lifecycle UNKNOWN.
 - CONSUMERS: learner revision UI, study planning. HTTP: living-revision route. INTERNAL: revision learning service.
-- CURRENT COMPLETENESS: PRESENT_BUT_PARTIAL with several UNKNOWN dimensions (per §8, UNKNOWN preserved, not ABSENT). KNOWN GAPS: GAP-revision-writer-durability-unknown.
+- CURRENT COMPLETENESS: PRESENT_BUT_PARTIAL (durability dimension closed). KNOWN GAPS: none for durability — GAP-revision-writer-durability-unknown is RESOLVED by R8-G.3A final reconciliation (durable Phase3RevisionNode/Edge/DueItem/Audit records; graph is a DERIVED_VIEW). SUPERSEDED BY R8-G.3A FINAL RECONCILIATION for the durability dimension; remaining §8 UNKNOWN dimensions (e.g. validation) are unchanged.
 - EVIDENCE: 04 revision family; 05 LOGIC-mastery-api-phase3-living-revision; 05 dependency cycle. CONFIDENCE: low.
 
 ## Daily Objectives
@@ -222,7 +222,7 @@ All other capabilities were assessed from accepted R8-B/R8-C evidence without re
 - PERSISTENCE: UNKNOWN. RESTART: UNKNOWN. RETRY/CONCURRENCY/FAILURE: UNKNOWN. DEPENDENCY FAILURE: UNKNOWN.
 - LONG-HISTORY: inference bounded (n<=40 events, fixed vocabulary, 06) → STATICALLY_BOUNDED decisioning; underlying trend history UNKNOWN.
 - CONSUMERS: learner growth page, recommendations. HTTP: mounts above. INTERNAL: growth data reader.
-- CURRENT COMPLETENESS: PRESENT_BUT_PARTIAL with UNKNOWN durability. KNOWN GAPS: GAP-mastery-growth-writers (shared with Mastery domain).
+- CURRENT COMPLETENESS: PRESENT_BUT_PARTIAL. KNOWN GAPS: none for the growth-page path — GAP-mastery-growth-writers is PROVEN NOT A GAP by R8-G.3A final reconciliation (growth page is a DERIVED_VIEW; no Growth* writer required). SUPERSEDED BY R8-G.3A FINAL RECONCILIATION for this dimension.
 - EVIDENCE: 04 canonical writers; 06 growth algorithm records; 05 phase3-growth-page row. CONFIDENCE: low.
 
 ## Learning Intelligence / Recommendations
@@ -241,7 +241,7 @@ All other capabilities were assessed from accepted R8-B/R8-C evidence without re
 - CANONICAL LOGIC/DATA OWNER: UNRESOLVED in accepted artifacts — study-plan writer/link not proven; algorithm coverage UNRESOLVED (06 LOGIC-mastery-api-phase3-study-plans).
 - PERSISTENCE/RESTART/RETRY/CONCURRENCY/FAILURE/LONG-HISTORY: UNKNOWN (all dimensions; per §7/§8 these are recorded UNKNOWN, not ABSENT).
 - CONSUMERS: learner planner UI (consumer inferred from route surface; product consumer UNKNOWN).
-- CURRENT COMPLETENESS: PRESENT_BUT_PARTIAL; DOMAIN READINESS = UNKNOWN. KNOWN GAPS: GAP-studyplanning-ownership-unknown.
+- CURRENT COMPLETENESS: PRESENT_BUT_PARTIAL (ownership/durability dimension closed). KNOWN GAPS: none for ownership — GAP-studyplanning-ownership-unknown is RESOLVED by R8-G.3A final reconciliation (StudyPlan/StudyGoal DURABLE_CANONICAL via studySupportService; priorities view DERIVED_VIEW). SUPERSEDED BY R8-G.3A FINAL RECONCILIATION for the ownership dimension.
 - EVIDENCE: 04 evidence/mastery family route surfaces; 06 coverage row. CONFIDENCE: low.
 
 ## Question Bank / Assessment
@@ -263,7 +263,7 @@ All other capabilities were assessed from accepted R8-B/R8-C evidence without re
 - PERSISTENCE: UNKNOWN for audit records. RETRY/CONCURRENCY: UNKNOWN. PARTIAL FAILURE: persistence-failure blocks source approval per accepted contract tests (TEST_PROOF, supporting only) → fail-closed intent PROVEN_AT_TEST_LEVEL.
 - LONG-HISTORY: audit/decision records lifecycle UNKNOWN.
 - CONSUMERS: governance UI, tutor runtime, teacher. HTTP: safety mounts. INTERNAL: privacy guards (evidence, tutor action), moderation.
-- CURRENT COMPLETENESS: PRESENT_BUT_PARTIAL. KNOWN GAPS: GAP-safety-audit-writers, GAP-evidence-header-identity (cross-linked, Learning Evidence domain).
+- CURRENT COMPLETENESS: PRESENT_BUT_PARTIAL. KNOWN GAPS: GAP-evidence-header-identity (cross-linked, Learning Evidence domain). (GAP-safety-audit-writers is RESOLVED by R8-G.3A final reconciliation: the four governance record families are durable — ApprovedSourceRecord/ContentGapRecord/ModerationDecisionRecord DURABLE_CANONICAL, ContentGovernanceAuditRecord DURABLE_EVENT; production default is Prisma fail-closed with no environment-controlled memory fallback.) SUPERSEDED BY R8-G.3A FINAL RECONCILIATION for the writer/audit dimension.
 - EVIDENCE: 04 safeguarding-privacy family + canonical writers; 05 safety section; 06 safety algorithm records. CONFIDENCE: medium.
 
 ## Teacher / School Administration
@@ -383,6 +383,10 @@ Append-only; prior questions preserved. Resolutions proven by focused R8-G.3A tr
 1. Growth* writer UNKNOWN (question 1, partial): for the `/api/phase3/growth-page` path the question is closed — growth page is a DERIVED_VIEW with no Growth* writes; no Growth* writer is required on this path (GAP-mastery-growth-writers PROVEN NOT A GAP). Canonical Growth* writers remain solely in `growthIntelligenceService` (unchanged). No competing mastery truth introduced.
 2. MediaAsset writer UNKNOWN (question 1, partial): closed — durable canonical owner is `mediaAssetService` (Prisma); video learning routes proven to be consumers, not owners.
 3. Study planning readiness UNKNOWN (question 5): closed — study plans are DURABLE_CANONICAL persistent authored snapshots (StudyPlan/StudyGoal Prisma rows via `studySupportService`); only `GET /priorities` is derived.
-4. Tutor-state durability (GAP-tutorcore-persistence-unresolved, partial): closed for the state object — `tutorStateService` production default is Prisma-backed fail-closed (R8-G.3A repair); snapshots/history remain process-local (CONTRADICTION, needs schema decision).
-5. Living-revision and governance-audit durability UNKNOWNs: NOT closed — recorded CONTRADICTION (process-local canonical state with no mechanically completable durable composition; architecture decisions required). No fake durability claimed.
-6. Provenance: remote HEAD imports 10 R8-G.3A route files it does not track; 6 surfaces restored (62-file union), 4 stopped as provenance CONTRADICTION. Full tracked import closure for all active target routes is therefore NOT established — R8-G.4 compile-integrity input.
+4. Tutor-state durability (GAP-tutorcore-persistence-unresolved, partial): closed for the state object — `tutorStateService` production default is Prisma-backed fail-closed (R8-G.3A repair); snapshots/history remain process-local (CONTRADICTION, needs schema decision). — SUPERSEDED BY R8-G.3A FINAL RECONCILIATION: snapshots/history are DURABLE_CANONICAL via `TutorStateSnapshotRecord` (D1, restart-proven); GAP-tutorcore-persistence-unresolved is RESOLVED with no remainder.
+5. Living-revision and governance-audit durability UNKNOWNs: NOT closed — recorded CONTRADICTION (process-local canonical state with no mechanically completable durable composition; architecture decisions required). No fake durability claimed. — SUPERSEDED BY R8-G.3A FINAL RECONCILIATION: both are RESOLVED by D1/D1C (Living Revision durable records) and D2/D2C (governance durable composition; moderation Prisma-only production default).
+6. Provenance: remote HEAD imports 10 R8-G.3A route files it does not track; 6 surfaces restored (62-file union), 4 stopped as provenance CONTRADICTION. Full tracked import closure for all active target routes is therefore NOT established — R8-G.4 compile-integrity input. — Still current as a provenance matter only: re-verified 2026-09-13 that `src/routes/tutorState.ts`, `src/routes/tutorStateEndpoint.ts`, `src/routes/tutorConversation.ts`, `src/routes/phase3GrowthPageRoutes.ts` remain Git-untracked while imported by `src/index.ts`. This is an R8-G.4 compile/provenance input and does NOT reopen the six ownership/durability gaps.
+
+## R8-G.3A FINAL RECONCILIATION (2026-09-13, HEAD 7b2e4047cf9f3a1ecd82afed73255021f35e2a3b)
+
+Supersedes the intermediate R8-G.3A Reconciliation above and the CURRENT rows annotated with SUPERSEDED in this document. Final gap statuses: GAP-tutorcore-persistence-unresolved RESOLVED; GAP-mastery-growth-writers PROVEN NOT A GAP (growth-page path); GAP-revision-writer-durability-unknown RESOLVED; GAP-studyplanning-ownership-unknown RESOLVED; GAP-media-writer-unknown RESOLVED; GAP-safety-audit-writers RESOLVED. No UNKNOWN, PARTIALLY RESOLVED, or active CONTRADICTION remains for these six ownership/durability gaps. Full ownership-verdict table: see 04_BACKEND_DATA_OWNERSHIP_MATRIX.md §R8-G.3A FINAL RECONCILIATION. Remaining provenance items (tutorState, tutorStateEndpoint, tutorConversation, phase3GrowthPageRoutes untracked import closure) are R8-G.4 compile/provenance inputs, not ownership verdicts.

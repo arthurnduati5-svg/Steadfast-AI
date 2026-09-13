@@ -2437,6 +2437,8 @@ Total findings carried as evidence (no dispositions): 9610.
 
 ## R8-G.3A Ownership Reconciliation (2026-09-12, HEAD a0a3feac1e545f383a36f4b7bf73c1635ce61154)
 
+> SUPERSEDED BY R8-G.3A FINAL RECONCILIATION (final section at end of this document). The intermediate verdicts below — in particular the `DEFECT_PROCESS_LOCAL_CANONICAL` rows for Tutor State Snapshots/History, Living Revision, Approved Source, Content Gap, Moderation Decision, and Governance Audit — were repaired by the accepted R8-G.3A commits D1 `4f0a6d2`, D1C `449d17b`, D2 `bcf9fb4`, D2C `7b2e404` and are historical evidence, not current truth.
+
 Append-only. One verdict per target state object (R8-G.3A §9). No UNKNOWN for active production-critical state.
 
 | CAPABILITY | STATE | VERDICT | CANONICAL OWNER | RESTART BEHAVIOR | PROOF |
@@ -2459,4 +2461,45 @@ Append-only. One verdict per target state object (R8-G.3A §9). No UNKNOWN for a
 | Governance Audit | audit trail | DEFECT_PROCESS_LOCAL_CANONICAL | none durable (records array; Prisma repo exists, unwired) | lost on restart; decisions do not gate on audit success | defect lock; CONTRADICTION |
 
 Provenance: 6 surfaces restored as ACCEPTED_PROVENANCE_OMISSION (62-file union); 4 surfaces stopped as provenance CONTRADICTION (tutorState 30, tutorStateEndpoint 39, tutorConversation 148, phase3GrowthPageRoutes 33 untracked value-closure files each).
+
+## R8-G.3A FINAL RECONCILIATION (2026-09-13, HEAD 7b2e4047cf9f3a1ecd82afed73255021f35e2a3b)
+
+Authoritative final ownership truth for the six R8-G.3A families. This section supersedes all intermediate verdicts above (including every `DEFECT_PROCESS_LOCAL_CANONICAL` row in the 2026-09-12 table, repaired by D1/D1C/D2/D2C: commits `4f0a6d2`, `449d17b`, `bcf9fb4`, `7b2e404`). Exactly ONE verdict per state object. Allowed verdict enum: `DURABLE_CANONICAL` | `DURABLE_EVENT` | `DERIVED_VIEW` | `CACHE_ONLY` | `REQUEST_EPHEMERAL` | `PREPARATION_EPHEMERAL_BY_DESIGN` | `NOT_ACTIVE`. No UNKNOWN, MAYBE, PARTIAL, or DEFECT_PROCESS_LOCAL_CANONICAL verdict remains for the accepted final R8-G.3A state.
+
+| STATE | FINAL VERDICT | CANONICAL OWNER | RESTART BEHAVIOR | PROOF |
+| --- | --- | --- | --- | --- |
+| Tutor Handoff | DURABLE_CANONICAL | Prisma `TutorLearnerIdentityMap` + `TutorSession` (copilotHandoffService / tutorSessionContinuityService) | survives restart | r8g3a initial chain trace (`7988716`); no Map on canonical path |
+| Tutor Actions | REQUEST_EPHEMERAL | none (pure per-request decision/hint-envelope compute); durable effects belong to Tutor State / Conversation / Learning Evidence owners | stateless; nothing to lose | `7988716` trace; no TutorAction persistence table invented |
+| Tutor State | DURABLE_CANONICAL | Prisma `TutorState` row (`tutorStateService`, fail-closed production default) | survives restart; DB-down reads/writes throw | `r8g3a-tutor-state-durability.test.ts` (4 tests) |
+| Tutor State Snapshots / History | DURABLE_CANONICAL | Prisma `TutorStateSnapshotRecord` (D1) | survives restart; restart-proven | D1 real-PostgreSQL suite 10/10 (`r8g3a-d1-snapshot-revision-durability-prisma.test.ts`) |
+| Tutor Turn | REQUEST_EPHEMERAL | none (per-request orchestration); telemetry array CACHE_ONLY | telemetry lost and safely recomputed | `7988716` trace; no TutorTurn persistence invented |
+| Tutor Conversation | DURABLE_CANONICAL | Prisma `StudentLearningSessionState`/`Event` (raw SQL) + R8-F `chatMessageRepository` | survives restart | `7988716` chain inspection; idempotency Map CACHE_ONLY (loss → safe retry) |
+| Growth Page | DERIVED_VIEW | canonical mastery / learning evidence / study+support signals via DailyFeed, StudyPlan, Evidence adapters | recomputed; snapshot Map CACHE_ONLY | `r8g3a-growth-derived-view.test.ts` (3 tests); GAP-mastery-growth-writers PROVEN NOT A GAP |
+| Revision Nodes | DURABLE_CANONICAL | Prisma `Phase3RevisionNodeRecord` (D1) | survives restart; restart-proven | D1 real-PostgreSQL suite 10/10 |
+| Revision Edges | DURABLE_CANONICAL | Prisma `Phase3RevisionEdgeRecord` (transactional edge/count maintenance) | survives restart | D1 real-PostgreSQL suite 10/10 |
+| Revision Due State | DURABLE_CANONICAL | Prisma `Phase3RevisionDueItemRecord` | survives restart | D1 real-PostgreSQL suite 10/10 |
+| Revision Audit | DURABLE_EVENT | Prisma `Phase3RevisionAuditRecord` (append-only, awaited) | survives restart | D1 real-PostgreSQL suite 10/10 |
+| Revision Graph | DERIVED_VIEW | derived from durable nodes + edges + due state (no graph table; none invented) | recomputed | D1/D1C; `r8g3a-revision-durability-defect.test.ts` durability lock |
+| Study Plans / Goals | DURABLE_CANONICAL | Prisma `StudyPlan`/`StudyGoal` rows (`studySupportService`) | survives restart | `r8g3a-studyplan-durable-canonical.test.ts` (2 tests) |
+| Study Priority View | DERIVED_VIEW | recomputed from durable plans/goals (`GET /priorities`) | recomputed | `r8g3a-studyplan-durable-canonical.test.ts` |
+| MediaAsset | DURABLE_CANONICAL | `mediaAssetService` / Prisma `MediaAsset` | survives restart | `r8g3a-media-ownership.test.ts`; video routes proven non-owners |
+| Video Learning Session | DURABLE_CANONICAL | TutorState row `videoLearningSession` object + established `LearningEvent` mirror | survives restart (inherits TutorState fail-closed repair) | `7988716` chain via videoLearningSessionStateService → tutorStateService |
+| Video Learning Analytics | DERIVED_VIEW | computed from durable event/session inputs (bounded 200-event store; pure aggregation/scoring) | recomputed | `r8g3a-media-ownership.test.ts`; no metric persistence invented |
+| ApprovedSourceRecord | DURABLE_CANONICAL | `PrismaApprovedSourceRepository` (D2); memory sink is explicit `CONTENT_GOVERNANCE_ALLOW_MEMORY_FALLBACK=1` opt-in only, overridable by `CONTENT_GOVERNANCE_REQUIRE_DURABLE=1` | survives restart; failed durable reads fail closed | D2 real-PostgreSQL suite final run 16/16; composition lock |
+| ContentGapRecord | DURABLE_CANONICAL | `PrismaContentGapRepository` (D2); pure decision logic preserved, logical gap key preserved | survives restart | D2 real-PostgreSQL suite final run 16/16 |
+| ModerationDecisionRecord | DURABLE_CANONICAL | `PrismaModerationDecisionRepository`; `new ModerationService()` default composition is Prisma with NO environment-controlled memory fallback (D2C removed `ASSESSMENT_MODERATION_ALLOW_MEMORY`); memory only via explicit constructor injection | survives restart | D2C composition lock 8/8 + package-5 teacher review/moderation 11/11 |
+| ContentGovernanceAuditRecord | DURABLE_EVENT | `PrismaContentGovernanceAuditRepository` (append-only; required audits awaited; audit failure never reports successful governance completion) | survives restart | D2 real-PostgreSQL suite final run 16/16 |
+
+Final gap statuses (no UNKNOWN, no PARTIALLY RESOLVED, no active CONTRADICTION remains for these six ownership/durability gaps):
+
+- GAP-tutorcore-persistence-unresolved → RESOLVED
+- GAP-mastery-growth-writers → PROVEN NOT A GAP (growth-page path)
+- GAP-revision-writer-durability-unknown → RESOLVED
+- GAP-studyplanning-ownership-unknown → RESOLVED
+- GAP-media-writer-unknown → RESOLVED
+- GAP-safety-audit-writers → RESOLVED
+
+Accepted durability evidence — PREVIOUSLY EXECUTED / REUSED ACCEPTED EVIDENCE, not rerun by final reconciliation: D1 (`4f0a6d2`) 10/10 real PostgreSQL first run; D1C (`449d17b`) 16/16 focused/strict-history + 1/1 real-PostgreSQL HTTP production-route proof; D2 (`bcf9fb4`) 16/16 real PostgreSQL final run (run 1 15/16 was a test-expectation defect, not production); D2C (`7b2e404`) composition lock 8/8 + package-5 teacher review/moderation 11/11.
+
+Provenance (R8-G.4 compile/provenance input — NOT an ownership verdict): `src/routes/tutorState.ts`, `src/routes/tutorStateEndpoint.ts`, `src/routes/tutorConversation.ts`, `src/routes/phase3GrowthPageRoutes.ts` remain Git-untracked while directly imported by `src/index.ts` (verified 2026-09-13: `git ls-files` empty for all four; import sites src/index.ts:12-13,36,584). These do not reopen any of the six ownership/durability gaps.
 

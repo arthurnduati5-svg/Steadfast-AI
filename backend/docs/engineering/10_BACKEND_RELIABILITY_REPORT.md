@@ -173,6 +173,8 @@ New risks identified by R8-E measurement:
 
 ## R8-G.3A Closure (2026-09-12, HEAD a0a3feac1e545f383a36f4b7bf73c1635ce61154)
 
+> SUPERSEDED BY R8-G.3A FINAL RECONCILIATION (final section below). The intermediate DEF-R8G3A-01 record and the recorded-CONTRADICTION risks below were repaired by D1/D1C/D2/D2C (commits `4f0a6d2`, `449d17b`, `bcf9fb4`, `7b2e404`) and are historical evidence, not current truth.
+
 ### DEF-R8G3A-01 TutorState silent Prisma→memory fallback (GAP-tutorcore-persistence-unresolved, state object)
 
 - Root cause: `tutorStateService.getTutorStateForLearner/upsertTutorStateForLearner` always wrote the module `memoryStore` Map and returned memory success when Prisma was unreachable (plus a process-lifetime `_prismaAvailable=false` latch), so canonical learner/tutor/video-session state could be silently volatile while the API reported success.
@@ -180,9 +182,25 @@ New risks identified by R8-E measurement:
 - Regression guard: `src/tests/r8g3a-tutor-state-durability.test.ts` (4 tests: legacy injection preserved, strict write throws, strict read throws, strict never serves seeded memory). No real-DB execution; global test Prisma mock models unreachability.
 - Restart behavior after repair: durable rows survive restart; outage-time requests fail loudly (no misleading success). No tutoring policy/AI behavior changed.
 
-### Remaining R8-G.3A risks (recorded CONTRADICTION, not repaired)
+### Remaining R8-G.3A risks (recorded CONTRADICTION, not repaired) — SUPERSEDED BY R8-G.3A FINAL RECONCILIATION
 
-- Living-revision canonical mutations on a heap repository (total restart loss; no suitable schema) — architecture decision required before this surface may claim durability.
-- Task022 governance singletons + moderation default composition process-local (fail-closed direction preserved and locked by test) — durable composition redesign required.
-- TutorState snapshots/history (`snapshotStore` Map) process-local — schema decision required.
-- Provenance: 4 active target route surfaces without tracked import closure (tutorState 30, tutorStateEndpoint 39, tutorConversation 148, phase3GrowthPageRoutes 33 untracked value-closure files) — bulk restoration refused per budget law; R8-G.4 compile-integrity input. Remote HEAD cannot boot these mounts until closed.
+The intermediate risks below were repaired by the accepted R8-G.3A chain (D1 `4f0a6d2`, D1C `449d17b`, D2 `bcf9fb4`, D2C `7b2e404`); they remain here as history only. Current state:
+
+- Living-revision canonical mutations on a heap repository — RESOLVED: durable `Phase3RevisionNode/Edge/DueItem/AuditRecord` ownership (D1, restart-proven real PostgreSQL 10/10); revision graph is a DERIVED_VIEW.
+- Task022 governance singletons + moderation default composition process-local — RESOLVED: ApprovedSourceRecord/ContentGapRecord/ModerationDecisionRecord DURABLE_CANONICAL, ContentGovernanceAuditRecord DURABLE_EVENT (D2 real PostgreSQL final 16/16); moderation production default is Prisma-only with no environment memory fallback (D2C, composition lock 8/8 + package-5 teacher review/moderation 11/11). Fail-closed direction preserved throughout.
+- TutorState snapshots/history (`snapshotStore` Map) process-local — RESOLVED: durable `TutorStateSnapshotRecord` (D1, restart-proven).
+- Provenance: 4 active target route surfaces without tracked import closure (tutorState 30, tutorStateEndpoint 39, tutorConversation 148, phase3GrowthPageRoutes 33 untracked value-closure files) — bulk restoration refused per budget law; R8-G.4 compile-integrity input. Remote HEAD cannot boot these mounts until closed. — Still current as a provenance matter only; re-verified 2026-09-13 that all four remain Git-untracked while imported by `src/index.ts`. This is an R8-G.4 compile/provenance input and does NOT reopen the six ownership/durability gaps.
+
+## R8-G.3A FINAL RECONCILIATION (2026-09-13, HEAD 7b2e4047cf9f3a1ecd82afed73255021f35e2a3b)
+
+Supersedes all intermediate R8-G.3A reliability records above. Final state of the six R8-G.3A ownership/durability gaps — no UNKNOWN, no PARTIALLY RESOLVED, no active CONTRADICTION remains: GAP-tutorcore-persistence-unresolved RESOLVED; GAP-mastery-growth-writers PROVEN NOT A GAP (growth-page path); GAP-revision-writer-durability-unknown RESOLVED; GAP-studyplanning-ownership-unknown RESOLVED; GAP-media-writer-unknown RESOLVED; GAP-safety-audit-writers RESOLVED.
+
+Durability posture of the repaired surfaces (all restart-durable, fail-closed; no silent Prisma→memory fallback remains in accepted canonical paths — R8G3A-FR11):
+
+- Tutor State + Snapshots/History: Prisma `TutorState` + `TutorStateSnapshotRecord`, strict fail-closed production default (DEF-R8G3A-01 repair stands; snapshot/history remainder now durable per D1).
+- Living Revision: durable node/edge/due/audit records with transactional edge/count maintenance; required revision audit awaited (D1/D1C).
+- Governance: ApprovedSourceRecord/ContentGapRecord/ModerationDecisionRecord DURABLE_CANONICAL, ContentGovernanceAuditRecord DURABLE_EVENT; required audits awaited and gating; source approval fail-closed (D2/D2C).
+
+Accepted durability evidence — PREVIOUSLY EXECUTED / REUSED ACCEPTED EVIDENCE, not rerun: D1 (`4f0a6d2`) 10/10 real PostgreSQL first run; D1C (`449d17b`) 16/16 focused composition/strict-history + 1/1 real-PostgreSQL HTTP production-route proof; D2 (`bcf9fb4`) final 16/16 real PostgreSQL (run 1 15/16 was a test-expectation defect, not production); D2C (`7b2e404`) composition lock 8/8 + package-5 teacher review/moderation 11/11.
+
+Provenance remains the only open item and is explicitly separated as an R8-G.4 compile/provenance input (see final section in 04_BACKEND_DATA_OWNERSHIP_MATRIX.md and 08_BACKEND_GAP_REGISTER.md).
