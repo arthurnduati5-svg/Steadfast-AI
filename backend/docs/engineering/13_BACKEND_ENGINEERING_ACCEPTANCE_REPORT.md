@@ -70,3 +70,57 @@ rewriting the R8-G acceptance result above.
   video/durable-session/RBAC semantics, so unrelated R8-G suites were not
   mechanically rerun per run budget; the reliability-adjacent suites covering
   the touched paths pass (see above).
+
+## Backend Integration Readiness Handoff
+
+- Accepted baseline: `b9ed75960f33fd99af39687e4183818ca5c509a9`; handoff
+  contract version `1`; artifact
+  `backend/docs/engineering/14_BACKEND_INTEGRATION_HANDOFF.md`
+  (ends `STEADFAST_BACKEND_INTEGRATION_HANDOFF_V1_COMPLETE`).
+- Current route-map proof: existing scanner `npm run engineering:scan` run
+  once (no new scanner, no production change). Regenerated
+  `01_BACKEND_SYSTEM_INVENTORY.json`, `02_BACKEND_DEPENDENCY_GRAPH.json`,
+  `03_BACKEND_RUNTIME_ROUTE_MAP.md` now stamped to `b9ed759` (prior map was
+  generated at `87df127`). Truthful delta: `copilotHandoffRoutes` mount now
+  correctly `schoolAuthMiddleware + requireVerifiedSchoolContext`; stale
+  `src/routes/ai.ts` `/` mounts removed (ai/* extraction modules are not
+  wired); one test-only unresolved router composition documented.
+  Production mounts: 113 in `src/index.ts` (76 auth+verified, 32
+  auth-only, 5 public).
+- Contract proof selection (deterministic, loopback-only, synthetic ids):
+  new `src/tests/integration-readiness-handoff.contract.test.ts` 23/23
+  (health public, auth provenance + spoof rejection, verified-context
+  401/403 closures, evidence family durable/idempotent/conflict/
+  cross-school/role-gate, rate-limit exemption + 429, mock/disabled ports +
+  offline proof). Reused unmodified: `r8g-final-security-integrity` 11/11,
+  `learning-evidence-routes`, `r8h-rate-limit-equivalence`,
+  `r8g-idempotency-lifecycle` — 68/68 PASS across 5 files.
+- Consumer-map completion: read-only inspection of `frontend/**` and
+  `AI/**` (no cross-lane edits). Study Chat, Revision, Practice, Growth,
+  Media, Profile = LIVE_CONSUMER; Learning Sessions, Question Bank, Voice
+  = PARTIAL_CONSUMER; Teacher/Admin = NO_CONSUMER_EVIDENCE; AI lane =
+  PLANNED_CONSUMER (no backend HTTP calls from orchestration).
+- External-port classification: governed LLM = DETERMINISTIC_MOCK default;
+  legacy direct OpenAI/STT/TTS = ACTIVE_INTERNAL where configured; redis /
+  pinecone / YouTube / Vimeo / safety webhook = LIVE_DISABLED without
+  config; school identity/roster = mock_only + disabled-live shells;
+  email/SMS/push/storage/SSO/live-SIS = NOT_IMPLEMENTED_DEFERRED. No mock
+  described as live; no live integration activated by this task.
+- Security/privacy result: no secrets read or printed (config names only);
+  synthetic identifiers in tests/docs; spoofed school identity proven
+  ignored; cross-school reads proven empty; envelopes carry safe messages
+  only. Known constraints documented (question-bank MOCK actor extractor
+  must be replaced before live-school use — D2; evidence candidate
+  student-self is body-echoed — frontend must send own learnerId).
+- Gates: `npx tsc -p tsconfig.json --noEmit` 0 diagnostics (client
+  regenerated from the tracked schema into the junctioned dependency tree;
+  no schema/manifest edits, no installs); `npx prisma validate` PASS with
+  stub datasource env (bare-shell P1012 is the pre-existing env-only
+  requirement); `npm run build` exit 0 with
+  `backend/dist/backend/src/index.js` emitted (dist untracked-ignored).
+- Remaining deferred integration: frontend wiring (D1), question-bank
+  verified-context replacement (D2), school lane SSO/SIS (D3),
+  notifications (D4), AI-provider activation (D5), vector/cache activation
+  (D6), deployment/pilot execution (D7), roster/event scale bounds
+  (D8/D9), plus 8 unresolved policy rows — all next-lane items, none a
+  backend-completion defect. R8-G/R8-H history above is unchanged.

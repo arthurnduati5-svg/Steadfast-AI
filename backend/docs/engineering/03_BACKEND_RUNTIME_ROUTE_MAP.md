@@ -9,10 +9,10 @@ both statically resolvable. Anything else is listed as a candidate.
 ## Baseline
 
 - Scanner version: 1.0.0
-- Source fingerprint: sf-7fc842778ef56aaf2cb3563a4eef107fb4154790ec8407ccac9f56049d0656b0
-- Generated at: 2026-09-08T17:43:59.064Z
-- Git branch: main
-- Git head: 87df12783eb0283d4b24963879f8a632b315e8cf
+- Source fingerprint: sf-dacc90c859cb2d574ea1eb66e4d86bcc01e3dc5a84b5249d27e8e148c0302ed9
+- Generated at: 2026-09-16T13:29:08.477Z
+- Git branch: unknown
+- Git head: b9ed75960f33fd99af39687e4183818ca5c509a9
 
 ## Direct Runtime Mounts
 
@@ -43,7 +43,7 @@ mount path | router | source | middleware | line
 /api | profileRoutes | src/index.ts | schoolAuthMiddleware | 194
 /api/learner | learnerRecommendationRoutes | src/index.ts | schoolAuthMiddleware | 195
 /api/learner | learnerPreferenceRoutes | src/index.ts | schoolAuthMiddleware | 196
-/api/copilot | copilotHandoffRoutes | src/index.ts | — | 197
+/api/copilot | copilotHandoffRoutes | src/index.ts | schoolAuthMiddleware, requireVerifiedSchoolContext | 197
 /api/copilot | tutorPolicyEvaluateRoutes | src/index.ts | schoolAuthMiddleware | 198
 /api/copilot | tutorSafeChatRoutes | src/index.ts | schoolAuthMiddleware | 199
 /api/learner | learnerSessionRoutes | src/index.ts | schoolAuthMiddleware, requireVerifiedSchoolContext | 200
@@ -131,17 +131,7 @@ mount path | router | source | middleware | line
 /api/phase3/confidence-recovery | phase3ConfidenceRecoveryRoutes | src/index.ts | schoolAuthMiddleware, requireVerifiedSchoolContext | 593
 /api/phase3/parent-support | phase3ParentSupportRoutes | src/index.ts | schoolAuthMiddleware, requireVerifiedSchoolContext | 597
 /api/phase3/peer-learning | phase3PeerLearningRoutes | src/index.ts | schoolAuthMiddleware, requireVerifiedSchoolContext | 601
-/ | preferencesMemoryRouter | src/routes/ai.ts | — | 204
-/ | voiceQuotaRouter | src/routes/ai.ts | — | 205
-/ | safetyRouter | src/routes/ai.ts | — | 206
-/ | researchRouter | src/routes/ai.ts | — | 207
-/ | studyRouter | src/routes/ai.ts | — | 208
-/ | growthRouter | src/routes/ai.ts | — | 209
-/ | assessmentRouter | src/routes/ai.ts | — | 210
-/ | mediaRouter | src/routes/ai.ts | — | 211
-/ | revisionRouter | src/routes/ai.ts | — | 212
 /api/copilot/learner-memory | learnerMemoryRoutes | src/tests/learner-memory-r2-repair.test.ts | schoolAuthMiddleware, requireVerifiedSchoolContext | 39
-/api/copilot/evidence | createLearningEvidenceRouter | src/tests/learning-evidence-domain/learning-evidence-routes.test.ts | — | 9
 /api/task-032 | task032Router | src/tests/task-032-cross-learner-denial.contract.test.ts | — | 10
 /api/task-032 | task032Router | src/tests/task-032-cross-school-denial.contract.test.ts | — | 10
 /api/task-032 | task032Router | src/tests/task-032-peer-denied-routes.contract.test.ts | — | 10
@@ -203,7 +193,6 @@ mount | factory/router | source | resolution note
 /api/question-bank/recovery-execution-readiness-board | composedRecoveryExecutionReadinessBoardRouter | src/index.ts:479 | router factory call; effective endpoints not composed
 /api/question-bank/recovery-case-adjudication | composedRecoveryCaseAdjudicationRouter | src/index.ts:503 | router factory call; effective endpoints not composed
 /api/copilot/evidence | createLearningEvidenceRouter | src/index.ts:545 | router factory call; effective endpoints not composed
-/api/copilot/evidence | createLearningEvidenceRouter | src/tests/learning-evidence-domain/learning-evidence-routes.test.ts:9 | router factory call; effective endpoints not composed
 
 ## Duplicate Exact Route Candidates
 
@@ -264,7 +253,6 @@ _none_
   - src/index.ts:563 (router remediationTask015Routes at /api/copilot/remediation)
   - src/index.ts:565 (router noAiBypassAuditRoutes at /api/copilot/no-ai-bypass)
   - src/tests/learner-memory-r2-repair.test.ts:39 (router learnerMemoryRoutes at /api/copilot/learner-memory)
-  - src/tests/learning-evidence-domain/learning-evidence-routes.test.ts:9 (router createLearningEvidenceRouter at /api/copilot/evidence)
 - `/api/learner`
   - src/index.ts:195 (router learnerRecommendationRoutes at /api/learner)
   - src/index.ts:196 (router learnerPreferenceRoutes at /api/learner)
@@ -313,15 +301,22 @@ _none_
 ## Unmounted Route Candidates
 
 - src/domains/curriculum-knowledge-graph/routes/CurriculumGraphRouter.ts
-- src/routes/ai-route-segmentation.contract.test.ts
 - src/routes/ai.assistant-envelope.contract.test.ts
 - src/routes/ai.growth-endpoints.contract.test.ts
-- src/routes/ai/ai-chat.routes.ts
-- src/routes/ai/ai-route-contracts.ts
+- src/routes/ai/ai-assessment.routes.ts
+- src/routes/ai/ai-growth.routes.ts
+- src/routes/ai/ai-media.routes.ts
+- src/routes/ai/ai-memory-preferences.routes.ts
+- src/routes/ai/ai-research.routes.ts
+- src/routes/ai/ai-revision.routes.ts
+- src/routes/ai/ai-safety.routes.ts
+- src/routes/ai/ai-shared.ts
+- src/routes/ai/ai-study.routes.ts
+- src/routes/ai/ai-voice.routes.ts
 - src/routes/task026ControlledPilotExecutionRoutes.ts
 - src/routes/task033CanaryObservationRoutes.ts
 - src/routes/task034ControlledRolloutRoutes.ts
 
 ## Unresolved Route Dependencies
 
-_none_
+- /api/phase3/living-revision (<unknown>) at src/tests/r8g3a-d1c-http-durable-prisma.test.ts:40 — no statically identifiable router argument; middleware-only composition remains unresolved
