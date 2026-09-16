@@ -1,10 +1,12 @@
 /**
  * R8-H candidate equivalence: AI runtime sliding-window rate limiter.
  *
- * Proves the amortized-O(1) deque implementation preserves the exact
- * admission/denial contract of the O(w) filter-scan baseline:
- * scope isolation, window boundaries, limit counts, reset timing,
- * retryAfterMs, stale-key sweep, and per-scope denial reasons.
+ * Proves the optimized implementation (ordered fast path with amortized-O(1)
+ * head pruning + order-independent O(w) fallback for rare out-of-order /
+ * clock-rollback inserts) preserves the exact admission/denial contract of
+ * the O(w) filter-scan baseline: scope isolation, window boundaries, limit
+ * counts, reset timing, retryAfterMs, stale-key sweep, per-scope denial
+ * reasons, and exact live-entry counting under non-monotonic timestamps.
  */
 import { describe, it, expect, beforeEach } from 'vitest';
 import {
@@ -139,5 +141,53 @@ describe('r8h rate-limit equivalence', () => {
     expect(check(id, T0 + WINDOW_MS).allowed).toBe(true);
     record(id, T0 + WINDOW_MS);
     expect(check(id, T0 + WINDOW_MS).allowed).toBe(false);
+  });
+
+  it('clock rollback: out-of-order trailing expired entry is not counted', () => {
+    // Non-monotonic insertion: T0, T0+100000, T0. At cutoff T0 the two T0
+    // entries are expired and only T0+100000 is live. A head-only prune
+    // would stop at the first live entry and overcount the trailing T0.
+    // Boundary-sized window: 28 live + triple => reference live 29 < 30.
+    const id = 'r8h-rollback-triple';
+    const mirrored: number[] = [];
+    const rec = (t: number) => { record(id, t); mirrored.push(t); };
+    rec(T0);
+    rec(T0 + 100000);
+    rec(T0);
+    for (let i = 0; i < 28; i++) rec(T0 + 100000);
+    const cutoff = T0; // nowMs = T0 + WINDOW_MS
+    const expected = mirrored.filter((t) => t > cutoff).length;
+    expect(expected).toBe(29);
+    // Exact count proven indirectly at the 30-limit boundary: 29 allows.
+    expect(check(id, T0 + WINDOW_MS).allowed).toBe(true);
+    // One more live entry reaches exactly 30 and must deny.
+    rec(T0 + 100000);
+    const expectedFull = mirrored.filter((t) => t > cutoff).length;
+    expect(expectedFull).toBe(30);
+    expect(check(id, T0 + WINDOW_MS).allowed).toBe(false);
+  });
+
+  it('clock rollback forward/backward/forward matches reference baseline', () => {
+    // Realistic rollback: forward jump, backward rollback to an expired
+    // timestamp, then forward again. All timestamps stay within one window
+    // so the bounded stale-key sweep does not interfere; the reference
+    // baseline is computed inline with the legacy filter predicate.
+    const id = 'r8h-rollback-fbf';
+    const mirrored: number[] = [];
+    const rec = (t: number) => { record(id, t); mirrored.push(t); };
+    for (let i = 0; i < 27; i++) rec(T0 + 100 + i);
+    rec(T0 + 30000); // forward jump
+    rec(T0); // backward rollback (expired at cutoff T0)
+    rec(T0 + 30001); // forward again
+    const cutoff = T0;
+    const expected = mirrored.filter((t) => t > cutoff).length;
+    // 27 + 1 + 1 = 29 live (T0 expired); boundary allows.
+    expect(expected).toBe(29);
+    expect(check(id, T0 + WINDOW_MS).allowed).toBe(true);
+    rec(T0 + 30002);
+    expect(mirrored.filter((t) => t > cutoff).length).toBe(30);
+    const denied = check(id, T0 + WINDOW_MS);
+    expect(denied.allowed).toBe(false);
+    expect(denied.reason).toBe('student_rate_limited');
   });
 });

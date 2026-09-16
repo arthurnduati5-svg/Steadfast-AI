@@ -268,11 +268,15 @@ No other process exception is evidenced for R8-G.3B. Package-20 production owner
 ### R8-H Rate-Limiter Implementation Note (2026-09-16, no reliability disposition change)
 
 - The AI runtime limiter (`aiRuntimeRateLimitGuardService.ts`) internals changed
-  from per-call `filter` copies to a head-offset deque (amortized O(1)). Window
-  boundaries, per-scope limits, denial reasons, retryAfterMs, stale-key sweep
-  cadence, and process-local classification are UNCHANGED; failure behavior
-  (bounded retries, capped backoff, breaker, budget guard) is untouched.
+  from per-check `filter` copies to a head-offset window: amortized O(1) for
+  ordered timestamps with an order-independent O(w) fallback for rare
+  out-of-order / clock-rollback inserts, so exact baseline semantics hold for
+  arbitrary timestamp order (wall-clock time is not assumed monotonic).
+  Window boundaries, per-scope limits, denial reasons, retryAfterMs,
+  stale-key sweep cadence, and process-local classification are UNCHANGED;
+  failure behavior (bounded retries, capped backoff, breaker, budget guard)
+  is untouched.
 - All R8-E reliability dispositions for the limiter/retry/breaker system STAND
-  (see 09 §R8-H for measured proof: guard suite 6/6, equivalence 10/10,
+  (see 09 §R8-H for measured proof: guard suite 6/6, equivalence 12/12,
   digest-equal decision script). No new retry, circuit-breaker, concurrency,
   idempotency, or restart semantics introduced.

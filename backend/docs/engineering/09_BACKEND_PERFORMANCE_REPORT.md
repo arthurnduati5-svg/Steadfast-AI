@@ -341,29 +341,37 @@ Compact numbers: `docs/engineering/r8h-benchmark-summary.json`.
 
 Owner `src/services/aiRuntimeRateLimitGuardService.ts` (via
 `aiRuntimeReliabilityService` <- `liveChatAiAdapter`). Baseline: `timestamps:
-number[]` with a `filter` copy per scope on every check AND every record —
-O(w) time + O(w) allocation per op. Candidate: head-offset deque (prune
-advances `start`, compaction only when the dead prefix dominates), amortized
-O(1), zero steady-state allocation. Window boundary (strict `t > cutoff`),
-limits (30/500/1000), denial reasons, retryAfterMs, sweep cadence unchanged;
-non-decreasing insertion contract documented (production uses Date.now()).
+number[]` with an O(w) `filter`-copy prune per scope on every check and on the
+bounded stale-key sweep path (ordinary record append itself was an O(1) push;
+the per-op cost that mattered was the per-check prune, not every record).
+Candidate: head-offset window with an ordered fast path (prune advances
+`start`, compaction only when the dead prefix dominates), amortized O(1), zero
+steady-state allocation, plus a correctness-preserving fallback: a rare
+out-of-order / clock-rollback insert (nowMs below the window max) marks that
+window unordered and it uses order-independent predicate pruning (`t >
+cutoff`, O(w)) until its live entries are non-decreasing again. Window
+boundary (strict `t > cutoff`), limits (30/500/1000), denial reasons,
+retryAfterMs, sweep cadence unchanged; wall-clock `Date.now()` is NOT assumed
+monotonic, so non-decreasing timestamps are not a correctness precondition.
 
-Baseline (per check+record op) -> candidate:
+Baseline (per check op) -> candidate (repair recheck, same harness/seeds):
 
 | Scenario | Baseline p50 / p95 | Candidate p50 / p95 | Δp95 |
 | --- | --- | --- | --- |
 | SMALL student w=30 | 0.0026 / 0.0040 ms | 0.0010 / 0.0017 ms | -57.5% |
-| REPRESENTATIVE 3-scope | 0.0233 / 0.0389 ms | 0.0031 / 0.0065 ms | -83.3% |
-| LARGE provider w=1000 denial | 0.0137 / 0.0194 ms | 0.0010 / 0.0017 ms | -91.2% |
-| STRESS w=2000 | 0.0243 / 0.0455 ms | 0.0020 / 0.0029 ms | -93.6% |
+| REPRESENTATIVE 3-scope | 0.0233 / 0.0389 ms | 0.0016 / 0.0030 ms | -92.3% |
+| LARGE provider w=1000 denial | 0.0137 / 0.0194 ms | 0.0014 / 0.0020 ms | -89.7% |
+| STRESS w=2000 | 0.0243 / 0.0455 ms | 0.0014 / 0.0017 ms | -96.3% |
 
 Correctness digest equal: `4ff6f5476dd6f430` (admit/saturate/deny/expiry/
-isolation script). Equivalence tests 10/10
+isolation script). Equivalence tests 12/12
 (`src/tests/r8h-rate-limit-equivalence.test.ts`: boundary, expiry, slide,
-isolation, school/provider caps, sweep, dup timestamps); existing guard suite
-6/6 PASS. Asymptotic: O(w) per op -> amortized O(1). No small-workload
-regression (SMALL improved too). No generic primitive created (no second
-sliding-window consumer; kept local).
+isolation, school/provider caps, sweep, dup timestamps, plus clock-rollback
+triple and forward/backward/forward reference-baseline cases proven at the
+30-limit boundary against `filter(t => t > cutoff)`); existing guard suite
+6/6 PASS. Asymptotic: O(w) per check -> amortized O(1) ordered, O(w) only for
+rare unordered windows. No small-workload regression (SMALL improved too). No
+generic primitive created (no second sliding-window consumer; kept local).
 
 ### Candidate 2 — Daily-feed rank-dedupe (ACCEPTED_OPTIMIZATION)
 

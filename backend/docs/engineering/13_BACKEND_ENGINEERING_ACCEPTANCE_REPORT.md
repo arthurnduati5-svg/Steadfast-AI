@@ -52,13 +52,15 @@ rewriting the R8-G acceptance result above.
 - Portfolio: 30 R8-C records reconciled (27 CURRENT, 2 SUPERSEDED, 1
   NO_LONGER_RUNTIME_REACHABLE); classes A=2/B=7/C=9/D=9 (see 06 appendix).
 - Production optimizations (2, both ACCEPTED_OPTIMIZATION with correctness
-  equivalence PASS): AI rate-limit sliding window O(w)->amortized O(1)
-  (p95 -57%..-94%, digest `4ff6f5476dd6f430`); daily-feed rank-dedupe with
+  equivalence PASS): AI rate-limit sliding window O(w)->amortized O(1) ordered
+  fast path with order-independent fallback for rare clock rollback
+  (p95 -57%..-97% on repair recheck, digest `4ff6f5476dd6f430`); daily-feed rank-dedupe with
   rank-table + single-parse decoration (LARGE p95 -39%, STRESS p95 -20%,
   digest `297be19ee8a5ea75`). No output-contract, security, tenant, schema,
   or learning-rule change; no benchmark-only path in runtime; no generic
   abstraction (both STEADFAST_SPECIFIC, kept local).
-- Proof: equivalence suites 23/23 PASS; existing guard/integration/contract
+- Proof: equivalence suites 25/25 PASS (rate-limit 12/12 incl. clock-rollback
+  reference-baseline cases, daily-feed 13/13); existing guard/integration/contract
   suites 11/11 PASS; `npx tsc -p tsconfig.json --noEmit` 0 diagnostics
   (proven with a client regenerated from the tracked schema; owner
   node_modules restored from backup afterwards); `npx prisma validate` PASS

@@ -1,18 +1,23 @@
 type RateWindow = {
-  // Monotonic timestamp buffer with a logical head offset.
+  // Timestamp buffer with a logical head offset for the normal ordered path.
   // pruneWindow advances `start` past expired entries (amortized O(1))
   // instead of allocating a filtered copy on every check/record.
   // The backing array is compacted only when the dead prefix grows large,
   // so steady-state operation performs zero allocations.
   //
-  // Ordering contract: timestamps are appended in non-decreasing order.
-  // Production callers always use Date.now(); explicit-nowMs callers
-  // (tests, harness) pass non-decreasing sequences. Under this contract
-  // head-pruning counts exactly the entries with t > cutoff, identical to
-  // the previous filter copy. Window boundary (strict t > cutoff),
-  // per-scope limits, retryAfterMs, and sweep cadence are unchanged.
+  // Ordering architecture (corrected R8-H repair): ordered timestamps use
+  // amortized O(1) head pruning. A rare out-of-order / clock-rollback insert
+  // (nowMs < max previously appended, or Date.now() moving backward) marks
+  // the window unordered; that window then uses order-independent predicate
+  // pruning (t > cutoff over live entries, O(w)) until its live entries are
+  // non-decreasing again. This preserves exact baseline filter semantics for
+  // arbitrary timestamp order. Wall-clock Date.now() is NOT assumed
+  // monotonic. Window boundary (strict t > cutoff), per-scope limits,
+  // retryAfterMs, and sweep cadence are unchanged.
   timestamps: number[];
   start: number;
+  unordered: boolean;
+  maxTs: number;
 };
 
 type RateLimitKey = string;
@@ -37,20 +42,61 @@ function makeKey(prefix: string, id: string): RateLimitKey {
 
 function pruneWindow(window: RateWindow, nowMs: number): void {
   const cutoff = nowMs - WINDOW_MS;
+  if (!window.unordered) {
+    const ts = window.timestamps;
+    let start = window.start;
+    while (start < ts.length && ts[start] <= cutoff) start++;
+    window.start = start;
+    // Compact the dead prefix only when it dominates the buffer, keeping
+    // amortized O(1) behavior without per-call allocation. The live count
+    // (length - start) is unchanged by compaction.
+    if (window.start > 1024 && window.start * 2 >= ts.length) {
+      window.timestamps = ts.slice(window.start);
+      window.start = 0;
+    } else if (window.start === ts.length && ts.length > 0) {
+      // Fully expired small buffer: reset in place without allocation.
+      ts.length = 0;
+      window.start = 0;
+    }
+    if (window.timestamps.length - window.start === 0 && window.timestamps.length === 0) {
+      window.maxTs = Number.NEGATIVE_INFINITY;
+      window.unordered = false;
+    }
+    return;
+  }
+  // Correctness-preserving fallback for rare out-of-order / clock-rollback
+  // input: order-independent predicate pruning over live entries (O(w)),
+  // exactly matching the legacy `filter(t => t > cutoff)` semantics.
   const ts = window.timestamps;
-  let start = window.start;
-  while (start < ts.length && ts[start] <= cutoff) start++;
-  window.start = start;
-  // Compact the dead prefix only when it dominates the buffer, keeping
-  // amortized O(1) behavior without per-call allocation. The live count
-  // (length - start) is unchanged by compaction.
-  if (window.start > 1024 && window.start * 2 >= ts.length) {
-    window.timestamps = ts.slice(window.start);
-    window.start = 0;
-  } else if (window.start === ts.length && ts.length > 0) {
-    // Fully expired small buffer: reset in place without allocation.
-    ts.length = 0;
-    window.start = 0;
+  const live: number[] = [];
+  let liveMax = Number.NEGATIVE_INFINITY;
+  for (let i = window.start; i < ts.length; i++) {
+    const t = ts[i];
+    if (t > cutoff) {
+      live.push(t);
+      if (t > liveMax) liveMax = t;
+    }
+  }
+  window.timestamps = live;
+  window.start = 0;
+  if (live.length === 0) {
+    window.maxTs = Number.NEGATIVE_INFINITY;
+    window.unordered = false;
+    return;
+  }
+  let ordered = true;
+  for (let i = 1; i < live.length; i++) {
+    if (live[i] < live[i - 1]) {
+      ordered = false;
+      break;
+    }
+  }
+  if (ordered) {
+    window.unordered = false;
+    window.maxTs = live[live.length - 1];
+  } else {
+    window.unordered = true;
+    window.maxTs = liveMax;
   }
 }
 
@@ -66,10 +112,20 @@ function countInWindow(window: RateWindow, nowMs: number): number {
 function getOrCreateWindow(key: RateLimitKey): RateWindow {
   let w = windows.get(key);
   if (!w) {
-    w = { timestamps: [], start: 0 };
+    w = { timestamps: [], start: 0, unordered: false, maxTs: Number.NEGATIVE_INFINITY };
     windows.set(key, w);
   }
   return w;
+}
+
+function appendTimestamp(window: RateWindow, nowMs: number): void {
+  if (window.maxTs !== Number.NEGATIVE_INFINITY && nowMs < window.maxTs) {
+    window.unordered = true;
+  }
+  if (window.maxTs === Number.NEGATIVE_INFINITY || nowMs > window.maxTs) {
+    window.maxTs = nowMs;
+  }
+  window.timestamps.push(nowMs);
 }
 
 function maybeSweepStaleKeys(nowMs: number): void {
@@ -138,18 +194,18 @@ export function recordAiRateLimitUsage(input: {
   if (input.actorType === 'student' && input.actorId) {
     const key = makeKey('student', input.actorId);
     const w = getOrCreateWindow(key);
-    w.timestamps.push(nowMs);
+    appendTimestamp(w, nowMs);
   }
 
   if (input.schoolId) {
     const key = makeKey('school', input.schoolId);
     const w = getOrCreateWindow(key);
-    w.timestamps.push(nowMs);
+    appendTimestamp(w, nowMs);
   }
 
   const providerKey = makeKey('provider', `${input.provider}:${input.operation}`);
   const providerWindow = getOrCreateWindow(providerKey);
-  providerWindow.timestamps.push(nowMs);
+  appendTimestamp(providerWindow, nowMs);
 }
 
 export function resetAiRateLimitStateForTests(): void {

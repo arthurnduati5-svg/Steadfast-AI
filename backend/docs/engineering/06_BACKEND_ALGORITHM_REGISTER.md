@@ -5784,6 +5784,9 @@ Allowed signals only: COMPLETENESS_REVIEW, PERFORMANCE_MEASUREMENT, RELIABILITY_
 <!-- R8-H-MEASURED-APPENDIX-BEGIN: preserved across generator reruns; do not erase -->
 ## R8-H Measured Intelligence Appendix (2026-09-16, baseline 6b419dad)
 
+R8-H targeted reconciliation of accepted R8-C records; full generator rerun
+was not used as R8-H evidence.
+
 Reconciliation of the 30 R8-C records against the R8-H baseline (deterministic
 tooling + targeted source inspection; no second scanner created). Status values:
 CURRENT (source file present at baseline), CHANGED_IMPLEMENTATION, SUPERSEDED
@@ -5838,10 +5841,13 @@ CURRENT (source file present at baseline), CHANGED_IMPLEMENTATION, SUPERSEDED
 1. ALG-operations-reliability-ai-rate-limit-window — owner
    `src/services/aiRuntimeRateLimitGuardService.ts`, runtime consumer
    `aiRuntimeReliabilityService` <- `liveChatAiAdapter`. Baseline O(w)
-   filter-copy per scope per check AND per record. Candidate: head-offset
-   deque, amortized O(1), strict `t > cutoff` boundary preserved,
-   non-decreasing insertion contract (production uses Date.now()). Maturity:
-   BENCHMARKED. Decision: ACCEPTED_OPTIMIZATION. Reusability: STEADFAST_SPECIFIC
+   filter-copy prune per scope on checks and on the bounded sweep path
+   (record append itself O(1)). Candidate: head-offset window, amortized O(1)
+   ordered fast path + O(w) order-independent fallback for rare
+   out-of-order/clock-rollback inserts, strict `t > cutoff` boundary
+   preserved, wall-clock Date.now() NOT assumed monotonic (no ordering
+   precondition). Maturity: BENCHMARKED. Decision: ACCEPTED_OPTIMIZATION.
+   Reusability: STEADFAST_SPECIFIC
    (no second sliding-window consumer found; kept local, no new primitive).
 2. ALG-mastery-dailyfeed-feed-rank-dedupe — owner
    `src/services/phase3DailyLearningFeedRankingService.ts`, runtime consumer
@@ -5854,7 +5860,7 @@ CURRENT (source file present at baseline), CHANGED_IMPLEMENTATION, SUPERSEDED
 
 Full measurements: `09_BACKEND_PERFORMANCE_REPORT.md` §R8-H and
 `r8h-benchmark-summary.json`. Harness: `tools/engineering/r8-h-workload.ts`.
-Equivalence tests: `src/tests/r8h-rate-limit-equivalence.test.ts` (10/10),
+Equivalence tests: `src/tests/r8h-rate-limit-equivalence.test.ts` (12/12),
 `src/tests/r8h-daily-feed-equivalence.test.ts` (13/13).
 <!-- R8-H-MEASURED-APPENDIX-END -->
 
