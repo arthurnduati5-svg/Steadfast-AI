@@ -159,6 +159,14 @@ export function inferVideoTrustTier(channelTitle?: string | null): SourceTrustTi
 }
 
 function resolveSourceTrust(input: SourceTrustInput): SourceTrustDecision {
+  // schoolId MUST be verified caller context (threaded from schoolAuthMiddleware
+  // via artifactQueryService / tutorContextResolver / chat pipeline identity).
+  // An arbitrary caller-supplied schoolId never establishes another school's
+  // source context: tenant authorization lives in caller composition, and this
+  // pure service only propagates the already-verified scope for provenance.
+  // Unknown or unreviewed sources stay fail-closed: trustTier 'limited' is
+  // always withheld, never learner-visible, and never marked verified.
+  const verifiedSchoolId = typeof input.schoolId === 'string' && input.schoolId.trim() ? input.schoolId.trim() : null;
   const candidates: SourceCandidate[] = [
     ...(input.requestedSources || []),
     ...(input.retrievalRecords || []),
@@ -186,7 +194,7 @@ function resolveSourceTrust(input: SourceTrustInput): SourceTrustDecision {
       url: source.url,
       artifactId: candidate.artifactId || null,
       artifactBlockId: candidate.artifactBlockId || null,
-      schoolId: input.schoolId || null,
+      schoolId: verifiedSchoolId,
       retrievedAt: candidate.retrievedAt || null,
       verifiedAt: new Date().toISOString(),
       verificationMethod: candidate.artifactId ? 'artifact_provenance' : 'retrieval_record',

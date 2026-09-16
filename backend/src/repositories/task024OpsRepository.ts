@@ -115,19 +115,28 @@ export const task024OpsRepository = {
   },
 
   async createBackupCheck(input: any): Promise<any> {
-    const check = { id: `backup_${backupChecks.length + 1}`, ...input, createdAt: new Date().toISOString() }
+    const schoolId = typeof input?.schoolId === 'string' && input.schoolId.trim() ? input.schoolId.trim() : null
+    const check = { id: `backup_${backupChecks.length + 1}`, ...input, schoolId, createdAt: new Date().toISOString() }
     backupChecks.push(check)
     return check
   },
 
+  async listBackupChecks(schoolId?: string): Promise<any[]> {
+    if (schoolId === undefined) return [...backupChecks]
+    return backupChecks.filter((check) => check.schoolId === schoolId)
+  },
+
   async createOpsReport(input: any): Promise<any> {
-    const report = { id: `ops_${opsReports.length + 1}`, ...input, createdAt: new Date().toISOString() }
+    const schoolId = typeof input?.schoolId === 'string' && input.schoolId.trim() ? input.schoolId.trim() : null
+    const report = { id: `ops_${opsReports.length + 1}`, ...input, schoolId, createdAt: new Date().toISOString() }
     opsReports.push(report)
     return report
   },
 
-  async getLatestOpsReport(taskId?: string): Promise<any | null> {
-    const reports = taskId ? opsReports.filter((report) => report.taskId === taskId) : opsReports
+  async getLatestOpsReport(taskId?: string, schoolId?: string): Promise<any | null> {
+    let reports = [...opsReports]
+    if (schoolId !== undefined) reports = reports.filter((report) => report.schoolId === schoolId)
+    if (taskId) reports = reports.filter((report) => report.taskId === taskId)
     return reports.length ? reports[reports.length - 1] : null
   },
 

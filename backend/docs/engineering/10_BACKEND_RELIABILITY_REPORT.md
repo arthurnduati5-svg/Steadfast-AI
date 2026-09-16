@@ -254,5 +254,13 @@ No other process exception is evidenced for R8-G.3B. Package-20 production owner
 - Durable sessions: 3 R1 Vitest files (keyed/unkeyed atomic create, idempotency repair contract), 14 tests = PASS.
 - Build: `npm run build` = PASS; `backend/dist/backend/src/index.js` exists.
 - Prisma: `npx prisma validate` = PASS; client regenerated from the tracked schema.
-- Repository preservation: `studentLearningSessionRepository.ts` is byte-identical to frozen HEAD (zero diff); no test file was modified.
+- Repository preservation: `studentLearningSessionRepository.ts` is byte-identical to frozen HEAD (zero diff); no pre-existing test file was modified.
 - Process exceptions (recorded truthfully): temp-root `node_modules` junction recreated (untracked env link, not a source change); `npm ci` executed to restore the lockfile dependency tree (no manifest edits); one `prisma generate --no-engine` run was superseded by a full `prisma generate`; owner authorized the scoped Prisma schema/client synchronization.
+
+### R8-G Final Security Integrity Repair (descendant of 276af5c, same task)
+
+- Task024 ops records (`backupChecks`, `opsReports`) are school-scoped: writes carry verified `schoolId` from `getReqSchoolId(req)`; scoped reads isolate per school. No cross-school leak.
+- `videoRecommendationService.recommend` enforces verified non-empty identity before any provider use; provider-search evidence is honest (`score: 0` with rank text, heuristic-scores warning preserved alongside `needs_review` safety, no learner-context caching).
+- `kernelSourceTrustService.resolve` normalizes blank `schoolId` to null, documents verified-context-only provenance, and stays fail-closed for unreviewed sources.
+- Targeted proof: `backend/src/tests/r8g-final-security-integrity.test.ts`, 11/11 PASS.
+- Regression re-proof after repair: R1 durable 14/14 PASS; focused 51/51 PASS (same semantic file selections); `npx tsc -p tsconfig.json --noEmit` 0 diagnostics; `npm run build` exit 0 with `backend/dist/backend/src/index.js` emitted (28 dist files restored to HEAD post-proof, excluded from commit); Prisma schema valid (stub datasource env, no live DB touched).

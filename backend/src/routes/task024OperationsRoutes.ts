@@ -342,6 +342,7 @@ router.get('/operations/backup/readiness', async (req: Request, res: Response) =
   try {
     const result = await evaluateBackupReadiness();
     await task024OpsRepository.createBackupCheck({
+      schoolId: getReqSchoolId(req) ?? null,
       backupConfigured: result.scopeDefined,
       backupProvider: 'postgresql',
       backupMode: 'local_drill',
@@ -426,7 +427,8 @@ router.get('/operations/reports/task-024', async (req: Request, res: Response) =
   const requestId = (req as any).requestId || 'unknown';
   if (!(await enforceInternalAccess(req, res))) return;
   try {
-    const report = await task024OpsRepository.getLatestOpsReport();
+    const schoolId = getReqSchoolId(req);
+    const report = await task024OpsRepository.getLatestOpsReport(undefined, schoolId);
     if (!report) {
       res.json({ ok: true, report: null, message: 'No report generated yet. POST /operations/reports/task-024/generate to generate.', requestId });
       return;
@@ -489,6 +491,7 @@ router.post('/operations/reports/task-024/generate', async (req: Request, res: R
     });
 
     await task024OpsRepository.createOpsReport({
+      schoolId: getReqSchoolId(req) ?? null,
       taskId: '024',
       taskName: report.taskName,
       status: blockingIssues.length === 0 ? 'pass' : 'fail',

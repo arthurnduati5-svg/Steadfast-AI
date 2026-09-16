@@ -9,6 +9,7 @@ import type {
   VideoRecommendationResult,
 } from '../lib/types';
 import { inferVideoTrustTier } from './sourceTrustService';
+import { randomUUID } from 'crypto';
 import type { VideoCandidateInput, VideoRecommendation, VideoRecommendationRequest, VideoRecommendationResponse } from './videoRecommendationContracts';
 
 type YoutubeCandidate = {
@@ -328,6 +329,14 @@ export const videoRecommendationService = {
     identity: { schoolId: string; studentId: string },
     request: VideoRecommendationRequest,
   ): Promise<VideoRecommendationResponse> => {
+    // Identity MUST be verified school context established by schoolAuthMiddleware
+    // (or a verified internal caller such as the chat pipeline). Never accept
+    // caller-supplied schoolId/studentId from an untrusted body as authority.
+    const verifiedSchoolId = typeof identity?.schoolId === 'string' ? identity.schoolId.trim() : '';
+    const verifiedStudentId = typeof identity?.studentId === 'string' ? identity.studentId.trim() : '';
+    if (!verifiedSchoolId || !verifiedStudentId) {
+      throw new Error('Verified school identity and authorized learner relationship are required.');
+    }
     const result = await recommendEducationalVideos({
       query: request.query || request.topic || request.subject || request.message,
       topic: request.topic,
@@ -345,7 +354,7 @@ export const videoRecommendationService = {
         source: 'provider_search',
       };
       return {
-        recommendationId: `${identity.schoolId}:${video.videoId}`,
+        recommendationId: `${verifiedSchoolId}:${video.videoId}`,
         status: 'recommended',
         decision: 'include',
         candidate,
@@ -357,7 +366,7 @@ export const videoRecommendationService = {
           accessibility: 0.5, availability: 1, finalScore: 0.5,
         },
         reasons: [video.whyRecommended || 'Relevant educational video.'],
-        warnings: [],
+        warnings: ['Dimension scores are provider-search heuristics pending policy/teacher review.'],
         rejectionReasons: [],
         safety: { status: 'needs_review', reasons: [], warnings: ['Video suitability requires policy review.'] },
         suitability: {
@@ -365,7 +374,7 @@ export const videoRecommendationService = {
           islamicAppropriateness: { status: 'needs_review', confidence: 0, reasons: [], warnings: [], needsTeacherReview: true },
           languageSuitability: { status: 'unknown', reasons: [] },
         },
-        evidence: [{ dimension: 'provider_search', score: index, reason: video.whyRecommended || 'Provider result.', source: 'provider_search' }],
+        evidence: [{ dimension: 'provider_search', score: 0, reason: `Provider result rank ${index + 1}: ${video.whyRecommended || 'Provider result.'}`, source: 'provider_search' }],
         cachePolicy: { cacheAllowed: false, scope: 'request', reason: 'Recommendations are learner-contextual.' },
         createdAt: new Date().toISOString(),
       };
@@ -377,8 +386,8 @@ export const videoRecommendationService = {
       rejected: [],
       reviewQueue: [],
       meta: {
-        requestId: `${identity.schoolId}:${identity.studentId}:${Date.now()}`,
-        schoolId: identity.schoolId,
+        requestId: randomUUID(),
+        schoolId: verifiedSchoolId,
         sessionId: request.sessionId,
         usedTutorContext: false,
         usedIntentResolution: false,
