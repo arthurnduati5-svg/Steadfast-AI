@@ -5781,3 +5781,80 @@ Allowed signals only: COMPLETENESS_REVIEW, PERFORMANCE_MEASUREMENT, RELIABILITY_
 - SIGNAL: COMPLETENESS_REVIEW — LOGIC-operations-api-task033-controlled-canary-observation (structural candidate)
 - SIGNAL: COMPLETENESS_REVIEW — LOGIC-operations-api-task034-controlled-limited-rollout (structural candidate)
 
+<!-- R8-H-MEASURED-APPENDIX-BEGIN: preserved across generator reruns; do not erase -->
+## R8-H Measured Intelligence Appendix (2026-09-16, baseline 6b419dad)
+
+Reconciliation of the 30 R8-C records against the R8-H baseline (deterministic
+tooling + targeted source inspection; no second scanner created). Status values:
+CURRENT (source file present at baseline), CHANGED_IMPLEMENTATION, SUPERSEDED
+(equivalent lives elsewhere), NO_LONGER_RUNTIME_REACHABLE.
+
+### Reconciliation
+
+- CURRENT: 27 records (all registered source paths resolve at baseline except
+  the three below; roster dry-run already Set-indexed per R8-F/R8-G history).
+- SUPERSEDED: ALG-mastery-confidencerecovery-mismatch-rank-dedupe
+  (dedupe equivalent now `dedupeConfidenceObservations` in
+  `src/services/phase3ConfidenceCalibrationService.ts`, already O(n)
+  Set-based; rank-table half replaced by the calibration alignment model);
+  ALG-mastery-practicemastery-score-threshold-ladder and
+  ALG-mastery-practicemastery-score-compute (mastery scoring now owned by the
+  probabilistic-mastery stack + `masteryEvidenceAggregationService` ladder).
+- NO_LONGER_RUNTIME_REACHABLE: ALG-operations-shared-pagination-cursor
+  (`apiPaginationService.ts` never landed as a runtime unit; clamp concern is
+  distributed inline at call sites, e.g. `Math.min(limit, …)`; contracts only
+  in `apiPaginationContracts.ts` with `MAX_PAGINATION_LIMIT = 100`).
+- Newly introduced backend algorithms since R8-C with strong evidence: none
+  claimed (candidate families inspected; media-scoring route-level inline
+  copies in `src/routes/ai.ts` / `src/routes/ai/ai-media.routes.ts` duplicate
+  the canonical `src/media-stream/scoring.ts` — recorded as duplication
+  observation, not a new algorithm, not touched).
+
+### Classification (Class A/B/C/D)
+
+- Class A eligible + selected (2): ALG-operations-reliability-ai-rate-limit-window,
+  ALG-mastery-dailyfeed-feed-rank-dedupe (see candidates below).
+- Class A considered but NOT selected: roster dry-run/reconcile (already
+  repaired, verified O(n)-shape — do not re-optimize); media-stream scores
+  (per-asset micro-cost, triplicated implementation, corpus bound with caller —
+  no coherent mechanical win); marking batch sweep (DB-round-trip bound in
+  production, ordering/isolation semantics at risk); voice ledger quota loop
+  (transaction/row-lock bound); topic-inference signal count (bounded n<=40,
+  3-query shape, no N+1); external-video dedupe (already O(n) single pass).
+- Class B (benchmarked or left untouched, semantics frozen): daily-objective
+  idempotency settle, retry backoff/jitter, circuit breaker, canary state
+  transition, JWT claim extract, generation-policy gate, voice express limiter
+  (library-delegated).
+- Class C (learning/quality, no behavioral tuning): evidence-level ladder,
+  next-practice priority, spaced-review interval, growth topic inference,
+  video-effectiveness score, learner-recommendation priority, media/stream rank
+  scores, recency decay, confidence calibration.
+- Class D (already efficient, NO OPTIMIZATION JUSTIFIED): content fingerprint,
+  media-dedupe key, replay idempotency (library-hash O(content), negligible),
+  roster reconcile (O(n)), external-video dedupe (O(n)), pagination (no unit).
+
+### Selected candidates
+
+1. ALG-operations-reliability-ai-rate-limit-window — owner
+   `src/services/aiRuntimeRateLimitGuardService.ts`, runtime consumer
+   `aiRuntimeReliabilityService` <- `liveChatAiAdapter`. Baseline O(w)
+   filter-copy per scope per check AND per record. Candidate: head-offset
+   deque, amortized O(1), strict `t > cutoff` boundary preserved,
+   non-decreasing insertion contract (production uses Date.now()). Maturity:
+   BENCHMARKED. Decision: ACCEPTED_OPTIMIZATION. Reusability: STEADFAST_SPECIFIC
+   (no second sliding-window consumer found; kept local, no new primitive).
+2. ALG-mastery-dailyfeed-feed-rank-dedupe — owner
+   `src/services/phase3DailyLearningFeedRankingService.ts`, runtime consumer
+   `phase3DailyLearningFeedService` <- feed routes + growth adapters. Baseline
+   O(n·m) indexOf-in-loop dedupe + O(n log n) Date parses in comparator.
+   Candidate: precomputed rank Map (unknown -> -1, indexOf parity) +
+   decorate-sort-undecorate with single-parse dueAtMs; identical branches;
+   localeCompare tiebreak verbatim. Maturity: BENCHMARKED. Decision:
+   ACCEPTED_OPTIMIZATION. Reusability: STEADFAST_SPECIFIC (feed-local).
+
+Full measurements: `09_BACKEND_PERFORMANCE_REPORT.md` §R8-H and
+`r8h-benchmark-summary.json`. Harness: `tools/engineering/r8-h-workload.ts`.
+Equivalence tests: `src/tests/r8h-rate-limit-equivalence.test.ts` (10/10),
+`src/tests/r8h-daily-feed-equivalence.test.ts` (13/13).
+<!-- R8-H-MEASURED-APPENDIX-END -->
+

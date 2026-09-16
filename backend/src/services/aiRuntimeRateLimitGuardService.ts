@@ -1,5 +1,18 @@
 type RateWindow = {
+  // Monotonic timestamp buffer with a logical head offset.
+  // pruneWindow advances `start` past expired entries (amortized O(1))
+  // instead of allocating a filtered copy on every check/record.
+  // The backing array is compacted only when the dead prefix grows large,
+  // so steady-state operation performs zero allocations.
+  //
+  // Ordering contract: timestamps are appended in non-decreasing order.
+  // Production callers always use Date.now(); explicit-nowMs callers
+  // (tests, harness) pass non-decreasing sequences. Under this contract
+  // head-pruning counts exactly the entries with t > cutoff, identical to
+  // the previous filter copy. Window boundary (strict t > cutoff),
+  // per-scope limits, retryAfterMs, and sweep cadence are unchanged.
   timestamps: number[];
+  start: number;
 };
 
 type RateLimitKey = string;
@@ -24,18 +37,36 @@ function makeKey(prefix: string, id: string): RateLimitKey {
 
 function pruneWindow(window: RateWindow, nowMs: number): void {
   const cutoff = nowMs - WINDOW_MS;
-  window.timestamps = window.timestamps.filter(t => t > cutoff);
+  const ts = window.timestamps;
+  let start = window.start;
+  while (start < ts.length && ts[start] <= cutoff) start++;
+  window.start = start;
+  // Compact the dead prefix only when it dominates the buffer, keeping
+  // amortized O(1) behavior without per-call allocation. The live count
+  // (length - start) is unchanged by compaction.
+  if (window.start > 1024 && window.start * 2 >= ts.length) {
+    window.timestamps = ts.slice(window.start);
+    window.start = 0;
+  } else if (window.start === ts.length && ts.length > 0) {
+    // Fully expired small buffer: reset in place without allocation.
+    ts.length = 0;
+    window.start = 0;
+  }
+}
+
+function liveCount(window: RateWindow): number {
+  return window.timestamps.length - window.start;
 }
 
 function countInWindow(window: RateWindow, nowMs: number): number {
   pruneWindow(window, nowMs);
-  return window.timestamps.length;
+  return liveCount(window);
 }
 
 function getOrCreateWindow(key: RateLimitKey): RateWindow {
   let w = windows.get(key);
   if (!w) {
-    w = { timestamps: [] };
+    w = { timestamps: [], start: 0 };
     windows.set(key, w);
   }
   return w;
@@ -46,7 +77,7 @@ function maybeSweepStaleKeys(nowMs: number): void {
   lastSweepMs = nowMs;
   for (const [key, window] of windows) {
     pruneWindow(window, nowMs);
-    if (window.timestamps.length === 0) windows.delete(key);
+    if (liveCount(window) === 0) windows.delete(key);
   }
 }
 

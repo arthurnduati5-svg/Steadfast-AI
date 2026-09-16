@@ -302,3 +302,116 @@ Derivation: budget = max(observed p95 × ~3–5, human-perceptible floor). These
 
 - Behavioral acceptance of the repaired release-approval concurrency semantics under realistic multi-actor flows.
 - Long-history retention policy decisions (evidence idempotency, daily-objective idempotency) require product/legal input before any purge behavior is accepted.
+
+## R8-H Algorithm Optimization (2026-09-16, baseline 6b419dad)
+
+R8-E historical measurements above are preserved as history; nothing rewritten.
+R8-H measured current baselines on the current machine — old R8-E numbers were
+never reused as R8-H evidence.
+
+### Environment
+
+| Item | Value |
+| --- | --- |
+| OS | Windows 11 (win32 10.0.26200) |
+| Node | v24.14.1 |
+| CPU | Intel i5-8365U, 8 logical |
+| RAM | 15.8 GB |
+| Database | none (in-memory synthetic only; no DB algorithm selected) |
+| SHA | 6b419dad5731282f71c5721d72b223e6a488a35c |
+| Warmups / samples | >= 10 / >= 30 per workload |
+| Sizes | SMALL / REPRESENTATIVE / LARGE / STRESS per algorithm |
+
+### Methodology
+
+One bounded harness `tools/engineering/r8-h-workload.ts` (`--target
+rate-limit|daily-feed`): deterministic seeded fixtures, per-sample timing of
+batched micro-ops where needed for timer resolution, p50/p95/min/max (no p99
+claimed), heap deltas around workloads, sha256 correctness digests, machine
+metadata per run. Baseline campaign ran against the accepted starting
+implementation before any production edit; candidate campaign ran after, with
+identical seeds in fresh processes. One confirmation campaign for the noisy
+daily-feed tails. No production providers, no live school data.
+
+Reproduction: `R8H_SHA=$(git rev-parse HEAD); npx tsx
+tools/engineering/r8-h-workload.ts --target <rate-limit|daily-feed>`.
+Compact numbers: `docs/engineering/r8h-benchmark-summary.json`.
+
+### Candidate 1 — AI runtime sliding-window rate limiter (ACCEPTED_OPTIMIZATION)
+
+Owner `src/services/aiRuntimeRateLimitGuardService.ts` (via
+`aiRuntimeReliabilityService` <- `liveChatAiAdapter`). Baseline: `timestamps:
+number[]` with a `filter` copy per scope on every check AND every record —
+O(w) time + O(w) allocation per op. Candidate: head-offset deque (prune
+advances `start`, compaction only when the dead prefix dominates), amortized
+O(1), zero steady-state allocation. Window boundary (strict `t > cutoff`),
+limits (30/500/1000), denial reasons, retryAfterMs, sweep cadence unchanged;
+non-decreasing insertion contract documented (production uses Date.now()).
+
+Baseline (per check+record op) -> candidate:
+
+| Scenario | Baseline p50 / p95 | Candidate p50 / p95 | Δp95 |
+| --- | --- | --- | --- |
+| SMALL student w=30 | 0.0026 / 0.0040 ms | 0.0010 / 0.0017 ms | -57.5% |
+| REPRESENTATIVE 3-scope | 0.0233 / 0.0389 ms | 0.0031 / 0.0065 ms | -83.3% |
+| LARGE provider w=1000 denial | 0.0137 / 0.0194 ms | 0.0010 / 0.0017 ms | -91.2% |
+| STRESS w=2000 | 0.0243 / 0.0455 ms | 0.0020 / 0.0029 ms | -93.6% |
+
+Correctness digest equal: `4ff6f5476dd6f430` (admit/saturate/deny/expiry/
+isolation script). Equivalence tests 10/10
+(`src/tests/r8h-rate-limit-equivalence.test.ts`: boundary, expiry, slide,
+isolation, school/provider caps, sweep, dup timestamps); existing guard suite
+6/6 PASS. Asymptotic: O(w) per op -> amortized O(1). No small-workload
+regression (SMALL improved too). No generic primitive created (no second
+sliding-window consumer; kept local).
+
+### Candidate 2 — Daily-feed rank-dedupe (ACCEPTED_OPTIMIZATION)
+
+Owner `src/services/phase3DailyLearningFeedRankingService.ts` (via
+`phase3DailyLearningFeedService` <- feed routes + growth adapters). Baseline:
+`DEDUPE_ORDER.indexOf` per item per branch (O(n·m)) + `new Date(dueAt)` parsed
+inside the sort comparator (O(n log n) parses). Candidate: precomputed rank
+Map (unknown -> -1, indexOf parity) + decorate-sort-undecorate with
+single-parse dueAtMs; branch structure identical (NaN propagates as before);
+createdAt tiebreak keeps `localeCompare` verbatim; V8 stable sort preserved.
+
+| Size | Baseline p50 / p95 | Candidate p50 / p95 | Δp95 |
+| --- | --- | --- | --- |
+| SMALL 100 | 0.0877 / 0.1698 ms | 0.0948 / 0.2254 ms | +0.056 ms abs (noise) |
+| REPRESENTATIVE 1000 | 1.7415 / 2.7060 ms | 1.3760 / 2.2779 ms | -15.8% |
+| LARGE 10000 | 30.5916 / 44.7099 ms | 20.0301 / 27.1446 ms | -39.3% (stable x2 runs) |
+| STRESS 100000 | 634.1214 / 703.8030 ms | 423.1235 / 561.0623 ms | -20.3% (confirmation) |
+
+Correctness digest equal: `297be19ee8a5ea75`, order `[b,c,e]`. Equivalence
+tests 13/13 (`src/tests/r8h-daily-feed-equivalence.test.ts`: empty, single,
+dedupe rank/first-wins, priority order, dueAt branches, createdAt tiebreak,
+sorted/reverse, all-tie stability, malformed-date NaN parity, input
+immutability, 5000-item collapse, limit slice). SMALL regression investigated:
+absolute +0.007 ms p50 / +0.056 ms p95 — below timer/noise significance on
+sub-ms ops (fixed decoration cost vs lazy parses at tiny n); not meaningful,
+no user-visible impact (feed rank is one sub-ms step in a DB-backed request).
+STRESS first-run p95 (+8.5%) was GC noise (heap -16 MB major collection);
+confirmation settles at -20.3%. Asymptotic: dedupe O(n·m) -> O(n); dueAt
+parses O(n log n) -> O(n). No generic primitive created (feed-local).
+
+### Rejected / not selected (with reason)
+
+- Roster dry-run quadratic scan: already repaired (R8-F), verified O(n)-shape;
+  not re-optimized per research law.
+- Mastery concurrency, result-release transitions, voice quota locking,
+  daily-objective settlement: transactional correctness dominates; no
+  mechanical win without weakening invariants.
+- Media-stream scoring: per-asset micro-cost, triplicated implementation
+  (`scoring.ts` + inline copies in `routes/ai.ts`, `routes/ai/ai-media.routes.ts`),
+  corpus bound lives with caller — no coherent mechanical win; duplication
+  recorded in the 06 appendix, not touched.
+- Marking batch sweep, topic-inference reads, external-video dedupe: already
+  linear/bounded shapes; gains would be cosmetic or policy-laden.
+- All Class B/C/D records: NO OPTIMIZATION JUSTIFIED (see 06 appendix).
+
+### Decision summary
+
+- C1 rate-limit: ACCEPTED_OPTIMIZATION (latency + asymptotic).
+- C2 daily-feed: ACCEPTED_OPTIMIZATION (latency + asymptotic).
+- Losing experiments in production: none (both won; nothing restored).
+- Production optimizations: 2. Measured/rejected candidates: 8 families.

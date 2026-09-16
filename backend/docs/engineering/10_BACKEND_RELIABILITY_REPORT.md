@@ -264,3 +264,15 @@ No other process exception is evidenced for R8-G.3B. Package-20 production owner
 - `kernelSourceTrustService.resolve` normalizes blank `schoolId` to null, documents verified-context-only provenance, and stays fail-closed for unreviewed sources.
 - Targeted proof: `backend/src/tests/r8g-final-security-integrity.test.ts`, 11/11 PASS.
 - Regression re-proof after repair: R1 durable 14/14 PASS; focused 51/51 PASS (same semantic file selections); `npx tsc -p tsconfig.json --noEmit` 0 diagnostics; `npm run build` exit 0 with `backend/dist/backend/src/index.js` emitted (28 dist files restored to HEAD post-proof, excluded from commit); Prisma schema valid (stub datasource env, no live DB touched).
+
+### R8-H Rate-Limiter Implementation Note (2026-09-16, no reliability disposition change)
+
+- The AI runtime limiter (`aiRuntimeRateLimitGuardService.ts`) internals changed
+  from per-call `filter` copies to a head-offset deque (amortized O(1)). Window
+  boundaries, per-scope limits, denial reasons, retryAfterMs, stale-key sweep
+  cadence, and process-local classification are UNCHANGED; failure behavior
+  (bounded retries, capped backoff, breaker, budget guard) is untouched.
+- All R8-E reliability dispositions for the limiter/retry/breaker system STAND
+  (see 09 §R8-H for measured proof: guard suite 6/6, equivalence 10/10,
+  digest-equal decision script). No new retry, circuit-breaker, concurrency,
+  idempotency, or restart semantics introduced.

@@ -43,3 +43,28 @@ Preserved base guarantees: authentication, verified school identity, student pri
 ## Remaining Backend Correctness Gaps
 
 NONE
+
+## R8-H Post-Acceptance Optimization (2026-09-16, baseline 6b419dad)
+
+R8-G correctness remains intact; this section adds optimization truth without
+rewriting the R8-G acceptance result above.
+
+- Portfolio: 30 R8-C records reconciled (27 CURRENT, 2 SUPERSEDED, 1
+  NO_LONGER_RUNTIME_REACHABLE); classes A=2/B=7/C=9/D=9 (see 06 appendix).
+- Production optimizations (2, both ACCEPTED_OPTIMIZATION with correctness
+  equivalence PASS): AI rate-limit sliding window O(w)->amortized O(1)
+  (p95 -57%..-94%, digest `4ff6f5476dd6f430`); daily-feed rank-dedupe with
+  rank-table + single-parse decoration (LARGE p95 -39%, STRESS p95 -20%,
+  digest `297be19ee8a5ea75`). No output-contract, security, tenant, schema,
+  or learning-rule change; no benchmark-only path in runtime; no generic
+  abstraction (both STEADFAST_SPECIFIC, kept local).
+- Proof: equivalence suites 23/23 PASS; existing guard/integration/contract
+  suites 11/11 PASS; `npx tsc -p tsconfig.json --noEmit` 0 diagnostics
+  (proven with a client regenerated from the tracked schema; owner
+  node_modules restored from backup afterwards); `npx prisma validate` PASS
+  (stub env); build emit PASS to temp dir with `index.js` produced; tracked
+  `backend/dist/**` untouched; `git diff --check` clean.
+- R8-G regression stance: optimizations touch neither security/tenant/source/
+  video/durable-session/RBAC semantics, so unrelated R8-G suites were not
+  mechanically rerun per run budget; the reliability-adjacent suites covering
+  the touched paths pass (see above).

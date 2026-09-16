@@ -6,8 +6,16 @@ import type {
 } from '../contracts/phase3DailyLearningFeedContracts';
 import { PHASE3_DAILY_LEARNING_FEED_DEDUPE_ORDER } from '../contracts/phase3DailyLearningFeedContracts';
 
-function nowISO(): string {
-  return new Date().toISOString();
+// R8-H: precomputed dedupe ranks. Map lookup is O(1); the previous
+// per-item indexOf scan over the policy table was O(table) per item.
+// Unknown item types resolve to -1, exactly matching indexOf semantics
+// (including the first-wins/replace comparison below).
+const DEDUPE_RANK_BY_TYPE = new Map<string, number>(
+  PHASE3_DAILY_LEARNING_FEED_DEDUPE_ORDER.map((entry, index) => [entry, index]),
+);
+
+function dedupeRankOf(itemType: string): number {
+  return DEDUPE_RANK_BY_TYPE.get(itemType) ?? -1;
 }
 
 export class Phase3DailyLearningFeedRankingService {
@@ -118,8 +126,8 @@ export class Phase3DailyLearningFeedRankingService {
         continue;
       }
 
-      const existingRank = PHASE3_DAILY_LEARNING_FEED_DEDUPE_ORDER.indexOf(existing.itemType);
-      const newRank = PHASE3_DAILY_LEARNING_FEED_DEDUPE_ORDER.indexOf(item.itemType);
+      const existingRank = dedupeRankOf(existing.itemType);
+      const newRank = dedupeRankOf(item.itemType);
 
       if (newRank < existingRank) {
         itemsByObjective.set(item.objectiveId, item);
@@ -153,21 +161,36 @@ export class Phase3DailyLearningFeedRankingService {
       completed_today: 11,
     };
 
-    return [...items].sort((a, b) => {
-      const pDiff = (priorityOrder[a.priority] ?? 9) - (priorityOrder[b.priority] ?? 9);
+    // R8-H: decorate-sort-undecorate. The previous comparator parsed
+    // `new Date(dueAt)` on every comparison (O(n log n) parses). Each
+    // item's dueAt is parsed once here; the branch structure below is
+    // identical to the previous comparator: both-present compares numeric
+    // epoch millis (NaN propagates exactly as before for malformed dates),
+    // single-present orders first, and the createdAt tiebreak keeps the
+    // original localeCompare call verbatim.
+    const decorated = items.map((item) => ({
+      item,
+      dueAtMs: item.dueAt ? new Date(item.dueAt).getTime() : NaN,
+      hasDueAt: Boolean(item.dueAt),
+    }));
+
+    decorated.sort((a, b) => {
+      const pDiff = (priorityOrder[a.item.priority] ?? 9) - (priorityOrder[b.item.priority] ?? 9);
       if (pDiff !== 0) return pDiff;
 
-      const tDiff = (typeOrder[a.itemType] ?? 99) - (typeOrder[b.itemType] ?? 99);
+      const tDiff = (typeOrder[a.item.itemType] ?? 99) - (typeOrder[b.item.itemType] ?? 99);
       if (tDiff !== 0) return tDiff;
 
-      if (a.dueAt && b.dueAt) {
-        return new Date(a.dueAt).getTime() - new Date(b.dueAt).getTime();
+      if (a.hasDueAt && b.hasDueAt) {
+        return a.dueAtMs - b.dueAtMs;
       }
-      if (a.dueAt) return -1;
-      if (b.dueAt) return 1;
+      if (a.hasDueAt) return -1;
+      if (b.hasDueAt) return 1;
 
-      return b.createdAt.localeCompare(a.createdAt);
+      return b.item.createdAt.localeCompare(a.item.createdAt);
     });
+
+    return decorated.map((entry) => entry.item);
   }
 
   limitFeedItems(items: Phase3DailyLearningFeedItem[], limit?: number): Phase3DailyLearningFeedItem[] {
