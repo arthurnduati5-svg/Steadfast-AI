@@ -1,3 +1,4 @@
+import { randomUUID } from 'crypto';
 import prisma from '../lib/prisma';
 
 export interface CreateQuestionStateInput {
@@ -19,6 +20,7 @@ export interface CreateQuestionStateInput {
 export async function createQuestionState(input: CreateQuestionStateInput) {
   return prisma.examModeQuestionStateRecord.create({
     data: {
+      id: randomUUID(),
       schoolId: input.schoolId,
       studentId: input.studentId,
       examSessionId: input.examSessionId,
@@ -34,6 +36,7 @@ export async function createQuestionState(input: CreateQuestionStateInput) {
       attemptNumber: 0,
       safeReasonCodesJson: input.safeReasonCodes || [],
       safeEvidenceRefsJson: input.safeEvidenceRefs || [],
+      updatedAt: new Date(),
     },
   });
 }

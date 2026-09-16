@@ -1,3 +1,4 @@
+import { randomUUID } from 'crypto';
 import type { PrismaClient, Prisma } from '@prisma/client';
 import type {
   ResultFinalizationReview,
@@ -44,9 +45,10 @@ export class PrismaResultFinalizationReviewRepository implements ResultFinalizat
   constructor(private prisma: PrismaClient) {}
 
   async create(review: ResultFinalizationReview): Promise<ResultFinalizationReview> {
+    const now = new Date();
     const record = await this.prisma.resultFinalizationReviewRecord.create({
       data: {
-        resultFinalizationReviewId: review.resultFinalizationReviewId,
+        resultFinalizationReviewId: review.resultFinalizationReviewId || randomUUID(),
         schoolId: review.schoolId,
         markingInvocationRequestId: review.markingInvocationRequestId || null,
         markingRunId: review.markingRunId || null,
@@ -60,6 +62,7 @@ export class PrismaResultFinalizationReviewRepository implements ResultFinalizat
         safeReviewSummary: review.safeReviewSummary,
         createdByActorId: review.createdByActorId,
         createdByRole: review.createdByRole,
+        updatedAt: now,
       },
     });
     return this.mapReview(record);
@@ -133,8 +136,10 @@ export class PrismaResultFinalizationDecisionRepository implements ResultFinaliz
   constructor(private prisma: PrismaClient) {}
 
   async create(decision: ResultFinalizationDecision): Promise<ResultFinalizationDecision> {
+    const now = new Date();
     const record = await this.prisma.resultFinalizationDecisionRecord.create({
       data: {
+        resultFinalizationDecisionId: decision.resultFinalizationDecisionId || randomUUID(),
         schoolId: decision.schoolId,
         resultFinalizationReviewId: decision.resultFinalizationReviewId,
         markingInvocationRequestId: decision.markingInvocationRequestId || null,
@@ -146,6 +151,7 @@ export class PrismaResultFinalizationDecisionRepository implements ResultFinaliz
         safeDecisionSummary: decision.safeDecisionSummary,
         reasonCodesJson: inputJson(decision.reasonCodesJson),
         affectedResultVersionRefsJson: inputJson(decision.affectedResultVersionRefsJson),
+        updatedAt: now,
       },
     });
     return this.mapDecision(record);
@@ -211,8 +217,10 @@ export class PrismaResultReleaseReadinessRepository implements ResultReleaseRead
   constructor(private prisma: PrismaClient) {}
 
   async create(readiness: ResultReleaseReadiness): Promise<ResultReleaseReadiness> {
+    const now = new Date();
     const record = await this.prisma.resultReleaseReadinessRecord.create({
       data: {
+        resultReleaseReadinessId: readiness.resultReleaseReadinessId || randomUUID(),
         schoolId: readiness.schoolId,
         resultFinalizationDecisionId: readiness.resultFinalizationDecisionId,
         resultFinalizationReviewId: readiness.resultFinalizationReviewId || null,
@@ -225,6 +233,7 @@ export class PrismaResultReleaseReadinessRepository implements ResultReleaseRead
         createdByActorId: readiness.createdByActorId,
         createdByRole: readiness.createdByRole,
         expiresAt: readiness.expiresAt ? new Date(readiness.expiresAt) : null,
+        updatedAt: now,
       },
     });
     return this.mapReadiness(record);
@@ -290,8 +299,10 @@ export class PrismaResultReleaseBoundaryRepository implements ResultReleaseBound
   constructor(private prisma: PrismaClient) {}
 
   async create(boundary: ResultReleaseBoundary): Promise<ResultReleaseBoundary> {
+    const now = new Date();
     const record = await this.prisma.resultReleaseBoundaryRecord.create({
       data: {
+        resultReleaseBoundaryId: boundary.resultReleaseBoundaryId || randomUUID(),
         schoolId: boundary.schoolId,
         resultReleaseReadinessId: boundary.resultReleaseReadinessId,
         resultFinalizationDecisionId: boundary.resultFinalizationDecisionId || null,
@@ -303,6 +314,7 @@ export class PrismaResultReleaseBoundaryRepository implements ResultReleaseBound
         safeBoundarySummary: boundary.safeBoundarySummary,
         createdByActorId: boundary.createdByActorId,
         createdByRole: boundary.createdByRole,
+        updatedAt: now,
       },
     });
     return this.mapBoundary(record);
@@ -364,8 +376,10 @@ export class PrismaResultRegradeRequestRepository implements ResultRegradeReques
   constructor(private prisma: PrismaClient) {}
 
   async create(request: ResultRegradeRequest): Promise<ResultRegradeRequest> {
+    const now = new Date();
     const record = await this.prisma.resultRegradeRequestRecord.create({
       data: {
+        resultRegradeRequestId: request.resultRegradeRequestId || randomUUID(),
         schoolId: request.schoolId,
         resultFinalizationDecisionId: request.resultFinalizationDecisionId || null,
         markingResultVersionId: request.markingResultVersionId,
@@ -377,6 +391,7 @@ export class PrismaResultRegradeRequestRepository implements ResultRegradeReques
         requestType: request.requestType || 'student_challenge_escalation',
         safeRequestSummary: request.safeRequestSummary,
         reasonCodesJson: inputJson(request.reasonCodesJson),
+        updatedAt: now,
       },
     });
     return this.mapRequest(record);
@@ -437,8 +452,10 @@ export class PrismaResultRegradeIntakeRepository implements ResultRegradeIntakeR
   constructor(private prisma: PrismaClient) {}
 
   async create(intake: ResultRegradeIntake): Promise<ResultRegradeIntake> {
+    const now = new Date();
     const record = await this.prisma.resultRegradeIntakeRecord.create({
       data: {
+        resultRegradeIntakeId: intake.resultRegradeIntakeId || randomUUID(),
         schoolId: intake.schoolId,
         resultRegradeRequestId: intake.resultRegradeRequestId,
         intakeStatus: intake.intakeStatus || 'received',
@@ -446,6 +463,7 @@ export class PrismaResultRegradeIntakeRepository implements ResultRegradeIntakeR
         assignedReviewerRole: intake.assignedReviewerRole || null,
         safeIntakeSummary: intake.safeIntakeSummary,
         triageReasonCodesJson: inputJson(intake.triageReasonCodesJson),
+        updatedAt: now,
       },
     });
     return this.mapIntake(record);
@@ -507,6 +525,7 @@ export class PrismaResultGovernanceAuditRepository implements ResultGovernanceAu
   async create(event: ResultGovernanceAuditEvent): Promise<ResultGovernanceAuditEvent> {
     const record = await this.prisma.resultGovernanceAuditRecord.create({
       data: {
+        resultGovernanceAuditId: event.resultGovernanceAuditId || randomUUID(),
         schoolId: event.schoolId,
         resultFinalizationReviewId: event.resultFinalizationReviewId || null,
         resultFinalizationDecisionId: event.resultFinalizationDecisionId || null,
@@ -569,8 +588,10 @@ export class PrismaResultGovernanceIdempotencyRepository implements ResultGovern
   constructor(private prisma: PrismaClient) {}
 
   async create(entry: ResultGovernanceIdempotencyEntry): Promise<ResultGovernanceIdempotencyEntry> {
+    const now = new Date();
     const record = await this.prisma.resultGovernanceIdempotencyRecord.create({
       data: {
+        resultGovernanceIdempotencyId: entry.resultGovernanceIdempotencyId || randomUUID(),
         schoolId: entry.schoolId,
         operation: entry.operation,
         idempotencyKey: entry.idempotencyKey,
@@ -580,6 +601,7 @@ export class PrismaResultGovernanceIdempotencyRepository implements ResultGovern
         resourceId: entry.resourceId || null,
         safeResultSummary: entry.safeResultSummary || null,
         expiresAt: entry.expiresAt ? new Date(entry.expiresAt) : null,
+        updatedAt: now,
       },
     });
     return this.mapIdempotency(record);

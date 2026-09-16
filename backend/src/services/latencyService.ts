@@ -134,7 +134,7 @@ const evaluateBreaches = (metric: Record<string, unknown>): Breach[] => {
   const breaches: Breach[] = [];
   (Object.keys(THRESHOLDS) as ThresholdKey[]).forEach((key) => {
     const observed = readMetric(metric, key);
-    if (!Number.isFinite(observed) || observed < 0) return;
+    if (observed === null || !Number.isFinite(observed) || observed < 0) return;
     const threshold = THRESHOLDS[key];
     if (observed >= threshold.critical) {
       breaches.push({
@@ -172,7 +172,7 @@ const average = (values: number[]): number | null => {
 const extractMetricNumbers = (rows: any[], key: ThresholdKey): number[] =>
   rows
     .map((row) => readMetric((row || {}) as Record<string, unknown>, key))
-    .filter((value): value is number => Number.isFinite(value) && value >= 0)
+    .filter((value): value is number => value !== null && Number.isFinite(value) && value >= 0)
     .map((value) => Math.floor(value));
 
 const summarizeMode = (rows: any[]) => {

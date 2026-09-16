@@ -156,7 +156,7 @@ export class Phase3GrowthPageStudyPlanAdapterService {
       studyPlanId: plan.planId,
       safeEvidenceRefs: step.safeEvidenceRefs,
       safeReasonCodes: step.reasonCode ? [step.reasonCode] : plan.safeReasonCodes,
-      createdAt: step.completedAt || step.updatedAt,
+      createdAt: step.completedAt || step.updatedAt || step.createdAt,
     };
   }
 

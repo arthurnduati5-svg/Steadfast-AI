@@ -1,3 +1,4 @@
+import { randomUUID } from 'crypto';
 import { PrismaClient } from '@prisma/client';
 import type { AdaptiveChallengeAuditRecord } from './task015Contracts';
 
@@ -8,6 +9,7 @@ export class AdaptiveChallengeAuditRepository {
     try {
       await prisma.durableAuditEvent.create({
         data: {
+          id: randomUUID(),
           category: 'adaptive_challenge',
           eventType: audit.challengeType ?? 'challenge_generation',
           severity: 'info',

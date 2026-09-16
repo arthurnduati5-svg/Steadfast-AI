@@ -1,3 +1,4 @@
+import { randomUUID } from 'crypto';
 import { prisma } from '../lib/prisma';
 import { RevisionModeQueue } from '../contracts/revisionModeContracts';
 
@@ -18,6 +19,7 @@ export async function createRevisionQueue(data: {
 }): Promise<RevisionModeQueue> {
   const queue = await prisma.revisionModeQueueRecord.create({
     data: {
+      id: randomUUID(),
       schoolId: data.schoolId,
       studentId: data.studentId,
       revisionSessionId: data.revisionSessionId || null,
@@ -38,6 +40,7 @@ export async function createRevisionQueue(data: {
       pinnedItemCount: 0,
       safeReasonCodesJson: [],
       safeEvidenceRefsJson: [],
+      updatedAt: new Date(),
     },
   });
   return queue as unknown as RevisionModeQueue;

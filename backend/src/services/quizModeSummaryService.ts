@@ -1,3 +1,4 @@
+import { randomUUID } from 'crypto';
 import prisma from '../lib/prisma';
 import type { QuizModeExitReason } from '../contracts/quizModeContracts';
 import { createSignal } from './learningSignalService';
@@ -29,6 +30,7 @@ export interface CreateQuizSummaryInput {
 export async function createQuizSummary(input: CreateQuizSummaryInput) {
   const summary = await prisma.quizModeSummaryRecord.create({
     data: {
+      id: randomUUID(),
       schoolId: input.schoolId,
       studentId: input.studentId,
       quizSessionId: input.quizSessionId,

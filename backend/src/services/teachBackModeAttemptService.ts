@@ -1,3 +1,4 @@
+import { randomUUID } from 'crypto';
 import prisma from '../lib/prisma';
 import { createAttempt } from './learningAttemptService';
 import { createSignal } from './learningSignalService';
@@ -28,6 +29,7 @@ export interface RecordTeachBackAttemptInput {
 export async function recordTeachBackAttempt(input: RecordTeachBackAttemptInput) {
   const attempt = await prisma.teachBackModeAttemptRecord.create({
     data: {
+      id: randomUUID(),
       schoolId: input.schoolId,
       studentId: input.studentId,
       teachBackSessionId: input.teachBackSessionId,

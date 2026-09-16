@@ -1,3 +1,4 @@
+import { randomUUID } from 'crypto';
 import prisma from '../lib/prisma';
 import type { SignalType, ModeStage, HintLevel, AnswerQuality, MistakeCategory, SupportActionType, ConfidenceSignal, TimeSpentBucket, DifficultyBucket, SourceType } from '../contracts/learningModeContracts';
 
@@ -24,6 +25,7 @@ export interface CreateSignalInput {
 export async function createSignal(input: CreateSignalInput) {
   return prisma.learningModeSignal.create({
     data: {
+      id: randomUUID(),
       modeSessionId: input.modeSessionId,
       schoolId: input.schoolId,
       studentId: input.studentId,

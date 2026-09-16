@@ -11067,39 +11067,51 @@ model StudentLearningProfileSnapshot {
 }
 
 model StudentLearningSessionEvent {
-  id               String   @id
-  schoolId         String
-  tutorLearnerId   String
-  sessionId        String
-  eventType        String
-  previousMode     String?
-  nextMode         String?
-  subject          String?
-  topic            String?
-  skillTag         String?
-  safeEventSummary String?
-  safeEvidenceRefs Json     @default("[]")
-  reasonCodes      Json     @default("[]")
-  privacyMetadata  Json     @default("{}")
-  createdAt        DateTime @default(now())
+  id                 String   @id @default(cuid())
+  schoolId           String
+  tutorLearnerId     String
+  sessionId          String
+  studentId          String?
+  eventType          String
+  transitionType     String?
+  previousStatus     String?
+  resultingStatus    String?
+  previousMode       String?
+  nextMode           String?
+  subject            String?
+  topic              String?
+  skillTag           String?
+  safeEventSummary   String?
+  safeEvidenceRefs   Json     @default("[]")
+  reasonCodes        Json     @default("[]")
+  privacyMetadata    Json     @default("{}")
+  operationVersion   Int      @default(1)
+  idempotencyKey     String?
+  requestFingerprint String?
+  requestId          String?
+  correlationId      String?
+  createdAt          DateTime @default(now())
 
   @@index([schoolId, tutorLearnerId])
   @@index([schoolId, tutorLearnerId, sessionId])
   @@index([sessionId, createdAt])
+  @@index([idempotencyKey])
 }
 
 model StudentLearningSessionState {
-  id                      String   @id
+  id                      String   @id @default(cuid())
   schoolId                String
   tutorLearnerId          String
   studentId               String?
   externalStudentId       String?
-  status                  String   @default("active")
-  currentMode             String   @default("session_start")
+  status                  String   @default("created")
+  stage                   String   @default("orienting")
+  currentMode             String   @default("none")
   previousMode            String?
   subject                 String?
   topic                   String?
   skillTag                String?
+  objectiveId             String?
   activeChallengeId       String?
   activeRemediationPathId String?
   activeRevisionItemId    String?
@@ -11109,7 +11121,11 @@ model StudentLearningSessionState {
   safeEvidenceRefs        Json     @default("[]")
   reasonCodes             Json     @default("[]")
   privacyMetadata         Json     @default("{}")
+  sourceTruthStatus       String   @default("unknown")
+  confidenceBucket        String   @default("not_enough_evidence")
+  stateVersion            Int      @default(1)
   lastTransitionAt        DateTime @default(now())
+  endedAt                 DateTime?
   createdAt               DateTime @default(now())
   updatedAt               DateTime
 

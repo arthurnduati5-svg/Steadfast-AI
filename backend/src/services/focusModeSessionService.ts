@@ -1,3 +1,4 @@
+import { randomUUID } from 'crypto';
 import prisma from '../lib/prisma';
 import { createModeSession, updateModeSessionStatus } from './learningModeSessionService';
 import type { FocusModeGoalCategory, FocusModeTargetType, FocusModeStage, FocusModeStatus, FocusModeExitReason } from '../contracts/focusModeContracts';
@@ -32,6 +33,7 @@ export async function startFocusSession(input: StartFocusSessionInput) {
 
   const focusSession = await prisma.focusModeSessionRecord.create({
     data: {
+      id: randomUUID(),
       schoolId: input.schoolId,
       studentId: input.studentId,
       tutorLearnerId: input.tutorLearnerId || null,
@@ -53,6 +55,7 @@ export async function startFocusSession(input: StartFocusSessionInput) {
       recoveryCount: 0,
       safeEvidenceRefsJson: [],
       startedAt: new Date(),
+      updatedAt: new Date(),
     },
   });
 

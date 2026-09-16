@@ -1,3 +1,4 @@
+import { randomUUID } from 'crypto';
 import prisma from '../lib/prisma';
 import type { SchoolIntegrationAuditEventType, SchoolActorRole } from '../services/task021SchoolIntegrationContracts';
 
@@ -55,6 +56,7 @@ export async function createAuditRecord(data: {
 }): Promise<AuditRecord> {
   const row = await prisma.schoolIntegrationAuditRecord.create({
     data: {
+      id: randomUUID(),
       schoolId: data.schoolId ?? null,
       actorId: data.actorId ?? null,
       actorRole: data.actorRole,

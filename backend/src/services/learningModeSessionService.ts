@@ -1,3 +1,4 @@
+import { randomUUID } from 'crypto';
 import prisma from '../lib/prisma';
 import type { LearningMode } from '../contracts/learningModeContracts';
 
@@ -14,6 +15,7 @@ export interface CreateSessionInput {
 export async function createModeSession(input: CreateSessionInput) {
   return prisma.learningModeSession.create({
     data: {
+      id: randomUUID(),
       schoolId: input.schoolId,
       studentId: input.studentId,
       mode: input.mode,
@@ -24,6 +26,7 @@ export async function createModeSession(input: CreateSessionInput) {
       topicId: input.topicId || null,
       skillId: input.skillId || null,
       requestedAt: new Date(),
+      updatedAt: new Date(),
     },
   });
 }

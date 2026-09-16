@@ -1,3 +1,4 @@
+import { randomUUID } from 'crypto';
 import prisma from '../lib/prisma';
 
 export interface SyncConflictRecord {
@@ -45,6 +46,7 @@ export async function createConflict(data: {
 }): Promise<SyncConflictRecord> {
   const row = await prisma.schoolRosterSyncConflictRecord.create({
     data: {
+      id: randomUUID(),
       schoolId: data.schoolId,
       syncBatchId: data.syncBatchId,
       conflictType: data.conflictType,
@@ -56,6 +58,7 @@ export async function createConflict(data: {
       safeSummary: data.safeSummary,
       reasonCodes: data.reasonCodes,
       privacyMetadata: {},
+      updatedAt: new Date(),
     },
   });
   return toRecord(row);

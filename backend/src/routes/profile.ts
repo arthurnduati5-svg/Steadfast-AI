@@ -1,4 +1,4 @@
-
+import { randomUUID } from 'crypto';
 import { Router, Request } from 'express';
 import { schoolAuthMiddleware } from '../middleware/schoolAuthMiddleware';
 import prisma from '../utils/prismaClient';
@@ -159,13 +159,13 @@ router.post('/copilot/preferences', schoolAuthMiddleware, async (req: Request, r
     await prisma.studentProfile.upsert({
       where: { userId },
       update: {},
-      create: { userId, preferredLanguage: 'english', topInterests: [] }, // Create with defaults if not exists
+      create: { userId, preferredLanguage: 'english', topInterests: [], updatedAt: new Date() }, // Create with defaults if not exists
     });
 
     const updatedPreferences = await prisma.copilotPreferences.upsert({
       where: { userId },
       update: { preferredLanguage, interests: interestsToSave as Prisma.JsonArray },
-      create: { userId, preferredLanguage, interests: interestsToSave as Prisma.JsonArray },
+      create: { id: randomUUID(), userId, preferredLanguage, interests: interestsToSave as Prisma.JsonArray, lastUpdatedAt: new Date() },
     });
 
     logger.info({ userId }, '[Backend] Preferences saved successfully');

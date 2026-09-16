@@ -53,7 +53,7 @@ router.get('/pilot/expansion/status', ...internalGuard, async (req: Request, res
     const schoolId = getSchoolId(req);
     const pilotProgramId = req.query.pilotProgramId as string;
     const proposals = schoolId
-      ? await task027PilotExpansionRepository.listProposals(schoolId, pilotProgramId)
+      ? (await task027PilotExpansionRepository.listProposals(schoolId)).filter((proposal) => proposal.pilotProgramId === pilotProgramId)
       : await task027PilotExpansionRepository.listProposals();
 
     const counts: Record<string, number> = {};

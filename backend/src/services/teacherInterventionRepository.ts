@@ -5,6 +5,7 @@
 // cross-class, cross-school reads are blocked.
 // ─────────────────────────────────────────────────────────────
 
+import { randomUUID } from 'crypto';
 import prisma from '../lib/prisma';
 import type { Prisma } from '@prisma/client';
 import type {
@@ -77,6 +78,7 @@ export async function createTeacherInterventionAssignment(
   const now = new Date();
   const record = await prisma.teacherInterventionAssignment.create({
     data: {
+      id: randomUUID(),
       sourceRecommendationId: request.sourceRecommendationId || null,
       teacherId: request.teacherId,
       studentId: request.studentId,
@@ -104,6 +106,7 @@ export async function createTeacherInterventionAssignment(
       evidenceSummary: '',
       warnings: [],
       metadata: {},
+      updatedAt: new Date(),
     },
   });
 

@@ -1,3 +1,4 @@
+import { randomUUID } from 'crypto';
 import prisma from '../lib/prisma';
 
 export interface IdempotencyRecord {
@@ -38,6 +39,7 @@ export async function createIdempotencyRecord(data: {
 }): Promise<IdempotencyRecord> {
   const row = await prisma.schoolIntegrationIdempotencyRecord.create({
     data: {
+      id: randomUUID(),
       schoolId: data.schoolId,
       idempotencyKey: data.idempotencyKey,
       operation: data.operation,
@@ -46,6 +48,7 @@ export async function createIdempotencyRecord(data: {
       safeResultSummary: data.safeResultSummary ?? null,
       reasonCodes: data.reasonCodes,
       expiresAt: data.expiresAt ? new Date(data.expiresAt) : null,
+      updatedAt: new Date(),
     },
   });
   return toRecord(row);

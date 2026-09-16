@@ -1,3 +1,4 @@
+import { randomUUID } from 'crypto';
 import prisma from '../lib/prisma';
 import type { LearnerSupportLevel, LearnerStepSizePreference, LearnerPracticeModePreference } from './learnerPreferenceFeedbackContracts';
 
@@ -57,7 +58,7 @@ export class PrismaAdaptiveRecommendationProfileRepository implements IAdaptiveR
         tutorLearnerId: input.tutorLearnerId,
       },
       create: {
-        id: undefined as any,
+        id: randomUUID(),
         schoolId: input.schoolId,
         tutorLearnerId: input.tutorLearnerId,
         preferredSupportLevel: input.preferredSupportLevel || 'guided_support',
@@ -74,6 +75,7 @@ export class PrismaAdaptiveRecommendationProfileRepository implements IAdaptiveR
         recentTeacherHelpRequestCount: input.recentTeacherHelpRequestCount ?? 0,
         profileSnapshot: (input.profileSnapshot || null) as any,
         privacyMetadata: (input.privacyMetadata || null) as any,
+        updatedAt: new Date(),
       },
       update: {
         ...(input.preferredSupportLevel !== undefined && { preferredSupportLevel: input.preferredSupportLevel }),

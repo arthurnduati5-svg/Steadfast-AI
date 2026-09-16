@@ -1,3 +1,4 @@
+import { randomUUID } from 'crypto';
 import prisma from '../lib/prisma';
 import type { HintLevel, ModeStage } from '../contracts/learningModeContracts';
 
@@ -15,6 +16,7 @@ export interface CreateHintEventInput {
 export async function createHintEvent(input: CreateHintEventInput) {
   return prisma.learningModeHintEvent.create({
     data: {
+      id: randomUUID(),
       modeSessionId: input.modeSessionId,
       schoolId: input.schoolId,
       studentId: input.studentId,

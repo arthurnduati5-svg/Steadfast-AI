@@ -1,3 +1,4 @@
+import { randomUUID } from 'crypto';
 import prisma from '../lib/prisma';
 import type { ModeStage, AnswerQuality, MistakeCategory, HintLevel, TimeSpentBucket } from '../contracts/learningModeContracts';
 
@@ -20,6 +21,7 @@ export interface CreateAttemptInput {
 export async function createAttempt(input: CreateAttemptInput) {
   return prisma.learningModeAttempt.create({
     data: {
+      id: randomUUID(),
       modeSessionId: input.modeSessionId,
       schoolId: input.schoolId,
       studentId: input.studentId,

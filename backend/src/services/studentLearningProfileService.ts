@@ -1,3 +1,4 @@
+import { randomUUID } from 'crypto';
 import prisma from '../lib/prisma';
 import { calculateMasteryScore, aggregateSkillMastery } from './masteryAggregationService';
 import { detectWeakTopics, detectImprovingTopics } from './weakTopicDetectionService';
@@ -234,6 +235,7 @@ export async function buildStudentLearningProfileSnapshot(
         lastEvidenceAt: new Date(),
       },
       create: {
+        id: randomUUID(),
         schoolId,
         studentId,
         profileVersion: 1,
@@ -248,6 +250,7 @@ export async function buildStudentLearningProfileSnapshot(
         confidenceScore: confidenceScoreVal,
         generatedFromEventCount: totalEvents,
         lastEvidenceAt: new Date(),
+        updatedAt: new Date(),
       },
     });
   } catch {

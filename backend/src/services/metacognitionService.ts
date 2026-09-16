@@ -236,6 +236,7 @@ export async function recordMetacognitiveEvent(args: RecordMetacognitiveEventArg
     await ensureMetacognitionTables();
     const created = await prisma.metacognitiveEvent.create({
       data: {
+        id: randomUUID(),
         userId: args.userId,
         sessionId: args.sessionId || null,
         revisionItemId: args.revisionItemId || null,

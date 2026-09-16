@@ -457,7 +457,7 @@ export class PrismaLearningEvidenceEventStoreRepository implements LearningEvide
         schoolId_commandType_idempotencyKey: { schoolId, commandType, idempotencyKey },
       },
       update: { commandType, requestHash, responseReference },
-      create: { schoolId, idempotencyKey, commandType, requestHash, responseReference },
+      create: { id: `${schoolId}:${commandType}:${idempotencyKey}`, schoolId, idempotencyKey, commandType, requestHash, responseReference },
     });
   }
 
@@ -512,6 +512,7 @@ export class PrismaLearningEvidenceEventStoreRepository implements LearningEvide
         eligibilityReasonCodes: projection.eligibilityReasonCodes ?? [],
         latestSequence: projection.latestSequence,
         version: projection.version,
+        updatedAt: new Date(),
       },
     });
   }
@@ -674,6 +675,7 @@ export class PrismaLearningEvidenceEventStoreRepository implements LearningEvide
         failureReason: checkpoint.failureReason,
       },
       create: {
+        id: `${checkpoint.projectionName}:${checkpoint.schoolId}:${checkpoint.partitionKey}`,
         projectionName: checkpoint.projectionName,
         schoolId: checkpoint.schoolId,
         partitionKey: checkpoint.partitionKey,
@@ -681,6 +683,7 @@ export class PrismaLearningEvidenceEventStoreRepository implements LearningEvide
         lastEventHash: checkpoint.lastEventHash,
         status: checkpoint.status,
         failureReason: checkpoint.failureReason,
+        updatedAt: new Date(),
       },
     });
   }

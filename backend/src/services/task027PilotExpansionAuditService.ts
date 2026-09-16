@@ -17,5 +17,5 @@ export async function recordExpansionAuditEvent(data: {
 }
 
 export async function listExpansionAuditEvents(expansionProposalId?: string, limit = 100) {
-  return task027PilotExpansionRepository.listAuditRecords(expansionProposalId, limit);
+  return task027PilotExpansionRepository.listAuditRecords(expansionProposalId).then((records) => records.slice(-limit));
 }

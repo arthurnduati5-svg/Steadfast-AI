@@ -79,7 +79,7 @@ export async function checkRequiredReviews(expansionProposalId: string): Promise
 }> {
   const proposal = await task027PilotExpansionRepository.getProposal(expansionProposalId);
   if (!proposal) {
-    return { allRequiredPresent: false, missingReviews: REQUIRED_EXPANSION_REVIEW_TYPES, rejectedReviews: [], blockedReviews: [], safeMessage: 'Proposal not found.' };
+    return { allRequiredPresent: false, missingReviews: [...REQUIRED_EXPANSION_REVIEW_TYPES], rejectedReviews: [], blockedReviews: [], safeMessage: 'Proposal not found.' };
   }
 
   const reviews = await task027PilotExpansionRepository.listReviews(expansionProposalId);

@@ -9,6 +9,7 @@ import type {
   VideoRecommendationResult,
 } from '../lib/types';
 import { inferVideoTrustTier } from './sourceTrustService';
+import type { VideoCandidateInput, VideoRecommendation, VideoRecommendationRequest, VideoRecommendationResponse } from './videoRecommendationContracts';
 
 type YoutubeCandidate = {
   id?: unknown;
@@ -321,3 +322,76 @@ export async function getVideoContextSummary(args: VideoContextArgs): Promise<Vi
     notices: notices.length > 0 ? notices : null,
   };
 }
+
+export const videoRecommendationService = {
+  recommend: async (
+    identity: { schoolId: string; studentId: string },
+    request: VideoRecommendationRequest,
+  ): Promise<VideoRecommendationResponse> => {
+    const result = await recommendEducationalVideos({
+      query: request.query || request.topic || request.subject || request.message,
+      topic: request.topic,
+      subject: request.subject,
+      limit: request.maxResults,
+    });
+    const recommendations: VideoRecommendation[] = result.videos.map((video, index) => {
+      const candidate: VideoCandidateInput = {
+        provider: 'youtube',
+        providerVideoId: video.videoId,
+        url: `https://www.youtube.com/watch?v=${encodeURIComponent(video.videoId)}`,
+        title: video.title,
+        channelTitle: video.channelTitle || null,
+        thumbnailUrl: video.thumbnailUrl || null,
+        source: 'provider_search',
+      };
+      return {
+        recommendationId: `${identity.schoolId}:${video.videoId}`,
+        status: 'recommended',
+        decision: 'include',
+        candidate,
+        metadata: null,
+        score: {
+          syllabusAlignment: 0.5, topicRelevance: 0.7, learnerNeedFit: 0.5,
+          ageSuitability: 0.5, islamicAppropriateness: 0.5, languageSuitability: 0.5,
+          teachingQuality: 0.5, sourceTrust: video.trustTier === 'high' ? 0.8 : 0.5,
+          accessibility: 0.5, availability: 1, finalScore: 0.5,
+        },
+        reasons: [video.whyRecommended || 'Relevant educational video.'],
+        warnings: [],
+        rejectionReasons: [],
+        safety: { status: 'needs_review', reasons: [], warnings: ['Video suitability requires policy review.'] },
+        suitability: {
+          ageSuitability: { status: 'needs_review', reasons: [] },
+          islamicAppropriateness: { status: 'needs_review', confidence: 0, reasons: [], warnings: [], needsTeacherReview: true },
+          languageSuitability: { status: 'unknown', reasons: [] },
+        },
+        evidence: [{ dimension: 'provider_search', score: index, reason: video.whyRecommended || 'Provider result.', source: 'provider_search' }],
+        cachePolicy: { cacheAllowed: false, scope: 'request', reason: 'Recommendations are learner-contextual.' },
+        createdAt: new Date().toISOString(),
+      };
+    });
+    return {
+      ok: true,
+      status: recommendations.length ? 'partial' : 'no_candidates',
+      recommendations,
+      rejected: [],
+      reviewQueue: [],
+      meta: {
+        requestId: `${identity.schoolId}:${identity.studentId}:${Date.now()}`,
+        schoolId: identity.schoolId,
+        sessionId: request.sessionId,
+        usedTutorContext: false,
+        usedIntentResolution: false,
+        usedLearnerMemory: false,
+        usedPracticeMastery: false,
+        usedArtifactContext: false,
+        providerSearchUsed: true,
+        warnings: result.notices?.map((notice) => notice.message) || [],
+      },
+      safeSummary: result.summary,
+      queryUsed: result.queryUsed,
+    };
+  },
+  recommendEducationalVideos,
+  getVideoContextSummary,
+};

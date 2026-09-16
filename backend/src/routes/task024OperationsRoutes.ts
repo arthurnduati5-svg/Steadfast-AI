@@ -426,7 +426,7 @@ router.get('/operations/reports/task-024', async (req: Request, res: Response) =
   const requestId = (req as any).requestId || 'unknown';
   if (!(await enforceInternalAccess(req, res))) return;
   try {
-    const report = await task024OpsRepository.getLatestOpsReport('024');
+    const report = await task024OpsRepository.getLatestOpsReport();
     if (!report) {
       res.json({ ok: true, report: null, message: 'No report generated yet. POST /operations/reports/task-024/generate to generate.', requestId });
       return;

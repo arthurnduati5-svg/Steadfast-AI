@@ -234,8 +234,10 @@ function mapIdempotencyFromPrisma(row: any): ResultReleaseIdempotencyEntry {
 
 export class PrismaResultReleasePacketRepository implements ResultReleasePacketRepository {
   async create(input: CreateReleasePacketInput): Promise<ResultReleasePacket> {
+    const now = new Date();
     const row = await prisma.resultReleasePacketRecord.create({
       data: {
+        resultReleasePacketId: randomUUID(),
         schoolId: input.schoolId,
         resultFinalizationDecisionId: input.resultFinalizationDecisionId,
         resultReleaseReadinessId: input.resultReleaseReadinessId,
@@ -255,6 +257,7 @@ export class PrismaResultReleasePacketRepository implements ResultReleasePacketR
         sourceRefsJson: (input.sourceRefsJson as any) || undefined,
         createdByActorId: input.createdByActorId,
         createdByRole: input.createdByRole,
+        updatedAt: now,
       },
     });
     return mapPacketFromPrisma(row);
@@ -323,8 +326,10 @@ export class PrismaResultReleasePacketRepository implements ResultReleasePacketR
 
 export class PrismaResultReleaseApprovalRepository implements ResultReleaseApprovalRepository {
   async create(input: CreateReleaseApprovalInput): Promise<ResultReleaseApproval> {
+    const now = new Date();
     const row = await prisma.resultReleaseApprovalRecord.create({
       data: {
+        resultReleaseApprovalId: randomUUID(),
         schoolId: input.schoolId,
         resultReleasePacketId: input.resultReleasePacketId,
         resultFinalizationDecisionId: input.resultFinalizationDecisionId,
@@ -336,6 +341,7 @@ export class PrismaResultReleaseApprovalRepository implements ResultReleaseAppro
         approvedByRole: input.approvedByRole,
         safeApprovalSummary: input.safeApprovalSummary,
         reasonCodesJson: (input.reasonCodesJson as any) || undefined,
+        updatedAt: now,
       },
     });
     return mapApprovalFromPrisma(row);
@@ -408,8 +414,10 @@ export class PrismaResultReleaseApprovalRepository implements ResultReleaseAppro
 
 export class PrismaResultAudienceProjectionRepository implements ResultAudienceProjectionRepository {
   async create(input: CreateAudienceProjectionInput, projectionVersion?: number): Promise<ResultAudienceProjection> {
+    const now = new Date();
     const row = await prisma.resultAudienceProjectionRecord.create({
       data: {
+        resultAudienceProjectionId: randomUUID(),
         schoolId: input.schoolId,
         resultReleasePacketId: input.resultReleasePacketId,
         studentRef: input.studentRef,
@@ -423,6 +431,7 @@ export class PrismaResultAudienceProjectionRepository implements ResultAudienceP
         safeProjectionSummary: input.safeProjectionSummary,
         createdByActorId: input.createdByActorId,
         createdByRole: input.createdByRole,
+        updatedAt: now,
       },
     });
     return mapProjectionFromPrisma(row);
@@ -479,8 +488,10 @@ export class PrismaResultAudienceProjectionRepository implements ResultAudienceP
 
 export class PrismaStudentResultReportSnapshotRepository implements StudentResultReportSnapshotRepository {
   async create(input: CreateReportSnapshotInput): Promise<StudentResultReportSnapshot> {
+    const now = new Date();
     const row = await prisma.studentResultReportSnapshotRecord.create({
       data: {
+        studentResultReportSnapshotId: randomUUID(),
         schoolId: input.schoolId,
         resultReleasePacketId: input.resultReleasePacketId,
         resultAudienceProjectionId: input.resultAudienceProjectionId,
@@ -496,6 +507,7 @@ export class PrismaStudentResultReportSnapshotRepository implements StudentResul
         sourceRefsJson: (input.sourceRefsJson as any) || undefined,
         createdByActorId: input.createdByActorId,
         createdByRole: input.createdByRole,
+        updatedAt: now,
       },
     });
     return mapSnapshotFromPrisma(row);
@@ -555,8 +567,10 @@ export class PrismaStudentResultReportSnapshotRepository implements StudentResul
 
 export class PrismaParentSafeResultSummaryRepository implements ParentSafeResultSummaryRepository {
   async create(input: CreateParentSafeSummaryInput): Promise<ParentSafeResultSummary> {
+    const now = new Date();
     const row = await prisma.parentSafeResultSummaryRecord.create({
       data: {
+        parentSafeResultSummaryId: randomUUID(),
         schoolId: input.schoolId,
         resultReleasePacketId: input.resultReleasePacketId,
         resultAudienceProjectionId: input.resultAudienceProjectionId,
@@ -572,6 +586,7 @@ export class PrismaParentSafeResultSummaryRepository implements ParentSafeResult
         blockedFieldNamesJson: (input.blockedFieldNamesJson as any) || undefined,
         createdByActorId: input.createdByActorId,
         createdByRole: input.createdByRole,
+        updatedAt: now,
       },
     });
     return mapParentSummaryFromPrisma(row);
@@ -631,8 +646,10 @@ export class PrismaParentSafeResultSummaryRepository implements ParentSafeResult
 
 export class PrismaStudentSafeResultSummaryRepository implements StudentSafeResultSummaryRepository {
   async create(input: CreateStudentSafeSummaryInput): Promise<StudentSafeResultSummary> {
+    const now = new Date();
     const row = await prisma.studentSafeResultSummaryRecord.create({
       data: {
+        studentSafeResultSummaryId: randomUUID(),
         schoolId: input.schoolId,
         resultReleasePacketId: input.resultReleasePacketId,
         resultAudienceProjectionId: input.resultAudienceProjectionId,
@@ -647,6 +664,7 @@ export class PrismaStudentSafeResultSummaryRepository implements StudentSafeResu
         blockedFieldNamesJson: (input.blockedFieldNamesJson as any) || undefined,
         createdByActorId: input.createdByActorId,
         createdByRole: input.createdByRole,
+        updatedAt: now,
       },
     });
     return mapStudentSummaryFromPrisma(row);
@@ -706,8 +724,10 @@ export class PrismaStudentSafeResultSummaryRepository implements StudentSafeResu
 
 export class PrismaResultReleaseDeliveryIntentRepository implements ResultReleaseDeliveryIntentRepository {
   async create(input: CreateDeliveryIntentInput): Promise<ResultReleaseDeliveryIntent> {
+    const now = new Date();
     const row = await prisma.resultReleaseDeliveryIntentRecord.create({
       data: {
+        resultReleaseDeliveryIntentId: randomUUID(),
         schoolId: input.schoolId,
         resultReleasePacketId: input.resultReleasePacketId,
         resultReleaseApprovalId: input.resultReleaseApprovalId,
@@ -719,6 +739,7 @@ export class PrismaResultReleaseDeliveryIntentRepository implements ResultReleas
         blockedReasonCodesJson: (input.blockedReasonCodesJson as any) || undefined,
         createdByActorId: input.createdByActorId,
         createdByRole: input.createdByRole,
+        updatedAt: now,
       },
     });
     return mapIntentFromPrisma(row);

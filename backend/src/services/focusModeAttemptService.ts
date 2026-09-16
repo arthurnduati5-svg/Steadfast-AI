@@ -1,3 +1,4 @@
+import { randomUUID } from 'crypto';
 import prisma from '../lib/prisma';
 import { createAttempt } from './learningAttemptService';
 import { createSignal } from './learningSignalService';
@@ -22,6 +23,7 @@ export interface RecordFocusAttemptInput {
 export async function recordFocusAttempt(input: RecordFocusAttemptInput) {
   const attempt = await prisma.focusModeAttemptRecord.create({
     data: {
+      id: randomUUID(),
       schoolId: input.schoolId,
       studentId: input.studentId,
       focusSessionId: input.focusSessionId,

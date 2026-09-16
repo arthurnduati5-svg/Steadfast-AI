@@ -1,3 +1,4 @@
+import { randomUUID } from 'crypto';
 import { prisma } from '../lib/prisma';
 import { RevisionModeItemState } from '../contracts/revisionModeContracts';
 import { SafeRevisionTarget } from './revisionModeTargetService';
@@ -14,6 +15,7 @@ export async function createRevisionItemState(data: {
 }): Promise<RevisionModeItemState> {
   const item = await prisma.revisionModeItemStateRecord.create({
     data: {
+      id: randomUUID(),
       schoolId: data.schoolId,
       studentId: data.studentId,
       revisionSessionId: data.revisionSessionId,
@@ -36,6 +38,7 @@ export async function createRevisionItemState(data: {
       attemptNumber: 0,
       safeReasonCodesJson: [],
       safeEvidenceRefsJson: [],
+      updatedAt: new Date(),
     },
   });
   return item as unknown as RevisionModeItemState;

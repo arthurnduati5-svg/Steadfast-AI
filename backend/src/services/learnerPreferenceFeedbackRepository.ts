@@ -78,6 +78,7 @@ export class PrismaLearnerPreferenceFeedbackRepository implements ILearnerPrefer
         stepSizeAdjustment: input.stepSizeAdjustment || null,
         recommendationBiases: (input.recommendationBiases || null) as any,
         profileSnapshot: (input.profileSnapshot || null) as any,
+        updatedAt: new Date(),
       },
     });
   }

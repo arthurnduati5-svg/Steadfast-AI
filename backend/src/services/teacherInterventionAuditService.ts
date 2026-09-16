@@ -5,6 +5,7 @@
 // Uses Prisma for durable audit storage.
 // ─────────────────────────────────────────────────────────────
 
+import { randomUUID } from 'crypto';
 import prisma from '../lib/prisma';
 import type {
   TeacherInterventionAuditEvent,
@@ -40,6 +41,7 @@ export async function recordTeacherInterventionAuditEvent(
   try {
     const record = await prisma.teacherInterventionAuditEvent.create({
       data: {
+        id: randomUUID(),
         interventionId: input.interventionId,
         actorId: input.actorId,
         actorRole: input.actorRole || 'teacher',

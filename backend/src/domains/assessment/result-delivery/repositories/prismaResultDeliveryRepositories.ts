@@ -1,3 +1,4 @@
+import { randomUUID } from 'crypto';
 import type {
   ResultDeliveryJob, CreateDeliveryJobInput,
   ResultDeliveryRecipient, CreateRecipientInput,
@@ -257,8 +258,10 @@ function mapIdempotencyFromPrisma(row: any): ResultDeliveryIdempotencyEntry {
 
 export class PrismaResultDeliveryJobRepository implements ResultDeliveryJobRepository {
   async create(input: CreateDeliveryJobInput & { schoolId: string; createdByActorId: string; createdByRole: string }): Promise<ResultDeliveryJob> {
+    const now = new Date();
     const row = await prisma.resultDeliveryJobRecord.create({
       data: {
+        resultDeliveryJobId: randomUUID(),
         schoolId: input.schoolId,
         resultReleaseDeliveryIntentId: input.resultReleaseDeliveryIntentId,
         resultReleasePacketId: input.resultReleasePacketId,
@@ -275,6 +278,7 @@ export class PrismaResultDeliveryJobRepository implements ResultDeliveryJobRepos
         blockedFieldsJson: (input.blockedFieldsJson as any) || undefined,
         createdByActorId: input.createdByActorId,
         createdByRole: input.createdByRole,
+        updatedAt: now,
       },
     });
     return mapJobFromPrisma(row);
@@ -359,8 +363,10 @@ export class PrismaResultDeliveryJobRepository implements ResultDeliveryJobRepos
 
 export class PrismaResultDeliveryRecipientRepository implements ResultDeliveryRecipientRepository {
   async create(input: CreateRecipientInput & { schoolId: string; createdByActorId: string; createdByRole: string }): Promise<ResultDeliveryRecipient> {
+    const now = new Date();
     const row = await prisma.resultDeliveryRecipientRecord.create({
       data: {
+        resultDeliveryRecipientId: randomUUID(),
         schoolId: input.schoolId,
         resultDeliveryJobId: input.resultDeliveryJobId,
         studentRef: input.studentRef,
@@ -375,6 +381,7 @@ export class PrismaResultDeliveryRecipientRepository implements ResultDeliveryRe
         blockedReasonCodesJson: (input.blockedReasonCodesJson as any) || undefined,
         createdByActorId: input.createdByActorId,
         createdByRole: input.createdByRole,
+        updatedAt: now,
       },
     });
     return mapRecipientFromPrisma(row);
@@ -446,8 +453,10 @@ export class PrismaResultDeliveryRecipientRepository implements ResultDeliveryRe
 
 export class PrismaResultDeliveryChannelEnvelopeRepository implements ResultDeliveryChannelEnvelopeRepository {
   async create(input: CreateChannelEnvelopeInput & { schoolId: string; createdByActorId: string; createdByRole: string }): Promise<ResultDeliveryChannelEnvelope> {
+    const now = new Date();
     const row = await prisma.resultDeliveryChannelEnvelopeRecord.create({
       data: {
+        resultDeliveryChannelEnvelopeId: randomUUID(),
         schoolId: input.schoolId,
         resultDeliveryJobId: input.resultDeliveryJobId,
         resultDeliveryRecipientId: input.resultDeliveryRecipientId,
@@ -464,6 +473,7 @@ export class PrismaResultDeliveryChannelEnvelopeRepository implements ResultDeli
         sourceRefsJson: (input.sourceRefsJson as any) || undefined,
         createdByActorId: input.createdByActorId,
         createdByRole: input.createdByRole,
+        updatedAt: now,
       },
     });
     return mapEnvelopeFromPrisma(row);
@@ -525,8 +535,10 @@ export class PrismaResultDeliveryChannelEnvelopeRepository implements ResultDeli
 
 export class PrismaResultDeliverySuppressionRepository implements ResultDeliverySuppressionRepository {
   async create(input: CreateSuppressionInput & { schoolId: string; createdByActorId: string; createdByRole: string }): Promise<ResultDeliverySuppression> {
+    const now = new Date();
     const row = await prisma.resultDeliverySuppressionRecord.create({
       data: {
+        resultDeliverySuppressionId: randomUUID(),
         schoolId: input.schoolId,
         resultDeliveryJobId: input.resultDeliveryJobId,
         resultDeliveryRecipientId: input.resultDeliveryRecipientId || null,
@@ -538,6 +550,7 @@ export class PrismaResultDeliverySuppressionRepository implements ResultDelivery
         sourceRefsJson: (input.sourceRefsJson as any) || undefined,
         createdByActorId: input.createdByActorId,
         createdByRole: input.createdByRole,
+        updatedAt: now,
       },
     });
     return mapSuppressionFromPrisma(row);
@@ -585,8 +598,10 @@ export class PrismaResultDeliverySuppressionRepository implements ResultDelivery
 
 export class PrismaResultDeliveryAttemptRepository implements ResultDeliveryAttemptRepository {
   async create(input: CreateMockAttemptInput & { schoolId: string; createdByActorId: string; createdByRole: string }): Promise<ResultDeliveryAttempt> {
+    const now = new Date();
     const row = await prisma.resultDeliveryAttemptRecord.create({
       data: {
+        resultDeliveryAttemptId: randomUUID(),
         schoolId: input.schoolId,
         resultDeliveryJobId: input.resultDeliveryJobId,
         resultDeliveryRecipientId: input.resultDeliveryRecipientId,
@@ -600,6 +615,7 @@ export class PrismaResultDeliveryAttemptRepository implements ResultDeliveryAtte
         blockedReasonCodesJson: (input.blockedReasonCodesJson as any) || undefined,
         createdByActorId: input.createdByActorId,
         createdByRole: input.createdByRole,
+        updatedAt: now,
       },
     });
     return mapAttemptFromPrisma(row);
@@ -688,8 +704,10 @@ export class PrismaResultDeliveryAttemptRepository implements ResultDeliveryAtte
 
 export class PrismaResultDeliveryReceiptRepository implements ResultDeliveryReceiptRepository {
   async create(input: CreateReceiptInput & { schoolId: string; createdByActorId: string; createdByRole: string }): Promise<ResultDeliveryReceipt> {
+    const now = new Date();
     const row = await prisma.resultDeliveryReceiptRecord.create({
       data: {
+        resultDeliveryReceiptId: randomUUID(),
         schoolId: input.schoolId,
         resultDeliveryAttemptId: input.resultDeliveryAttemptId,
         resultDeliveryJobId: input.resultDeliveryJobId,
@@ -702,6 +720,7 @@ export class PrismaResultDeliveryReceiptRepository implements ResultDeliveryRece
         blockedReasonCodesJson: (input.blockedReasonCodesJson as any) || undefined,
         createdByActorId: input.createdByActorId,
         createdByRole: input.createdByRole,
+        updatedAt: now,
       },
     });
     return mapReceiptFromPrisma(row);
@@ -746,8 +765,10 @@ export class PrismaResultDeliveryReceiptRepository implements ResultDeliveryRece
 
 export class PrismaResultDeliveryRetryPlanRepository implements ResultDeliveryRetryPlanRepository {
   async create(input: CreateRetryPlanInput & { schoolId: string; createdByActorId: string; createdByRole: string }): Promise<ResultDeliveryRetryPlan> {
+    const now = new Date();
     const row = await prisma.resultDeliveryRetryPlanRecord.create({
       data: {
+        resultDeliveryRetryPlanId: randomUUID(),
         schoolId: input.schoolId,
         resultDeliveryJobId: input.resultDeliveryJobId,
         resultDeliveryAttemptId: input.resultDeliveryAttemptId,
@@ -760,6 +781,7 @@ export class PrismaResultDeliveryRetryPlanRepository implements ResultDeliveryRe
         blockedReasonCodesJson: (input.blockedReasonCodesJson as any) || undefined,
         createdByActorId: input.createdByActorId,
         createdByRole: input.createdByRole,
+        updatedAt: now,
       },
     });
     return mapRetryPlanFromPrisma(row);
@@ -808,8 +830,10 @@ export class PrismaResultDeliveryRetryPlanRepository implements ResultDeliveryRe
 
 export class PrismaResultDeliveryMockProviderRepository implements ResultDeliveryMockProviderRepository {
   async create(input: CreateMockProviderInput & { schoolId: string; createdByActorId: string; createdByRole: string }): Promise<ResultDeliveryMockProvider> {
+    const now = new Date();
     const row = await prisma.resultDeliveryMockProviderRecord.create({
       data: {
+        resultDeliveryMockProviderId: randomUUID(),
         schoolId: input.schoolId,
         providerName: input.providerName,
         providerStatus: 'active',
@@ -818,6 +842,7 @@ export class PrismaResultDeliveryMockProviderRepository implements ResultDeliver
         safeProviderSummary: input.safeProviderSummary,
         createdByActorId: input.createdByActorId,
         createdByRole: input.createdByRole,
+        updatedAt: now,
       },
     });
     return mapMockProviderFromPrisma(row);

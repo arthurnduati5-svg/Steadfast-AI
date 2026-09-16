@@ -1,3 +1,4 @@
+import { randomUUID } from 'crypto';
 import { prisma } from '../lib/prisma';
 import { RevisionModeSummary } from '../contracts/revisionModeContracts';
 
@@ -30,6 +31,7 @@ export async function createRevisionSummary(data: {
 }): Promise<RevisionModeSummary> {
   const summary = await prisma.revisionModeSummaryRecord.create({
     data: {
+      id: randomUUID(),
       schoolId: data.schoolId,
       studentId: data.studentId,
       revisionSessionId: data.revisionSessionId,

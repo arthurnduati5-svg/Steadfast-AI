@@ -2,6 +2,8 @@ const incidents: any[] = []
 const metricsSnapshots: any[] = []
 const restoreDrills: any[] = []
 const auditRecords: any[] = []
+const backupChecks: any[] = []
+const opsReports: any[] = []
 
 export const task024OpsRepository = {
   _clearMemory() {
@@ -9,6 +11,8 @@ export const task024OpsRepository = {
     metricsSnapshots.length = 0
     restoreDrills.length = 0
     auditRecords.length = 0
+    backupChecks.length = 0
+    opsReports.length = 0
   },
 
   async countIncidents(): Promise<number> { return incidents.length },
@@ -84,7 +88,7 @@ export const task024OpsRepository = {
 
   async getRestoreDrills(): Promise<any[]> { return [...restoreDrills] },
 
-  async listRestoreDrills(): Promise<any[]> { return [...restoreDrills] },
+  async listRestoreDrills(limit?: number): Promise<any[]> { return limit === undefined ? [...restoreDrills] : restoreDrills.slice(-limit) },
 
   async createMetricSnapshot(input: any): Promise<any> {
     const now = new Date()
@@ -108,6 +112,23 @@ export const task024OpsRepository = {
     const backupSnaps = metricsSnapshots.filter((s: any) => s.databaseStatus || s.backupStatus)
     if (backupSnaps.length === 0) return null
     return { lastBackupStatus: backupSnaps[backupSnaps.length - 1].backupStatus || 'checked', lastBackupAt: new Date().toISOString() }
+  },
+
+  async createBackupCheck(input: any): Promise<any> {
+    const check = { id: `backup_${backupChecks.length + 1}`, ...input, createdAt: new Date().toISOString() }
+    backupChecks.push(check)
+    return check
+  },
+
+  async createOpsReport(input: any): Promise<any> {
+    const report = { id: `ops_${opsReports.length + 1}`, ...input, createdAt: new Date().toISOString() }
+    opsReports.push(report)
+    return report
+  },
+
+  async getLatestOpsReport(taskId?: string): Promise<any | null> {
+    const reports = taskId ? opsReports.filter((report) => report.taskId === taskId) : opsReports
+    return reports.length ? reports[reports.length - 1] : null
   },
 
   async getLatestRestoreDrill(): Promise<any | null> {

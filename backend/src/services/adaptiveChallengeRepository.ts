@@ -1,3 +1,4 @@
+import { randomUUID } from 'crypto';
 import { PrismaClient, Prisma } from '@prisma/client';
 
 const prisma = new PrismaClient();
@@ -50,6 +51,7 @@ export class AdaptiveChallengeRepository {
     try {
       const record = await prisma.adaptiveChallengeRecord.create({
         data: {
+          id: randomUUID(),
           schoolId: input.schoolId,
           tutorLearnerId: input.tutorLearnerId,
           studentId: input.studentId ?? null,
@@ -65,6 +67,7 @@ export class AdaptiveChallengeRepository {
           safeEvidenceRefs: input.safeEvidenceRefs as any,
           reasonCodes: input.reasonCodes as any,
           privacyMetadata: input.privacyMetadata as any,
+          updatedAt: new Date(),
         },
       });
       return this.mapRecord(record);

@@ -1,3 +1,4 @@
+import { randomUUID } from 'crypto';
 import prisma from '../lib/prisma';
 import type { FocusModeStepType, FocusModeStepStatus, FocusModeStage, FocusModeReasonCode } from '../contracts/focusModeContracts';
 import { TUTOR_ACTION_TYPES, type TutorActionType } from '../contracts/tutorActionContracts';
@@ -35,6 +36,7 @@ export async function createInitialStep(input: {
 }) {
   return prisma.focusModeStepRecord.create({
     data: {
+      id: randomUUID(),
       schoolId: input.schoolId,
       studentId: input.studentId,
       focusSessionId: input.focusSessionId,
@@ -66,6 +68,7 @@ export async function createStep(input: {
 }) {
   return prisma.focusModeStepRecord.create({
     data: {
+      id: randomUUID(),
       schoolId: input.schoolId,
       studentId: input.studentId,
       focusSessionId: input.focusSessionId,

@@ -176,6 +176,7 @@ export class PrismaResultLearningEvidenceBridgeRepository implements ResultLearn
         safeEvidenceSummary: bridge.safeEvidenceSummary,
         createdByActorId: bridge.createdByActorId,
         createdByRole: bridge.createdByRole,
+        updatedAt: bridge.updatedAt ? new Date(bridge.updatedAt) : new Date(),
       },
     });
     return mapBridgeFromPrisma(row);

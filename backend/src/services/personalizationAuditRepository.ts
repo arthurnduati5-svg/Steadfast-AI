@@ -57,6 +57,7 @@ export class PrismaPersonalizationAuditRepository implements IPersonalizationAud
         privacyDecision: input.privacyDecision || 'teacher_safe_learner_preference',
         deenSensitivityHandled: input.deenSensitivityHandled ?? false,
         safeguardingBoundaryApplied: input.safeguardingBoundaryApplied ?? false,
+        updatedAt: new Date(),
       },
     });
   }

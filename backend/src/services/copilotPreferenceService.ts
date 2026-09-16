@@ -1,3 +1,4 @@
+import { randomUUID } from 'crypto';
 import prisma from '../lib/prisma';
 import { getRedisClient } from '../lib/redis';
 
@@ -46,9 +47,11 @@ export async function getOrCreateCopilotPreferences(userId: string): Promise<Cop
     if (!preferences) {
       preferences = await prisma.copilotPreferences.create({
         data: {
+          id: randomUUID(),
           userId,
           preferredLanguage: DEFAULT_LANGUAGE,
           interests: DEFAULT_INTERESTS,
+          lastUpdatedAt: new Date(),
         },
       });
     }

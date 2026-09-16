@@ -58,6 +58,7 @@ export async function persistIdentityMappingToDurable(
           role: role,
           status: status ?? 'active',
           reasonCodes: ['durable_persisted_via_bridge'],
+          lastSeenAt: new Date(),
         },
       });
       logger.debug(

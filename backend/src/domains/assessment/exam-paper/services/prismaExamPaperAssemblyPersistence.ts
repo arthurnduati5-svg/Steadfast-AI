@@ -35,6 +35,7 @@ export class PrismaExamPaperAssemblyPersistence implements ExamPaperAssemblyPers
             createdByActorId: input.createdByActorId,
             createdByRole: input.createdByRole,
             safeSummary: input.safeSummary,
+            updatedAt: now,
           },
         });
 

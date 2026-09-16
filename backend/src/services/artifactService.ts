@@ -715,10 +715,9 @@ export class ArtifactService {
     }
 
     if (!testFallback) {
-      await prisma.learningArtifact.update({
-        where: { id: artifactId },
-        data: { mediaAssetId: resolvedMediaId },
-      });
+      // The tracked LearningArtifact model has no mediaAsset relation. Keep the
+      // authorized locator in the process-owned artifact record rather than
+      // writing an obsolete Prisma column.
       // Update optional cache only after successful durable write.
       const memEntry = artifactMemoryStore.get(artifactId);
       if (memEntry) {
@@ -831,7 +830,6 @@ export class ArtifactService {
           ownerStudentId: artifact.ownerStudentId,
           ownerTeacherId: artifact.ownerTeacherId,
           classId: artifact.classId,
-          mediaAssetId: artifact.mediaAssetId ?? null,
           kind: artifact.kind,
           accessScope: artifact.accessScope,
           title: artifact.title,
@@ -843,24 +841,21 @@ export class ArtifactService {
           parseStatus: artifact.parseStatus,
           structureQuality: artifact.structureQuality,
           contentFingerprint: artifact.contentFingerprint,
-          curriculumRefs: (artifact.curriculumRefs || {}) as Prisma.InputJsonValue,
           warnings: artifact.warnings as Prisma.InputJsonValue,
           parsedAt: artifact.parsedAt ? new Date(artifact.parsedAt) : null,
+          updatedAt: new Date(artifact.updatedAt),
         },
         update: {
-          mediaAssetId: artifact.mediaAssetId ?? null,
           parseStatus: artifact.parseStatus,
           structureQuality: artifact.structureQuality,
           blockCount: artifact.blockCount,
           questionCount: artifact.questionCount,
           diagramCount: artifact.diagramCount,
           answerKeyCount: artifact.answerKeyCount,
-          tableCount: artifact.tableCount,
-          transcriptCount: artifact.transcriptCount,
           contentFingerprint: artifact.contentFingerprint,
-          curriculumRefs: (artifact.curriculumRefs || {}) as Prisma.InputJsonValue,
           warnings: artifact.warnings as Prisma.InputJsonValue,
           parsedAt: artifact.parsedAt ? new Date(artifact.parsedAt) : null,
+          updatedAt: new Date(artifact.updatedAt),
         },
       });
     } catch (e) {
@@ -936,7 +931,6 @@ export class ArtifactService {
           ownerStudentId: artifact.ownerStudentId,
           ownerTeacherId: artifact.ownerTeacherId,
           classId: artifact.classId,
-          mediaAssetId: artifact.mediaAssetId ?? null,
           kind: artifact.kind,
           accessScope: artifact.accessScope,
           title: artifact.title,
@@ -948,22 +942,18 @@ export class ArtifactService {
           parseStatus: artifact.parseStatus,
           structureQuality: artifact.structureQuality,
           contentFingerprint: artifact.contentFingerprint,
-          curriculumRefs: (artifact.curriculumRefs || {}) as Prisma.InputJsonValue,
           warnings: artifact.warnings as Prisma.InputJsonValue,
           parsedAt: artifact.parsedAt ? new Date(artifact.parsedAt) : null,
+          updatedAt: new Date(artifact.updatedAt),
         },
         update: {
-          mediaAssetId: artifact.mediaAssetId ?? null,
           parseStatus: artifact.parseStatus,
           structureQuality: artifact.structureQuality,
           blockCount: artifact.blockCount,
           questionCount: artifact.questionCount,
           diagramCount: artifact.diagramCount,
           answerKeyCount: artifact.answerKeyCount,
-          tableCount: artifact.tableCount,
-          transcriptCount: artifact.transcriptCount,
           contentFingerprint: artifact.contentFingerprint,
-          curriculumRefs: (artifact.curriculumRefs || {}) as Prisma.InputJsonValue,
           warnings: artifact.warnings as Prisma.InputJsonValue,
           parsedAt: artifact.parsedAt ? new Date(artifact.parsedAt) : null,
         },
@@ -990,6 +980,7 @@ export class ArtifactService {
             educationalTags: block.educationalTags as Prisma.InputJsonValue,
             metadata: block.metadata as Prisma.InputJsonValue,
             contentFingerprint: computeFingerprint(block.text || ''),
+            updatedAt: new Date(),
           })),
           skipDuplicates: true,
         });
@@ -1018,7 +1009,7 @@ export class ArtifactService {
       ownerStudentId: record.ownerStudentId ?? null,
       ownerTeacherId: record.ownerTeacherId ?? null,
       classId: record.classId ?? null,
-      mediaAssetId: record.mediaAssetId ?? null,
+      mediaAssetId: null,
       kind: record.kind as ArtifactKind,
       accessScope: record.accessScope as ArtifactAccessScope,
       title: record.title,
@@ -1033,11 +1024,11 @@ export class ArtifactService {
       questionCount: record.questionCount || 0,
       diagramCount: record.diagramCount || 0,
       answerKeyCount: record.answerKeyCount || 0,
-      tableCount: record.tableCount || 0,
-      transcriptCount: record.transcriptCount || 0,
+      tableCount: 0,
+      transcriptCount: 0,
       restrictedCount: 0,
       contentFingerprint: record.contentFingerprint || '',
-      curriculumRefs: (record.curriculumRefs && typeof record.curriculumRefs === 'object' ? record.curriculumRefs : {}) as ArtifactCurriculumRefs,
+      curriculumRefs: {},
       createdAt: record.createdAt?.toISOString?.() || nowISO(),
       updatedAt: record.updatedAt?.toISOString?.() || nowISO(),
       parsedAt: record.parsedAt?.toISOString?.() || null,
@@ -1051,7 +1042,7 @@ export class ArtifactService {
       artifactId: record.artifactId,
       schoolId: record.schoolId,
       kind: record.kind as ArtifactBlockKind,
-      visibility: (record.visibility === 'teacher_only' ? 'teacher_only' : 'student') as ArtifactBlock['visibility'],
+      visibility: (record.kind === 'answer_key' ? 'teacher_only' : 'student') as ArtifactBlock['visibility'],
       order: record.order,
       text: record.text ?? null,
       normalizedText: record.normalizedText ?? null,

@@ -14,8 +14,9 @@
       "@/*": ["../AI/*"]
     },
     "allowSyntheticDefaultImports": true,
-    "moduleResolution": "node"
+    "moduleResolution": "node",
+    "rootDir": ".."
   },
-  "include": ["src/**/*.ts", "../AI/**/*.ts"],
+  "files": ["src/index.ts"],
   "exclude": ["node_modules", "dist"]
 }

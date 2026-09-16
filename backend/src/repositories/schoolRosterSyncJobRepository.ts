@@ -1,3 +1,4 @@
+import { randomUUID } from 'crypto';
 import prisma from '../lib/prisma';
 
 export interface SyncJobRecord {
@@ -37,6 +38,7 @@ function toRecord(row: any): SyncJobRecord {
 export async function createSyncJob(data: SyncJobRecord): Promise<SyncJobRecord> {
   const row = await prisma.schoolRosterSyncJobRecord.create({
     data: {
+      id: randomUUID(),
       schoolId: data.schoolId,
       syncBatchId: data.syncBatchId,
       idempotencyKey: null,
@@ -51,6 +53,7 @@ export async function createSyncJob(data: SyncJobRecord): Promise<SyncJobRecord>
       quarantinedCount: data.quarantinedCount,
       reasonCodes: data.reasonCodes,
       privacyMetadata: {},
+      updatedAt: new Date(),
     },
   });
   return toRecord(row);

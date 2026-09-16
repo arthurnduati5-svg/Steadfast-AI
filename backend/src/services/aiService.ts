@@ -1,3 +1,4 @@
+import { randomUUID } from 'crypto';
 import prisma from '../lib/prisma';
 import { createChatMessage } from '../repositories/chatMessageRepository';
 import { getRedisClient } from '../lib/redis'; // Corrected import
@@ -31,7 +32,7 @@ export const aiService = {
   chat: async ({ studentId, message, topic }: AIChatInput) => {
     const studentProfile = await prisma.studentProfile.findUnique({
       where: { userId: studentId },
-      include: { progress: true, mistakes: true, chatSessions: { take: 1, orderBy: { createdAt: 'desc' } } },
+      include: { Progress: true, Mistake: true, ChatSession: { take: 1, orderBy: { createdAt: 'desc' } } },
     });
 
     if (!studentProfile) {
@@ -121,13 +122,15 @@ export const aiService = {
     const aiResponse = completion.choices[0].message?.content || 'I am sorry, I could not generate a response.';
 
     // 6. Save response + student message to PostgreSQL.
-    let chatSession = studentProfile.chatSessions[0];
+    let chatSession = studentProfile.ChatSession[0];
     if (!chatSession || !chatSession.isActive || (topic && chatSession.topic !== topic)) {
       chatSession = await prisma.chatSession.create({
         data: {
+          id: randomUUID(),
           studentId: studentId,
           topic: topic,
           isActive: true,
+          updatedAt: new Date(),
         },
       });
     }

@@ -1,3 +1,4 @@
+import { randomUUID } from 'crypto';
 import prisma from '../lib/prisma';
 import { createModeSession, updateModeSessionStatus } from './learningModeSessionService';
 import type { ExamModeStatus, ExamModeStage } from '../contracts/examModeContracts';
@@ -35,6 +36,7 @@ export async function startExamSession(input: StartExamSessionInput) {
 
   const examSession = await prisma.examModeSessionRecord.create({
     data: {
+      id: randomUUID(),
       schoolId: input.schoolId,
       studentId: input.studentId,
       tutorLearnerId: input.tutorLearnerId || null,
@@ -62,6 +64,7 @@ export async function startExamSession(input: StartExamSessionInput) {
       flaggedCount: 0,
       safeEvidenceRefsJson: [],
       startedAt: new Date(),
+      updatedAt: new Date(),
     },
   });
 

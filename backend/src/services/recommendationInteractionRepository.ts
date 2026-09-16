@@ -62,6 +62,7 @@ export class PrismaRecommendationInteractionRepository implements IRecommendatio
         safeReasonCodes: (input.safeReasonCodes || null) as any,
         safetyFlags: (input.safetyFlags || null) as any,
         privacyMetadata: (input.privacyMetadata || null) as any,
+        updatedAt: new Date(),
       },
     });
   }

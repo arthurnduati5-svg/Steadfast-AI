@@ -3,7 +3,9 @@ import { task025PilotRepository } from '../repositories/task025PilotRepository';
 import { PILOT_EXECUTION_STATUSES } from '../contracts/task026PilotExecutionContracts';
 import type { PilotExecutionStatus } from '../contracts/task026PilotExecutionContracts';
 
-const VALID_TRANSITIONS: Record<PilotExecutionStatus, PilotExecutionStatus[]> = {
+type InternalPilotStatus = PilotExecutionStatus | 'starting' | 'resuming' | 'rollback_requested' | 'failed'
+
+const VALID_TRANSITIONS: Record<InternalPilotStatus, InternalPilotStatus[]> = {
   not_started: ['starting', 'blocked', 'failed'],
   starting: ['active', 'blocked', 'failed'],
   active: ['paused', 'rollback_requested', 'completed', 'blocked', 'failed'],
@@ -12,13 +14,14 @@ const VALID_TRANSITIONS: Record<PilotExecutionStatus, PilotExecutionStatus[]> = 
   rollback_requested: ['rolled_back', 'blocked', 'failed'],
   rolled_back: ['blocked', 'failed'],
   completed: ['blocked', 'failed'],
+  cancelled: [],
   blocked: [],
   failed: [],
 };
 
 export async function transitionExecutionState(
   executionRunId: string,
-  newStatus: PilotExecutionStatus,
+  newStatus: InternalPilotStatus,
   actorRole: string,
   actorIdHash?: string,
   requestId?: string,
@@ -28,7 +31,7 @@ export async function transitionExecutionState(
     return { ok: false, reasonCodes: ['execution_run_not_found'], safeMessage: 'Execution run not found.' };
   }
 
-  const currentStatus = (run as any).status as PilotExecutionStatus;
+  const currentStatus = (run as any).status as InternalPilotStatus;
   const allowedNext = VALID_TRANSITIONS[currentStatus];
 
   if (!allowedNext || !allowedNext.includes(newStatus)) {
@@ -54,6 +57,8 @@ export async function transitionExecutionState(
       updateData.pausedAt = now;
       break;
     case 'resuming':
+      break;
+    case 'rollback_requested':
       break;
     case 'rolled_back':
       updateData.rolledBackAt = now;
@@ -81,14 +86,14 @@ export async function transitionExecutionState(
 
 export async function assertCanTransition(
   executionRunId: string,
-  targetStatus: PilotExecutionStatus,
+  targetStatus: InternalPilotStatus,
 ): Promise<{ ok: boolean; reasonCodes: string[]; safeMessage: string }> {
   const run = await task026PilotExecutionRepository.getExecutionRun(executionRunId);
   if (!run) {
     return { ok: false, reasonCodes: ['execution_run_not_found'], safeMessage: 'Execution run not found.' };
   }
 
-  const currentStatus = (run as any).status as PilotExecutionStatus;
+  const currentStatus = (run as any).status as InternalPilotStatus;
   const allowedNext = VALID_TRANSITIONS[currentStatus];
 
   if (!allowedNext || !allowedNext.includes(targetStatus)) {
@@ -103,3 +108,4 @@ export async function assertCanTransition(
 }
 
 export { PILOT_EXECUTION_STATUSES, VALID_TRANSITIONS };
+export type { InternalPilotStatus };

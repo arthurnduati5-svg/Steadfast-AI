@@ -250,6 +250,7 @@ export async function recordLearningEffectEvent(args: RecordLearningEffectEventA
     await ensureLearningEffectEventTable();
     const created = await prisma.learningEffectEvent.create({
       data: {
+        id: randomUUID(),
         userId: args.userId,
         sessionId,
         subject,

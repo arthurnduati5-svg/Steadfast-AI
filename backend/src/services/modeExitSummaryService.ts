@@ -1,3 +1,4 @@
+import { randomUUID } from 'crypto';
 import prisma from '../lib/prisma';
 import type { RecommendedNextAction } from '../contracts/learningModeContracts';
 
@@ -22,6 +23,7 @@ export interface CreateExitSummaryInput {
 export async function createExitSummary(input: CreateExitSummaryInput) {
   return prisma.learningModeExitSummary.create({
     data: {
+      id: randomUUID(),
       modeSessionId: input.modeSessionId,
       schoolId: input.schoolId,
       studentId: input.studentId,

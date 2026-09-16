@@ -1,3 +1,4 @@
+import { randomUUID } from 'crypto';
 import prisma from '../lib/prisma';
 import type { TeachBackModeSummary } from '../contracts/teachBackModeContracts';
 import { createSignal } from './learningSignalService';
@@ -29,6 +30,7 @@ export interface CreateSummaryInput {
 export async function createTeachBackSummary(input: CreateSummaryInput) {
   const summary = await prisma.teachBackModeSummaryRecord.create({
     data: {
+      id: randomUUID(),
       schoolId: input.schoolId,
       studentId: input.studentId,
       teachBackSessionId: input.teachBackSessionId,

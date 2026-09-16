@@ -1,3 +1,4 @@
+import { randomUUID } from 'crypto';
 import { Router, Request, Response } from 'express';
 import { schoolAuthMiddleware } from '../middleware/schoolAuthMiddleware';
 import { rateLimiter } from '../middleware/rateLimiter';
@@ -21,6 +22,8 @@ import type {
   SimplicityLevel,
   SupportedLearningLanguage,
   TopicMasteryState,
+  TutorActionUiMeta as AssistantTutorActionUiMeta,
+  TutorRevisionNote as AssistantTutorRevisionNote,
   VoiceBehaviorProfile,
   VideoRecommendationIntent,
   WeakTopicRecoveryState,
@@ -490,6 +493,34 @@ type TutorActionUiMeta = {
   nextStep?: string;
   savedRevisionNote?: TutorRevisionNote;
 };
+
+function toAssistantTutorRevisionNote(note: TutorRevisionNote): AssistantTutorRevisionNote {
+  const parsedContentType = RevisionContentTypeSchema.safeParse(note.contentType);
+  return {
+    id: note.id,
+    text: note.text,
+    createdAt: note.createdAt,
+    ...(note.topic ? { topic: note.topic } : {}),
+    ...(note.subject ? { subject: note.subject } : {}),
+    ...(note.summary ? { summary: note.summary } : {}),
+    ...(note.sourceMessageId ? { sourceMessageId: note.sourceMessageId } : {}),
+    ...(note.collectionId ? { collectionId: note.collectionId } : {}),
+    ...(note.collectionTitle ? { collectionTitle: note.collectionTitle } : {}),
+    ...(note.artifactLabels ? { artifactLabels: note.artifactLabels } : {}),
+    ...(note.basedOnVideoTitle ? { basedOnVideoTitle: note.basedOnVideoTitle } : {}),
+    ...(parsedContentType.success ? { contentType: parsedContentType.data } : {}),
+  };
+}
+
+function toAssistantTutorActionUiMeta(meta: TutorActionUiMeta | undefined): AssistantTutorActionUiMeta | undefined {
+  if (!meta) return undefined;
+  return {
+    ...(meta.actionId ? { actionId: meta.actionId } : {}),
+    ...(meta.statusLine ? { statusLine: meta.statusLine } : {}),
+    ...(meta.nextStep ? { nextStep: meta.nextStep } : {}),
+    ...(meta.savedRevisionNote ? { savedRevisionNote: toAssistantTutorRevisionNote(meta.savedRevisionNote) } : {}),
+  };
+}
 
 const VALID_TUTOR_ACTIONS = new Set<TutorActionId>([
   'ask',
@@ -2275,14 +2306,16 @@ async function applyDeterministicMasteryUpdate(args: {
         data: { mastery, subject },
       });
     } else {
-      await prisma.progress.create({
-        data: {
-          studentId: args.studentId,
-          subject,
-          topic,
-          mastery: Math.max(5, increment),
-        },
-      });
+    await prisma.progress.create({
+      data: {
+        id: randomUUID(),
+        studentId: args.studentId,
+        subject,
+        topic,
+        mastery: Math.max(5, increment),
+        updatedAt: new Date(),
+      },
+    });
     }
     if (mastery >= 80) {
       await prisma.mistake.deleteMany({
@@ -2310,6 +2343,7 @@ async function applyDeterministicMasteryUpdate(args: {
     } else {
       await prisma.mistake.create({
         data: {
+          id: randomUUID(),
           studentId: args.studentId,
           topic,
           error: conciseError,
@@ -4361,6 +4395,7 @@ const getOrCreateStudentProfile = async (studentId: string) => {
         preferences: {},
         favoriteShows: [],
         topInterests: [],
+        updatedAt: new Date(),
       },
     });
 
@@ -4385,15 +4420,15 @@ router.get('/preload', schoolAuthMiddleware, async (req: AuthedRequest, res: Res
 
     const [lastSession, history, revisionOverviewBase] = await Promise.all([
       prisma.chatSession.findFirst({
-        where: { studentId: studentUserId, messages: { some: {} } },
+        where: { studentId: studentUserId, ChatMessage: { some: {} } },
         orderBy: { updatedAt: 'desc' },
-        include: { messages: { orderBy: { timestamp: 'desc' }, take: 12 } },
+        include: { ChatMessage: { orderBy: { timestamp: 'desc' }, take: 12 } },
       }),
       prisma.chatSession.findMany({
-        where: { studentId: studentUserId, messages: { some: {} } },
+        where: { studentId: studentUserId, ChatMessage: { some: {} } },
         take: 10,
         orderBy: { updatedAt: 'desc' },
-        include: { messages: { orderBy: { timestamp: 'asc' }, take: 3 } },
+        include: { ChatMessage: { orderBy: { timestamp: 'asc' }, take: 3 } },
       }),
       getRevisionOverview({ userId: studentUserId, limit: 8 }),
     ]);
@@ -4433,13 +4468,13 @@ router.get('/preload', schoolAuthMiddleware, async (req: AuthedRequest, res: Res
       lastSession: resolvedLastSession,
       revisionOverview,
       history: filteredHistory.map((session: any) => {
-        const title = resolveSessionTitle(session.topic, session.messages || []);
+        const title = resolveSessionTitle(session.topic, session.ChatMessage || []);
         const tutorState = getTutorStateFromMetadata(session.metadata);
         const tutorArtifacts = getTutorArtifactsFromMetadata(session.metadata);
         const tutorRevisionNotes = getTutorRevisionNotesFromMetadata(session.metadata);
         const summaryMeta = buildSessionSummaryMeta({
           topic: session.topic,
-          messages: session.messages || [],
+          messages: session.ChatMessage || [],
           tutorState,
           tutorArtifacts,
           tutorRevisionNotes,
@@ -4455,7 +4490,7 @@ router.get('/preload', schoolAuthMiddleware, async (req: AuthedRequest, res: Res
           title,
           createdAt: safeToISOString(session.createdAt),
           updatedAt: safeToISOString(session.updatedAt),
-          firstMessage: session.messages ? (session.messages[0]?.content || null) : null,
+          firstMessage: session.ChatMessage ? (session.ChatMessage[0]?.content || null) : null,
           summary: summaryMeta.summary,
           lastTutorFocus: summaryMeta.lastTutorFocus,
           learningMode: summaryMeta.learningMode,
@@ -4493,10 +4528,12 @@ router.post('/new-session', schoolAuthMiddleware, async (req: AuthedRequest, res
 
     const newSession = await prisma.chatSession.create({
       data: {
+        id: randomUUID(),
         studentId: studentUserId,
         topic: null,
         isActive: true,
         metadata: DEFAULT_CONVERSATION_STATE,
+        updatedAt: new Date(),
       },
     });
 
@@ -4607,20 +4644,20 @@ router.post('/chat', schoolAuthMiddleware, aiLimiter, async (req: AuthedRequest,
       prisma.chatSession.findUnique({
         where: { id: sessionId },
         include: {
-          student: { select: { name: true, gradeLevel: true, userId: true } },
-          messages: { orderBy: { timestamp: 'asc' }, take: 80 }
+          StudentProfile: { select: { name: true, gradeLevel: true, userId: true } },
+          ChatMessage: { orderBy: { timestamp: 'asc' }, take: 80 }
         }
       }),
       getOrCreateCopilotPreferences(studentId),
       getCopilotPreferencesMetadata(studentId),
     ]);
 
-    if (!session || session.student.userId !== studentId) {
+    if (!session || session.StudentProfile.userId !== studentId) {
       return res.status(404).send({ message: 'Session not found.' });
     }
 
     const existingEditedUserMessage = editedMessageId
-      ? session.messages.find((message) => message.id === editedMessageId)
+      ? session.ChatMessage.find((message) => message.id === editedMessageId)
       : undefined;
     if (editedMessageId && !existingEditedUserMessage) {
       return res.status(404).send({ message: 'Edited message not found.' });
@@ -4639,8 +4676,8 @@ router.post('/chat', schoolAuthMiddleware, aiLimiter, async (req: AuthedRequest,
       return res.status(400).send({ message: 'Cannot attach new files while regenerating an edited message.' });
     }
     const priorSessionMessages = existingEditedUserMessage
-      ? session.messages.filter((message) => message.id !== existingEditedUserMessage.id)
-      : session.messages;
+      ? session.ChatMessage.filter((message) => message.id !== existingEditedUserMessage.id)
+      : session.ChatMessage;
 
     const effectiveConversationState = buildEffectiveConversationState(
       session.metadata,
@@ -4735,7 +4772,7 @@ router.post('/chat', schoolAuthMiddleware, aiLimiter, async (req: AuthedRequest,
       sessionId,
       message: effectiveMessage,
       preferredLanguage: sessionLanguageState.preferredLanguageMode || preferences.preferredLanguage,
-      gradeLevel: session.student.gradeLevel || undefined,
+      gradeLevel: session.StudentProfile.gradeLevel || undefined,
       activeTopic: safeString(
         (effectiveConversationState as any)?.lastStudyTopic ||
         (effectiveConversationState as any)?.lastTopic ||
@@ -4955,8 +4992,8 @@ router.post('/chat', schoolAuthMiddleware, aiLimiter, async (req: AuthedRequest,
       state: effectiveConversationState,
       tutorState: effectiveProvisionalTutorState,
       studentProfile: {
-        name: session.student.name || 'Student',
-        gradeLevel: session.student.gradeLevel || 'Primary'
+        name: session.StudentProfile.name || 'Student',
+        gradeLevel: session.StudentProfile.gradeLevel || 'Primary'
       },
       preferences: {
         preferredLanguage: preferences.preferredLanguage as any,
@@ -5063,6 +5100,9 @@ router.post('/chat', schoolAuthMiddleware, aiLimiter, async (req: AuthedRequest,
       activeTopic: resolvedTopicForTurn,
       savedRevisionNote,
     });
+    const assistantRevisionNote = savedRevisionNote
+      ? toAssistantTutorRevisionNote(savedRevisionNote)
+      : undefined;
     const resolvedSubjectForTurn = safeString(
       tutorArtifacts[0]?.subject ||
       effectiveProvisionalTutorState.activeSubject ||
@@ -5070,7 +5110,7 @@ router.post('/chat', schoolAuthMiddleware, aiLimiter, async (req: AuthedRequest,
     ).trim() || undefined;
     const basePresentation = deriveMessagePresentation({
       tutorAction,
-      tutorUi,
+      tutorUi: toAssistantTutorActionUiMeta(tutorUi),
       tutorState: effectiveProvisionalTutorState,
       artifacts: tutorArtifacts,
       videoData: aiResult.videoData,
@@ -5097,13 +5137,13 @@ router.post('/chat', schoolAuthMiddleware, aiLimiter, async (req: AuthedRequest,
       ),
       afterSuccess: /\b(well done|good work|that is right|you got it|correct)\b/i.test(finalContent),
       basePresentation,
-      tutorUi,
+      tutorUi: toAssistantTutorActionUiMeta(tutorUi),
       aiAssistantMetadata: asRecord(aiResult.assistantMetadata),
       sessionLanguageState,
       detectedInputLanguage,
       generatedLanguage: sessionLanguageState.preferredResponseLanguage,
       systemNotices,
-      savedRevisionNote,
+      savedRevisionNote: assistantRevisionNote,
       buildMessageLanguageMetadata,
     });
     const postAiSemanticSnapshot = buildSemanticSessionSnapshot([
@@ -5354,7 +5394,7 @@ router.post('/chat', schoolAuthMiddleware, aiLimiter, async (req: AuthedRequest,
     });
 
     // Background Tasks
-    if (session.messages.length === 0 && isPlaceholderTitle(session.topic)) {
+    if (session.ChatMessage.length === 0 && isPlaceholderTitle(session.topic)) {
       generateTopicInBackground(sessionId, effectiveMessage);
     }
     if (pineconeIndex) {
@@ -5425,6 +5465,7 @@ router.post('/message', schoolAuthMiddleware, rateLimiter, async (req: AuthedReq
 
     const savedMessage = await prisma.chatMessage.create({
       data: {
+        id: randomUUID(),
         sessionId,
         role: message.role,
         content: message.content,
@@ -5484,9 +5525,9 @@ router.post('/messages/:id/edit', schoolAuthMiddleware, async (req: AuthedReques
     const targetMessage = await prisma.chatMessage.findUnique({
       where: { id: req.params.id },
       include: {
-        chatSession: {
+        ChatSession: {
           include: {
-            messages: {
+            ChatMessage: {
               orderBy: { messageNumber: 'asc' },
             },
           },
@@ -5494,7 +5535,7 @@ router.post('/messages/:id/edit', schoolAuthMiddleware, async (req: AuthedReques
       },
     });
 
-    if (!targetMessage || targetMessage.chatSession.studentId !== studentUserId) {
+    if (!targetMessage || targetMessage.ChatSession.studentId !== studentUserId) {
       return res.status(404).send({ message: 'Message not found.' });
     }
     if (targetMessage.role !== 'user') {
@@ -5508,16 +5549,16 @@ router.post('/messages/:id/edit', schoolAuthMiddleware, async (req: AuthedReques
     }
 
     if (nextContent === safeString(targetMessage.content).trim()) {
-      return res.status(200).send(buildSessionResponsePayload(targetMessage.chatSession));
+      return res.status(200).send(buildSessionResponsePayload(targetMessage.ChatSession));
     }
 
-    const session = targetMessage.chatSession;
-    const targetIndex = session.messages.findIndex((message) => message.id === targetMessage.id);
+    const session = targetMessage.ChatSession;
+    const targetIndex = session.ChatMessage.findIndex((message) => message.id === targetMessage.id);
     if (targetIndex < 0) {
       return res.status(404).send({ message: 'Message not found in session.' });
     }
 
-    const laterUserTurnExists = session.messages
+    const laterUserTurnExists = session.ChatMessage
       .slice(targetIndex + 1)
       .some((message) => message.role === 'user');
     if (laterUserTurnExists) {
@@ -5547,7 +5588,7 @@ router.post('/messages/:id/edit', schoolAuthMiddleware, async (req: AuthedReques
     };
 
     const semanticSnapshot = buildSemanticSessionSnapshot([
-      ...session.messages.slice(0, targetIndex).map((message) => ({
+      ...session.ChatMessage.slice(0, targetIndex).map((message) => ({
         role: message.role,
         content: message.content,
         metadata: message.metadata,
@@ -5606,7 +5647,7 @@ router.post('/messages/:id/edit', schoolAuthMiddleware, async (req: AuthedReques
       return tx.chatSession.findUnique({
         where: { id: session.id },
         include: {
-          messages: { orderBy: { timestamp: 'asc' } },
+          ChatMessage: { orderBy: { timestamp: 'asc' } },
         },
       });
     });
@@ -5666,11 +5707,11 @@ router.get('/history', schoolAuthMiddleware, async (req: AuthedRequest, res: Res
     const pageNum = parseInt(page as string), limitNum = parseInt(limit as string);
     const skip = (pageNum - 1) * limitNum;
 
-    const whereClause: any = { studentId: studentUserId, messages: { some: {} } };
+    const whereClause: any = { studentId: studentUserId, ChatMessage: { some: {} } };
     if (search) {
       whereClause.OR = [
         { topic: { contains: search as string, mode: 'insensitive' } },
-        { messages: { some: { content: { contains: search as string, mode: 'insensitive' } } } },
+        { ChatMessage: { some: { content: { contains: search as string, mode: 'insensitive' } } } },
       ];
     }
 
@@ -5678,14 +5719,14 @@ router.get('/history', schoolAuthMiddleware, async (req: AuthedRequest, res: Res
       prisma.chatSession.count({ where: whereClause }),
       prisma.chatSession.findMany({
         where: whereClause, skip, take: limitNum, orderBy: { updatedAt: 'desc' },
-        include: { messages: { orderBy: { timestamp: 'asc' }, take: 3 } }
+        include: { ChatMessage: { orderBy: { timestamp: 'asc' }, take: 3 } }
       })
     ]);
 
     // SELF-HEALING HISTORY: Rename old placeholder sessions using background summarization
     const sessionsWithTitles = await Promise.all(history.map(async (s) => {
       const currentTitle = String(s.topic || '').trim();
-      let title = resolveSessionTitle(currentTitle, s.messages || []);
+      let title = resolveSessionTitle(currentTitle, s.ChatMessage || []);
       if (title && title !== currentTitle) {
         runSummarizationTask(s.id, studentUserId);
         prisma.chatSession.update({
@@ -5698,7 +5739,7 @@ router.get('/history', schoolAuthMiddleware, async (req: AuthedRequest, res: Res
       const tutorRevisionNotes = getTutorRevisionNotesFromMetadata(s.metadata);
       const summaryMeta = buildSessionSummaryMeta({
         topic: s.topic,
-        messages: s.messages || [],
+        messages: s.ChatMessage || [],
         tutorState,
         tutorArtifacts,
         tutorRevisionNotes,
@@ -5708,7 +5749,7 @@ router.get('/history', schoolAuthMiddleware, async (req: AuthedRequest, res: Res
         title: title,
         updatedAt: s.updatedAt.toISOString(),
         createdAt: s.createdAt.toISOString(),
-        firstMessage: s.messages[0]?.content || null,
+        firstMessage: s.ChatMessage[0]?.content || null,
         summary: summaryMeta.summary,
         lastTutorFocus: summaryMeta.lastTutorFocus,
         learningMode: summaryMeta.learningMode,
@@ -5740,7 +5781,7 @@ router.get('/session/:id', schoolAuthMiddleware, async (req: AuthedRequest, res:
     const session = await prisma.chatSession.update({
       where: { id: req.params.id, studentId: studentUserId },
       data: { isActive: true },
-      include: { messages: { orderBy: { timestamp: 'asc' } } },
+      include: { ChatMessage: { orderBy: { timestamp: 'asc' } } },
     });
 
     if (!session) return res.status(404).send({ message: 'Session not found.' });
@@ -5748,7 +5789,7 @@ router.get('/session/:id', schoolAuthMiddleware, async (req: AuthedRequest, res:
 
     res.status(200).send({
       ...session,
-      messages: session.messages.map((msg: any) => ({
+      messages: session.ChatMessage.map((msg: any) => ({
         ...msg,
         timestamp: msg.timestamp.toISOString(),
         // ✅ RETURN SAVED VIDEO DATA
@@ -5770,7 +5811,7 @@ router.get('/session/:id/tutor-state', schoolAuthMiddleware, async (req: AuthedR
     const session = await prisma.chatSession.findFirst({
       where: { id: req.params.id, studentId: studentUserId },
       include: {
-        messages: {
+        ChatMessage: {
           orderBy: { timestamp: 'desc' },
           take: 8,
         },
@@ -5877,18 +5918,18 @@ router.post('/revision', schoolAuthMiddleware, async (req: AuthedRequest, res: R
       ? await prisma.chatMessage.findUnique({
           where: { id: sourceMessageId },
           include: {
-            chatSession: {
+            ChatSession: {
               select: { id: true, studentId: true, metadata: true },
             },
           },
         })
       : null;
 
-    if (sourceMessageRecord && sourceMessageRecord.chatSession.studentId !== studentUserId) {
+    if (sourceMessageRecord && sourceMessageRecord.ChatSession.studentId !== studentUserId) {
       return res.status(404).send({ message: 'Source message not found.' });
     }
 
-    const sessionId = requestedSessionId || sourceMessageRecord?.chatSession?.id || undefined;
+    const sessionId = requestedSessionId || sourceMessageRecord?.ChatSession?.id || undefined;
     const session = sessionId
       ? await prisma.chatSession.findFirst({
           where: { id: sessionId, studentId: studentUserId },
@@ -6103,8 +6144,8 @@ function parseCachedRevisionChapterSummaries(value: unknown): {
   const preface = limitText(safeString(record.preface).trim(), 320) || null;
   const endRecap = limitText(safeString(record.endRecap).trim(), 320) || null;
   const chaptersRaw = Array.isArray(record.chapters) ? record.chapters : [];
-  const chapters = chaptersRaw
-    .map((entry) => {
+  const chapters: RevisionNotebookChapterSummaryPayload[] = chaptersRaw
+    .map((entry): RevisionNotebookChapterSummaryPayload | null => {
       const chapter = asRecord(entry);
       if (!chapter) return null;
       const id = safeString(chapter.id).trim();
@@ -6120,9 +6161,9 @@ function parseCachedRevisionChapterSummaries(value: unknown): {
           ? chapter.itemIds.map((itemId) => safeString(itemId).trim()).filter(Boolean)
           : [],
         generatedAt,
-      } satisfies RevisionNotebookChapterSummaryPayload;
+      };
     })
-    .filter((entry): entry is RevisionNotebookChapterSummaryPayload => Boolean(entry));
+    .filter((entry): entry is RevisionNotebookChapterSummaryPayload => entry !== null);
   if (!signature || !chapters.length) return null;
   return { signature, generatedAt, preface, endRecap, chapters };
 }
@@ -6164,8 +6205,8 @@ function parseCachedRevisionFlashcards(value: unknown): {
   const chapterId = limitText(safeString(record.chapterId).trim(), 120) || null;
   const chapterLabel = limitText(safeString(record.chapterLabel).trim(), 160) || null;
   const flashcardsRaw = Array.isArray(record.flashcards) ? record.flashcards : [];
-  const flashcards = flashcardsRaw
-    .map((entry) => {
+  const flashcards: RevisionNotebookFlashcardPayload[] = flashcardsRaw
+    .map((entry): RevisionNotebookFlashcardPayload | null => {
       const card = asRecord(entry);
       if (!card) return null;
       const id = safeString(card.id).trim();
@@ -6182,9 +6223,9 @@ function parseCachedRevisionFlashcards(value: unknown): {
           sourceItemIds: Array.isArray(card.sourceItemIds)
             ? card.sourceItemIds.map((itemId) => safeString(itemId).trim()).filter(Boolean).slice(0, 4)
             : [],
-      } satisfies RevisionNotebookFlashcardPayload;
+      };
     })
-    .filter((entry): entry is RevisionNotebookFlashcardPayload => Boolean(entry));
+    .filter((entry): entry is RevisionNotebookFlashcardPayload => entry !== null);
   if (!signature || !flashcards.length) return null;
   return {
     signature,
@@ -6534,17 +6575,17 @@ router.post('/revision/collections/:id/chapter-summaries', schoolAuthMiddleware,
         endRecap = aiEndRecap;
       }
       if (aiChapters.length) {
-        const aiSummaryByLabel = new Map(
+        const aiSummaryByLabel = new Map<string, string>(
           aiChapters
-            .map((entry: unknown) => {
+            .map((entry: unknown): [string, string] | null => {
               const chapter = asRecord(entry);
               if (!chapter) return null;
               const label = safeString(chapter.label).trim().toLocaleLowerCase();
               const summary = limitText(safeString(chapter.summary).trim(), 240);
               if (!label || !summary) return null;
-              return [label, summary] as const;
+              return [label, summary];
             })
-            .filter((entry): entry is readonly [string, string] => Boolean(entry))
+          .filter((entry: [string, string] | null): entry is [string, string] => entry !== null)
         );
 
         chapterSummaries = fallbackSummaries.map((chapter) => ({
@@ -6663,7 +6704,7 @@ router.post('/revision/collections/:id/flashcards', schoolAuthMiddleware, async 
       ? `${selectedChapter.label} quick deck`
       : `${details.collection.title} quick deck`;
     let deckTitle = defaultDeckTitle;
-    let flashcards = fallbackFlashcards;
+    let flashcards: RevisionNotebookFlashcardPayload[] = fallbackFlashcards;
 
     try {
       const completion = await openai.chat.completions.create({
@@ -6711,7 +6752,7 @@ router.post('/revision/collections/:id/flashcards', schoolAuthMiddleware, async 
             chaptersForDeck.map((chapter) => [chapter.label.toLocaleLowerCase(), chapter] as const)
           );
         flashcards = aiFlashcards
-          .map((entry: unknown, index: number) => {
+          .map((entry: unknown, index: number): RevisionNotebookFlashcardPayload | null => {
             const card = asRecord(entry);
             if (!card) return null;
             const front = limitText(safeString(card.front).trim(), 220);
@@ -6732,9 +6773,9 @@ router.post('/revision/collections/:id/flashcards', schoolAuthMiddleware, async 
               chapterLabel,
               chapterId: matchedChapter?.id || limitText(safeString(card.chapterId).trim(), 120) || null,
               sourceItemIds,
-            } satisfies RevisionNotebookFlashcardPayload;
+            };
           })
-          .filter((entry): entry is RevisionNotebookFlashcardPayload => Boolean(entry))
+          .filter((entry: RevisionNotebookFlashcardPayload | null): entry is RevisionNotebookFlashcardPayload => entry !== null)
           .slice(0, 12);
       }
     } catch (error) {
@@ -6960,14 +7001,15 @@ router.patch('/revision/items/batch', schoolAuthMiddleware, async (req: AuthedRe
   try {
     const updates = Array.isArray(req.body?.updates)
       ? req.body.updates
-          .map((entry) => {
-            const patchBody = asRecord(entry?.patch) || {};
+          .map((entry: unknown) => {
+            const updateEntry = asRecord(entry) || {};
+            const patchBody = asRecord(updateEntry.patch) || {};
             const hasFeaturedRank = Object.prototype.hasOwnProperty.call(patchBody, 'featuredRank');
             const parsedFeaturedRank = hasFeaturedRank
               ? Number(patchBody.featuredRank)
               : undefined;
             return {
-              itemId: safeString(entry?.itemId).trim(),
+              itemId: safeString(updateEntry.itemId).trim(),
               patch: {
                 title: typeof patchBody.title === 'string' ? patchBody.title : undefined,
                 summary: typeof patchBody.summary === 'string' ? patchBody.summary : undefined,
@@ -6976,7 +7018,7 @@ router.patch('/revision/items/batch', schoolAuthMiddleware, async (req: AuthedRe
                   ? (safeString(patchBody.collectionId).trim() || null)
                   : undefined,
                 featuredRank: hasFeaturedRank
-                  ? (Number.isFinite(parsedFeaturedRank) ? Math.max(1, Math.round(parsedFeaturedRank)) : null)
+                  ? (typeof parsedFeaturedRank === 'number' && Number.isFinite(parsedFeaturedRank) ? Math.max(1, Math.round(parsedFeaturedRank)) : null)
                   : undefined,
                 bundleRole: Object.prototype.hasOwnProperty.call(patchBody, 'bundleRole')
                   ? (safeString(patchBody.bundleRole).trim() || null)
@@ -7004,7 +7046,7 @@ router.patch('/revision/items/batch', schoolAuthMiddleware, async (req: AuthedRe
               },
             };
           })
-          .filter((entry) => entry.itemId)
+          .filter((entry: { itemId: string }) => Boolean(entry.itemId))
       : [];
 
     if (!updates.length) {
@@ -7035,7 +7077,7 @@ router.patch('/revision/:id', schoolAuthMiddleware, async (req: AuthedRequest, r
         summary: typeof req.body?.summary === 'string' ? req.body.summary : undefined,
         content: typeof req.body?.content === 'string' ? req.body.content : undefined,
         collectionId: Object.prototype.hasOwnProperty.call(req.body || {}, 'collectionId') ? (safeString(req.body?.collectionId).trim() || null) : undefined,
-        featuredRank: hasFeaturedRank ? (Number.isFinite(parsedFeaturedRank) ? Math.max(1, Math.round(parsedFeaturedRank)) : null) : undefined,
+        featuredRank: hasFeaturedRank ? (typeof parsedFeaturedRank === 'number' && Number.isFinite(parsedFeaturedRank) ? Math.max(1, Math.round(parsedFeaturedRank)) : null) : undefined,
         bundleRole: Object.prototype.hasOwnProperty.call(req.body || {}, 'bundleRole') ? (safeString(req.body?.bundleRole).trim() || null) : undefined,
         studentNote: Object.prototype.hasOwnProperty.call(req.body || {}, 'studentNote') ? (safeString(req.body?.studentNote).trim() || null) : undefined,
         isPinned: typeof req.body?.isPinned === 'boolean' ? req.body.isPinned : undefined,
@@ -8497,7 +8539,7 @@ router.patch('/study-plans/:id', schoolAuthMiddleware, async (req: AuthedRequest
       planId: req.params.id,
       patch: {
         title: safeString(req.body?.title).trim() || undefined,
-        summary: req.body?.summary === null ? null : safeString(req.body?.summary).trim() || undefined,
+        summary: typeof req.body?.summary === 'string' ? req.body.summary.trim() || undefined : undefined,
         subject: req.body?.subject === null ? null : safeString(req.body?.subject).trim() || undefined,
         topic: req.body?.topic === null ? null : safeString(req.body?.topic).trim() || undefined,
         subjects: Array.isArray(req.body?.subjects)
@@ -9533,7 +9575,7 @@ router.get('/safety/chats', schoolAuthMiddleware, async (req: AuthedRequest, res
     if (sessionId) {
       const session = await prisma.chatSession.findFirst({
         where: { id: sessionId, ...(studentId ? { studentId } : {}) },
-        include: { messages: { orderBy: { timestamp: 'asc' } } },
+        include: { ChatMessage: { orderBy: { timestamp: 'asc' } } },
       });
       if (!session) return res.status(404).send({ message: 'Session not found.' });
 
@@ -9554,7 +9596,7 @@ router.get('/safety/chats', schoolAuthMiddleware, async (req: AuthedRequest, res
           createdAt: session.createdAt.toISOString(),
           updatedAt: session.updatedAt.toISOString(),
         },
-        messages: session.messages.map((msg: any) => ({
+        messages: session.ChatMessage.map((msg: any) => ({
           ...msg,
           timestamp: msg.timestamp.toISOString(),
           videoData: deriveVideoDataFromMessage(msg),
@@ -9566,14 +9608,14 @@ router.get('/safety/chats', schoolAuthMiddleware, async (req: AuthedRequest, res
 
     const where: any = {};
     if (query) where.content = { contains: query, mode: 'insensitive' };
-    if (studentId) where.chatSession = { studentId };
+    if (studentId) where.ChatSession = { studentId };
 
     const messages = await prisma.chatMessage.findMany({
       where,
       orderBy: { timestamp: 'desc' },
       take: limit,
       include: {
-        chatSession: {
+        ChatSession: {
           select: { id: true, studentId: true, topic: true, updatedAt: true },
         },
       },
@@ -9596,8 +9638,8 @@ router.get('/safety/chats', schoolAuthMiddleware, async (req: AuthedRequest, res
         content: msg.content,
         messageNumber: msg.messageNumber,
         timestamp: msg.timestamp.toISOString(),
-        studentId: msg.chatSession?.studentId,
-        sessionTopic: msg.chatSession?.topic || '',
+        studentId: msg.ChatSession?.studentId,
+        sessionTopic: msg.ChatSession?.topic || '',
         videoData: deriveVideoDataFromMessage(msg),
         sources: extractSources(msg.metadata),
         image: deriveImageFromMessage(msg),
@@ -9635,10 +9677,10 @@ router.get('/search', schoolAuthMiddleware, async (req: AuthedRequest, res: Resp
         prisma.chatSession.findMany({
           where: {
             studentId,
-            messages: { some: {} },
+            ChatMessage: { some: {} },
             OR: [
               { topic: { contains: query, mode: 'insensitive' } },
-              { messages: { some: { content: { contains: query, mode: 'insensitive' } } } }
+              { ChatMessage: { some: { content: { contains: query, mode: 'insensitive' } } } }
             ]
           },
           select: { id: true, topic: true, updatedAt: true },
@@ -9738,7 +9780,7 @@ router.post('/preferences/update', schoolAuthMiddleware, async (req: AuthedReque
     const saved = await prisma.copilotPreferences.upsert({
       where: { userId: studentId },
       update: { preferredLanguage, interests: interests as Prisma.JsonArray },
-      create: { userId: studentId, preferredLanguage, interests: interests as Prisma.JsonArray },
+      create: { id: randomUUID(), userId: studentId, preferredLanguage, interests: interests as Prisma.JsonArray, lastUpdatedAt: new Date() },
     });
     await updateCopilotPreferencesMetadata(studentId, {
       ...existingMetadata,
@@ -9827,7 +9869,7 @@ router.post('/memory/mastery/upsert', schoolAuthMiddleware, async (req: AuthedRe
           data: { mastery },
         })
       : await prisma.progress.create({
-          data: { studentId, subject, topic, mastery },
+          data: { id: randomUUID(), studentId, subject, topic, mastery, updatedAt: new Date() },
         });
 
     let mistake = null;
@@ -9842,7 +9884,7 @@ router.post('/memory/mastery/upsert', schoolAuthMiddleware, async (req: AuthedRe
             data: { attempts: { increment: 1 }, lastSeen: new Date() },
           })
         : await prisma.mistake.create({
-            data: { studentId, topic, error: misconception, attempts: 1 },
+            data: { id: randomUUID(), studentId, topic, error: misconception, attempts: 1 },
           });
     }
 
@@ -10102,8 +10144,8 @@ router.post('/voice-chat', schoolAuthMiddleware, sttLimiter, upload.single('audi
       prisma.chatSession.findUnique({
         where: { id: sessionId },
         include: {
-          student: { select: { name: true, gradeLevel: true, userId: true } },
-          messages: { orderBy: { timestamp: 'asc' }, take: 60 }
+          StudentProfile: { select: { name: true, gradeLevel: true, userId: true } },
+          ChatMessage: { orderBy: { timestamp: 'asc' }, take: 60 }
         }
       }),
       getOrCreateCopilotPreferences(studentId),
@@ -10144,7 +10186,7 @@ router.post('/voice-chat', schoolAuthMiddleware, sttLimiter, upload.single('audi
     })}\n\n`);
 
     const preAiSemanticSnapshot = buildSemanticSessionSnapshot([
-      ...session.messages.map((message) => ({
+      ...session.ChatMessage.map((message) => ({
         role: message.role,
         content: message.content,
         metadata: message.metadata,
@@ -10260,7 +10302,7 @@ router.post('/voice-chat', schoolAuthMiddleware, sttLimiter, upload.single('audi
     const emotionalAICopilot = await getEmotionalAICopilot();
     const aiResult = await emotionalAICopilot({
       text: userText,
-      chatHistory: trimHistoryForModel(session.messages.map(m => ({
+      chatHistory: trimHistoryForModel(session.ChatMessage.map(m => ({
         id: m.id,
         role: m.role as "user" | "model",
         content: m.content,
@@ -10271,7 +10313,7 @@ router.post('/voice-chat', schoolAuthMiddleware, sttLimiter, upload.single('audi
       }))),
       state: effectiveVoiceState,
       tutorState: provisionalTutorState,
-      studentProfile: { name: session.student.name || 'Student', gradeLevel: session.student.gradeLevel || 'Primary' },
+      studentProfile: { name: session.StudentProfile.name || 'Student', gradeLevel: session.StudentProfile.gradeLevel || 'Primary' },
       preferences: { preferredLanguage: preferences.preferredLanguage as any, interests: preferences.interests },
       sessionLanguageState: effectiveVoiceSessionLanguageState,
       metacognitiveState: mergedMetacognitiveState,
@@ -10305,7 +10347,7 @@ router.post('/voice-chat', schoolAuthMiddleware, sttLimiter, upload.single('audi
       role: 'user',
       content: userText,
       timestamp: new Date(),
-      messageNumber: session.messages.length + 1,
+      messageNumber: session.ChatMessage.length + 1,
         metadata: toPrismaMetadata({
           language: buildMessageLanguageMetadata({
             text: userText,
@@ -10335,7 +10377,7 @@ router.post('/voice-chat', schoolAuthMiddleware, sttLimiter, upload.single('audi
       tutorState: provisionalTutorState,
     });
     const postAiSemanticSnapshot = buildSemanticSessionSnapshot([
-      ...session.messages.map((message) => ({
+      ...session.ChatMessage.map((message) => ({
         role: message.role,
         content: message.content,
         metadata: message.metadata,
@@ -10422,7 +10464,7 @@ router.post('/voice-chat', schoolAuthMiddleware, sttLimiter, upload.single('audi
       role: 'model',
       content: fullAiResponse || aiResult.processedText,
       timestamp: new Date(),
-      messageNumber: session.messages.length + 2,
+      messageNumber: session.ChatMessage.length + 2,
         metadata: toPrismaMetadata({
           videoData: aiResult.videoData || null,
           video: aiResult.videoData || null,

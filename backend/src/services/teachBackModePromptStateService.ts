@@ -1,3 +1,4 @@
+import { randomUUID } from 'crypto';
 import prisma from '../lib/prisma';
 import type { TeachBackModePromptState } from '../contracts/teachBackModeContracts';
 
@@ -17,6 +18,7 @@ export async function createPromptState(data: {
 }) {
   return prisma.teachBackModePromptStateRecord.create({
     data: {
+      id: randomUUID(),
       schoolId: data.schoolId,
       studentId: data.studentId,
       teachBackSessionId: data.teachBackSessionId,
@@ -33,6 +35,7 @@ export async function createPromptState(data: {
       attemptNumber: 0,
       safeReasonCodesJson: [],
       safeEvidenceRefsJson: [],
+      updatedAt: new Date(),
     },
   });
 }
@@ -45,8 +48,10 @@ export async function createPromptStatesBatch(
   promptCount: number,
 ) {
   const states = [];
+  const now = new Date();
   for (let i = 0; i < promptCount; i++) {
     states.push({
+      id: randomUUID(),
       schoolId,
       studentId,
       teachBackSessionId,
@@ -57,6 +62,7 @@ export async function createPromptStatesBatch(
       attemptNumber: 0,
       safeReasonCodesJson: [],
       safeEvidenceRefsJson: [],
+      updatedAt: now,
     });
   }
   if (states.length > 0) {

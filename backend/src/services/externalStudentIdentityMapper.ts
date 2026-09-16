@@ -59,12 +59,14 @@ export async function createTutorLearnerMapping(
 
   const record = await prisma.tutorLearnerIdentityMap.create({
     data: {
+      id: randomUUID(),
       tutorLearnerId,
       externalStudentId: input.externalStudentId,
       schoolId: input.schoolId,
       classId: input.classId || null,
       grade: input.grade || null,
       status: enrollmentToStatus(input.enrollmentStatus),
+      lastSeenAt: new Date(),
     },
   });
 

@@ -92,5 +92,5 @@ export async function runRestoreDrill(
 }
 
 export async function getDrillHistory(limit = 10) {
-  return task024OpsRepository.listRestoreDrills(limit);
+  return task024OpsRepository.listRestoreDrills().then((drills) => drills.slice(-limit));
 }

@@ -1,3 +1,4 @@
+import { randomUUID } from 'crypto';
 import prisma from '../utils/prismaClient';
 import type {
   MasteryEvidenceSignal,
@@ -197,10 +198,12 @@ export async function recordMasteryEvidenceSignal(args: {
   } else {
     await prisma.progress.create({
       data: {
+        id: randomUUID(),
         studentId: args.userId,
         subject,
         topic,
         mastery: clamp(Math.max(10, 40 + delta)),
+        updatedAt: new Date(),
       },
     });
   }
@@ -224,6 +227,7 @@ export async function recordMasteryEvidenceSignal(args: {
     } else {
       await prisma.mistake.create({
         data: {
+          id: randomUUID(),
           studentId: args.userId,
           topic,
           error: misconception,

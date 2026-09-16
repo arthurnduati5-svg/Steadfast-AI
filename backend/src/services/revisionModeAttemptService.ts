@@ -1,3 +1,4 @@
+import { randomUUID } from 'crypto';
 import { prisma } from '../lib/prisma';
 import { RevisionModeAttempt } from '../contracts/revisionModeContracts';
 import { updateRevisionItemState } from './revisionModeItemStateService';
@@ -27,6 +28,7 @@ export async function recordRevisionAttempt(data: {
 }): Promise<RevisionModeAttempt> {
   const attempt = await prisma.revisionModeAttemptRecord.create({
     data: {
+      id: randomUUID(),
       schoolId: data.schoolId,
       studentId: data.studentId,
       revisionSessionId: data.revisionSessionId,

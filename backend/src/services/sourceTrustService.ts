@@ -1,5 +1,7 @@
 import { isTrustedSource } from '../../../AI/lib/research/source-trust';
+import { createHash } from 'crypto';
 import type { ResearchSource, SourceTrustTier } from '../lib/types';
+import type { SourceCandidate, SourceTrustDecision, SourceTrustInput, VerifiedSourceRecord } from './sourceTrustContracts';
 
 const HIGH_TRUST_DOMAINS = [
   'khanacademy.org',
@@ -155,3 +157,72 @@ export function inferVideoTrustTier(channelTitle?: string | null): SourceTrustTi
   if (/\b(academy|education|tutorial|lessons?|school|math|science|revision)\b/.test(channel)) return 'medium';
   return 'limited';
 }
+
+function resolveSourceTrust(input: SourceTrustInput): SourceTrustDecision {
+  const candidates: SourceCandidate[] = [
+    ...(input.requestedSources || []),
+    ...(input.retrievalRecords || []),
+    ...(input.artifactSources || []),
+    ...(input.teacherSources || []),
+  ];
+  const verifiedSources: VerifiedSourceRecord[] = [...(input.existingVerifiedSources || [])];
+  const unsupportedSources: SourceTrustDecision['unsupportedSources'] = [];
+
+  for (const candidate of candidates) {
+    const source = evaluateResearchSource({ title: candidate.title || 'Source', url: candidate.url });
+    if (source.trustTier === 'limited') {
+      unsupportedSources.push({
+        attemptedTitle: candidate.title || null,
+        attemptedUrl: candidate.url || null,
+        reason: candidate.url ? 'untrusted_source' : 'missing_retrieval_record',
+        blockedAt: new Date().toISOString(),
+      });
+      continue;
+    }
+    verifiedSources.push({
+      sourceId: candidate.sourceId || createHash('sha256').update(`${candidate.title || ''}|${candidate.url || ''}`).digest('hex'),
+      kind: candidate.kind || 'research_result',
+      title: source.title,
+      url: source.url,
+      artifactId: candidate.artifactId || null,
+      artifactBlockId: candidate.artifactBlockId || null,
+      schoolId: input.schoolId || null,
+      retrievedAt: candidate.retrievedAt || null,
+      verifiedAt: new Date().toISOString(),
+      verificationMethod: candidate.artifactId ? 'artifact_provenance' : 'retrieval_record',
+      contentFingerprint: candidate.contentFingerprint || null,
+      trustStatus: source.trustTier === 'high' ? 'verified' : 'partial',
+      displayAllowed: candidate.displayAllowed !== false,
+      citationAllowed: true,
+      notes: [],
+    });
+  }
+
+  const unsupportedSourcesBlocked = unsupportedSources.length > 0;
+  const status = verifiedSources.length === 0
+    ? (candidates.length === 0 ? 'no_sources' : 'unsupported')
+    : (unsupportedSourcesBlocked ? 'partial' : 'verified');
+  const sourceFingerprint = verifiedSources.length
+    ? createHash('sha256').update(verifiedSources.map((source) => source.sourceId).sort().join('|')).digest('hex')
+    : null;
+  return {
+    status,
+    verifiedSources,
+    unsupportedSources,
+    sourceCount: verifiedSources.length,
+    unsupportedCount: unsupportedSources.length,
+    unsupportedSourcesBlocked,
+    citationPolicy: 'verified_only',
+    sourceFingerprint,
+    warnings: unsupportedSourcesBlocked ? ['Unsupported sources were withheld.'] : [],
+    errors: [],
+    resolvedAt: new Date().toISOString(),
+  };
+}
+
+export const kernelSourceTrustService = {
+  resolve: resolveSourceTrust,
+  evaluateResearchSource,
+  summarizeSourceTrust,
+  inferVideoTrustTier,
+};

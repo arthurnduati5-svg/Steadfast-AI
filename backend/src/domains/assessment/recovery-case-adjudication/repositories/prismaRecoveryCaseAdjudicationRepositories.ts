@@ -1,3 +1,4 @@
+import { randomUUID } from 'crypto';
 import { PrismaClient } from '@prisma/client';
 import type {
   RecoveryCaseAdjudicationReadiness,
@@ -77,8 +78,10 @@ export class PrismaRecoveryCaseAdjudicationReadinessRepository implements Recove
   constructor(private prisma: PrismaClient) {}
 
   async create(input: CreateAdjudicationReadinessInput): Promise<RecoveryCaseAdjudicationReadiness> {
+    const now = new Date();
     const created = await this.prisma.recoveryCaseAdjudicationReadinessRecord.create({
       data: {
+        adjudicationReadinessId: randomUUID(),
         schoolId: input.schoolId,
         studentRef: input.studentRef,
         resultRecoveryPlanId: input.resultRecoveryPlanId,
@@ -90,6 +93,7 @@ export class PrismaRecoveryCaseAdjudicationReadinessRepository implements Recove
         sourceRefsJson: input.sourceRefs as any,
         createdByActorId: input.createdByActorId,
         createdByRole: input.createdByRole,
+        updatedAt: now,
       },
     });
     return this.toContract(created);
@@ -172,8 +176,10 @@ export class PrismaRecoveryCaseReviewSessionRepository implements RecoveryCaseRe
   constructor(private prisma: PrismaClient) {}
 
   async create(input: CreateReviewSessionInput): Promise<RecoveryCaseReviewSession> {
+    const now = new Date();
     const created = await this.prisma.recoveryCaseReviewSessionRecord.create({
       data: {
+        reviewSessionId: randomUUID(),
         schoolId: input.schoolId,
         queueItemId: input.queueItemId,
         adjudicationReadinessId: input.adjudicationReadinessId ?? null,
@@ -183,6 +189,7 @@ export class PrismaRecoveryCaseReviewSessionRepository implements RecoveryCaseRe
         sourceRefsJson: input.sourceRefs as any,
         createdByActorId: input.createdByActorId,
         createdByRole: input.createdByRole,
+        updatedAt: now,
       },
     });
     return this.toContract(created);
@@ -258,8 +265,10 @@ export class PrismaRecoveryCaseReviewEvidenceBundleRepository implements Recover
   constructor(private prisma: PrismaClient) {}
 
   async create(input: CreateEvidenceBundleInput): Promise<RecoveryCaseReviewEvidenceBundle> {
+    const now = new Date();
     const created = await this.prisma.recoveryCaseReviewEvidenceBundleRecord.create({
       data: {
+        evidenceBundleId: randomUUID(),
         schoolId: input.schoolId,
         queueItemId: input.queueItemId,
         priorityAssessmentId: input.priorityAssessmentId ?? null,
@@ -269,6 +278,7 @@ export class PrismaRecoveryCaseReviewEvidenceBundleRepository implements Recover
         safeEvidenceItemsJson: input.safeEvidenceItems as any,
         sourceUpdatedAtJson: input.sourceUpdatedAt as any,
         safeBundleSummary: input.safeBundleSummary,
+        updatedAt: now,
       },
     });
     return this.toContract(created);
@@ -349,8 +359,10 @@ export class PrismaRecoveryCaseReviewChecklistRepository implements RecoveryCase
   constructor(private prisma: PrismaClient) {}
 
   async create(input: CreateReviewChecklistInput): Promise<RecoveryCaseReviewChecklist> {
+    const now = new Date();
     const created = await this.prisma.recoveryCaseReviewChecklistRecord.create({
       data: {
+        reviewChecklistId: randomUUID(),
         schoolId: input.schoolId,
         queueItemId: input.queueItemId,
         evidenceBundleId: input.evidenceBundleId ?? null,
@@ -359,6 +371,7 @@ export class PrismaRecoveryCaseReviewChecklistRepository implements RecoveryCase
         safeChecklistSummary: input.safeChecklistSummary,
         createdByActorId: input.createdByActorId,
         createdByRole: input.createdByRole,
+        updatedAt: now,
       },
     });
     return this.toContract(created);
@@ -428,8 +441,10 @@ export class PrismaRecoveryCaseConflictOfInterestDeclarationRepository implement
   constructor(private prisma: PrismaClient) {}
 
   async create(input: CreateConflictDeclarationInput): Promise<RecoveryCaseConflictOfInterestDeclaration> {
+    const now = new Date();
     const created = await this.prisma.recoveryCaseConflictOfInterestDeclarationRecord.create({
       data: {
+        conflictDeclarationId: randomUUID(),
         schoolId: input.schoolId,
         queueItemId: input.queueItemId,
         reviewerActorId: input.reviewerActorId,
@@ -438,6 +453,7 @@ export class PrismaRecoveryCaseConflictOfInterestDeclarationRepository implement
         safeDeclarationSummary: input.safeDeclarationSummary,
         createdByActorId: input.createdByActorId,
         createdByRole: input.createdByRole,
+        updatedAt: now,
       },
     });
     return this.toContract(created);
@@ -512,8 +528,10 @@ export class PrismaRecoveryCaseReviewerDecisionDraftRepository implements Recove
   constructor(private prisma: PrismaClient) {}
 
   async create(input: CreateReviewerDecisionInput): Promise<RecoveryCaseReviewerDecisionDraft> {
+    const now = new Date();
     const created = await this.prisma.recoveryCaseReviewerDecisionDraftRecord.create({
       data: {
+        reviewerDecisionId: randomUUID(),
         schoolId: input.schoolId,
         queueItemId: input.queueItemId,
         reviewSessionId: input.reviewSessionId ?? null,
@@ -530,6 +548,7 @@ export class PrismaRecoveryCaseReviewerDecisionDraftRepository implements Recove
         checklistId: input.checklistId ?? null,
         conflictDeclarationId: input.conflictDeclarationId ?? null,
         sourceRefsJson: input.sourceRefs as any,
+        updatedAt: now,
       },
     });
     return this.toContract(created);
@@ -616,8 +635,10 @@ export class PrismaRecoveryCasePriorityOverrideRequestRepository implements Reco
   constructor(private prisma: PrismaClient) {}
 
   async create(input: CreatePriorityOverrideRequestInput): Promise<RecoveryCasePriorityOverrideRequest> {
+    const now = new Date();
     const created = await this.prisma.recoveryCasePriorityOverrideRequestRecord.create({
       data: {
+        priorityOverrideRequestId: randomUUID(),
         schoolId: input.schoolId,
         queueItemId: input.queueItemId,
         priorityAssessmentId: input.priorityAssessmentId,
@@ -630,6 +651,7 @@ export class PrismaRecoveryCasePriorityOverrideRequestRepository implements Reco
         supportingEvidenceBundleIdsJson: input.supportingEvidenceBundleIds as any,
         createdByActorId: input.createdByActorId,
         createdByRole: input.createdByRole,
+        updatedAt: now,
       },
     });
     return this.toContract(created);
@@ -708,8 +730,10 @@ export class PrismaRecoveryCaseSecondReviewRequestRepository implements Recovery
   constructor(private prisma: PrismaClient) {}
 
   async create(input: CreateSecondReviewRequestInput): Promise<RecoveryCaseSecondReviewRequest> {
+    const now = new Date();
     const created = await this.prisma.recoveryCaseSecondReviewRequestRecord.create({
       data: {
+        secondReviewRequestId: randomUUID(),
         schoolId: input.schoolId,
         queueItemId: input.queueItemId,
         primaryDecisionId: input.primaryDecisionId,
@@ -718,6 +742,7 @@ export class PrismaRecoveryCaseSecondReviewRequestRepository implements Recovery
         safeRequestSummary: input.safeRequestSummary,
         createdByActorId: input.createdByActorId,
         createdByRole: input.createdByRole,
+        updatedAt: now,
       },
     });
     return this.toContract(created);
@@ -786,8 +811,10 @@ export class PrismaRecoveryCaseReviewerConsensusRepository implements RecoveryCa
   constructor(private prisma: PrismaClient) {}
 
   async create(input: CreateConsensusInput): Promise<RecoveryCaseReviewerConsensus> {
+    const now = new Date();
     const created = await this.prisma.recoveryCaseReviewerConsensusRecord.create({
       data: {
+        consensusId: randomUUID(),
         schoolId: input.schoolId,
         queueItemId: input.queueItemId,
         primaryDecisionId: input.primaryDecisionId ?? null,
@@ -796,6 +823,7 @@ export class PrismaRecoveryCaseReviewerConsensusRepository implements RecoveryCa
         safeConsensusSummary: input.safeConsensusSummary,
         createdByActorId: input.createdByActorId,
         createdByRole: input.createdByRole,
+        updatedAt: now,
       },
     });
     return this.toContract(created);
@@ -865,8 +893,10 @@ export class PrismaRecoveryCaseDisagreementResolutionDraftRepository implements 
   constructor(private prisma: PrismaClient) {}
 
   async create(input: CreateDisagreementResolutionDraftInput): Promise<RecoveryCaseDisagreementResolutionDraft> {
+    const now = new Date();
     const created = await this.prisma.recoveryCaseDisagreementResolutionDraftRecord.create({
       data: {
+        disagreementResolutionDraftId: randomUUID(),
         schoolId: input.schoolId,
         queueItemId: input.queueItemId,
         consensusId: input.consensusId ?? null,
@@ -879,6 +909,7 @@ export class PrismaRecoveryCaseDisagreementResolutionDraftRepository implements 
         proposedResolutionOptionsJson: input.proposedResolutionOptions as any,
         createdByActorId: input.createdByActorId,
         createdByRole: input.createdByRole,
+        updatedAt: now,
       },
     });
     return this.toContract(created);
@@ -952,8 +983,10 @@ export class PrismaRecoveryCaseQueueDispositionRepository implements RecoveryCas
   constructor(private prisma: PrismaClient) {}
 
   async create(input: CreateQueueDispositionInput): Promise<RecoveryCaseQueueDisposition> {
+    const now = new Date();
     const created = await this.prisma.recoveryCaseQueueDispositionRecord.create({
       data: {
+        queueDispositionId: randomUUID(),
         schoolId: input.schoolId,
         queueItemId: input.queueItemId,
         consensusId: input.consensusId ?? null,
@@ -965,6 +998,7 @@ export class PrismaRecoveryCaseQueueDispositionRepository implements RecoveryCas
         sourceRefsJson: input.sourceRefs as any,
         createdByActorId: input.createdByActorId,
         createdByRole: input.createdByRole,
+        updatedAt: now,
       },
     });
     return this.toContract(created);
@@ -1043,6 +1077,7 @@ export class PrismaRecoveryCaseQualitySampleRepository implements RecoveryCaseQu
   async create(input: RecoveryCaseQualitySamplingInput & { selected: boolean; bucket: number; createdByActorId: string; createdByRole: string }): Promise<RecoveryCaseQualitySample> {
     const created = await this.prisma.recoveryCaseQualitySampleRecord.create({
       data: {
+        qualitySampleId: randomUUID(),
         schoolId: input.schoolId,
         queueItemId: input.queueItemId,
         priorityBand: input.priorityBand,
@@ -1114,8 +1149,10 @@ export class PrismaRecoveryCaseAdjudicationSummaryRepository implements Recovery
   constructor(private prisma: PrismaClient) {}
 
   async create(input: CreateAdjudicationSummaryInput): Promise<RecoveryCaseAdjudicationSummary> {
+    const now = new Date();
     const created = await this.prisma.recoveryCaseAdjudicationSummaryRecord.create({
       data: {
+        adjudicationSummaryId: randomUUID(),
         schoolId: input.schoolId,
         studentRef: input.studentRef ?? null,
         resultRecoveryPlanId: input.resultRecoveryPlanId ?? null,
@@ -1128,6 +1165,7 @@ export class PrismaRecoveryCaseAdjudicationSummaryRepository implements Recovery
         sourceRefsJson: input.sourceRefs as any,
         createdByActorId: input.createdByActorId,
         createdByRole: input.createdByRole,
+        updatedAt: now,
       },
     });
     return this.toContract(created);
@@ -1225,6 +1263,7 @@ export class PrismaRecoveryCaseAdjudicationAuditRepository implements RecoveryCa
   async create(event: { schoolId: string; entityType: string; entityId: string; action: string; actorId: string; actorRole: string; correlationId?: string; safeMetadata?: Record<string, unknown> }): Promise<unknown> {
     const created = await this.prisma.recoveryCaseAdjudicationAuditRecord.create({
       data: {
+        adjudicationAuditEventId: randomUUID(),
         schoolId: event.schoolId,
         entityType: event.entityType,
         entityId: event.entityId,
@@ -1278,6 +1317,7 @@ export class PrismaRecoveryCaseAdjudicationIdempotencyRepository implements Reco
   async create(entry: { schoolId: string; idempotencyKey: string; operation: string; requestHash: string; responseRef?: string; status?: string }): Promise<unknown> {
     const created = await this.prisma.recoveryCaseAdjudicationIdempotencyRecord.create({
       data: {
+        adjudicationIdempotencyId: randomUUID(),
         schoolId: entry.schoolId,
         idempotencyKey: entry.idempotencyKey,
         operation: entry.operation,

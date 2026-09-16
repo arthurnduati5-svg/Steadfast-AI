@@ -1,3 +1,4 @@
+import { randomUUID } from 'crypto';
 import prisma from '../lib/prisma';
 import type { FocusModeExitReason } from '../contracts/focusModeContracts';
 import { createSignal } from './learningSignalService';
@@ -21,6 +22,7 @@ export interface CreateFocusSummaryInput {
 export async function createFocusSummary(input: CreateFocusSummaryInput) {
   const summary = await prisma.focusModeSummaryRecord.create({
     data: {
+      id: randomUUID(),
       schoolId: input.schoolId,
       studentId: input.studentId,
       focusSessionId: input.focusSessionId,

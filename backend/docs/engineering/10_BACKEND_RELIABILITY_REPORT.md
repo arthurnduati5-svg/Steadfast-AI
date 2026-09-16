@@ -239,9 +239,20 @@ Final reliability model for Package 20 (recovery-outcome-action controlled actio
 
 No other process exception is evidenced for R8-G.3B. Package-20 production ownership gap status: RESOLVED (see 08_BACKEND_GAP_REGISTER.md §R8-G.3B Package-20 Production Ownership Closure).
 
-### R8-G.4 Provenance Verification (2026-09-13, baseline b17a01cc2c7c036e588501e000827e7795d5e7bc) — compile gate FAILED, STOPPED
+### R8-G.4 Provenance Verification (2026-09-13, baseline b17a01cc2c7c036e588501e000827e7795d5e7bc) — historical compile gate FAILED, STOPPED
 
 - Clean-candidate proof method: ONE disposable detached Git worktree at b17a01c (temp dir, junctioned node_modules only, no .env copied); all staging and proofs performed there; the dirty primary worktree was never used as compile or provenance proof. No dirty-worktree contamination; no process-local provenance dependency (proof operates on `git ls-files --cached` / staged index content, not filesystem presence).
 - Provenance closure method: TypeScript compiler-API import extraction (static import/export-from/require/dynamic-import; ./ ../ @/ alias and index resolution) with BFS; per-file manifest with classification; deduplicated union staged by exact path.
 - Results: four-root union = 250 files, index closure = 309 files, MISSING_INTERNAL_RUNTIME_IMPORTS = 0 for all four roots; owner-authorized full-backend expansion restored 888 further untracked production files; post-expansion missing-module errors in canonical compile collapsed from 383 specifiers to 2 (test-fixture/generated only).
 - Canonical compile: `npx tsc -p tsconfig.json --noEmit` from the temp worktree's backend — attempt 1: 1,272 errors; attempt 2 (after full provenance restoration): 990 total TypeScript diagnostics (545 backend production + 440 backend tests + 5 cross-lane AI + 0 other; 545 backend-production diagnostics across 109 files). Generated Prisma client verified current vs tracked schema (`diff -w` = 0). Run budget 2/2 used; STOP honored; compile = FAIL; no acceptance report created.
+
+### R8-G.5R-FINAL Runtime Type Integrity Closure
+
+- Runtime root: `backend/src/index.ts`, compiled as its complete transitive graph under `backend/tsconfig.json` with `rootDir: ".."` and `files: ["src/index.ts"]`.
+- Compiler: `npx tsc -p tsconfig.json --noEmit` = PASS, zero diagnostics, exit 0.
+- Regression: 7 focused Vitest files, 51 tests = PASS.
+- Durable sessions: 3 R1 Vitest files (keyed/unkeyed atomic create, idempotency repair contract), 14 tests = PASS.
+- Build: `npm run build` = PASS; `backend/dist/backend/src/index.js` exists.
+- Prisma: `npx prisma validate` = PASS; client regenerated from the tracked schema.
+- Repository preservation: `studentLearningSessionRepository.ts` is byte-identical to frozen HEAD (zero diff); no test file was modified.
+- Process exceptions (recorded truthfully): temp-root `node_modules` junction recreated (untracked env link, not a source change); `npm ci` executed to restore the lockfile dependency tree (no manifest edits); one `prisma generate --no-engine` run was superseded by a full `prisma generate`; owner authorized the scoped Prisma schema/client synchronization.

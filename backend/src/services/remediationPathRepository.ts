@@ -1,3 +1,4 @@
+import { randomUUID } from 'crypto';
 import { PrismaClient } from '@prisma/client';
 
 const prisma = new PrismaClient();
@@ -51,6 +52,7 @@ export class RemediationPathRepository {
     try {
       const record = await prisma.remediationPathRecord.create({
         data: {
+          id: randomUUID(),
           schoolId: input.schoolId,
           tutorLearnerId: input.tutorLearnerId,
           studentId: input.studentId ?? null,
@@ -63,6 +65,7 @@ export class RemediationPathRepository {
           steps: input.steps as any,
           reasonCodes: input.reasonCodes as any,
           privacyMetadata: input.privacyMetadata as any,
+          updatedAt: new Date(),
         },
       });
       return this.mapRecord(record);

@@ -1,3 +1,4 @@
+import { randomUUID } from 'crypto';
 import { OpenAI } from 'openai';
 import prisma from '../utils/prismaClient';
 import { getRedisClient } from './redis';
@@ -47,10 +48,12 @@ export async function analyzeAndTrackProgress(studentId: string, userMessage: st
         where: { id: existingProgress?.id || `new-${Date.now()}` },
         update: { mastery: newMastery }, // REMOVED lastReviewed
         create: {
+          id: randomUUID(),
           studentId,
           subject: 'General',
           topic: analysis.topic,
           mastery: masteryIncrement,
+          updatedAt: new Date(),
           // REMOVED lastReviewed
         }
       });
@@ -93,6 +96,7 @@ export async function analyzeAndTrackProgress(studentId: string, userMessage: st
         // NEW WEAKNESS
         await prisma.mistake.create({
           data: {
+            id: randomUUID(),
             studentId,
             topic: analysis.topic,
             error: analysis.details,

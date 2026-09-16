@@ -1,3 +1,4 @@
+import { randomUUID } from 'crypto';
 import { prisma } from '../lib/prisma';
 import {
   RevisionModeSession,
@@ -12,6 +13,7 @@ export async function startRevisionSession(
 ): Promise<RevisionModeSession> {
   const session = await prisma.revisionModeSessionRecord.create({
     data: {
+      id: randomUUID(),
       schoolId,
       studentId,
       modeSessionId,
@@ -39,6 +41,7 @@ export async function startRevisionSession(
       skippedItemCount: 0,
       pinnedItemCount: 0,
       safeEvidenceRefsJson: [],
+      updatedAt: new Date(),
     },
   });
   return session as unknown as RevisionModeSession;

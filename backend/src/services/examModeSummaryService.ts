@@ -1,3 +1,4 @@
+import { randomUUID } from 'crypto';
 import prisma from '../lib/prisma';
 import type { ExamModeExitReason, MasterySignal, EstimatedReadinessBucket } from '../contracts/examModeContracts';
 import { createSignal } from './learningSignalService';
@@ -25,6 +26,7 @@ export interface CreateExamSummaryInput {
 export async function createExamSummary(input: CreateExamSummaryInput) {
   const summary = await prisma.examModeSummaryRecord.create({
     data: {
+      id: randomUUID(),
       schoolId: input.schoolId,
       studentId: input.studentId,
       examSessionId: input.examSessionId,

@@ -57,6 +57,7 @@ export async function createMapping(data: {
       role: data.role,
       status: data.status,
       reasonCodes: data.reasonCodes,
+      lastSeenAt: new Date(),
     },
   });
   return toRecord(row);
