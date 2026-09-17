@@ -13,11 +13,18 @@
  *   ai-reliab    T7  AI limiter/retry/breaker controlled failure matrix (in-memory)
  *   daily-obj    T6  daily-objective idempotency repeated-session workload (maps mode, in-memory store observable)
  *   evidence     T5  learning evidence long-history growth units (calculated from model shape)
+ *   voice        T8  voice quota contention (real Prisma/PostgreSQL, production path)
+ *   intelligence T9  whole-system engineering-intelligence consolidated diagnostic
+ *                     (media scoring/helper evidence, canonical media-scorer
+ *                     throw evidence, content fingerprint workload, HTTP
+ *                     middleware baseline, Redis-unavailable token-bucket
+ *                     behavior; synthetic data only, no live providers)
  *
  * Exit code nonzero on invalid measurement setup.
  */
 
 import { performance } from 'node:perf_hooks';
+import { createHash } from 'node:crypto';
 
 const args = process.argv.slice(2);
 function argValue(name: string): string | undefined {
@@ -30,7 +37,7 @@ const DATABASE_URL =
   'postgresql://postgres:postgres@localhost:8000/steadfast_r6_test?schema=public';
 
 if (!target) {
-  console.error('usage: tsx tools/engineering/r8-e-workload.ts --target <roster|marking|mastery|assessment|ai-reliab|daily-obj|evidence|voice>');
+  console.error('usage: tsx tools/engineering/r8-e-workload.ts --target <roster|marking|mastery|assessment|ai-reliab|daily-obj|evidence|voice|intelligence>');
   process.exit(2);
 }
 
@@ -870,6 +877,278 @@ async function runVoice() {
   await client.$disconnect();
 }
 
+// ════════════════════════════════════════════════════════════════════════
+// T9 — Whole-system engineering-intelligence consolidated diagnostic
+// (durable reproduction of the NEW diagnosis evidence at d9eb861).
+//
+// Covers ONLY the durable/reproducible portions of the diagnosis:
+//   I1 media scoring/helper evidence (composed-helper sweep, BENCHMARK)
+//   I2 canonical media-scorer invocation/throw evidence (OBSERVATION)
+//   I3 content fingerprint workload (BENCHMARK)
+//   I4 HTTP middleware baseline (BENCHMARK where sampled, OBSERVATION for single-shots)
+//   I5 Redis-unavailable token-bucket behavior (OBSERVATION)
+//
+// Properties: synthetic data only; no live providers; no live school
+// data; no production DB; warmup/samples where latency is measured;
+// p50/p95/min/max where meaningful; machine/SHA metadata; explicit
+// OBSERVATION labels where a sub-check is not a benchmark measurement.
+// Sub-checks that cannot be safely represented without distorting the
+// production path remain documentation + source citations in
+// 15_BACKEND_ENGINEERING_INTELLIGENCE_REPORT.md (not another helper).
+// ════════════════════════════════════════════════════════════════════════
+async function runIntelligence() {
+  const SHA = process.env.DIAG_SHA ?? 'unknown';
+  console.log(JSON.stringify({
+    harness: 'r8-e-workload',
+    target: 'intelligence',
+    kind: 'environment',
+    sha: SHA,
+    os: process.platform,
+    node: process.version,
+    database: 'none (in-memory synthetic only)',
+    providers: 'none (no live provider call)',
+    warmups: 10,
+    samples: 30,
+  }));
+
+  function mulberry(seed: number): () => number {
+    let a = seed >>> 0;
+    return () => {
+      a |= 0; a = (a + 0x6d2b79f5) | 0;
+      let t = Math.imul(a ^ (a >>> 15), 1 | a);
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+  function pctOf(samples: number[], p: number): number {
+    const s = [...samples].sort((a, b) => a - b);
+    return s[Math.min(s.length - 1, Math.ceil((p / 100) * s.length) - 1)];
+  }
+  function statsOf(samples: number[]): Record<string, number> {
+    return {
+      samples: samples.length,
+      p50Ms: Number(pctOf(samples, 50).toFixed(4)),
+      p95Ms: Number(pctOf(samples, 95).toFixed(4)),
+      minMs: Number(Math.min(...samples).toFixed(4)),
+      maxMs: Number(Math.max(...samples).toFixed(4)),
+    };
+  }
+  const heapMB = (): number => process.memoryUsage().heapUsed / 1048576;
+  const digestOf = (v: unknown): string => createHash('sha256').update(JSON.stringify(v)).digest('hex').slice(0, 16);
+
+  // ── I2 (order: throw evidence first — it gates what I1 may measure) ──
+  // Canonical media-scorer invocation: OBSERVATION, not a benchmark.
+  {
+    const scoring = await import('../../src/media-stream/scoring');
+    const asset: any = {
+      topic: 'algebra', kind: 'video', subject: 'maths', durationSec: 600,
+      sourceTrust: 'verified', updatedAt: new Date().toISOString(),
+    };
+    const ctx: any = {
+      activeTopic: 'algebra', weakTopics: ['fractions'], streamMode: 'study',
+      schoolLevel: 'secondary', language: 'en', learningNeed: 'practice',
+      examMode: false, focusMode: false, preferredKind: 'video',
+    };
+    for (const name of ['computeMediaStreamScore', 'computeStudyStreamScore'] as const) {
+      try {
+        const r = (scoring[name] as any)(asset, ctx);
+        console.log(JSON.stringify({
+          target: 'intelligence-canonical-media-scorer', fn: name,
+          outcome: 'OK', score: r, kind: 'OBSERVATION (not a benchmark)',
+        }));
+      } catch (e: any) {
+        console.log(JSON.stringify({
+          target: 'intelligence-canonical-media-scorer', fn: name,
+          outcome: 'THROW',
+          errorName: e?.constructor?.name ?? typeof e,
+          errorMessage: String(e?.message ?? e).slice(0, 120),
+          kind: 'OBSERVATION (not a benchmark)',
+          note: 'canonical requires getMediaKindGroup from ./metadata.js; the export lives in validation.js — production ranking uses route-local copies (D-NEW-01)',
+        }));
+      }
+    }
+  }
+
+  // ── I1 — media scoring/helper evidence (composed helpers, BENCHMARK) ──
+  {
+    const scoring = await import('../../src/media-stream/scoring');
+    const TOPICS = ['algebra', 'photosynthesis', 'fractions', 'essay writing', 'trigonometry', 'cell biology'];
+    function makeAsset(r: () => number, i: number): any {
+      return {
+        topic: TOPICS[i % TOPICS.length], subject: 'maths',
+        durationSec: Math.floor(r() * 1200),
+        isCompleted: r() < 0.3, isHelpful: r() < 0.2,
+        sourceTrust: ['verified', 'community', 'external', ''][Math.floor(r() * 4)],
+        transcript: r() < 0.5 ? 'some transcript text' : '', transcriptSnippet: '',
+        sourceUrl: r() < 0.4 ? 'https://example.com/v' : '',
+        schoolLevel: 'secondary', language: 'en',
+        updatedAt: new Date(Date.now() - Math.floor(r() * 90) * 86400000).toISOString(),
+        streamRankScore: Math.floor(r() * 60),
+        revisionItemId: r() < 0.2 ? 'rev-1' : undefined,
+      };
+    }
+    const one = (a: any): number =>
+      scoring.getRecencyBoost(a.updatedAt) +
+      scoring.getMediaSourceTrustBoost(a.sourceTrust, 'study') +
+      scoring.getKindPreferenceBoost('video', undefined) +
+      scoring.normalizeTopicLike(a.topic).length +
+      scoring.parseNumericSignal(a.durationSec) +
+      scoring.getStudySpacingBoost(a);
+    for (const n of [100, 1000, 10000]) {
+      const r = mulberry(1234);
+      const assets = Array.from({ length: n }, (_, i) => makeAsset(r, i));
+      for (let w = 0; w < 10; w++) for (const a of assets) one(a);
+      const before = heapMB();
+      const samples: number[] = [];
+      let sink = 0;
+      for (let s = 0; s < 30; s++) {
+        const t0 = performance.now();
+        for (const a of assets) sink += one(a);
+        samples.push(performance.now() - t0);
+      }
+      const after = heapMB();
+      report('intelligence-media-helper-sweep', n, samples, {
+        mode: 'COMPOSED-HELPERS (canonical scorer throws; see throw evidence above)',
+        ...statsOf(samples),
+        heapDeltaMB: Number((after - before).toFixed(3)),
+        sinkDigest: digestOf(sink),
+      });
+    }
+    // micros: recency / trust / spacing per-op cost
+    {
+      const rr = mulberry(99);
+      const micros: Array<[string, () => number]> = [
+        ['recency', () => scoring.getRecencyBoost(new Date(Date.now() - Math.floor(rr() * 90) * 86400000).toISOString())],
+        ['trust', () => scoring.getMediaSourceTrustBoost(['verified', 'community', 'external', ''][Math.floor(rr() * 4)], 'study')],
+        ['spacing', () => scoring.getStudySpacingBoost({ revisionItemId: 'x', updatedAt: new Date().toISOString() } as any)],
+      ];
+      for (const [label, fn] of micros) {
+        for (let w = 0; w < 1000; w++) fn();
+        const N = 20000;
+        const t0 = performance.now();
+        let sink = 0;
+        for (let i = 0; i < N; i++) sink += fn();
+        const total = performance.now() - t0;
+        console.log(JSON.stringify({
+          target: `intelligence-micro-${label}`, ops: N,
+          perOpMicro: Number(((total / N) * 1000).toFixed(4)),
+          sinkDigest: digestOf(sink),
+        }));
+      }
+    }
+  }
+
+  // ── I3 — content fingerprint workload (sha256/16 primitive, BENCHMARK) ──
+  {
+    for (const bytes of [1024, 102400, 1048576]) {
+      const buf = Buffer.alloc(bytes, 'ab');
+      for (let w = 0; w < 10; w++) createHash('sha256').update(buf).digest('hex').slice(0, 16);
+      const samples: number[] = [];
+      for (let s = 0; s < 30; s++) {
+        const t0 = performance.now();
+        createHash('sha256').update(buf).digest('hex').slice(0, 16);
+        samples.push(performance.now() - t0);
+      }
+      report('intelligence-fingerprint', bytes, samples, { ...statsOf(samples) });
+    }
+  }
+
+  // ── I4 — HTTP middleware baseline (supertest in-process, real middleware) ──
+  {
+    if (!process.env.JWT_SECRET) process.env.JWT_SECRET = 'intelligence-harness-stub-secret';
+    const express = (await import('express')).default;
+    const request = (await import('supertest')).default;
+    const jwt = (await import('jsonwebtoken')).default;
+    const { requestIdMiddleware } = await import('../../src/middleware/requestId');
+    const { requestCorrelationMiddleware } = await import('../../src/middleware/requestCorrelationMiddleware');
+    const { schoolAuthMiddleware } = await import('../../src/middleware/schoolAuthMiddleware');
+    const { requireVerifiedSchoolContext } = await import('../../src/middleware/schoolContextGuardMiddleware');
+    const { backpressureMiddleware } = await import('../../src/middleware/task019BackpressureMiddleware');
+    const { rateLimitMiddleware } = await import('../../src/middleware/task019RateLimitMiddleware');
+    const healthRoutes = (await import('../../src/routes/health')).default;
+    const app = express();
+    app.use(express.json({ limit: '1mb' }));
+    app.use(requestIdMiddleware);
+    app.use(requestCorrelationMiddleware);
+    app.use('/api/health', healthRoutes);
+    app.use('/api/open', schoolAuthMiddleware, (_req: any, res: any) => res.json({ ok: true }));
+    app.use('/api/verified', schoolAuthMiddleware, requireVerifiedSchoolContext, (_req: any, res: any) => res.json({ ok: true }));
+    app.use('/api/guarded', schoolAuthMiddleware, backpressureMiddleware, rateLimitMiddleware, (_req: any, res: any) => res.json({ ok: true }));
+    const token = jwt.sign({ userId: 'stu-1', schoolId: 'school-a', role: 'student' }, String(process.env.JWT_SECRET), { expiresIn: '5m' });
+    function pctMs(a: number[], p: number): number {
+      const s = [...a].sort((x, y) => x - y);
+      return s[Math.min(s.length - 1, Math.floor((p / 100) * s.length))];
+    }
+    async function bench(name: string, make: () => Promise<any>, n: number) {
+      for (let i = 0; i < 5; i++) await make();
+      const ts: number[] = [];
+      let last: any;
+      for (let i = 0; i < n; i++) {
+        const s = Date.now();
+        last = await make();
+        ts.push(Date.now() - s);
+      }
+      console.log(JSON.stringify({
+        target: name, p50Ms: pctMs(ts, 50), p95Ms: pctMs(ts, 95),
+        minMs: Math.min(...ts), maxMs: Math.max(...ts), status: last.status,
+      }));
+    }
+    await bench('intelligence-http-health-live-public', () => request(app).get('/api/health/live'), 30);
+    await bench('intelligence-http-auth-missing-401', () => request(app).get('/api/open'), 30);
+    await bench('intelligence-http-auth-malformed-401', () => request(app).get('/api/open').set('Authorization', 'Bearer not-a-jwt'), 30);
+    await bench('intelligence-http-auth-ok-lightweight', () => request(app).get('/api/open').set('Authorization', 'Bearer ' + token), 30);
+    {
+      const t1 = Date.now();
+      const rV = await request(app).get('/api/verified').set('Authorization', 'Bearer ' + token);
+      console.log(JSON.stringify({
+        target: 'intelligence-http-verified-context', status: rV.status, ms: Date.now() - t1,
+        kind: 'OBSERVATION (single-shot functional check, not a benchmark)',
+      }));
+      const rJ = await request(app).post('/api/open').set('Authorization', 'Bearer ' + token).set('Content-Type', 'application/json').send('{"broken":');
+      console.log(JSON.stringify({
+        target: 'intelligence-http-malformed-json', status: rJ.status,
+        kind: 'OBSERVATION (single-shot functional check, not a benchmark)',
+      }));
+    }
+    {
+      const seq: Array<{ i: number; ms: number; status: number }> = [];
+      for (let i = 0; i < 6; i++) {
+        const s = Date.now();
+        const r = await request(app).get('/api/guarded').set('Authorization', 'Bearer ' + token);
+        seq.push({ i, ms: Date.now() - s, status: r.status });
+      }
+      const warm = seq.slice(1).map((o) => o.ms);
+      console.log(JSON.stringify({
+        target: 'intelligence-http-guarded-sequence',
+        sequence: seq,
+        firstIsColdObservation: true,
+        warmP50Ms: pctMs(warm, 50), warmP95Ms: pctMs(warm, 95),
+        kind: 'MIXED (first = cold-path observation incl. Redis-timeout tail when Redis is configured-but-down; rest = warm baseline samples)',
+      }));
+    }
+  }
+
+  // ── I5 — Redis-unavailable token-bucket behavior (OBSERVATION) ──
+  {
+    const { getRedisClient } = await import('../../src/lib/redis');
+    const { checkTokenBucket } = await import('../../src/services/task019TokenBucketService');
+    const redis = await getRedisClient();
+    const result = await checkTokenBucket('intelligence', 'synthetic-actor', { burstCapacity: 60, refillRate: 1 } as any, 1);
+    console.log(JSON.stringify({
+      target: 'intelligence-token-bucket-redis-unavailable',
+      redisClient: redis ? 'REACHABLE' : 'UNAVAILABLE (null)',
+      allowed: result.allowed,
+      remaining: result.remaining,
+      verdict: !redis && result.allowed === true
+        ? 'REPRODUCED: FAIL-OPEN (allowed:true with warn [TokenBucket] Redis unavailable — allowing request)'
+        : 'SOURCE-VERIFIED ONLY (Redis reachable in this env; fail-open path at task019TokenBucketService.ts:55,77)',
+      kind: 'OBSERVATION (not a benchmark)',
+    }));
+  }
+
+  console.log(JSON.stringify({ target: 'intelligence', decision: 'consolidated diagnosis reproduction complete' }));
+}
+
 // ── main ────────────────────────────────────────────────────────────────
 const t0 = performance.now();
 main().catch((err) => {
@@ -887,6 +1166,7 @@ async function main(): Promise<void> {
     else if (target === 'daily-obj') await runDailyObj();
     else if (target === 'evidence') await runEvidence();
     else if (target === 'voice') await runVoice();
+    else if (target === 'intelligence') await runIntelligence();
     else {
       console.error(`unknown target: ${target}`);
       process.exit(2);

@@ -5864,3 +5864,66 @@ Equivalence tests: `src/tests/r8h-rate-limit-equivalence.test.ts` (12/12),
 `src/tests/r8h-daily-feed-equivalence.test.ts` (13/13).
 <!-- R8-H-MEASURED-APPENDIX-END -->
 
+## Whole-System Engineering Intelligence Reconciliation — d9eb861 (2026-09-16/17)
+
+Diagnostic commit `7333435` (`docs(backend): establish whole-system
+engineering intelligence`); baseline `d9eb8618ceb582db467261e5d559cc4322da7763`.
+This section APPENDS reconciliation only. Historical R8-C/R8-H evidence
+above is NOT rewritten.
+
+- Current 26/30 reconciliation: 26 of 30 R8-C records resolve to live
+  source at `d9eb861` (path inspection via `diag-verify-register.py`,
+  since consolidated — see `r8-e-workload.ts --target intelligence`
+  provenance note); 4 are non-current exactly as the accepted R8-H
+  appendix maps them (3 SUPERSEDED-evolved + 1 unreachable).
+- Current maturity classification: 11 algorithms/performance families
+  with measured evidence (accepted R8-E/R8-H measurements + this
+  diagnosis: R8-H digest-equal re-proofs, media-helper composed sweep,
+  recency/trust/spacing micros, content-fingerprint sweep, HTTP/
+  middleware baseline, Redis-unavailable cold-tail observation);
+  quality-calibrated 0; heuristic/unvalidated 9 (Class C + media
+  weights).
+- Newly measured families (this diagnosis, NEW at `d9eb861`): media
+  composed-helper sweep (per-asset ≈ 3 µs, linear); recency 4.30 µs/op,
+  trust 0.73 µs/op, spacing 7.26 µs/op; content fingerprint sha256/16
+  (1 KB / 100 KB / 1 MB linear in bytes); HTTP guarded-stack
+  ≈ 10 ms warm in-process with a ~5 s cold-Redis first-hit tail
+  (D-NEW-02). Full figures: `15_BACKEND_ENGINEERING_INTELLIGENCE_REPORT.md`
+  §10 and the 09 reconciliation below.
+- Canonical media scorer runtime throw: `computeMediaStreamScore` /
+  `computeStudyStreamScore` (`src/media-stream/scoring.ts:71,179`) throw
+  `TypeError: getMediaKindGroup is not a function` on every call — the
+  function requires it from `./metadata.js`, which never exported it
+  (it lives in `validation.js`). Severity HIGH / P0_BEFORE_PILOT:
+  maintainability/runtime risk (dead canonical module + forced
+  triplication; any future caller of the official API throws, and tsc
+  cannot catch the untyped require). NOT labelled CRITICAL REPAIR
+  REQUIRED: that category is reserved by frozen diagnostic law for
+  catastrophic security/data-loss defects, and the active production
+  ranking path currently survives through duplicated route-local
+  implementations. Runtime-throw evidence preserved (`15` §23 D-NEW-01).
+- Educational-quality calibration = UNPROVEN / QUALITY_UNCALIBRATED:
+  no calibration dataset exists; all learning weights (media scores,
+  recency decay, spacing/trust boosts, mastery ladders/thresholds,
+  priority tables) are honest heuristics with pinned behavior but zero
+  empirical grounding. Do not tune; build the dataset first (`15` §29 P3).
+- 85 unresolved capability classifications remain evidence unknowns,
+  not failures: UNRESOLVED means insufficient evidence, not failure.
+  Concentrated in learning-core, memory/evidence, and question-bank
+  domains. They are unresolved algorithm/logic evidence coverage = 85,
+  NOT 85 scale defects. Confirmed newly demonstrated high-risk
+  runtime/scale findings = 2 (D-NEW-01, D-NEW-02).
+- Reusable/research classifications from report §30 (no novelty or
+  patent claims; standard techniques named as such): REUSABLE_PRIMITIVE
+  — exactly-once settlement via receipt-claim + conditional-write +
+  audit in one transaction; head-offset sliding window with
+  order-independent fallback; decorate-sort-undecorate with single-parse
+  + rank-table dedupe; indexed reconciliation (roster Set-indexing);
+  guarded `transitionStatusFrom` conditional-write pattern; bounded
+  opportunistic sweep. STEADFAST_SPECIFIC — quota ledger with
+  row-locked clamped debit. RESEARCH_CANDIDATE — rank/dedupe/decay
+  media scoring family (needs calibration research, not reuse);
+  confidence-calibration alignment model (educational validity unknown).
+- No new algorithm discovery campaign was run; no production source
+  was changed by this reconciliation.
+

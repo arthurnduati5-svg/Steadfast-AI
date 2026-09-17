@@ -39,7 +39,8 @@ PRIORITIZED — not repaired.
 > (no cross-instance guarantee); the question-bank family still derives actor
 > context from a MOCK/DEV-ONLY extractor; one 570 KB route file concentrates
 > risk; learning/memory/tutor-turn domains have no source-verified algorithm
-> records (85 UNRESOLVED logic capabilities in R8-C).
+> records (85 UNRESOLVED logic capabilities in R8-C — evidence-coverage
+> unknowns, not scale defects).
 >
 > Is it fast? Yes at measured scales on a dev machine: rate-limit checks
 > ~1-3 microseconds; daily-feed rank 1 ms at 1,000 items, 15 ms at 10,000;
@@ -362,8 +363,8 @@ this task at d9eb861).
 | - | - | - | - | - | - | - | - | - |
 | 1 | AI sliding-window rate limiter | ops | amortized O(1) ordered / O(w) fallback | YES (R8-H + NEW digest-equal) | 12/12 equivalence + 6/6 guard | n/a (control) | LOW (per-instance by design) | ACCEPTED_OPTIMIZATION |
 | 2 | Daily-feed rank-dedupe | mastery | O(n log n) sort + O(n) dedupe | YES (R8-H + NEW digest-equal) | 13/13 equivalence + DIRECT test | UNCALIBRATED (weights heuristic) | MEDIUM (100k→275 ms; unbounded input) | ACCEPTED_OPTIMIZATION |
-| 3 | Media relevance scorer (canonical) | artifacts | O(w) weak topics | NEW helpers only (canonical THROWS) | NONE (throws TypeError) | UNCALIBRATED | HIGH (dead canonical + ×3 copies) | CRITICAL REPAIR REQUIRED (§29 P0) |
-| 4 | Study-stream rank scorer | artifacts | O(n) bounded sets + base | NEW helpers only (canonical THROWS) | NONE (throws TypeError) | UNCALIBRATED | HIGH (same as 3) | CRITICAL REPAIR REQUIRED (§29 P0) |
+| 3 | Media relevance scorer (canonical) | artifacts | O(w) weak topics | NEW helpers only (canonical THROWS) | NONE (throws TypeError) | UNCALIBRATED | HIGH (dead canonical + ×3 copies) | HIGH / P0_BEFORE_PILOT (§29 P0-2) |
+| 4 | Study-stream rank scorer | artifacts | O(n) bounded sets + base | NEW helpers only (canonical THROWS) | NONE (throws TypeError) | UNCALIBRATED | HIGH (same as 3) | HIGH / P0_BEFORE_PILOT (§29 P0-2) |
 | 5 | Recency decay | artifacts | O(1) | YES NEW (4.3 µs/op) | NONE_FOUND | UNCALIBRATED (22·e^-d/18) | LOW | KEEP (calibrate later) |
 | 6 | Mastery score-threshold ladder | mastery | O(T) T=6 | NO (SUPERSEDED: probabilistic stack) | legacy DIRECT (predecessor) | UNCALIBRATED | LOW (bounded) | SUPERSEDED — monitor successor |
 | 7 | Mastery score compute 0-100 | mastery | O(1) | NO (SUPERSEDED) | legacy DIRECT (predecessor) | UNCALIBRATED | LOW | SUPERSEDED — monitor successor |
@@ -393,9 +394,12 @@ this task at d9eb861).
 
 Counts: confirmed-current 26 · measured (this or accepted evidence)
 11 · quality-calibrated 0 · heuristic/unvalidated 9 (Class C + media
-weights) · high-scale-risk 2 (rows 3/4 via dead-code risk; 24 via
-fail-open). Plus 85 UNRESOLVED logic capabilities with no verified record
-— the largest algorithm-coverage gap, concentrated in learning-core,
+weights) · confirmed newly demonstrated high-risk runtime/scale findings
+= 2 (D-NEW-01 canonical media-scorer family, rows 3–4; D-NEW-02 route
+token-bucket fail-open, row 24). Unresolved algorithm/logic evidence
+coverage = 85. UNRESOLVED means insufficient evidence, not failure: the
+85 are evidence unknowns, not 85 scale defects. They are the largest
+algorithm-coverage gap, concentrated in learning-core,
 memory/evidence, and question-bank domains.
 
 ## 8. Algorithm Deep Dive
@@ -404,7 +408,8 @@ Type classification (primary) + maturity per record (PROVEN = measured +
 behavioral proof at/before this SHA; MEASURED = timed with digest;
 TESTED_NOT_MEASURED = behavioral tests only; SOURCE_CONFIRMED_ONLY =
 inspected, no behavioral test; QUALITY_UNCALIBRATED = weights/thresholds
-without empirical grounding; UNRESOLVED = no verified record):
+without empirical grounding; UNRESOLVED = no verified record —
+insufficient evidence, not failure):
 
 - PERFORMANCE (1, 2): limiter RESOURCE_CONTROL/MEASURED→PROVEN-equivalent
   (digest-equal at d9eb861, 25/25 equivalence); feed
@@ -836,7 +841,7 @@ assessment-composition, and governance-gate areas.
 
 ## 23. Weakest Parts
 
-1. D-NEW-01 canonical media scorer throws (HIGH) — EVIDENCE:
+1. D-NEW-01 canonical media scorer throws — HIGH / P0_BEFORE_PILOT — EVIDENCE:
    `diag-media-verify.ts`: both exports `THROW TypeError:
    getMediaKindGroup is not a function` (scoring.ts:71 requires it from
    `./metadata.js`, which never exported it — it lives in
@@ -866,8 +871,9 @@ assessment-composition, and governance-gate areas.
    payloads, marking batches, some list limits. CONSEQUENCE: graceful
    linear degradation today; cliff risk under whole-school bursts.
    TRIGGER: large-school syncs. REPAIR: P1 declarative bounds.
-   (Plus structural MEDIUMs: 570 KB `routes/ai.ts`; 85 UNRESOLVED logic
-   capabilities; retention policies undecided; observability unaggregated.)
+   (Plus structural MEDIUMs: 570 KB `routes/ai.ts`; 85 unresolved
+   capability classifications — evidence unknowns, not failures;
+   retention policies undecided; observability unaggregated.)
 
 ## 24. What We Do Not Yet Know
 
@@ -985,7 +991,7 @@ P0 — must fix before meaningful production/pilot (6):
    recovery. BENEFIT closes pre-live auth hole. CONCEPT replace extractor
    with `requireVerifiedSchoolContext` + relationship gates (D2).
    VERIFY rerun handoff spoof suite + per-package scope tests.
-2. P0-2 Canonical media scorer: PROBLEM module throws on every call;
+2. P0-2 Canonical media scorer (HIGH / P0_BEFORE_PILOT): PROBLEM module throws on every call;
    production on triplicated copies. EVIDENCE `diag-media-verify.ts` throw
    proof. CONCEPT EITHER one-line-correct import from `validation.js`
    (+equivalence tests pinning route-copy parity) OR delete canonical +

@@ -280,3 +280,49 @@ No other process exception is evidenced for R8-G.3B. Package-20 production owner
   (see 09 §R8-H for measured proof: guard suite 6/6, equivalence 12/12,
   digest-equal decision script). No new retry, circuit-breaker, concurrency,
   idempotency, or restart semantics introduced.
+
+### Engineering-Intelligence Reconciliation — d9eb861 (2026-09-16/17)
+
+Diagnostic commit `7333435`; baseline `d9eb8618ceb582db467261e5d559cc4322da7763`.
+Dated reconciliation only; existing dispositions above STAND unless
+stated otherwise.
+
+- Route token bucket on Redis unavailable = FAIL-OPEN (source-observed
+  behavior): `src/services/task019TokenBucketService.ts:55` logs
+  `[TokenBucket] Redis unavailable — allowing request (fail-open)` and
+  returns `allowed: true` with full capacity when `getRedisClient()`
+  resolves null; `:77` takes the same fail-open return on Redis eval
+  failure. Observed live in diagnosis: guarded-stack first request with
+  Redis down 4957 ms (cold connection-timeout tail), then ~10 ms warm
+  steady — limits unenforced for the outage duration. Disposition: WEAK
+  (D-NEW-02, `15` §23 item 2, §29 P0-4). This is distinct from the
+  separate process-local AI runtime limiter below.
+- Process-local AI runtime limiter distinguished: the AI limiter/breaker
+  (`aiRuntimeRateLimitGuardService.ts` et al.) holds semantics in
+  `windows` Maps in-process and is NOT Redis-dependent — Redis loss
+  does not alter its semantics (ADEQUATE per-instance). The Redis
+  fail-open belongs to the ROUTE token bucket (+ sibling Redis-backed
+  guards), not to the AI limiter. No cross-instance proof exists for
+  either: N replicas = N× effective quota/cost (P0 decision, `15` §29
+  P0-3). Per-instance guarantees where applicable: window expiry,
+  bounded retry (≤3, ≤30 s cap), breaker (5/probe/2-close), budget
+  guard — all STAND (see R8-H note above).
+- Redis outage behavior: `src/lib/redis.ts` degrades with cooldown
+  (30 s) rather than crashing the process; non-Redis paths continue
+  serving. The process survives; enforcement does not (route limiter).
+  No new Redis disposition beyond D-NEW-02.
+- Existing bounded retry/breaker behavior still stands: transient ≤3
+  attempts exp+jitter ≤30 s; fatal fail-fast; storm refused by breaker;
+  half-open probe + 2-close recovery; budget guard blocks retries.
+  Re-proven digest-equal at `d9eb861` (see 09 reconciliation).
+- Canonical media-scoring runtime throw recorded as
+  maintainability/runtime-path risk, NOT a current active-route outage:
+  the canonical module throws on every call, but every production call
+  site uses route-local copies, so ranking serves today. The risk is a
+  future "deduplication" toward the broken canonical (HIGH /
+  P0_BEFORE_PILOT, `15` §29 P0-2).
+- No new reliability disposition invented for unmeasured
+  multi-school/live-provider scenarios: production DB volumes,
+  multi-process coordination, provider production latency, Genkit
+  replica state, DB-pool saturation, heap/event-loop production
+  telemetry remain UNMEASURED. Unknown remains unknown (`15` §24).

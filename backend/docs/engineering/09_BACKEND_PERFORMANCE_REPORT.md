@@ -423,3 +423,66 @@ parses O(n log n) -> O(n). No generic primitive created (feed-local).
 - C2 daily-feed: ACCEPTED_OPTIMIZATION (latency + asymptotic).
 - Losing experiments in production: none (both won; nothing restored).
 - Production optimizations: 2. Measured/rejected candidates: 8 families.
+
+## Engineering-Intelligence Diagnosis Measurements — d9eb861 (2026-09-16/17)
+
+Diagnostic commit `7333435`; baseline `d9eb8618ceb582db467261e5d559cc4322da7763`.
+This section APPENDS the new diagnosis measurements only. Historical
+R8-E/R8-H numbers above are NOT overwritten. All figures are DEVELOPMENT
+BASELINE measurements; no production SLA claims are made.
+
+- Current diagnostic environment at `d9eb861`: Windows 11
+  (win32 10.0.26200), Node v24.14.1, Intel i5-8365U 8 logical, 15.8 GB
+  RAM; in-memory synthetic fixtures unless stated otherwise;
+  warmup >= 10, samples >= 30, p50/p95/min/max (no p99 claimed), heap
+  deltas, sha256 correctness digests. No live provider (OpenAI,
+  Pinecone, YouTube, Vimeo, school systems, webhooks) was called.
+- R8-H rate-limit digest re-proof (Campaign A, `r8-h-workload.ts` at
+  `d9eb861`): per check+record op, 30 samples — SMALL w=30
+  0.0011/0.0021 ms; REPRESENTATIVE 3-scope 0.0029/0.0041; LARGE w=1000
+  denial 0.0012/0.0022; STRESS w=2000 0.0010/0.0021. Correctness digest
+  equal: `4ff6f5476dd6f430`. Verdict FAST; amortized-O(1) holds.
+- R8-H daily-feed digest re-proof (Campaign A): 30 samples — 100 items
+  0.107/0.3246 ms; 1,000 items 1.0705/2.1432; 10,000 items
+  15.0135/23.5448; 100,000 items 275.08/515.78 (heap −15 MB on STRESS =
+  major GC during sweep, noted not hidden). Correctness digest equal:
+  `297be19ee8a5ea75`. Verdict: FAST ≤1k, ACCEPTABLE ≤10k, WATCH at 100k.
+- Media helper measurements (Campaign B, composed exported micro-helpers
+  — canonical full scorers throw, see below): sweep per corpus 100 items
+  0.3552/0.5115 ms; 1,000 items 2.6695/4.3808; 10,000 items
+  30.019/49.2353 — linear, per-asset ≈ 3 µs. Micros: recency
+  4.30 µs/op; trust 0.73 µs/op; spacing 7.26 µs/op (spacing pays for
+  Date parse). Verdict FAST.
+- Content fingerprint measurement (Campaign B, sha256/16 primitive):
+  1 KB 0.0126/0.0203 ms; 100 KB 0.5338/0.9815; 1 MB 11.1651/15.7926 —
+  linear in bytes, negligible at evidence sizes. Verdict FAST.
+- HTTP/middleware measurements (Campaign C, supertest in-process, real
+  middleware, stub JWT, Date.now resolution — coarse but truthful
+  relatively): health-live-public 200 p50 128/p95 258 ms (cold process
+  incl. first-hit init — NOT a service budget); auth-missing 401 p50 98;
+  auth-malformed 401 p50 88; auth-ok lightweight 200 p50 89 (cold);
+  verified-context 200; malformed JSON 400. Guarded stack
+  (auth+backpressure+route-limit) steady ≈ 10 ms warm in-process
+  (framework/middleware overhead, domain work excluded). Verdict
+  ACCEPTABLE with the cold-Redis caveat below.
+- Redis-unavailable cold-tail observation: first guarded request with
+  Redis down 4957 ms (cold Redis connection timeout path on the hot
+  path), then 64, 10, 8, 12, 11, 11 ms steady; observed log
+  `[TokenBucket] Redis unavailable — allowing request` (fail-open,
+  D-NEW-02). Source: `src/services/task019TokenBucketService.ts:55,77`.
+- Canonical media scorer = runtime throw / throughput not measurable:
+  `computeMediaStreamScore` / `computeStudyStreamScore` throw
+  `TypeError: getMediaKindGroup is not a function` on every call at
+  `d9eb861`; 0 throughput by definition (correctness bottleneck, not a
+  latency number). Evidence preserved in `15` §23 D-NEW-01.
+- Production DB / live-provider / multi-process figures remain
+  UNMEASURED: no production-like volumes, pooling, or multi-instance
+  contention data; no provider production latency (mock only); no
+  multi-school traffic evidence; no cold-start production budget beyond
+  the in-process observation above.
+- Durable reproduction: consolidated into the existing harness as
+  `npx tsx tools/engineering/r8-e-workload.ts --target intelligence`
+  (media scoring/helper evidence, canonical throw evidence, fingerprint
+  workload, HTTP baseline, Redis-unavailable token-bucket behavior;
+  synthetic data only). Ad-hoc `diag-*` probes removed (see closure
+  commit).
