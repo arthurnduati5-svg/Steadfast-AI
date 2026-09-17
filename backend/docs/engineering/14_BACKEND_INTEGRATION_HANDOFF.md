@@ -109,7 +109,7 @@ table below groups stable capability families.
 | Learning evidence ledger | `/api/copilot/evidence` | Learning Sessions (backend-internal today) | auth + verified | yes | student/teacher/`school_admin`/`internal_operator`; students body-echo own learnerId (see 7/23); internal ops privileged-only | route guards + `LearningEvidenceCommandService` | 201 create / 200 transitions+reads; `{ok,data}` / `{ok:false,error:{code,message,requestId,correlationId}}` | VALIDATION(400) AUTHN(401) AUTHZ(403) NOT_FOUND(404) IDEMPOTENCY_CONFLICT(400+code) INTERNAL(500) | REQUIRED (key + sha256 request hash; same-key/same-hash replays, same-key/changed-hash conflicts non-retryable) | none (stream reads bounded) | event-sourced evidence store, atomic append | none | PRIMARY_PRODUCT_SURFACE |
 | Learning sessions (durable) | `/api/copilot/learning-sessions`, `/api/learner` (`learnerSessionRoutes`), `/api/tutor` | Learning Sessions | auth + verified | yes | student self; teacher/admin per scope | route guards + transition service | 200/201 `{ok,session,decision}` | VALIDATION(400) AUTHN(401) AUTHZ(403) NOT_FOUND(404) INVALID_TRANSITION(422) IDEMPOTENCY_CONFLICT(409) | REQUIRED (header key + fingerprint; replay vs conflict) | `limit`-only on session events (default 50, no max cap) | transactional session state + event store | none | PRIMARY_PRODUCT_SURFACE |
 | Teacher insights / reports / interventions | `/api` (`teacherInterventionRoutes`, `teacherReportRoutes`), `/api/copilot/teacher-insights` | Teacher/Admin (no live UI consumer yet) | auth (+verified on reports) | reports yes | service scope policy (`validateTeacher*Scope`); audit trail admin-only | service policy (manual) | 200 report JSON | AUTHZ(403) INTERNAL(500) | NOT_APPLICABLE (reads) | query filters (`classId,subject,window`); no cursor | none (reads) + audit writes | safety webhook (gated) | PRIMARY_PRODUCT_SURFACE |
-| Question bank + assessment packages 4-26 | `/api/question-bank` (+ `/marking`, `/exam-papers`, `/exam-delivery`, `/result-*`, `/recovery-*`) | Assessment (via `/api/copilot/assessment/*`); direct `/api/question-bank` has no UI caller yet | auth (JWT) BUT actor context via MOCK/DEV-ONLY extractor (`x-school-id` header/body) — see 7/23 | mount-level NO (replacement deferred) | `extractMockAssessmentActorContext` role allow-list (`student..support_owner`); per-package policy | route + `*CommandService` + policy registry | 201 writes / 200 reads; `createSafeResponseEnvelope` (`ok,requestId,correlationId,resourceId,status,safeMessage,reasonCode,errorCode,data`) | VALIDATION(400 inc. `IDEMPOTENCY_REQUIRED`) AUTHN(401) AUTHZ(403) NOT_FOUND(404) STATE/IDEMPOTENCY/VERSION conflict(409) DEPENDENCY(503) | REQUIRED on writes (`x-idempotency-key` or body key; missing -> 400) | none (bounded lists; no cursor/offset) | package repositories (in-memory dev / prisma-gated prod) + audit writer | none | PRIMARY_PRODUCT_SURFACE with MOCK actor-context constraint |
+| Question bank + assessment packages 4-26 | `/api/question-bank` (+ `/marking`, `/exam-papers`, `/exam-delivery`, `/result-*`, `/recovery-*`) | Assessment (via `/api/copilot/assessment/*`); direct `/api/question-bank` has no UI caller yet | auth (JWT) + verified school context (P0-1; `extractVerifiedAssessmentActorContext`) — see 7/23 | mount-level YES | verified-identity role mapping (`student→student`, `teacher→teacher`, `school_admin→admin`; others fail closed); per-package policy | route + `*CommandService` + policy registry | 201 writes / 200 reads; `createSafeResponseEnvelope` (`ok,requestId,correlationId,resourceId,status,safeMessage,reasonCode,errorCode,data`) | VALIDATION(400 inc. `IDEMPOTENCY_REQUIRED`) AUTHN(401) AUTHZ(403) NOT_FOUND(404) STATE/IDEMPOTENCY/VERSION conflict(409) DEPENDENCY(503) | REQUIRED on writes (`x-idempotency-key` or body key; missing -> 400) | none (bounded lists; no cursor/offset) | package repositories (in-memory dev / prisma-gated prod) + audit writer | none | PRIMARY_PRODUCT_SURFACE (P0-1 verified-context closed) |
 | Voice / quotas / ledger | `/api/voice`, `/api/copilot/voice/*` (extracted quota domain, same pattern) | Voice (partial: proxy+client+AI hook exist; no prod UI caller) | auth + rate-limit | no (auth-only mount) | `requireRole(admin)` on grants; quota ledger per student/day | manual (`parsePositiveInt`; 400s) | 200 balance/session; 402 `time_exhausted`; 404/409/429 branches | VALIDATION(400) AUTHN(401) QUOTA(402/429) NOT_FOUND(404) CONFLICT(409) | NOT_APPLICABLE (ledger is transactional, row-locked) | none | voice ledger (transactional settlement) | OpenAI STT/TTS (live where configured); TTS model via `OPENAI_TTS_MODEL` | PRIMARY_PRODUCT_SURFACE |
 | Learner prefs / recommendations / adaptive | `/api/learner` (preferences, recommendations, adaptive-challenges), `/api/copilot` (learning-profile, adaptive-*, remediation) | Profile, Growth, Practice | auth (+verified on sessions/challenges paths) | family-specific | student self | route/service-level | 200 preference/recommendation objects | AUTHN/Z, VALIDATION, INTERNAL | SUPPORTED_OPTIONAL | none | preference/profile stores | none | PRIMARY_PRODUCT_SURFACE |
 | Video learning + analytics | `/api/copilot` (recommendations, sessions, aware-practice), `/api/video-learning-analytics` | Media | auth (+verified on sessions) | family-specific | student self; recommendations fail closed on empty identity | service-level | 200 school-scoped recommendations (`recommendationId` school-prefixed, `safety.status=needs_review`, `cacheAllowed=false`) | VALIDATION, AUTHZ, INTERNAL | SUPPORTED_OPTIONAL | none | session/analytics stores | YouTube/Vimeo candidate adapters (gated-off without key); Genkit transcript flow (in-process) | PRIMARY_PRODUCT_SURFACE |
@@ -142,12 +142,16 @@ Per protected family (verified in source, proven in contract tests):
 - Ownership checks: evidence internal ops (privileged roles), teacher report
   scope validators, learner-session transition guards,
   question-bank/enforcement policies, voice quota ledger identity.
-- Known constraint (documented, not changed): the question-bank family mounts
-  `schoolAuthMiddleware` WITHOUT `requireVerifiedSchoolContext` and derives
-  actor context from the explicitly MOCK/DEV-ONLY
-  `extractMockAssessmentActorContext` (`x-school-id` header/body). Production
-  school integration MUST replace this extractor with verified-context
-  middleware before any live-school use (deferred item D2).
+- P0-1 RESOLVED (was: known constraint): the question-bank family mounts
+  (`questionBankRoutes`, `examBlueprintRoutes`) now enforce
+  `schoolAuthMiddleware` + `requireVerifiedSchoolContext`, and actor context
+  derives exclusively from `req.verifiedSchoolIdentity` via
+  `extractVerifiedAssessmentActorContext`. Caller `x-school-id` / `x-actor-id` /
+  `x-actor-role` headers and body identity fields are never authoritative
+  (school mismatch → 403 `SCHOOL_SCOPE_MISMATCH`). Supported assessment-role
+  mapping: `student → student`, `teacher → teacher`, `school_admin → admin`;
+  all other verified roles fail closed (`POLICY_BLOCKED`). Frontend wiring
+  still deferred (no frontend change in P0-1).
 
 ## 7. Authorization/relationship model
 
@@ -494,9 +498,9 @@ Names/categories only (never values; no `.env` was read or printed):
 
 - D1 frontend wiring: dedicated session lifecycle, teacher/admin surfaces,
   voice UI + quota UX, direct question-bank use (gated on D2).
-- D2 question-bank verified-context replacement: swap
-  `extractMockAssessmentActorContext` for verified-context middleware before
-  any live-school use; keep idempotency/policy semantics.
+- D2 question-bank verified-context replacement: DONE in P0-1
+  (`extractVerifiedAssessmentActorContext`; verified-school mounts;
+  idempotency/policy semantics preserved). Frontend wiring still deferred.
 - D3 school lane: SSO/OAuth, SIS/LMS/roster live adapters, mapping,
   deactivation, sync SLO (port defined, adapters deferred).
 - D4 notifications: provider selection + consent + delivery SLO.
@@ -515,7 +519,7 @@ Names/categories only (never values; no `.env` was read or printed):
 | POLICY | AFFECTED CONTRACT | CURRENT SAFE BEHAVIOR | WHO MUST DECIDE | INTEGRATION IMPACT |
 |---|---|---|---|---|
 | Evidence candidate student-self cross-check | `/api/copilot/evidence` writes | school scope + roles enforced; body learnerId echoed, not JWT-compared | product + backend architecture | frontend MUST send caller's own learnerId; do not rely on server cross-check here |
-| Question-bank actor trust | `/api/question-bank/*` | JWT auth + policy registry; actor detail mock-extracted | backend architecture (D2) | no live-school use until verified-context replacement |
+| Question-bank actor trust | `/api/question-bank/*` | JWT auth + verified school context; caller identity headers ignored/rejected | backend architecture (P0-1 closed) | frontend wiring still deferred; no live-school use until frontend sends JWT school claims |
 | Retention/erasure periods | evidence, sessions, ledger, media | durable stores; no auto-erasure proven | product/policy + school contracts | data-lifecycle lane before pilot |
 | Parent release policy | report cards, parent support, transparency | parent-safe projections only; no raw learner data to teachers/parents | product/policy | teacher/parent UI scope |
 | External provider choice | LLM/STT/TTS/vector | mock default; legacy direct live where configured | product + AI lane (D5) | cost/latency/privacy posture |

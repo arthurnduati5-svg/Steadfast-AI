@@ -1088,3 +1088,20 @@ node_modules client backed up pre-generate and restored post-proof),
 `npm run build` PASS with `dist/backend/src/index.js` emitted (tracked
 dist outputs left unstaged and excluded from commit). No files changed
 under `backend/src/**`, `backend/prisma/**`, `AI/**`, `frontend/**`.*
+
+## P0-1 Closure Note (appended; historical diagnosis above unchanged)
+
+P0-1 question-bank verified-context defect = RESOLVED (pending owner
+acceptance). `questionBankRoutes` + `examBlueprintRoutes` now mount
+`schoolAuthMiddleware → requireVerifiedSchoolContext`, and
+`extractVerifiedAssessmentActorContext` derives `AssessmentCommandContext`
+exclusively from `req.verifiedSchoolIdentity` (mapping: `student → student`,
+`teacher → teacher`, `school_admin → admin`; all else fail-closed). Caller
+school/actor/role headers and body identity fields are never authoritative
+(school mismatch → 403 `SCHOOL_SCOPE_MISMATCH`). The dev-only
+`extractMockAssessmentActorContext` has no production runtime import.
+Proof: `backend/src/tests/p0-assessment-verified-identity.test.ts` (12/12:
+missing-auth, missing-context, teacher/admin derivation, body/header school
+spoof, actor/role spoof, unsupported-role, cross-school, idempotency,
+role-denial) plus affected regressions (214 tests). Remaining P0 items
+(P0-2 – P0-6) are unchanged and out of scope for P0-1.

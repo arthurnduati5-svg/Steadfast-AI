@@ -29,7 +29,7 @@ import {
   InMemoryQuestionExposureHoldRepository,
 } from '../domains/assessment/question-bank/repositories/inMemoryQuestionBankRepositories';
 
-import { extractMockAssessmentActorContext, createSafeResponseEnvelope } from '../domains/assessment/question-bank/services/extractMockAssessmentActorContext';
+import { extractVerifiedAssessmentActorContext, createSafeResponseEnvelope } from '../domains/assessment/question-bank/services/extractVerifiedAssessmentActorContext';
 
 const router = Router();
 
@@ -106,7 +106,7 @@ function getRequestId(req: Request): string {
 }
 
 function getCorrelationId(req: Request): string {
-  return String(req.headers['x-correlation-id'] || req.body?.correlationId || randomUUID());
+  return String(req.headers['x-correlation-id'] || req.body?.correlationId || (req as any).requestId || randomUUID());
 }
 
 function getIdempotencyKey(req: Request): string {
@@ -125,7 +125,9 @@ function safeHandler(handler: (req: Request, res: Response) => Promise<void>) {
       let status = 500;
       let errorCode = 'UNKNOWN_SAFE_ERROR';
 
-      if (message.startsWith('SCHOOL_CONTEXT_REQUIRED')) { status = 400; errorCode = 'SCHOOL_CONTEXT_REQUIRED'; }
+      if (message.startsWith('SCHOOL_CONTEXT_REQUIRED')) { status = 401; errorCode = 'SCHOOL_CONTEXT_REQUIRED'; }
+      else if (message.startsWith('SCHOOL_CONTEXT_INVALID')) { status = 403; errorCode = 'SCHOOL_CONTEXT_INVALID'; }
+      else if (message.startsWith('SCHOOL_SCOPE_MISMATCH')) { status = 403; errorCode = 'SCHOOL_SCOPE_MISMATCH'; }
       else if (message.startsWith('VALIDATION_FAILED')) { status = 400; errorCode = 'VALIDATION_FAILED'; }
       else if (message.startsWith('POLICY_BLOCKED')) { status = 403; errorCode = 'POLICY_BLOCKED'; }
       else if (message.startsWith('NOT_FOUND')) { status = 404; errorCode = 'NOT_FOUND'; }
@@ -149,13 +151,13 @@ function safeHandler(handler: (req: Request, res: Response) => Promise<void>) {
   };
 }
 
-function buildCommandContext(context: ReturnType<typeof extractMockAssessmentActorContext>) {
+function buildCommandContext(context: ReturnType<typeof extractVerifiedAssessmentActorContext>) {
   return context;
 }
 
 // POST /api/question-bank/drafts
 router.post('/drafts', safeHandler(async (req, res) => {
-  const context = extractMockAssessmentActorContext(req);
+  const context = extractVerifiedAssessmentActorContext(req);
   const idempotencyKey = getIdempotencyKey(req);
   if (!idempotencyKey) { res.status(400).json({ ok: false, errorCode: 'IDEMPOTENCY_REQUIRED' }); return; }
   context.idempotencyKey = idempotencyKey;
@@ -194,7 +196,7 @@ router.post('/drafts', safeHandler(async (req, res) => {
 
 // POST /api/question-bank/versions
 router.post('/versions', safeHandler(async (req, res) => {
-  const context = extractMockAssessmentActorContext(req);
+  const context = extractVerifiedAssessmentActorContext(req);
   const idempotencyKey = getIdempotencyKey(req);
   if (!idempotencyKey) { res.status(400).json({ ok: false, errorCode: 'IDEMPOTENCY_REQUIRED' }); return; }
   context.idempotencyKey = idempotencyKey;
@@ -233,7 +235,7 @@ router.post('/versions', safeHandler(async (req, res) => {
 
 // POST /api/question-bank/parts
 router.post('/parts', safeHandler(async (req, res) => {
-  const context = extractMockAssessmentActorContext(req);
+  const context = extractVerifiedAssessmentActorContext(req);
   const idempotencyKey = getIdempotencyKey(req);
   if (!idempotencyKey) { res.status(400).json({ ok: false, errorCode: 'IDEMPOTENCY_REQUIRED' }); return; }
   context.idempotencyKey = idempotencyKey;
@@ -270,7 +272,7 @@ router.post('/parts', safeHandler(async (req, res) => {
 
 // POST /api/question-bank/assets
 router.post('/assets', safeHandler(async (req, res) => {
-  const context = extractMockAssessmentActorContext(req);
+  const context = extractVerifiedAssessmentActorContext(req);
   const idempotencyKey = getIdempotencyKey(req);
   if (!idempotencyKey) { res.status(400).json({ ok: false, errorCode: 'IDEMPOTENCY_REQUIRED' }); return; }
   context.idempotencyKey = idempotencyKey;
@@ -307,7 +309,7 @@ router.post('/assets', safeHandler(async (req, res) => {
 
 // POST /api/question-bank/answer-keys
 router.post('/answer-keys', safeHandler(async (req, res) => {
-  const context = extractMockAssessmentActorContext(req);
+  const context = extractVerifiedAssessmentActorContext(req);
   const idempotencyKey = getIdempotencyKey(req);
   if (!idempotencyKey) { res.status(400).json({ ok: false, errorCode: 'IDEMPOTENCY_REQUIRED' }); return; }
   context.idempotencyKey = idempotencyKey;
@@ -341,7 +343,7 @@ router.post('/answer-keys', safeHandler(async (req, res) => {
 
 // POST /api/question-bank/rubrics
 router.post('/rubrics', safeHandler(async (req, res) => {
-  const context = extractMockAssessmentActorContext(req);
+  const context = extractVerifiedAssessmentActorContext(req);
   const idempotencyKey = getIdempotencyKey(req);
   if (!idempotencyKey) { res.status(400).json({ ok: false, errorCode: 'IDEMPOTENCY_REQUIRED' }); return; }
   context.idempotencyKey = idempotencyKey;
@@ -376,7 +378,7 @@ router.post('/rubrics', safeHandler(async (req, res) => {
 
 // POST /api/question-bank/objective-mappings
 router.post('/objective-mappings', safeHandler(async (req, res) => {
-  const context = extractMockAssessmentActorContext(req);
+  const context = extractVerifiedAssessmentActorContext(req);
   const idempotencyKey = getIdempotencyKey(req);
   if (!idempotencyKey) { res.status(400).json({ ok: false, errorCode: 'IDEMPOTENCY_REQUIRED' }); return; }
   context.idempotencyKey = idempotencyKey;
@@ -411,7 +413,7 @@ router.post('/objective-mappings', safeHandler(async (req, res) => {
 
 // POST /api/question-bank/source-records
 router.post('/source-records', safeHandler(async (req, res) => {
-  const context = extractMockAssessmentActorContext(req);
+  const context = extractVerifiedAssessmentActorContext(req);
   const idempotencyKey = getIdempotencyKey(req);
   if (!idempotencyKey) { res.status(400).json({ ok: false, errorCode: 'IDEMPOTENCY_REQUIRED' }); return; }
   context.idempotencyKey = idempotencyKey;
@@ -448,7 +450,7 @@ router.post('/source-records', safeHandler(async (req, res) => {
 
 // POST /api/question-bank/curriculum-validity
 router.post('/curriculum-validity', safeHandler(async (req, res) => {
-  const context = extractMockAssessmentActorContext(req);
+  const context = extractVerifiedAssessmentActorContext(req);
   const idempotencyKey = getIdempotencyKey(req);
   if (!idempotencyKey) { res.status(400).json({ ok: false, errorCode: 'IDEMPOTENCY_REQUIRED' }); return; }
   context.idempotencyKey = idempotencyKey;
@@ -482,7 +484,7 @@ router.post('/curriculum-validity', safeHandler(async (req, res) => {
 
 // POST /api/question-bank/usage-eligibility
 router.post('/usage-eligibility', safeHandler(async (req, res) => {
-  const context = extractMockAssessmentActorContext(req);
+  const context = extractVerifiedAssessmentActorContext(req);
   const idempotencyKey = getIdempotencyKey(req);
   if (!idempotencyKey) { res.status(400).json({ ok: false, errorCode: 'IDEMPOTENCY_REQUIRED' }); return; }
   context.idempotencyKey = idempotencyKey;
@@ -518,7 +520,7 @@ router.post('/usage-eligibility', safeHandler(async (req, res) => {
 
 // POST /api/question-bank/submit-approval
 router.post('/submit-approval', safeHandler(async (req, res) => {
-  const context = extractMockAssessmentActorContext(req);
+  const context = extractVerifiedAssessmentActorContext(req);
   const idempotencyKey = getIdempotencyKey(req);
   if (!idempotencyKey) { res.status(400).json({ ok: false, errorCode: 'IDEMPOTENCY_REQUIRED' }); return; }
   context.idempotencyKey = idempotencyKey;
@@ -550,7 +552,7 @@ router.post('/submit-approval', safeHandler(async (req, res) => {
 
 // POST /api/question-bank/ingestion/batches
 router.post('/ingestion/batches', safeHandler(async (req, res) => {
-  const context = extractMockAssessmentActorContext(req);
+  const context = extractVerifiedAssessmentActorContext(req);
   const idempotencyKey = getIdempotencyKey(req);
   if (!idempotencyKey) { res.status(400).json({ ok: false, errorCode: 'IDEMPOTENCY_REQUIRED' }); return; }
   context.idempotencyKey = idempotencyKey;
@@ -577,7 +579,7 @@ router.post('/ingestion/batches', safeHandler(async (req, res) => {
 
 // POST /api/question-bank/ingestion/candidates
 router.post('/ingestion/candidates', safeHandler(async (req, res) => {
-  const context = extractMockAssessmentActorContext(req);
+  const context = extractVerifiedAssessmentActorContext(req);
   const idempotencyKey = getIdempotencyKey(req);
   if (!idempotencyKey) { res.status(400).json({ ok: false, errorCode: 'IDEMPOTENCY_REQUIRED' }); return; }
   context.idempotencyKey = idempotencyKey;
@@ -612,7 +614,7 @@ router.post('/ingestion/candidates', safeHandler(async (req, res) => {
 
 // POST /api/question-bank/ingestion/candidates/:candidateId/validate
 router.post('/ingestion/candidates/:candidateId/validate', safeHandler(async (req, res) => {
-  const context = extractMockAssessmentActorContext(req);
+  const context = extractVerifiedAssessmentActorContext(req);
   const candidate = await ingestionService.validateCandidate(req.params.candidateId, context);
 
   res.status(200).json(createSafeResponseEnvelope({
@@ -627,7 +629,7 @@ router.post('/ingestion/candidates/:candidateId/validate', safeHandler(async (re
 
 // POST /api/question-bank/ingestion/candidates/:candidateId/accept
 router.post('/ingestion/candidates/:candidateId/accept', safeHandler(async (req, res) => {
-  const context = extractMockAssessmentActorContext(req);
+  const context = extractVerifiedAssessmentActorContext(req);
   const idempotencyKey = getIdempotencyKey(req);
   if (!idempotencyKey) { res.status(400).json({ ok: false, errorCode: 'IDEMPOTENCY_REQUIRED' }); return; }
   context.idempotencyKey = idempotencyKey;
@@ -647,7 +649,7 @@ router.post('/ingestion/candidates/:candidateId/accept', safeHandler(async (req,
 
 // POST /api/question-bank/ingestion/candidates/:candidateId/reject
 router.post('/ingestion/candidates/:candidateId/reject', safeHandler(async (req, res) => {
-  const context = extractMockAssessmentActorContext(req);
+  const context = extractVerifiedAssessmentActorContext(req);
   const candidate = await ingestionService.rejectCandidate(
     req.params.candidateId,
     req.body.reasonCode || 'manual_rejection',
@@ -687,7 +689,7 @@ router.get('/ingestion/batches/:batchId/candidates', safeHandler(async (req, res
 
 // POST /api/question-bank/approval-requests
 router.post('/approval-requests', safeHandler(async (req, res) => {
-  const context = extractMockAssessmentActorContext(req);
+  const context = extractVerifiedAssessmentActorContext(req);
   const idempotencyKey = getIdempotencyKey(req);
   if (!idempotencyKey) { res.status(400).json({ ok: false, errorCode: 'IDEMPOTENCY_REQUIRED' }); return; }
   context.idempotencyKey = idempotencyKey;
@@ -713,7 +715,7 @@ router.post('/approval-requests', safeHandler(async (req, res) => {
 
 // GET /api/question-bank/approval-requests/pending
 router.get('/approval-requests/pending', safeHandler(async (req, res) => {
-  const context = extractMockAssessmentActorContext(req);
+  const context = extractVerifiedAssessmentActorContext(req);
   const pending = await approvalService.listPendingApprovalRequests(context.schoolId);
 
   res.status(200).json(createSafeResponseEnvelope({
@@ -735,7 +737,7 @@ router.get('/approval-requests/pending', safeHandler(async (req, res) => {
 
 // POST /api/question-bank/approval-requests/:approvalRequestId/decision
 router.post('/approval-requests/:approvalRequestId/decision', safeHandler(async (req, res) => {
-  const context = extractMockAssessmentActorContext(req);
+  const context = extractVerifiedAssessmentActorContext(req);
   const idempotencyKey = getIdempotencyKey(req);
   if (!idempotencyKey) { res.status(400).json({ ok: false, errorCode: 'IDEMPOTENCY_REQUIRED' }); return; }
   context.idempotencyKey = idempotencyKey;
@@ -766,7 +768,7 @@ router.post('/approval-requests/:approvalRequestId/decision', safeHandler(async 
 
 // POST /api/question-bank/duplicate-candidates
 router.post('/duplicate-candidates', safeHandler(async (req, res) => {
-  const context = extractMockAssessmentActorContext(req);
+  const context = extractVerifiedAssessmentActorContext(req);
   const idempotencyKey = getIdempotencyKey(req);
   if (!idempotencyKey) { res.status(400).json({ ok: false, errorCode: 'IDEMPOTENCY_REQUIRED' }); return; }
   context.idempotencyKey = idempotencyKey;
@@ -792,7 +794,7 @@ router.post('/duplicate-candidates', safeHandler(async (req, res) => {
 
 // POST /api/question-bank/duplicate-candidates/:duplicateCandidateId/resolve
 router.post('/duplicate-candidates/:duplicateCandidateId/resolve', safeHandler(async (req, res) => {
-  const context = extractMockAssessmentActorContext(req);
+  const context = extractVerifiedAssessmentActorContext(req);
   const candidate = await duplicateCandidateService.resolveDuplicateCandidate({
     duplicateCandidateId: req.params.duplicateCandidateId,
     status: req.body.status,
@@ -812,7 +814,7 @@ router.post('/duplicate-candidates/:duplicateCandidateId/resolve', safeHandler(a
 
 // POST /api/question-bank/exposure-holds
 router.post('/exposure-holds', safeHandler(async (req, res) => {
-  const context = extractMockAssessmentActorContext(req);
+  const context = extractVerifiedAssessmentActorContext(req);
   const idempotencyKey = getIdempotencyKey(req);
   if (!idempotencyKey) { res.status(400).json({ ok: false, errorCode: 'IDEMPOTENCY_REQUIRED' }); return; }
   context.idempotencyKey = idempotencyKey;
@@ -839,7 +841,7 @@ router.post('/exposure-holds', safeHandler(async (req, res) => {
 
 // POST /api/question-bank/exposure-holds/:exposureHoldId/release
 router.post('/exposure-holds/:exposureHoldId/release', safeHandler(async (req, res) => {
-  const context = extractMockAssessmentActorContext(req);
+  const context = extractVerifiedAssessmentActorContext(req);
   const hold = await exposureHoldService.releaseExposureHold({
     exposureHoldId: req.params.exposureHoldId,
     releaseReason: req.body.releaseReason || '',
@@ -881,7 +883,7 @@ router.get('/questions/:questionId', safeHandler(async (req, res) => {
   const item = await questionBankItemRepo.findById(req.params.questionId);
   if (!item) { res.status(404).json({ ok: false, errorCode: 'NOT_FOUND' }); return; }
 
-  const context = extractMockAssessmentActorContext(req);
+  const context = extractVerifiedAssessmentActorContext(req);
   const isStudent = context.actorRole === 'student';
   const isParent = context.actorRole === 'parent';
 
@@ -914,7 +916,7 @@ router.get('/questions/:questionId', safeHandler(async (req, res) => {
 router.get('/questions/:questionId/versions', safeHandler(async (req, res) => {
   const versions = await questionVersionRepo.findByQuestionId(req.params.questionId);
 
-  const context = extractMockAssessmentActorContext(req);
+  const context = extractVerifiedAssessmentActorContext(req);
   const safeVersions = versions.map(v => ({
     questionVersionId: v.questionVersionId,
     versionNumber: v.versionNumber,
@@ -940,7 +942,7 @@ router.get('/versions/:questionVersionId', safeHandler(async (req, res) => {
   const version = await questionVersionRepo.findById(req.params.questionVersionId);
   if (!version) { res.status(404).json({ ok: false, errorCode: 'NOT_FOUND' }); return; }
 
-  const context = extractMockAssessmentActorContext(req);
+  const context = extractVerifiedAssessmentActorContext(req);
   const isStudentParent = context.actorRole === 'student' || context.actorRole === 'parent';
 
   const safeData: Record<string, unknown> = {

@@ -119,8 +119,49 @@ rewriting the R8-G acceptance result above.
   requirement); `npm run build` exit 0 with
   `backend/dist/backend/src/index.js` emitted (dist untracked-ignored).
 - Remaining deferred integration: frontend wiring (D1), question-bank
-  verified-context replacement (D2), school lane SSO/SIS (D3),
+  verified-context replacement (D2 — CLOSED by P0-1 below; frontend wiring
+  itself still deferred), school lane SSO/SIS (D3),
   notifications (D4), AI-provider activation (D5), vector/cache activation
   (D6), deployment/pilot execution (D7), roster/event scale bounds
   (D8/D9), plus 8 unresolved policy rows — all next-lane items, none a
   backend-completion defect. R8-G/R8-H history above is unchanged.
+
+## P0-1 Assessment Verified Identity Closure
+
+- Baseline: `2911a54a1b0e1cfdf0ff2610d15d2489a7cca8fa` (origin/main at task start).
+- Defect: `questionBankRoutes` + `examBlueprintRoutes` mounted with
+  `schoolAuthMiddleware` only and derived authoritative actor/school
+  identity from `extractMockAssessmentActorContext` (`x-school-id` /
+  `x-actor-id` / `x-actor-role` headers and body fields).
+- Affected mounts/routes: `/api/question-bank` mounts for `questionBank.ts`
+  (drafts, versions, parts, assets, answer-keys, rubrics, objective-mappings,
+  source-records, curriculum-validity, usage-eligibility, submit-approval,
+  ingestion, approval-requests, duplicate-candidates, exposure-holds, reads)
+  and `examBlueprint.ts` (blueprints, versions, requirements,
+  submit-approval, approve, draft-sets, reads).
+- Identity source: `schoolAuthMiddleware → requireVerifiedSchoolContext →
+  req.verifiedSchoolIdentity → extractVerifiedAssessmentActorContext →
+  AssessmentCommandContext → existing policy/enforcement` (unchanged).
+- Role mapping (explicit, fail-closed): `student → student`,
+  `teacher → teacher`, `school_admin → admin`; `unknown`,
+  `safeguarding_officer`, `system_admin`, `internal_operator` → denied
+  (`POLICY_BLOCKED`); no permissive default, no silent elevation.
+- Spoof rejection proof: body `schoolId` mismatch → 403
+  `SCHOOL_SCOPE_MISMATCH`; `x-school-id` mismatch → 403; actor/role header
+  and body fields ignored (verified actor/role preserved; student + spoofed
+  admin role still 403); missing auth → 401; missing school → 401
+  `SCHOOL_CONTEXT_REQUIRED`; unknown role → 403 `SCHOOL_CONTEXT_INVALID`.
+- Cross-school proof: real `GovernedQuestionCommandService` write lands
+  strictly in verified school with verified actor attribution; real
+  `QuestionApprovalService` pending scope returns school-A record to
+  school-A and empty to school-B.
+- Focused tests: `backend/src/tests/p0-assessment-verified-identity.test.ts`
+  12/12 PASS; affected regressions 214/214 PASS (question-bank packages 2–3,
+  exam-blueprint package 4, enforcement foundation).
+- TypeScript: 0 diagnostics in all task-owned files (repo-wide pre-existing
+  errors from undeclared `zod`/`@genkit-ai/*` modules unchanged;
+  intersection with task diff is empty). Prisma validate: PASS (stub env).
+  Build: `npm run build` blocked repo-wide by the same pre-existing missing
+  modules (no installs permitted); startup artifact
+  `backend/dist/backend/src/index.js` present from baseline; dist uncommitted.
+- Prior phases above unchanged.

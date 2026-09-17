@@ -356,12 +356,15 @@ app.use(
 );
 
 // ─── Question Bank Routes ───────────────────────────────
+// P0-1: verified school identity is required; actor/school context derives
+// exclusively from req.verifiedSchoolIdentity (never caller headers/body).
 import questionBankRoutes from './routes/questionBank';
-app.use('/api/question-bank', schoolAuthMiddleware, questionBankRoutes);
+app.use('/api/question-bank', schoolAuthMiddleware, requireVerifiedSchoolContext, questionBankRoutes);
 
 // ─── Exam Blueprint Routes (Package 4) ─────────────────
+// P0-1: verified school identity is required (same boundary as questionBank).
 import examBlueprintRoutes from './routes/examBlueprint';
-app.use('/api/question-bank', schoolAuthMiddleware, examBlueprintRoutes);
+app.use('/api/question-bank', schoolAuthMiddleware, requireVerifiedSchoolContext, examBlueprintRoutes);
 
 // ─── Question Bank Runtime Composition (Packages 5-26) ──
 import { createQuestionBankComposition } from './domains/assessment/runtime/questionBankRuntimeComposition';
