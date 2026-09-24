@@ -40,6 +40,11 @@ import { commitPracticeLearningEvidence } from '../practiceCanonicalLearningServ
 import { learnerMemoryService } from '../learnerMemoryService';
 import { spacedReviewService } from '../spacedReviewService';
 import { nextPracticeService } from '../nextPracticeService';
+import { practicePadProjectionReceiptStore } from './practicePadProjectionReceiptStore';
+import {
+  reconcilePracticePadLearningProjectionReceipt,
+  type PracticeProjectionProjectors,
+} from './practicePadProjectionReconciler';
 import type { ResolvedTutorIdentity } from '../tutorStateContracts';
 
 /** PP-10 performs zero live model/provider calls. */
@@ -629,6 +634,15 @@ export interface PP10CanonicalOverrides {
   loadTransferContext?: PP10IntegrateDeps['loadTransferContext'];
   /** Test seams only. Production defaults are the real canonical owners. */
   downstreamOwners?: Partial<PP10DownstreamOwners>;
+  /**
+   * Durable projection-receipt owner. Production default is the real
+   * PostgreSQL-backed practicePadProjectionReceiptStore. Test seam only
+   * overrides with an equivalent in-memory double.
+   */
+  receiptStore?: Pick<
+    typeof practicePadProjectionReceiptStore,
+    'ensureReceipt' | 'getReceipt' | 'markProjectionState'
+  >;
   clock?: () => string;
 }
 
@@ -894,6 +908,10 @@ export function __resolvePP10CanonicalBindings(overrides: PP10CanonicalOverrides
   memoryOwner: PP10DownstreamOwners['recordLearnerMemory'];
   revisionOwner: PP10DownstreamOwners['scheduleRevisionReview'];
   growthOwner: PP10DownstreamOwners['recommendGrowth'];
+  receiptStore: Pick<
+    typeof practicePadProjectionReceiptStore,
+    'ensureReceipt' | 'getReceipt' | 'markProjectionState'
+  >;
 } {
   const evidenceOwner =
     (overrides.evidenceOwner as { commitPracticeLearningEvidence?: typeof commitPracticeLearningEvidence } | undefined)
@@ -911,6 +929,7 @@ export function __resolvePP10CanonicalBindings(overrides: PP10CanonicalOverrides
     memoryOwner: overrides.downstreamOwners?.recordLearnerMemory ?? pp10RecordLearnerMemoryDefault,
     revisionOwner: overrides.downstreamOwners?.scheduleRevisionReview ?? pp10ScheduleRevisionReviewDefault,
     growthOwner: overrides.downstreamOwners?.recommendGrowth ?? pp10RecommendGrowthDefault,
+    receiptStore: overrides.receiptStore ?? practicePadProjectionReceiptStore,
   };
 }
 
@@ -926,11 +945,60 @@ function pp10TextLengthOfSnapshot(snapshot: { blocks?: Array<{ kind?: string; co
 }
 
 /**
+ * PP-10 → PP-12 safe projection candidate. Allowlist of scalar,
+ * already-admitted PP-10 facts ONLY. Never: raw PracticeDocument, raw
+ * handwriting/ink, hidden answers, tab destination, integrity
+ * accusation, chain of thought. The kernel candidate already carries
+ * rawWorkIncluded/rawInkIncluded=false; this allowlist is the second
+ * lock so even a future kernel field cannot leak into the receipt.
+ */
+export function buildPP10SafeProjectionCandidate(candidate: PP10EvidenceCandidate): Record<string, unknown> {
+  return {
+    attemptId: candidate.attemptId,
+    problemId: candidate.problemId,
+    problemVersion: candidate.problemVersion,
+    documentVersion: candidate.documentVersion,
+    checkId: candidate.checkId,
+    skillId: candidate.skillId,
+    curriculumRefs: candidate.curriculumRefs,
+    deterministicOutcome: candidate.deterministicOutcome,
+    firstDivergenceStepIndex: candidate.firstDivergenceStepIndex,
+    firstDivergenceReasonCode: candidate.firstDivergenceReasonCode,
+    confirmedPrefixCount: candidate.confirmedPrefixCount,
+    supportQuality: candidate.supportQuality,
+    recoveryClassification: candidate.recoveryClassification,
+    transferIndependent: candidate.transferIndependent,
+    transferReason: candidate.transferReason,
+    ledgerEventType: candidate.ledgerEventType,
+    masterySignal: candidate.masterySignal,
+    interpretationId: candidate.interpretationId,
+    interpretationSourceHash: candidate.interpretationSourceHash,
+    representationClass: candidate.representationClass,
+    integrityEvidenceId: candidate.integrityEvidenceId,
+    integrityConcern: candidate.integrityConcern,
+    integrityNextAction: candidate.integrityNextAction,
+    evidenceQualityNote: candidate.evidenceQualityNote,
+    createdAt: candidate.createdAt,
+  };
+}
+
+/**
  * ONE production Practice Pad learning-integration entry point.
  * Small public input; canonical owners bound internally; PP-09 really
  * evaluated; canonical evidence owner really invoked; durable owner
  * controls replay; no duplicate mastery; integrity hold survives the
  * canonical commit; zero model calls.
+ *
+ * Production law (PP-10 → PP-12):
+ *   canonical evidence commit
+ *   → durable PracticePadProjectionReceipt
+ *   → memory (durable memory=SUCCEEDED)
+ *   → revision (durable revision=SUCCEEDED)
+ *   → Growth (durable growth=SUCCEEDED)
+ * Projection execution runs through reconcilePracticePadLearningProjectionReceipt —
+ * the SAME single-receipt executor the bounded batch reconciler uses.
+ * Mastery is never invoked here: commitPracticeLearningEvidence already
+ * owns the one canonical mastery consequence.
  */
 export async function integratePracticePadLearningCanonical(
   input: PP10CanonicalInput,
@@ -1340,15 +1408,46 @@ export async function integratePracticePadLearningCanonical(
   kernelResult.candidate.representationClass = enrichedInterpretation.representationClass;
   if (canonicalDeduplicated) kernelResult.deduplicated = true;
 
+  // ── PP-12 durable projection receipt (production law). Canonical
+  // evidence is committed at this point; NOTHING downstream runs before
+  // one receipt is durably established. Deduplicated evidence replay
+  // binds/reuses the SAME receipt and retries pending projections —
+  // SUCCEEDED projections are never repeated (the shared executor owns
+  // that law; no JS Set/Map authority; the receipt is the authority).
+  const receiptStore = B.receiptStore;
+  const safeCandidateJson = JSON.stringify(buildPP10SafeProjectionCandidate(kernelResult.candidate));
+  let receiptKey: string;
+  try {
+    const receipt = await receiptStore.ensureReceipt({
+      schoolId: identity.schoolId,
+      studentId: identity.studentId,
+      attemptId: kernelResult.candidate.attemptId,
+      idempotencyKey: input.idempotencyKey,
+      committedEvidenceId: kernelResult.committedEvidenceId,
+      candidateJson: safeCandidateJson,
+    });
+    receiptKey = receipt.receiptKey;
+  } catch (err) {
+    // Receipt persistence failed: no optional projector runs; canonical
+    // evidence remains authoritative; failure is observable.
+    return {
+      ok: false,
+      code: 'DOWNSTREAM_PROJECTION_FAILED',
+      message: `Projection receipt persistence failed (${(err as Error)?.message}); canonical evidence ${kernelResult.committedEvidenceId} remains authoritative.`,
+      order: kernelResult.order,
+    };
+  }
+
   // ── Real downstream owners (existing canonical owners only), after
-  // the successful canonical evidence commit. Deduplicated replay
-  // never replays memory/revision/Growth consequences. Evidence commit
-  // failure never reaches this point (the kernel returned early). A
-  // downstream failure keeps the committed evidence authoritative and
-  // returns DOWNSTREAM_PROJECTION_FAILED with no fake rollback.
+  // the successful canonical evidence commit AND the durable receipt.
+  // Deduplicated replay never repeats a SUCCEEDED projection; pending
+  // projections are retried through the same shared executor the batch
+  // reconciler uses. Evidence commit failure never reaches this point
+  // (the kernel returned early). A downstream failure keeps the
+  // committed evidence authoritative and returns
+  // DOWNSTREAM_PROJECTION_FAILED with no fake rollback.
   // Mastery is never invoked here: commitPracticeLearningEvidence
   // already owns the one canonical mastery consequence.
-  if (canonicalDeduplicated) return kernelResult;
   const factsAttempt = await loadAttemptOnce().catch(() => null);
   const facts: PP10AdmittedLearningFacts = {
     committedEvidenceId: kernelResult.committedEvidenceId,
@@ -1365,26 +1464,62 @@ export async function integratePracticePadLearningCanonical(
     recoveryClassification: kernelResult.candidate.recoveryClassification,
     transferIndependent: kernelResult.candidate.transferIndependent,
   };
+  // Held evidence (MODERATE concern without independent transfer)
+  // still commits the math truth but defers the strong memory
+  // projection to transfer; revision/Growth receive the admitted
+  // contextual evidence. The deferred memory stage resolves here as a
+  // no-effect step (never a fabricated owner call).
+  const heldForTransfer = kernelResult.evidenceHeldForTransfer === true;
+  const execProjectors: PracticeProjectionProjectors = {
+    memory: heldForTransfer
+      ? async () => undefined
+      : async () => {
+          await B.memoryOwner(identity, facts);
+        },
+    revision: async () => {
+      await B.revisionOwner(identity, facts);
+    },
+    growth: async () => {
+      await B.growthOwner(identity, facts);
+    },
+  };
   try {
-    // Held evidence (MODERATE concern without independent transfer)
-    // still commits the math truth but defers the strong memory
-    // projection to transfer; revision/Growth receive the admitted
-    // contextual evidence.
-    if (!kernelResult.evidenceHeldForTransfer) {
-      await B.memoryOwner(identity, facts);
-      kernelResult.order.push('memory owner consequence');
+    // Fresh read: a replay whose receipt already completed (or a faster
+    // concurrent run) must observe current durable truth, not a stale copy.
+    const current = (await receiptStore.getReceipt(receiptKey)) ?? null;
+    if (!current) {
+      return {
+        ok: false,
+        code: 'DOWNSTREAM_PROJECTION_FAILED',
+        message: `Projection receipt missing after ensure; canonical evidence ${kernelResult.committedEvidenceId} remains authoritative.`,
+        order: kernelResult.order,
+      };
     }
-    await B.revisionOwner(identity, facts);
-    kernelResult.order.push('revision owner consequence');
-    await B.growthOwner(identity, facts);
-    kernelResult.order.push('Growth owner consequence');
+    const projectionOutcome = await reconcilePracticePadLearningProjectionReceipt({
+      store: receiptStore,
+      receipt: current,
+      projectors: execProjectors,
+    });
+    if (projectionOutcome !== 'COMPLETED') {
+      return {
+        ok: false,
+        code: 'DOWNSTREAM_PROJECTION_FAILED',
+        message: `Downstream projection ${projectionOutcome}; committed evidence ${kernelResult.committedEvidenceId} remains authoritative.`,
+        order: kernelResult.order,
+      };
+    }
   } catch (err) {
     return {
       ok: false,
       code: 'DOWNSTREAM_PROJECTION_FAILED',
-      message: `Downstream owner threw (${(err as Error).message}); committed evidence remains authoritative.`,
+      message: `Downstream projection failed (${(err as Error)?.message}); committed evidence ${kernelResult.committedEvidenceId} remains authoritative.`,
       order: kernelResult.order,
     };
   }
+  if (!heldForTransfer) {
+    kernelResult.order.push('memory owner consequence');
+  }
+  kernelResult.order.push('revision owner consequence');
+  kernelResult.order.push('Growth owner consequence');
   return kernelResult;
 }

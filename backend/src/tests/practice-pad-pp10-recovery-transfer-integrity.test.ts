@@ -1,11 +1,13 @@
 // PP-10 (B): recovery / transfer / integrity integration. No DB, no models.
 import { describe, it, expect, vi } from 'vitest';
+import { createHash } from 'crypto';
 
 vi.mock('../lib/prisma', () => ({
   default: { $queryRaw: vi.fn(), $executeRawUnsafe: vi.fn(), $queryRawUnsafe: vi.fn() },
 }));
 
 import { integratePracticePadLearning, PP10_LIVE_MODEL_CALLS } from '../services/practicePadRuntime/practicePadLearningIntegrationService';
+import type { PracticeProjectionReceipt } from '../services/practicePadRuntime/practicePadProjectionReceiptStore';
 import type { PracticePadCheckResult } from '../services/practicePadRuntime/practicePadCheckContracts';
 import { evaluatePracticeIntegrity } from '../services/practicePadRuntime/practicePadIntegrityEngine';
 import { practicePadIntegrityStore } from '../services/practicePadRuntime/practicePadIntegrityStore';
@@ -227,10 +229,15 @@ function prodBindingsB(current: PracticePadCheckResult, history: PracticePadChec
   // Downstream-owner seam: production binds the real canonical owners;
   // tests record admitted-facts calls without touching a database.
   const downstreamCalls: Array<{ owner: string; facts: unknown }> = [];
+  // Final-seal seam: PP-10 canonical durably establishes a projection
+  // receipt before projectors; tests use this in-memory double (same
+  // semantics as the PP-12 store) without touching a database.
+  const receiptStore = createFakeReceiptStoreB();
   return {
     evidence,
     integrityCalls,
     downstreamCalls,
+    receiptStore,
     overrides: {
       checkStore: {
         findByCheckId: async (attemptId: string, checkId: string) =>
@@ -270,6 +277,74 @@ function prodBindingsB(current: PracticePadCheckResult, history: PracticePadChec
         scheduleRevisionReview: async (_id: unknown, facts: unknown) => { downstreamCalls.push({ owner: 'revision', facts }); },
         recommendGrowth: async (_id: unknown, facts: unknown) => { downstreamCalls.push({ owner: 'growth', facts }); },
       },
+      receiptStore: receiptStore as never,
+    },
+  };
+}
+
+/** In-memory PP-12 receipt double with production-equivalent semantics. */
+function createFakeReceiptStoreB() {
+  const rows = new Map<string, PracticeProjectionReceipt>();
+  const nowIso = () => new Date().toISOString();
+  const keyFor = (attemptId: string, idempotencyKey: string) =>
+    createHash('sha256').update(`${attemptId}::${idempotencyKey}`).digest('hex');
+  return {
+    rows,
+    async ensureReceipt(input: {
+      schoolId: string;
+      studentId: string;
+      attemptId: string;
+      idempotencyKey: string;
+      committedEvidenceId?: string | null;
+      candidateJson?: string | null;
+    }): Promise<PracticeProjectionReceipt> {
+      const receiptKey = keyFor(input.attemptId, input.idempotencyKey);
+      const existing = rows.get(receiptKey);
+      if (!existing) {
+        const row: PracticeProjectionReceipt = {
+          receiptKey,
+          schoolId: input.schoolId,
+          studentId: input.studentId,
+          attemptId: input.attemptId,
+          idempotencyKey: input.idempotencyKey,
+          committedEvidenceId: input.committedEvidenceId ?? null,
+          candidateJson: input.candidateJson ?? '{}',
+          memoryState: 'PENDING',
+          revisionState: 'PENDING',
+          growthState: 'PENDING',
+          lastErrorJson: null,
+          claimedBy: null,
+          claimedAt: null,
+          createdAt: nowIso(),
+          updatedAt: nowIso(),
+        };
+        rows.set(receiptKey, row);
+        return { ...row };
+      }
+      if (input.committedEvidenceId && !existing.committedEvidenceId) {
+        existing.committedEvidenceId = input.committedEvidenceId;
+        if (input.candidateJson != null) existing.candidateJson = input.candidateJson;
+        existing.updatedAt = nowIso();
+      }
+      return { ...existing };
+    },
+    async getReceipt(receiptKey: string): Promise<PracticeProjectionReceipt | null> {
+      const row = rows.get(receiptKey);
+      return row ? { ...row } : null;
+    },
+    async markProjectionState(
+      receiptKey: string,
+      projection: 'memory' | 'revision' | 'growth',
+      state: 'PENDING' | 'SUCCEEDED' | 'FAILED',
+      errorMessage?: string | null,
+    ): Promise<PracticeProjectionReceipt | null> {
+      const row = rows.get(receiptKey);
+      if (!row) return null;
+      const column = projection === 'memory' ? 'memoryState' : projection === 'revision' ? 'revisionState' : 'growthState';
+      row[column] = state;
+      row.lastErrorJson = state === 'FAILED' ? JSON.stringify({ message: String(errorMessage || 'projection failed').slice(0, 500) }) : null;
+      row.updatedAt = nowIso();
+      return { ...row };
     },
   };
 }
@@ -490,6 +565,7 @@ function txBindings(transfers: TxTransferAttempt[]) {
       recommendGrowth: async (_id: unknown, facts: unknown) => { downstreamCalls.push({ owner: 'growth', facts }); },
     },
     // Deliberately NO loadTransferContext: production derives from backend state.
+    receiptStore: createFakeReceiptStoreB() as never,
   };
   return { evidence, downstreamCalls, overrides };
 }

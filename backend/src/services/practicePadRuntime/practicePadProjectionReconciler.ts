@@ -141,7 +141,12 @@ export async function reconcilePracticePadLearningProjections(args: {
     }
     result.processed += 1;
     try {
-      const outcome = await reconcileOneReceipt(store, receipt, args.projectors, result.projectorCalls);
+      const outcome = await reconcilePracticePadLearningProjectionReceipt({
+        store,
+        receipt,
+        projectors: args.projectors,
+        projectorCalls: result.projectorCalls,
+      });
       if (outcome === 'COMPLETED') result.completed += 1;
       else result.failed += 1;
       const current = await store.getReceipt(receipt.receiptKey);
@@ -165,12 +170,30 @@ export async function reconcilePracticePadLearningProjections(args: {
   return result;
 }
 
-async function reconcileOneReceipt(
-  store: typeof practicePadProjectionReceiptStore,
-  receipt: PracticeProjectionReceipt,
-  projectors: PracticeProjectionProjectors,
-  calls: Record<PracticeProjectionName, number>,
-): Promise<'COMPLETED' | 'PARTIAL' | 'FAILED'> {
+export type PracticeReceiptStoreForReconcile = Pick<
+  typeof practicePadProjectionReceiptStore,
+  'getReceipt' | 'markProjectionState'
+>;
+
+/**
+ * ONE single-receipt projection executor shared by BOTH:
+ *   A. immediate production PP-10 execution (newly committed/current receipt)
+ *   B. later bounded batch reconciliation (restart/manual path below)
+ *
+ * Ordering policy (explicit): memory → revision → Growth, strictly in
+ * order. A FAILED projection blocks later projections in the same run;
+ * they stay PENDING. Retry resumes at the first non-SUCCEEDED projection
+ * and NEVER repeats a SUCCEEDED one. Canonical evidence is never deleted
+ * or rolled back here.
+ */
+export async function reconcilePracticePadLearningProjectionReceipt(args: {
+  store: PracticeReceiptStoreForReconcile;
+  receipt: PracticeProjectionReceipt;
+  projectors: PracticeProjectionProjectors;
+  projectorCalls?: Record<PracticeProjectionName, number>;
+}): Promise<'COMPLETED' | 'PARTIAL' | 'FAILED'> {
+  let receipt = args.receipt;
+  const calls = args.projectorCalls;
   let candidate: unknown = {};
   try {
     candidate = JSON.parse(receipt.candidateJson || '{}');
@@ -186,13 +209,13 @@ async function reconcileOneReceipt(
     const state = receipt[`${name}State` as const];
     if (state === 'SUCCEEDED') continue; // never repeat success
     try {
-      calls[name] += 1;
-      await projectors[name](admitted);
-      const updated = await store.markProjectionState(receipt.receiptKey, name, 'SUCCEEDED');
+      if (calls) calls[name] += 1;
+      await args.projectors[name](admitted);
+      const updated = await args.store.markProjectionState(receipt.receiptKey, name, 'SUCCEEDED');
       if (updated) receipt = updated;
     } catch (err) {
       failed = name;
-      const updated = await store.markProjectionState(
+      const updated = await args.store.markProjectionState(
         receipt.receiptKey,
         name,
         'FAILED',
@@ -202,7 +225,7 @@ async function reconcileOneReceipt(
       break; // ordering policy: later projections wait for retry
     }
   }
-  const current = await store.getReceipt(receipt.receiptKey);
+  const current = await args.store.getReceipt(receipt.receiptKey);
   const allSucceeded =
     current?.memoryState === 'SUCCEEDED' &&
     current?.revisionState === 'SUCCEEDED' &&

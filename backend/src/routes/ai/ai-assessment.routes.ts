@@ -24,6 +24,7 @@ import {
   authorizePracticePadIdentity,
   checkPracticePadStepCanonical,
 } from '../../services/practicePadRuntime/practicePadCheckRuntime';
+import { integratePracticePadLearningCanonical } from '../../services/practicePadRuntime/practicePadLearningIntegrationService';
 import { practiceAttemptService } from '../../services/practiceAttemptService';
 import { practicePadWorkVersionStore } from '../../services/practicePadRuntime/practicePadWorkVersionStore';
 import {
@@ -248,7 +249,57 @@ router.post('/practice-pad/check-step', schoolAuthMiddleware, requireVerifiedSch
     // Learner-safe projection: the canonical result contains no protected
     // answer material by construction (expected answers never leave the
     // problem authority).
-    return res.status(200).send(outcome.result);
+    //
+    // PP-10 end-to-end wiring: after a canonical check has successfully
+    // persisted, the real student-facing path invokes the accepted
+    // production learning integration with SERVER-OWNED identities only
+    // (outcome.result.checkId / outcome.result.attemptId + verified
+    // backend identity; never a client-supplied checkId) and a
+    // backend-stable idempotency key derived from the canonical check
+    // identity (never Date.now()). Only evidence-admitting checks
+    // (current feedback + non-null evidence candidate) integrate;
+    // clarification / unsupported / non-evidence checks never fabricate
+    // learning state. PracticeCheck feedback truth and learning-state
+    // mutation stay distinct: a protected PP-10 failure preserves the
+    // durable check, logs bounded identifiers + code (never raw learner
+    // work), and leaves mathematical correctness untouched. The
+    // integration result stays truthful and observable via
+    // `learningIntegration`.
+    let learningIntegration: { ok: boolean; code?: string } | undefined;
+    if (outcome.result.currentFeedbackEligible === true && outcome.result.evidenceCandidate != null) {
+      try {
+        const integration = await integratePracticePadLearningCanonical({
+          identity: auth.identity,
+          attemptId: outcome.result.attemptId,
+          checkId: outcome.result.checkId,
+          idempotencyKey: `practice-pad-learning:${outcome.result.checkId}`,
+        });
+        if (integration && integration.ok) {
+          learningIntegration = { ok: true };
+        } else if (integration && !integration.ok) {
+          learningIntegration = { ok: false, code: integration.code };
+          logger.error(
+            {
+              attemptId: outcome.result.attemptId,
+              checkId: outcome.result.checkId,
+              code: integration.code,
+            },
+            '[POST /practice-pad/check-step] PP-10 learning integration failed; durable check preserved',
+          );
+        }
+      } catch (err) {
+        learningIntegration = { ok: false, code: 'LEARNING_INTEGRATION_ERROR' };
+        logger.error(
+          {
+            attemptId: outcome.result.attemptId,
+            checkId: outcome.result.checkId,
+            message: (err as Error)?.message,
+          },
+          '[POST /practice-pad/check-step] PP-10 learning integration threw; durable check preserved',
+        );
+      }
+    }
+    return res.status(200).send(learningIntegration ? { ...outcome.result, learningIntegration } : outcome.result);
   } catch (error) {
     logger.error({ err: error }, '[POST /practice-pad/check-step] Failed');
     res.status(500).send({ message: 'Step check failed', currentFeedbackEligible: false });

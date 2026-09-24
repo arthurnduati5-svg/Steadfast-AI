@@ -1,5 +1,6 @@
 // PP-10 (A): canonical learning integration proofs. No DB, no models.
 import { describe, it, expect, vi } from 'vitest';
+import { createHash } from 'crypto';
 
 vi.mock('../lib/prisma', () => ({
   default: {
@@ -169,6 +170,14 @@ import {
   pp10StableClientRequestId,
   __resolvePP10CanonicalBindings,
 } from '../services/practicePadRuntime/practicePadLearningIntegrationService';
+import {
+  reconcilePracticePadLearningProjections,
+  reconcilePracticePadLearningProjectionReceipt,
+} from '../services/practicePadRuntime/practicePadProjectionReconciler';
+import {
+  practicePadProjectionReceiptStore,
+  type PracticeProjectionReceipt,
+} from '../services/practicePadRuntime/practicePadProjectionReceiptStore';
 import { practicePadCheckStore } from '../services/practicePadRuntime/practicePadCheckStore';
 import { practiceAttemptService } from '../services/practiceAttemptService';
 import { practicePadProblemAuthority } from '../services/practicePadRuntime/practicePadProblemAuthority';
@@ -230,6 +239,7 @@ function fakeEvidenceOwner() {
 function prodBindings(current: PracticePadCheckResult, history: PracticePadCheckResult[], extra: Record<string, unknown> = {}) {
   const evidence = fakeEvidenceOwner();
   const integrityCalls: Array<{ readers: Record<string, unknown> }> = [];
+  const receiptStore = (extra.receiptStore as unknown) ?? createFakeReceiptStore();
   const revisions = [
     { revisionId: 'r1', version: 1, snapshot: { blocks: [{ blockId: 'b1', kind: 'TEXT', content: 'x=1 work trace' }] }, contentHash: 'h1' },
     { revisionId: 'r2', version: 2, snapshot: { blocks: [{ blockId: 'b1', kind: 'TEXT', content: 'x=1\nx=2 work trace long enough' }] }, contentHash: 'h2' },
@@ -241,6 +251,7 @@ function prodBindings(current: PracticePadCheckResult, history: PracticePadCheck
     evidence,
     integrityCalls,
     downstreamCalls,
+    receiptStore: receiptStore as ReturnType<typeof createFakeReceiptStore>,
     overrides: {
       checkStore: {
         findByCheckId: async (attemptId: string, checkId: string) =>
@@ -276,7 +287,104 @@ function prodBindings(current: PracticePadCheckResult, history: PracticePadCheck
         scheduleRevisionReview: async (_id: unknown, facts: unknown) => { downstreamCalls.push({ owner: 'revision', facts }); },
         recommendGrowth: async (_id: unknown, facts: unknown) => { downstreamCalls.push({ owner: 'growth', facts }); },
       },
+      receiptStore: receiptStore as never,
       ...extra,
+    },
+  };
+}
+
+/** In-memory PP-12 receipt double with production-equivalent semantics. */
+function createFakeReceiptStore() {
+  const rows = new Map<string, PracticeProjectionReceipt>();
+  const nowIso = () => new Date().toISOString();
+  const keyFor = (attemptId: string, idempotencyKey: string) =>
+    createHash('sha256').update(`${attemptId}::${idempotencyKey}`).digest('hex');
+  return {
+    rows,
+    async ensureReceipt(input: {
+      schoolId: string;
+      studentId: string;
+      attemptId: string;
+      idempotencyKey: string;
+      committedEvidenceId?: string | null;
+      candidateJson?: string | null;
+    }): Promise<PracticeProjectionReceipt> {
+      const receiptKey = keyFor(input.attemptId, input.idempotencyKey);
+      const existing = rows.get(receiptKey);
+      if (!existing) {
+        const row: PracticeProjectionReceipt = {
+          receiptKey,
+          schoolId: input.schoolId,
+          studentId: input.studentId,
+          attemptId: input.attemptId,
+          idempotencyKey: input.idempotencyKey,
+          committedEvidenceId: input.committedEvidenceId ?? null,
+          candidateJson: input.candidateJson ?? '{}',
+          memoryState: 'PENDING',
+          revisionState: 'PENDING',
+          growthState: 'PENDING',
+          lastErrorJson: null,
+          claimedBy: null,
+          claimedAt: null,
+          createdAt: nowIso(),
+          updatedAt: nowIso(),
+        };
+        rows.set(receiptKey, row);
+        return { ...row };
+      }
+      if (input.committedEvidenceId && !existing.committedEvidenceId) {
+        existing.committedEvidenceId = input.committedEvidenceId;
+        if (input.candidateJson != null) existing.candidateJson = input.candidateJson;
+        existing.updatedAt = nowIso();
+      }
+      return { ...existing };
+    },
+    async getReceipt(receiptKey: string): Promise<PracticeProjectionReceipt | null> {
+      const row = rows.get(receiptKey);
+      return row ? { ...row } : null;
+    },
+    async markProjectionState(
+      receiptKey: string,
+      projection: 'memory' | 'revision' | 'growth',
+      state: 'PENDING' | 'SUCCEEDED' | 'FAILED',
+      errorMessage?: string | null,
+    ): Promise<PracticeProjectionReceipt | null> {
+      const row = rows.get(receiptKey);
+      if (!row) return null;
+      const column = projection === 'memory' ? 'memoryState' : projection === 'revision' ? 'revisionState' : 'growthState';
+      row[column] = state;
+      row.lastErrorJson = state === 'FAILED' ? JSON.stringify({ message: String(errorMessage || 'projection failed').slice(0, 500) }) : null;
+      row.updatedAt = nowIso();
+      return { ...row };
+    },
+    async findByCommittedEvidenceId(committedEvidenceId: string): Promise<PracticeProjectionReceipt | null> {
+      for (const row of rows.values()) {
+        if (row.committedEvidenceId === committedEvidenceId) return { ...row };
+      }
+      return null;
+    },
+    async claimReceipt(receiptKey: string, workerId: string): Promise<boolean> {
+      const row = rows.get(receiptKey);
+      if (!row || row.claimedBy) return false;
+      row.claimedBy = workerId;
+      return true;
+    },
+    async releaseClaim(receiptKey: string, workerId: string): Promise<void> {
+      const row = rows.get(receiptKey);
+      if (row && row.claimedBy === workerId) row.claimedBy = null;
+    },
+    async listIncomplete(limit: number): Promise<PracticeProjectionReceipt[]> {
+      const out: PracticeProjectionReceipt[] = [];
+      for (const row of rows.values()) {
+        if (
+          row.committedEvidenceId &&
+          (row.memoryState !== 'SUCCEEDED' || row.revisionState !== 'SUCCEEDED' || row.growthState !== 'SUCCEEDED')
+        ) {
+          out.push({ ...row });
+        }
+        if (out.length >= limit) break;
+      }
+      return out;
     },
   };
 }
@@ -292,6 +400,7 @@ describe('PP-10 production binding', () => {
     expect(B.interpretationStore).toBe(practicePadInterpretationStore);
     expect(B.integrityEvaluator).toBe(evaluatePracticeIntegrity);
     expect(B.evidenceOwner).toBe(commitPracticeLearningEvidence);
+    expect(B.receiptStore).toBe(practicePadProjectionReceiptStore);
   });
 
   it('stable logical identity; identical replay uses canonical dedup with no duplicate downstream state', async () => {
@@ -625,6 +734,277 @@ describe('PP-10 blocker repair (A): fail-closed truth + real owners', () => {
   });
 
   it('14. zero live model calls', () => {
+    expect(PP10_LIVE_MODEL_CALLS).toBe(0);
+  });
+});
+
+// ── PP-10 → PP-12 final seal: durable receipt before projectors,
+// shared single-receipt executor, replay law, failure truth. ──
+
+const SEAL_ID = { schoolId: 's-pp10', studentId: 'l-pp10', verifiedSchool: true };
+
+function sealCheck(over: Partial<PracticePadCheckResult> = {}): PracticePadCheckResult {
+  return {
+    checkId: 'chk-seal', attemptId: 'att-seal', basedOnVersion: 2, status: 'CONFIRMED_CORRECT',
+    deterministicVerdict: 'correct', confirmedCorrectSteps: ['x = 1', 'x = 2'],
+    confidence: 0.95, checkerPath: 'deterministic_exact', evidenceCandidate: null,
+    misconceptionCandidate: null, currentFeedbackEligible: true, deduplicated: false,
+    createdAt: '2026-09-23T00:00:00.000Z', ...over,
+  };
+}
+
+function sealRecord(c: PracticePadCheckResult) {
+  return {
+    scopeHash: `scope-${c.checkId}`, checkId: c.checkId, schoolId: 's-pp10', studentId: 'l-pp10',
+    attemptId: c.attemptId, basedOnVersion: c.basedOnVersion, idempotencyKey: `k-${c.checkId}`,
+    fingerprint: `fp-${c.checkId}`, status: c.status, evaluationMode: 'deterministic' as const,
+    evidenceEligible: true, resultJson: JSON.stringify(c),
+    createdAt: '2026-09-23T00:00:00.000Z', resolvedAt: '2026-09-23T00:00:00.000Z',
+  };
+}
+
+/** Canonical bindings for the seal attempt/check identity. */
+function sealBindings(current: PracticePadCheckResult, extra: Record<string, unknown> = {}) {
+  const evidence = fakeEvidenceOwner();
+  const receiptStore = (extra.receiptStore as unknown) ?? createFakeReceiptStore();
+  const downstreamCalls: Array<{ owner: string; facts: unknown }> = [];
+  const revisions = [
+    { revisionId: 'r1', version: 1, snapshot: { blocks: [{ blockId: 'b1', kind: 'TEXT', content: 'x=1 work trace' }] }, contentHash: 'h1' },
+    { revisionId: 'r2', version: 2, snapshot: { blocks: [{ blockId: 'b1', kind: 'TEXT', content: 'x=1\nx=2 work trace long enough' }] }, contentHash: 'h2' },
+  ];
+  return {
+    evidence,
+    downstreamCalls,
+    receiptStore: receiptStore as ReturnType<typeof createFakeReceiptStore>,
+    overrides: {
+      checkStore: {
+        findByCheckId: async (attemptId: string, checkId: string) =>
+          checkId === current.checkId && attemptId === current.attemptId ? sealRecord(current) : null,
+        listByAttempt: async () => [sealCheck({ checkId: 'chk-seal-0', basedOnVersion: 1 })].map(sealRecord),
+      },
+      attemptOwner: {
+        getPracticeAttempt: async () => ({
+          attemptId: 'att-seal', schoolId: 's-pp10', studentId: 'l-pp10',
+          problemId: 'p-seal', problemVersion: 1, skillIds: ['skill-seal'],
+          subject: null, topic: null,
+        }),
+      },
+      problemAuthority: {
+        resolveForAttemptAsync: async () => ({
+          problem: { problemId: 'p-seal' },
+          learnerView: { problemId: 'p-seal' },
+          hasAuthoritativeAnswer: true, problemVersion: 1, durable: true,
+        }),
+      },
+      documentStore: {
+        getDocument: async () => ({ currentVersion: 2 }),
+        getRevision: async (_id: unknown, _att: unknown, version: number) => revisions.find((r) => r.version === version) ?? null,
+      },
+      interpretationStore: { getInterpretation: async () => null },
+      integrityEvaluator: (async () => ({ ok: true as const, evidence: null })) as unknown as typeof evaluatePracticeIntegrity,
+      evidenceOwner: { commitPracticeLearningEvidence: evidence.commit },
+      downstreamOwners: {
+        recordLearnerMemory: async (_id: unknown, facts: unknown) => { downstreamCalls.push({ owner: 'memory', facts }); },
+        scheduleRevisionReview: async (_id: unknown, facts: unknown) => { downstreamCalls.push({ owner: 'revision', facts }); },
+        recommendGrowth: async (_id: unknown, facts: unknown) => { downstreamCalls.push({ owner: 'growth', facts }); },
+      },
+      receiptStore: receiptStore as never,
+      ...extra,
+    },
+  };
+}
+
+const SEAL_SAFE_KEYS = [
+  'attemptId', 'problemId', 'problemVersion', 'documentVersion', 'checkId', 'skillId',
+  'curriculumRefs', 'deterministicOutcome', 'firstDivergenceStepIndex', 'firstDivergenceReasonCode',
+  'confirmedPrefixCount', 'supportQuality', 'recoveryClassification', 'transferIndependent',
+  'transferReason', 'ledgerEventType', 'masterySignal', 'interpretationId',
+  'interpretationSourceHash', 'representationClass', 'integrityEvidenceId', 'integrityConcern',
+  'integrityNextAction', 'evidenceQualityNote', 'createdAt',
+].sort();
+
+describe('PP-10 → PP-12 final seal', () => {
+  it('commit precedes receipt; receipt precedes memory/revision/Growth; receipt carries only the safe candidate', async () => {
+    const built = sealBindings(sealCheck());
+    const order: string[] = [];
+    const origCommit = built.evidence.commit;
+    (built.overrides as { evidenceOwner: object }).evidenceOwner = {
+      commitPracticeLearningEvidence: (async (input: Parameters<typeof commitPracticeLearningEvidence>[0]) => {
+        order.push('commit');
+        return origCommit(input);
+      }) as typeof commitPracticeLearningEvidence,
+    };
+    const innerStore = built.receiptStore;
+    const origEnsure = innerStore.ensureReceipt.bind(innerStore);
+    (built.overrides as { receiptStore: object }).receiptStore = {
+      ensureReceipt: async (input: Parameters<ReturnType<typeof createFakeReceiptStore>['ensureReceipt']>[0]) => {
+        order.push('receipt');
+        return origEnsure(input);
+      },
+      getReceipt: (...a: Parameters<ReturnType<typeof createFakeReceiptStore>['getReceipt']>) => innerStore.getReceipt(...a),
+      markProjectionState: (...a: Parameters<ReturnType<typeof createFakeReceiptStore>['markProjectionState']>) =>
+        innerStore.markProjectionState(...a),
+    };
+    const res = await integratePracticePadLearningCanonical(
+      { identity: SEAL_ID, attemptId: 'att-seal', checkId: 'chk-seal', idempotencyKey: 'practice-pad-learning:chk-seal' },
+      built.overrides as never,
+    );
+    expect(res.ok).toBe(true);
+    if (!res.ok) return;
+    // Canonical evidence commit occurs before receipt/projectors.
+    expect(order).toEqual(['commit', 'receipt']);
+    expect(res.order.indexOf('canonical evidence commit')).toBeLessThan(res.order.indexOf('memory owner consequence'));
+    expect(built.downstreamCalls.map((c) => c.owner)).toEqual(['memory', 'revision', 'growth']);
+    // Receipt is durably established with server-owned identity + committed evidence.
+    const receipt = await innerStore.findByCommittedEvidenceId(res.committedEvidenceId);
+    expect(receipt).not.toBeNull();
+    expect(receipt!.schoolId).toBe('s-pp10');
+    expect(receipt!.studentId).toBe('l-pp10');
+    expect(receipt!.attemptId).toBe('att-seal');
+    expect(receipt!.idempotencyKey).toBe('practice-pad-learning:chk-seal');
+    expect(receipt!.memoryState).toBe('SUCCEEDED');
+    expect(receipt!.revisionState).toBe('SUCCEEDED');
+    expect(receipt!.growthState).toBe('SUCCEEDED');
+    // candidateJson carries ONLY the already-admitted safe candidate.
+    const candidate = JSON.parse(receipt!.candidateJson) as Record<string, unknown>;
+    expect(Object.keys(candidate).sort()).toEqual(SEAL_SAFE_KEYS);
+    expect(JSON.stringify(candidate)).not.toMatch(/stroke|pathM|inkPoints|workText|snapshot|blocks|contentHash|tab-|chain of thought|accus|hidden answer|\bink\b/i);
+  });
+
+  it('memory SUCCEEDED + revision FAILED + Growth PENDING; replay retries revision without repeating memory', async () => {
+    const built = sealBindings(sealCheck());
+    (built.overrides as { downstreamOwners: object }).downstreamOwners = {
+      recordLearnerMemory: async (_id: unknown, facts: unknown) => { built.downstreamCalls.push({ owner: 'memory', facts }); },
+      scheduleRevisionReview: async (_id: unknown, facts: unknown) => {
+        built.downstreamCalls.push({ owner: 'revision-attempted', facts });
+        throw new Error('revision owner outage (injected)');
+      },
+      recommendGrowth: async (_id: unknown, facts: unknown) => { built.downstreamCalls.push({ owner: 'growth', facts }); },
+    };
+    const input = { identity: SEAL_ID, attemptId: 'att-seal', checkId: 'chk-seal', idempotencyKey: 'practice-pad-learning:chk-seal' };
+    const failed = await integratePracticePadLearningCanonical(input, built.overrides as never);
+    expect(failed.ok).toBe(false);
+    if (failed.ok) return;
+    expect(failed.code).toBe('DOWNSTREAM_PROJECTION_FAILED');
+    // Canonical evidence remains committed (exactly one commit, one mastery).
+    expect(built.evidence.writes).toBe(1);
+    expect(built.evidence.masteryApplications).toBe(1);
+    const partial = [...built.receiptStore.rows.values()][0]!;
+    expect(partial.memoryState).toBe('SUCCEEDED');
+    expect(partial.revisionState).toBe('FAILED');
+    expect(partial.growthState).toBe('PENDING');
+    // Same canonical check replay: canonical evidence deduplicates, memory
+    // is NOT repeated, revision is retried, then Growth succeeds.
+    (built.overrides as { downstreamOwners: object }).downstreamOwners = {
+      recordLearnerMemory: async (_id: unknown, facts: unknown) => { built.downstreamCalls.push({ owner: 'memory', facts }); },
+      scheduleRevisionReview: async (_id: unknown, facts: unknown) => { built.downstreamCalls.push({ owner: 'revision', facts }); },
+      recommendGrowth: async (_id: unknown, facts: unknown) => { built.downstreamCalls.push({ owner: 'growth', facts }); },
+    };
+    const healed = await integratePracticePadLearningCanonical(input, built.overrides as never);
+    expect(healed.ok).toBe(true);
+    if (!healed.ok) return;
+    expect(healed.deduplicated).toBe(true);
+    expect(healed.committedEvidenceId).toBe(partial.committedEvidenceId);
+    expect(built.downstreamCalls.filter((c) => c.owner === 'memory')).toHaveLength(1);
+    expect(built.downstreamCalls.filter((c) => c.owner === 'revision')).toHaveLength(1);
+    expect(built.downstreamCalls.filter((c) => c.owner === 'growth')).toHaveLength(1);
+    expect(built.evidence.writes).toBe(1);
+    expect(built.evidence.masteryApplications).toBe(1);
+    const final = [...built.receiptStore.rows.values()][0]!;
+    expect(final.memoryState).toBe('SUCCEEDED');
+    expect(final.revisionState).toBe('SUCCEEDED');
+    expect(final.growthState).toBe('SUCCEEDED');
+    // Completed replay duplicates no downstream projection.
+    const callsBefore = built.downstreamCalls.length;
+    const quiet = await integratePracticePadLearningCanonical(input, built.overrides as never);
+    expect(quiet.ok).toBe(true);
+    expect(built.downstreamCalls).toHaveLength(callsBefore);
+    expect(built.evidence.writes).toBe(1);
+  });
+
+  it('batch reconciler shares the same single-receipt executor and heals canonical partial receipts', async () => {
+    expect(typeof reconcilePracticePadLearningProjectionReceipt).toBe('function');
+    const built = sealBindings(sealCheck());
+    (built.overrides as { downstreamOwners: object }).downstreamOwners = {
+      recordLearnerMemory: async () => undefined,
+      scheduleRevisionReview: async () => { throw new Error('revision owner outage (injected)'); },
+      recommendGrowth: async () => undefined,
+    };
+    const input = { identity: SEAL_ID, attemptId: 'att-seal', checkId: 'chk-seal', idempotencyKey: 'practice-pad-learning:chk-seal' };
+    const failed = await integratePracticePadLearningCanonical(input, built.overrides as never);
+    expect(failed.ok).toBe(false);
+    const calls = { memory: 0, revision: 0, growth: 0 };
+    const healed = await reconcilePracticePadLearningProjections({
+      store: built.receiptStore as never,
+      projectors: {
+        memory: async () => { calls.memory += 1; },
+        revision: async () => { calls.revision += 1; },
+        growth: async () => { calls.growth += 1; },
+      },
+      batchSize: 25,
+      workerId: 'seal-batch',
+    });
+    expect(healed.processed).toBeGreaterThanOrEqual(1);
+    // Memory is NOT repeated; only failed revision + pending Growth ran.
+    expect(calls.memory).toBe(0);
+    expect(calls.revision).toBe(1);
+    expect(calls.growth).toBe(1);
+    const final = [...built.receiptStore.rows.values()][0]!;
+    expect(final.memoryState).toBe('SUCCEEDED');
+    expect(final.revisionState).toBe('SUCCEEDED');
+    expect(final.growthState).toBe('SUCCEEDED');
+    // A quiet batch run performs zero duplicate effects.
+    const quiet = await reconcilePracticePadLearningProjections({
+      store: built.receiptStore as never,
+      projectors: {
+        memory: async () => { calls.memory += 1; },
+        revision: async () => { calls.revision += 1; },
+        growth: async () => { calls.growth += 1; },
+      },
+      batchSize: 25,
+      workerId: 'seal-batch-quiet',
+    });
+    expect(quiet.processed).toBe(0);
+    expect(calls).toEqual({ memory: 0, revision: 1, growth: 1 });
+  });
+
+  it('receipt persistence failure runs no projector and keeps evidence authoritative', async () => {
+    const throwing = {
+      ensureReceipt: async (): Promise<never> => { throw new Error('receipt store down (injected)'); },
+      getReceipt: async (): Promise<null> => null,
+      markProjectionState: async (): Promise<null> => null,
+    };
+    const built = sealBindings(sealCheck(), { receiptStore: throwing });
+    const res = await integratePracticePadLearningCanonical(
+      { identity: SEAL_ID, attemptId: 'att-seal', checkId: 'chk-seal', idempotencyKey: 'practice-pad-learning:chk-seal' },
+      built.overrides as never,
+    );
+    expect(res.ok).toBe(false);
+    if (res.ok) return;
+    expect(res.code).toBe('DOWNSTREAM_PROJECTION_FAILED');
+    expect(built.downstreamCalls).toHaveLength(0);
+    // Canonical evidence remains authoritative: exactly one commit, no fake rollback.
+    expect(built.evidence.writes).toBe(1);
+  });
+
+  it('evidence commit failure creates no projection receipt and no downstream effects', async () => {
+    const built = sealBindings(sealCheck(), {
+      evidenceOwner: {
+        commitPracticeLearningEvidence: (async () => { throw new Error('evidence store down (injected)'); }) as never,
+      },
+    });
+    const res = await integratePracticePadLearningCanonical(
+      { identity: SEAL_ID, attemptId: 'att-seal', checkId: 'chk-seal', idempotencyKey: 'practice-pad-learning:chk-seal' },
+      built.overrides as never,
+    );
+    expect(res.ok).toBe(false);
+    if (res.ok) return;
+    expect(res.code).toBe('EVIDENCE_COMMIT_FAILED');
+    expect(built.receiptStore.rows.size).toBe(0);
+    expect(built.downstreamCalls).toHaveLength(0);
+  });
+
+  it('zero live model calls', () => {
     expect(PP10_LIVE_MODEL_CALLS).toBe(0);
   });
 });
