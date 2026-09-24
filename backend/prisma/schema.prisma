@@ -3609,6 +3609,8 @@ model PracticeAttempt {
   artifactId            String?
   artifactBlockId       String?
   sourceQuestionId      String?
+  problemId             String?
+  problemVersion        Int?
   hintsRequested        Int       @default(0)
   attemptNumber         Int       @default(1)
   timeSpentSeconds      Int?
@@ -3621,6 +3623,194 @@ model PracticeAttempt {
   @@index([artifactId])
   @@index([schoolId, studentId])
   @@index([schoolId, studentId, subject, topic])
+  @@index([status])
+}
+
+model PracticePadCheck {
+  scopeHash        String   @id
+  checkId          String
+  schoolId         String
+  studentId        String
+  attemptId        String
+  basedOnVersion   Int
+  idempotencyKey   String
+  fingerprint      String
+  status           String
+  evaluationMode   String
+  evidenceEligible Boolean  @default(false)
+  resultJson       String
+  createdAt        DateTime @default(now())
+  resolvedAt       DateTime @default(now())
+
+  @@unique([attemptId, basedOnVersion, idempotencyKey], map: "PracticePadCheck_attempt_version_key_uidx")
+  @@index([attemptId])
+  @@index([schoolId, studentId])
+}
+
+model PracticePadWorkVersion {
+  attemptId String   @id
+  version   Int
+  updatedAt DateTime @default(now())
+}
+
+model PracticePadDocument {
+  documentId     String   @id
+  attemptId      String   @unique
+  schoolId       String
+  studentId      String
+  currentVersion Int
+  status         String   @default("active")
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @default(now())
+
+  @@index([schoolId, studentId])
+}
+
+model PracticePadDocumentRevision {
+  revisionId         String   @id
+  documentId         String
+  attemptId          String
+  version            Int
+  schoolId           String
+  studentId          String
+  contentJson        String
+  contentHash        String
+  clientSubmissionId String?
+  createdAt          DateTime @default(now())
+
+  @@unique([attemptId, version])
+  @@unique([attemptId, clientSubmissionId])
+  @@index([attemptId])
+  @@index([documentId])
+  @@index([schoolId, studentId])
+}
+
+model PracticePadInterpretation {
+  interpretationId     String    @id
+  schoolId             String
+  studentId            String
+  attemptId            String
+  documentVersion      Int
+  sourceBlockId        String
+  sourceContentHash    String
+  representationClass  String    @default("UNKNOWN")
+  candidatesJson       String
+  status               String    @default("CONFIRMATION_REQUIRED")
+  interpreter          String    @default("backend")
+  interpreterVersion   String    @default("pp08-1")
+  confirmedCandidateId String?
+  createdAt            DateTime  @default(now())
+  confirmedAt          DateTime?
+
+  @@index([attemptId, documentVersion, sourceBlockId])
+  @@index([schoolId, studentId])
+}
+
+model PracticePadIntegrityObservation {
+  eventId          String   @id
+  schoolId         String
+  studentId        String
+  attemptId        String
+  eventType        String
+  clientObservedAt String?
+  serverReceivedAt DateTime @default(now())
+  serverSeq        Int
+  outOfOrder       Boolean  @default(false)
+  metadataJson     String   @default("{}")
+  createdAt        DateTime @default(now())
+
+  @@unique([attemptId, eventId])
+  @@unique([attemptId, serverSeq], map: "PracticePadIntegrityObservation_attempt_seq_uidx")
+  @@index([attemptId])
+  @@index([schoolId, studentId])
+}
+
+model PracticePadIntegrityEvidence {
+  scopeHash                      String   @id
+  integrityEvidenceId            String
+  schoolId                       String
+  studentId                      String
+  attemptId                      String
+  basedOnAttemptVersion          Int      @default(0)
+  idempotencyKey                 String
+  observationWindow              String   @default("{}")
+  concernLevel                   String
+  signalsJson                    String   @default("[]")
+  counterSignalsJson             String   @default("[]")
+  confidence                     Float
+  recommendedNextEvidenceAction  String
+  fingerprint                    String
+  resultJson                     String
+  createdAt                      DateTime @default(now())
+
+  @@unique([attemptId, idempotencyKey], map: "PracticePadIntegrityEvidence_attempt_key_uidx")
+  @@index([attemptId])
+  @@index([schoolId, studentId])
+}
+
+model PracticeCanonicalIdempotency {
+  id                  String   @id
+  schoolId            String
+  learnerId           String
+  requestHash         String
+  attemptId           String
+  committedEvidenceId String?
+  masteryApplied      Boolean  @default(false)
+  createdAt           DateTime @default(now())
+
+  @@unique([schoolId, learnerId, requestHash], map: "PracticeCanonicalIdempotency_school_learner_hash_uidx")
+  @@index([attemptId])
+}
+
+model PracticePadProjectionReceipt {
+  receiptKey          String   @id
+  schoolId            String
+  studentId           String
+  attemptId           String
+  idempotencyKey      String
+  committedEvidenceId String?  @unique
+  candidateJson       String   @default("{}")
+  memoryState         String   @default("PENDING")
+  revisionState       String   @default("PENDING")
+  growthState         String   @default("PENDING")
+  lastErrorJson       String?
+  claimedBy           String?
+  claimedAt           DateTime?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  @@index([attemptId])
+  @@index([schoolId, studentId])
+}
+
+model PracticeProblem {
+  problemId             String
+  problemVersion        Int
+  schoolId              String
+  sourceType            String
+  sourceRef             String
+  sourceVersion         String?
+  subject               String?
+  topic                 String?
+  subtopic              String?
+  gradeBand             String?
+  prompt                String
+  allowedResources      Json     @default("[]")
+  curriculumVersionId   String?
+  curriculumObjectiveId String?
+  curriculumSkillId     String?
+  evaluationType        String
+  evaluationPlan        String?
+  expectedAnswer        String?
+  acceptableAnswerForms Json     @default("[]")
+  validationStatus      String   @default("PROPOSED")
+  createdAt             DateTime @default(now())
+  validatedAt           DateTime?
+  retiredAt             DateTime?
+
+  @@id([problemId, problemVersion])
+  @@index([schoolId])
+  @@index([schoolId, validationStatus])
 }
 
 model PracticeMisconceptionSignal {
@@ -12165,4 +12355,199 @@ model Phase3RevisionAuditRecord {
   createdAt        DateTime @default(now())
 
   @@index([schoolId, createdAt])
+}
+
+// ── MP-B OpenAI preview: durable model-platform records (additive only) ──
+
+model ProviderDeploymentControlRecord {
+  id               String   @id @default(cuid())
+  schoolId         String
+  providerId       String
+  deploymentId     String   @default("default")
+  providerKind     String
+  configuredModel  String
+  enabled          Boolean  @default(false)
+  qualificationRef String?
+  controlEpoch     Int      @default(0)
+  configRevision   Int      @default(0)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@unique([schoolId, providerId, deploymentId])
+  @@index([schoolId, deploymentId])
+  @@index([providerId, controlEpoch])
+}
+
+model ModelInferenceAttemptRecord {
+  id             String   @id @default(cuid())
+  requestId      String
+  ordinal        Int
+  attemptId      String   @unique
+  schoolId       String
+  providerId     String
+  deploymentId   String
+  dispatchReason String
+  state          String   @default("intended")
+  createdAt      DateTime @default(now())
+
+  @@unique([requestId, ordinal])
+  @@index([schoolId, deploymentId])
+  @@index([state])
+}
+
+model ModelBudgetReservationRecord {
+  id             String   @id @default(cuid())
+  reservationId  String   @unique
+  requestId      String
+  attemptOrdinal Int
+  schoolId       String
+  accountScope   String
+  billingPeriod  String
+  amountMicro    BigInt
+  state          String   @default("held")
+  createdAt      DateTime @default(now())
+
+  @@unique([requestId, attemptOrdinal])
+  @@index([schoolId, accountScope, billingPeriod])
+  @@index([state])
+}
+
+model ModelProviderUsageRecord {
+  id                String   @id @default(cuid())
+  observationId     String   @unique
+  requestId         String
+  attemptId         String
+  providerRequestId String?
+  inputTokens       Int?
+  outputTokens      Int?
+  usageComplete     Boolean  @default(false)
+  amountMicro       BigInt?
+  settlementState   String   @default("pending")
+  createdAt         DateTime @default(now())
+
+  @@index([requestId, attemptId])
+  @@index([settlementState])
+}
+
+// ── MP-G tutor qualification harness: durable records (additive only) ──
+// Production authority: PostgreSQL. No learner-state tables touched.
+// Case/suite/rubric versions are frozen per row; runs never mutate history.
+
+model TutorQualificationCaseRecord {
+  id             String   @id @default(cuid())
+  caseId         String
+  caseVersion    Int      @default(1)
+  domain         String
+  subject        String
+  topic          String
+  gradeBand      String
+  language       String   @default("en")
+  caseJson       Json
+  rubricId       String
+  rubricVersion  Int      @default(1)
+  status         String   @default("draft")
+  fixtureMarker  String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@unique([caseId, caseVersion])
+  @@index([domain, subject])
+  @@index([status])
+}
+
+model TutorQualificationSuiteRecord {
+  id                String   @id @default(cuid())
+  suiteId           String
+  suiteVersion      Int      @default(1)
+  name              String
+  suiteJson         Json
+  rubricId          String
+  rubricVersion     Int
+  qualificationPurpose String @default("harness_validation")
+  status            String   @default("draft")
+  fixtureMarker     String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@unique([suiteId, suiteVersion])
+  @@index([status])
+}
+
+model TutorQualificationRunRecord {
+  id                  String   @id @default(cuid())
+  runId               String   @unique
+  candidateModelId    String
+  candidateRevision   String
+  providerKind        String
+  suiteId             String
+  suiteVersion        Int
+  rubricId            String
+  rubricVersion       Int
+  configurationDigest String
+  state               String   @default("CREATED")
+  totalCases          Int      @default(0)
+  completedCases      Int      @default(0)
+  failedCases         Int      @default(0)
+  criticalFailureCount Int     @default(0)
+  qualificationProposal String?
+  startedAt           DateTime?
+  endedAt             DateTime?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  @@index([candidateModelId, candidateRevision])
+  @@index([state])
+}
+
+model TutorQualificationCaseResultRecord {
+  id              String   @id @default(cuid())
+  runId           String
+  caseId          String
+  caseVersion     Int
+  responseDigest  String
+  providerKind    String
+  providerModelId String
+  resultJson      Json
+  criticalFailures Json    @default("[]")
+  reviewState     String   @default("none")
+  createdAt       DateTime @default(now())
+
+  @@unique([runId, caseId, caseVersion])
+  @@index([runId])
+  @@index([reviewState])
+}
+
+model TutorQualificationDecisionRecord {
+  id                  String   @id @default(cuid())
+  decisionId          String   @unique
+  decision            String
+  candidateModelId    String
+  candidateRevision   String
+  suiteId             String
+  suiteVersion        Int
+  rubricId            String
+  rubricVersion       Int
+  decisionJson        Json
+  allowedCapabilities Json     @default("[]")
+  expiresAt           DateTime?
+  decidedBy           String
+  decidedAt           DateTime @default(now())
+
+  @@index([candidateModelId, candidateRevision])
+  @@index([decision])
+}
+
+// ── MP-G rubric snapshot: exact versioned rubric state required by a run ──
+// Additive only. Runs pin (rubricId, rubricVersion); this table stores the
+// exact frozen rubric JSON so old runs never change when rubrics evolve.
+// No learner-state tables touched.
+model TutorQualificationRubricRecord {
+  id            String   @id @default(cuid())
+  rubricId      String
+  rubricVersion Int      @default(1)
+  rubricJson    Json
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@unique([rubricId, rubricVersion])
 }

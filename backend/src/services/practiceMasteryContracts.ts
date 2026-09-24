@@ -132,6 +132,16 @@ export interface PracticeAttempt {
   artifactBlockId?: string | null;
   sourceQuestionId?: string | null;
 
+  /**
+   * PP-02 exact PracticeProblem binding. sourceQuestionId remains the
+   * durable problem identity (equivalent to problemId); problemId mirrors
+   * it explicitly, and problemVersion pins the exact immutable issued
+   * version. Client data can never override this binding: the Practice Pad
+   * check runtime loads the server-owned problem/version itself.
+   */
+  problemId?: string | null;
+  problemVersion?: number | null;
+
   hintsRequested: number;
   attemptNumber: number;
   timeSpentSeconds?: number | null;
@@ -337,6 +347,10 @@ export interface CreatePracticeAttemptRequest {
   artifactId?: string | null;
   artifactBlockId?: string | null;
   sourceQuestionId?: string | null;
+
+  /** PP-02 exact PracticeProblem binding (mirrors PracticeAttempt). */
+  problemId?: string | null;
+  problemVersion?: number | null;
 
   hintsRequested?: number;
   attemptNumber?: number;

@@ -55,6 +55,37 @@ export interface PracticeCanonicalEvidenceInput {
   hintsUsed: number;
   // Trusted outcome: only set when a server-owned evaluator produced it.
   trustedOutcome?: 'correct' | 'partially_correct' | 'incorrect' | null;
+  /**
+   * PP-10 integrity hold (optional, backward-compatible). When true the
+   * mathematical fact is still committed as canonical evidence, but
+   * canonical mastery application is deferred until independent evidence
+   * exists. No numeric penalty, no punishment: correct math stays correct.
+   */
+  deferMastery?: boolean | null;
+  /**
+   * PP-10 safe provenance (optional, backward-compatible). Carried through
+   * the existing evidence command safe payload / source lineage / reason
+   * codes only. Never raw work, raw ink, hidden answers, or semantic
+   * misconception labels.
+   */
+  practicePadProvenance?: {
+    checkId?: string | null;
+    problemId?: string | null;
+    problemVersion?: number | null;
+    documentVersion?: number | null;
+    firstDivergenceStepIndex?: number | null;
+    firstDivergenceReasonCode?: string | null;
+    supportQuality?: string | null;
+    recoveryClassification?: string | null;
+    transferIndependent?: boolean | null;
+    transferReason?: string | null;
+    interpretationId?: string | null;
+    interpretationSourceHash?: string | null;
+    representationClass?: string | null;
+    integrityEvidenceId?: string | null;
+    integrityConcern?: string | null;
+    integrityNextAction?: string | null;
+  } | null;
 }
 
 export interface PracticeCanonicalResult {
@@ -65,32 +96,20 @@ export interface PracticeCanonicalResult {
   deduplicated: boolean;
 }
 
-// ── Durable idempotency receipt (smallest viable mechanism) ──
+// ── Durable idempotency receipt (provisioned by migration ──
+// 20260929000000_pp12_production_resilience; PP-12 law: migration owns
+// schema, runtime assumes provisioned schema, missing schema is an
+// explicit persistence failure, never silent request-path provisioning).
 // One row per logical submission. Unique key blocks concurrent duplicates.
 
-const IDEMPOTENCY_TABLE_DDL = `
-  CREATE TABLE IF NOT EXISTS "PracticeCanonicalIdempotency" (
-    "id" TEXT PRIMARY KEY,
-    "schoolId" TEXT NOT NULL,
-    "learnerId" TEXT NOT NULL,
-    "requestHash" TEXT NOT NULL,
-    "attemptId" TEXT NOT NULL,
-    "committedEvidenceId" TEXT NULL,
-    "masteryApplied" BOOLEAN NOT NULL DEFAULT false,
-    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
-  );
-`;
-
-let idempotencyTableReady = false;
-
-async function ensureIdempotencyTableOnce(): Promise<void> {
-  if (idempotencyTableReady) return;
-  await prisma.$executeRawUnsafe(IDEMPOTENCY_TABLE_DDL);
-  await prisma.$executeRawUnsafe(
-    `CREATE UNIQUE INDEX IF NOT EXISTS "PracticeCanonicalIdempotency_schoolId_learnerId_requestHash_uidx"
-     ON "PracticeCanonicalIdempotency" ("schoolId", "learnerId", "requestHash");`,
-  );
-  idempotencyTableReady = true;
+function isUniqueViolation(cause: unknown): boolean {
+  const err = cause as { code?: unknown; meta?: { code?: unknown } };
+  if (err?.code === 'P2002') return true;
+  // Prisma wraps raw-SQL failures as P2010 with the database code in meta.
+  if (String(err?.meta?.code || '') === '23505') return true;
+  if (String(err?.code || '') === '23505') return true;
+  const message = String((cause as Error)?.message || cause || '');
+  return /unique constraint|duplicate key|already exists/i.test(message);
 }
 
 async function findExistingReceipt(schoolId: string, learnerId: string, requestHash: string) {
@@ -123,8 +142,11 @@ async function insertReceiptClaim(args: {
       args.attemptId,
     );
     return true;
-  } catch {
+  } catch (cause) {
     // Unique violation → another concurrent identical submission owns the claim.
+    // Any other failure (missing provisioned table, DB down) FAILS CLOSED:
+    // never converted into a deduplication claim, never silent provisioning.
+    if (!isUniqueViolation(cause)) throw cause;
     return false;
   }
 }
@@ -175,7 +197,9 @@ export async function commitPracticeLearningEvidence(
     `practice_attempt:${schoolId}:${learnerId}:${safeString(input.clientRequestId).trim() || attemptId}`,
   );
 
-  await ensureIdempotencyTableOnce();
+  // PP-12: no request-path provisioning. The provisioned PracticeCanonicalIdempotency
+  // table (migration 20260929000000) is assumed; a missing table throws
+  // here and fails closed.
 
   // Fast path: identical logical submission already fully processed.
   const existing = await findExistingReceipt(schoolId, learnerId, requestHash);
@@ -227,11 +251,20 @@ export async function commitPracticeLearningEvidence(
   else if (trusted === 'incorrect') outcome = 'incorrect';
 
   const independence: EvidenceIndependence =
-    input.hintsUsed >= 3 ? 'heavily_supported' : input.hintsUsed >= 1 ? 'light_hint' : 'independent';
-  const evidenceMode: EvidenceMode = practiceKindToEvidenceMode('open_response');
+    input.hintsUsed >= 3 ? 'heavily_supported' : input.hintsUsed >= 1 ? 'light_hint' : 'independent';  const evidenceMode: EvidenceMode = practiceKindToEvidenceMode('open_response');
   const confidenceState: ConfidenceState = outcome === 'unscored' ? 'low' : 'high';
   const integrityState: IntegrityState = 'clear';
   const finalizationState: FinalizationState = 'final';
+
+  // PP-10: safe provenance only (scalar ids / codes / counts). The existing
+  // command already carries sourceLineage + safePayload + reasonCodes, so
+  // PP-10 provenance rides those exact contracts — no second ledger.
+  const pp10 = input.practicePadProvenance ?? null;
+  const pp10ReasonCodes = ['practice_attempt'];
+  if (pp10?.recoveryClassification) pp10ReasonCodes.push(`pp10_recovery:${pp10.recoveryClassification}`);
+  if (pp10?.transferIndependent === true) pp10ReasonCodes.push('pp10_transfer:independent');
+  if (pp10?.integrityConcern) pp10ReasonCodes.push(`pp10_integrity:${pp10.integrityConcern}`);
+  if (input.deferMastery === true) pp10ReasonCodes.push('pp10_mastery:deferred_pending_transfer');
 
   async function currentSeq(): Promise<number> {
     const streamId = `evidence_${schoolId}_${learnerId}`;
@@ -249,7 +282,7 @@ export async function commitPracticeLearningEvidence(
     expectedStreamSequence: seq,
     idempotencyKey: `${baseKey}:create`,
     requestHash: requestHashForStore,
-    reasonCodes: ['practice_attempt'],
+    reasonCodes: pp10ReasonCodes,
     policyVersion: '1.0',
     occurredAt: nowISO(),
     correlationId,
@@ -267,6 +300,17 @@ export async function commitPracticeLearningEvidence(
       integrityState,
       finalizationState,
       policyVersion: '1.0',
+      // PP-10 safe provenance through the existing lineage contract.
+      ...(pp10
+        ? {
+            practicePadCheckId: pp10.checkId ?? undefined,
+            practicePadProblemId: pp10.problemId ?? undefined,
+            practicePadProblemVersion: pp10.problemVersion ?? undefined,
+            practicePadDocumentVersion: pp10.documentVersion ?? undefined,
+            practicePadIntegrityEvidenceId: pp10.integrityEvidenceId ?? undefined,
+            practicePadInterpretationId: pp10.interpretationId ?? undefined,
+          }
+        : {}),
     },
     safePayload: {
       outcome,
@@ -280,6 +324,27 @@ export async function commitPracticeLearningEvidence(
       objectiveId: resolved.objectiveId || undefined,
       skillId: resolved.skillId || undefined,
       topicId: resolved.topicId || undefined,
+      // PP-10 safe provenance through the existing safe-payload contract.
+      ...(pp10
+        ? {
+            practicePad: {
+              checkId: pp10.checkId ?? null,
+              firstDivergenceStepIndex: pp10.firstDivergenceStepIndex ?? null,
+              firstDivergenceReasonCode: pp10.firstDivergenceReasonCode ?? null,
+              supportQuality: pp10.supportQuality ?? null,
+              recoveryClassification: pp10.recoveryClassification ?? null,
+              transferIndependent: pp10.transferIndependent ?? null,
+              transferReason: pp10.transferReason ?? null,
+              interpretationId: pp10.interpretationId ?? null,
+              interpretationSourceHash: pp10.interpretationSourceHash ?? null,
+              representationClass: pp10.representationClass ?? null,
+              integrityEvidenceId: pp10.integrityEvidenceId ?? null,
+              integrityConcern: pp10.integrityConcern ?? null,
+              integrityNextAction: pp10.integrityNextAction ?? null,
+              masteryDeferred: input.deferMastery === true,
+            },
+          }
+        : {}),
     },
   };
 
@@ -397,8 +462,12 @@ export async function commitPracticeLearningEvidence(
   // Step 5: canonical Mastery — ONLY for trusted, scored evidence with a
   // resolvable canonical target. The committed evidence ID is the mastery
   // evidence ID (same-identity invariant).
+  // PP-10 integrity hold: deferMastery records the mathematical fact but
+  // applies no mastery until independent evidence exists. No penalty.
   let masteryApplied = false;
-  if (trusted && (resolved.objectiveId || resolved.skillId) && resolved.curriculumVersionId) {
+  if (input.deferMastery === true) {
+    masteryApplied = false;
+  } else if (trusted && (resolved.objectiveId || resolved.skillId) && resolved.curriculumVersionId) {
     const outcomeNum = trusted === 'correct' ? 1 : trusted === 'partially_correct' ? 0.5 : 0;
     const masteryRes = await applyPracticeEvidenceToCanonicalMastery({
       schoolId,

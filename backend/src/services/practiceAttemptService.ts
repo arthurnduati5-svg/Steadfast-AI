@@ -33,6 +33,21 @@ import { commitPracticeLearningEvidence } from './practiceCanonicalLearningServi
 const attemptStore = new Map<string, PracticeAttempt>();
 const attemptLookupByKey = new Map<string, string[]>(); // schoolId:studentId -> attemptId[]
 
+// ── Explicit test seam ONLY (focused PP-01 tests, Prisma mocked) ──
+// When non-null, createPracticeAttempt reports this value as the durable
+// persistence outcome instead of inferring it from the database. Null in
+// production: durability is then whatever the database actually did.
+// Never inferred from a DB failure.
+let durableOverrideForTest: boolean | null = null;
+
+/**
+ * Pin the reported durable-persistence outcome. Focused PP-01 tests only.
+ * Pass null to restore production behavior (report actual DB outcome).
+ */
+export function __setPracticeAttemptDurableForTest(value: boolean | null): void {
+  durableOverrideForTest = value;
+}
+
 let _prismaAvailable: boolean | null = null;
 
 async function isPrismaAvailable(): Promise<boolean> {
@@ -67,12 +82,32 @@ function memoryKey(schoolId: string, studentId: string): string {
 export class PracticeAttemptService {
   /**
    * Create a practice attempt and propagate to downstream systems.
+   *
+   * PP-01 truth law: outcome 'not_evaluated' is bind-only. The attempt is
+   * persisted/bound and returned, but no canonical learning evidence is
+   * committed and no learning/mastery/memory effect is produced. A check
+   * request is not evidence that practice was completed
+   * (CHECK REQUESTED != PRACTICE COMPLETED).
+   *
+   * Protected callers may pass `{ requireDurableBeforeEffects: true }` so
+   * a non-durably-persisted attempt stops before ANY protected downstream
+   * learning effect. Generic callers (no option) keep existing evaluated
+   * behavior.
    */
   async createPracticeAttempt(
     identity: ResolvedTutorIdentity,
     request: CreatePracticeAttemptRequest,
+    options?: { requireDurableBeforeEffects?: boolean },
   ): Promise<{
     attempt: PracticeAttempt;
+    /**
+     * True only when the attempt was durably persisted to PostgreSQL
+     * (or when an explicit test double pins durability for focused
+     * tests). Protected callers (Practice Pad route) must refuse success
+     * when this is false: a non-durable attempt must never lead to a
+     * successful check.
+     */
+    persisted: boolean;
     masteryUpdates: any[];
     memoryUpdates: any[];
     reviewItems: any[];
@@ -133,6 +168,15 @@ export class PracticeAttemptService {
       artifactId: request.artifactId?.trim() || null,
       artifactBlockId: request.artifactBlockId?.trim() || null,
       sourceQuestionId: request.sourceQuestionId?.trim() || null,
+      // PP-02 exact problem binding: explicit problemId mirrors the durable
+      // sourceQuestionId identity; problemVersion pins the issued version.
+      problemId: request.problemId?.trim() || request.sourceQuestionId?.trim() || null,
+      problemVersion:
+        typeof request.problemVersion === 'number' &&
+        Number.isInteger(request.problemVersion) &&
+        request.problemVersion >= 1
+          ? request.problemVersion
+          : null,
       hintsRequested: request.hintsRequested ?? 0,
       attemptNumber: request.attemptNumber ?? 1,
       timeSpentSeconds: request.timeSpentSeconds ?? null,
@@ -150,8 +194,46 @@ export class PracticeAttemptService {
     existing.push(attemptId);
     attemptLookupByKey.set(key, existing);
 
-    // Try Prisma persistence
-    await this._persistPrismaAttempt(attempt);
+    // Try Prisma persistence. Durability is reported, never assumed:
+    // a non-durable attempt must not lead protected callers to success.
+    const prismaPersisted = await this._persistPrismaAttempt(attempt);
+    const persisted = durableOverrideForTest ?? prismaPersisted;
+
+    // PP-01 R1: CHECK REQUESTED != PRACTICE COMPLETED. An unevaluated
+    // attempt is persist/bind only: no canonical evidence commit, no
+    // learning event (in particular never `completed_practice`), and no
+    // mastery / memory / misconception / review / recommendation mutation.
+    // There is no neutral learning-event kind for a mere request, so no
+    // learning event is emitted at this stage at all.
+    if (outcome === 'not_evaluated') {
+      if (!persisted) warnings.push('practice_attempt_not_durably_persisted');
+      return {
+        attempt,
+        persisted,
+        masteryUpdates: [],
+        memoryUpdates: [],
+        reviewItems: [],
+        recommendations: [],
+        warnings,
+      };
+    }
+
+    // PP-01 R2: FAILURE BEFORE EFFECTS for protected callers. A
+    // non-durably-persisted attempt stops here, before any protected
+    // downstream learning effect. Generic callers (option absent) keep
+    // existing evaluated behavior.
+    if (options?.requireDurableBeforeEffects && !persisted) {
+      warnings.push('practice_attempt_not_durably_persisted');
+      return {
+        attempt,
+        persisted,
+        masteryUpdates: [],
+        memoryUpdates: [],
+        reviewItems: [],
+        recommendations: [],
+        warnings,
+      };
+    }
 
     // ── R6: join the canonical academic chain ──
     // PracticeAttempt → Learning Evidence (sourceType = practice_attempt) →
@@ -402,6 +484,7 @@ export class PracticeAttemptService {
 
     return {
       attempt,
+      persisted,
       masteryUpdates,
       memoryUpdates,
       reviewItems,
@@ -597,6 +680,11 @@ export class PracticeAttemptService {
   }
 
   // ── Outcome → Event Kind mapping ──
+  // PP-01 R3: explicit and fail-safe. 'not_evaluated' (or any unknown
+  // outcome) must NEVER silently become 'completed_practice':
+  // NOT_EVALUATED != COMPLETED PRACTICE. Unevaluated attempts return
+  // before any event is emitted, so reaching this mapper with one is a
+  // defect — fail loudly instead of manufacturing a learner outcome.
   private _outcomeToEventKind(
     outcome: PracticeOutcome,
     kind: PracticeAttemptKind,
@@ -605,14 +693,14 @@ export class PracticeAttemptService {
     if (outcome === 'partially_correct') return 'answered_question';
     if (outcome === 'incorrect') return 'made_mistake';
     if (outcome === 'unclear') return 'answered_question';
-    return 'completed_practice';
+    throw new Error(`Cannot map unevaluated outcome to a learning event: ${String(outcome)}`);
   }
 
   // ── Prisma helpers ──
 
-  private async _persistPrismaAttempt(attempt: PracticeAttempt): Promise<void> {
+  private async _persistPrismaAttempt(attempt: PracticeAttempt): Promise<boolean> {
     const available = await isPrismaAvailable();
-    if (!available) return;
+    if (!available) return false;
     try {
       await (prisma as any).practiceAttempt.create({
         data: {
@@ -642,8 +730,30 @@ export class PracticeAttemptService {
           evaluatedAt: attempt.evaluatedAt ? new Date(attempt.evaluatedAt) : null,
         },
       });
+      // PP-02 binding durability (best-effort, additive columns). The core
+      // attempt row above is the durability proof; sourceQuestionId keeps
+      // the problem identity binding regardless. A missing PP-02 migration
+      // (columns absent) must never fail creation: catch and continue.
+      try {
+        if (attempt.problemId != null || attempt.problemVersion != null) {
+          await (prisma as any).$executeRawUnsafe(
+            `UPDATE "PracticeAttempt" SET "problemId" = $2, "problemVersion" = $3 WHERE "id" = $1`,
+            attempt.attemptId,
+            attempt.problemId ?? null,
+            attempt.problemVersion ?? null,
+          );
+        }
+      } catch {
+        // Binding columns unavailable; identity binding via sourceQuestionId
+        // remains durable through the core row.
+      }
+      return true;
     } catch {
-      // Prisma unavailable — in-memory copy is already stored
+      // Prisma write failed: the attempt is NOT durably persisted.
+      // Callers (notably the protected Practice Pad route) must treat a
+      // false return as fatal to success. The in-memory copy is kept only
+      // for legacy/test read paths, never as durability proof.
+      return false;
     }
   }
 
@@ -715,6 +825,8 @@ export class PracticeAttemptService {
       artifactId: record.artifactId ?? null,
       artifactBlockId: record.artifactBlockId ?? null,
       sourceQuestionId: record.sourceQuestionId ?? null,
+      problemId: record.problemId ?? record.sourceQuestionId ?? null,
+      problemVersion: typeof record.problemVersion === 'number' ? record.problemVersion : null,
       hintsRequested: record.hintsRequested ?? 0,
       attemptNumber: record.attemptNumber ?? 1,
       timeSpentSeconds: record.timeSpentSeconds ?? null,
