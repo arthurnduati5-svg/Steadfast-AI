@@ -106,16 +106,19 @@ model ApprovedSourceRecord {
 }
 
 model ChatMessage {
-  id            String         @id
-  sessionId     String
-  role          String
-  content       String
-  timestamp     DateTime       @default(now())
-  messageNumber Int
-  metadata      Json?
-  ChatSession   ChatSession    @relation(fields: [sessionId], references: [id], onDelete: Cascade)
-  RevisionItem  RevisionItem[]
+  id              String         @id
+  sessionId       String
+  role            String
+  content         String
+  timestamp       DateTime       @default(now())
+  messageNumber   Int
+  originMessageId String?
+  metadata        Json?
+  ChatSession     ChatSession    @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  RevisionItem    RevisionItem[]
 
+  @@unique([sessionId, messageNumber])
+  @@index([sessionId, messageNumber])
   @@index([sessionId])
   @@index([timestamp])
 }
@@ -131,12 +134,61 @@ model ChatSession {
   createdAt         DateTime            @default(now())
   updatedAt         DateTime
   summarization     String?
+  // Chat durability v1: monotonic sequence allocation + lifecycle
+  nextMessageNumber Int                 @default(1)
+  learnerTurnCount  Int                 @default(0)
+  // Chat durability v1: branch / continuation lineage
+  parentSessionId           String?
+  rootSessionId             String?
+  lineageType               String?
+  lineageDepth              Int                 @default(0)
+  branchedFromMessageId     String?
+  lineageRequestId          String?
+  lineageRequestFingerprint String?
   ChatMessage       ChatMessage[]
+  ChatTurn          ChatTurn[]
   StudentProfile    StudentProfile      @relation(fields: [studentId], references: [userId], onDelete: Cascade)
   RevisionItem      RevisionItem[]
   VoiceSessionUsage VoiceSessionUsage[]
 
+  @@unique([parentSessionId, lineageType, lineageRequestId])
   @@index([studentId, updatedAt])
+  @@index([parentSessionId])
+  @@index([rootSessionId])
+}
+
+model ChatTurn {
+  id                     String    @id @default(cuid())
+  sessionId              String
+  clientTurnId           String
+  requestFingerprint     String
+  status                 String    @default("ACCEPTED")
+
+  userMessageId          String?
+  assistantMessageId     String?
+  assistantMessageNumber Int?
+
+  activeAttemptId        String?
+  retryCount             Int       @default(0)
+
+  checkpoint             Json?
+  checkpointKind         String?
+
+  errorCode              String?
+  invalidatedAt          DateTime?
+
+  createdAt              DateTime  @default(now())
+  startedAt              DateTime?
+  completedAt            DateTime?
+  stoppedAt              DateTime?
+  failedAt               DateTime?
+  updatedAt              DateTime  @updatedAt
+
+  ChatSession            ChatSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@unique([sessionId, clientTurnId])
+  @@index([sessionId, status])
+  @@index([assistantMessageId])
 }
 
 model CommittedLearningEvidenceProjection {

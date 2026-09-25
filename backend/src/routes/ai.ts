@@ -3,7 +3,40 @@ import { Router, Request, Response } from 'express';
 import { schoolAuthMiddleware } from '../middleware/schoolAuthMiddleware';
 import { rateLimiter } from '../middleware/rateLimiter';
 import prisma from '../utils/prismaClient';
-import { createChatMessage, updateChatMessage } from '../repositories/chatMessageRepository';
+import {
+  createChatMessage,
+  updateChatMessage,
+  reserveMessageNumbers,
+} from '../repositories/chatMessageRepository';
+import {
+  CHAT_TURN_STATES,
+  deriveSessionLifecycleFields,
+  isContinuationRequired,
+  computeClientTurnFingerprint,
+  computeLineageRequestFingerprint,
+  generateServerClientTurnId,
+  generateChatTurnAttemptId,
+  findChatTurnByClientTurnId,
+  createAcceptedChatTurn,
+  claimChatTurnForGeneration,
+  beginChatTurnRetry,
+  markChatTurnStopped,
+  markChatTurnFailedRetryable,
+  finalizeChatTurnCompletion,
+  findCompletedTurnForAssistantMessage,
+  findLatestExactCompletedTurn,
+  invalidateChatTurnForEditedAssistantMessage,
+  resolveLineageRequestReuse,
+} from '../services/chatTurnDurabilityService';
+import {
+  buildExactTurnCheckpoint,
+  reconstructLegacyCheckpoint,
+  deriveContinuitySummaryFromCheckpoint,
+} from '../services/conversationCheckpointService';
+import {
+  finalizeStudentFacingOutput,
+  createStreamingStudentFacingGate,
+} from '../services/studentFacingOutputService';
 import { getRedisClient } from '../lib/redis';
 import pinecone from '../lib/vectorClient';
 import { OpenAI } from 'openai';
@@ -2876,20 +2909,23 @@ function mapSessionMessagePayload(message: any) {
 }
 
 function buildSessionResponsePayload(session: any) {
+  // Chat durability v1: Prisma supplies the ChatMessage relation; accept the
+  // legacy `messages` shape defensively as well.
+  const sessionMessages: any[] = session.messages ?? session.ChatMessage ?? [];
   const tutorState = getTutorStateFromMetadata(session.metadata);
   const tutorArtifacts = getTutorArtifactsFromMetadata(session.metadata);
   const tutorRevisionNotes = getTutorRevisionNotesFromMetadata(session.metadata);
   const summaryMeta = buildSessionSummaryMeta({
     topic: session.topic,
-    messages: session.messages || [],
+    messages: sessionMessages,
     tutorState,
     tutorArtifacts,
     tutorRevisionNotes,
   });
   return {
     ...session,
-    title: resolveSessionTitle(session.topic, session.messages || []),
-    messages: (session.messages || []).map(mapSessionMessagePayload),
+    title: resolveSessionTitle(session.topic, sessionMessages),
+    messages: sessionMessages.map(mapSessionMessagePayload),
     createdAt: session.createdAt instanceof Date ? session.createdAt.toISOString() : safeString(session.createdAt),
     updatedAt: session.updatedAt instanceof Date ? session.updatedAt.toISOString() : safeString(session.updatedAt),
     conversationState: (session.metadata as any || DEFAULT_CONVERSATION_STATE),
@@ -2902,6 +2938,7 @@ function buildSessionResponsePayload(session: any) {
     continuationStatus: summaryMeta.continuationStatus,
     recentArtifactLabel: summaryMeta.recentArtifactLabel,
     revisionCount: summaryMeta.revisionCount,
+    ...deriveSessionLifecycleFields(session.learnerTurnCount ?? 0),
   };
 }
 
@@ -4559,6 +4596,12 @@ router.post('/chat', schoolAuthMiddleware, aiLimiter, async (req: AuthedRequest,
   const isStreaming = req.query.stream === 'true';
   logger.info({ userId: req.user?.id, sessionId: req.body.sessionId, isStreaming }, '[API] /chat hit');
   const routeStartedAt = Date.now();
+  // Chat durability v1: durable logical-turn state (ChatTurn) — declared here
+  // so the catch path can finalize a failed attempt without leaking scope.
+  let activeTurn: any = null;
+  let turnAttemptId = '';
+  let clientTurnId = '';
+  let clientCancelled = false;
   try {
     const studentId = req.user!.id;
     const messageRaw = safeString(req.body?.message);
@@ -4628,16 +4671,9 @@ router.post('/chat', schoolAuthMiddleware, aiLimiter, async (req: AuthedRequest,
       return res.status(413).send({ message: `Message too long (max ${MAX_MESSAGE_CHARS} characters).` });
     }
 
-    if (documentUploadCount > 0) {
-      const quota = await consumeDocumentQuota(studentId, documentUploadCount);
-      if (!quota.allowed) {
-        return res.status(429).send({
-          message: 'Daily document limit reached (2 per 24 hours).',
-          ...quota,
-        });
-      }
-    }
-
+    // Chat durability v1 §9: the logical turn is resolved/claimed before
+    // non-idempotent side effects such as document-quota consumption
+    // (moved below, post-claim).
     await getOrCreateStudentProfile(studentId);
 
     const [session, preferences, preferenceMetadata] = await Promise.all([
@@ -4645,7 +4681,9 @@ router.post('/chat', schoolAuthMiddleware, aiLimiter, async (req: AuthedRequest,
         where: { id: sessionId },
         include: {
           StudentProfile: { select: { name: true, gradeLevel: true, userId: true } },
-          ChatMessage: { orderBy: { timestamp: 'asc' }, take: 80 }
+          // Chat durability v1 R1: bounded LATEST candidate window in canonical
+          // sequence order — never the first (oldest) 80 rows.
+          ChatMessage: { orderBy: [{ messageNumber: 'desc' }, { id: 'desc' }], take: 80 }
         }
       }),
       getOrCreateCopilotPreferences(studentId),
@@ -4656,8 +4694,13 @@ router.post('/chat', schoolAuthMiddleware, aiLimiter, async (req: AuthedRequest,
       return res.status(404).send({ message: 'Session not found.' });
     }
 
+    // Chat durability v1: restore chronological order for context work.
+    let priorSessionMessages: any[] = [...(session.ChatMessage ?? [])].reverse();
+
     const existingEditedUserMessage = editedMessageId
-      ? session.ChatMessage.find((message) => message.id === editedMessageId)
+      ? await prisma.chatMessage.findFirst({
+          where: { id: editedMessageId, sessionId, ChatSession: { studentId } },
+        })
       : undefined;
     if (editedMessageId && !existingEditedUserMessage) {
       return res.status(404).send({ message: 'Edited message not found.' });
@@ -4675,9 +4718,25 @@ router.post('/chat', schoolAuthMiddleware, aiLimiter, async (req: AuthedRequest,
     if (existingEditedUserMessage && hasFilePayload) {
       return res.status(400).send({ message: 'Cannot attach new files while regenerating an edited message.' });
     }
-    const priorSessionMessages = existingEditedUserMessage
-      ? session.ChatMessage.filter((message) => message.id !== existingEditedUserMessage.id)
-      : session.ChatMessage;
+    if (existingEditedUserMessage) {
+      // Chat durability v1 §21 edit compatibility: the durable turn that
+      // produced the superseded assistant response is preserved historically
+      // but invalidated so it can never replay the regenerated content. No
+      // renumbering, no allocator rewind — gaps are valid.
+      const supersededAssistant = await prisma.chatMessage.findFirst({
+        where: {
+          sessionId,
+          messageNumber: existingEditedUserMessage.messageNumber + 1,
+          role: { in: ['model', 'assistant'] },
+        },
+      });
+      if (supersededAssistant) {
+        await invalidateChatTurnForEditedAssistantMessage(prisma as any, supersededAssistant.id).catch(() => {});
+      }
+    }
+    priorSessionMessages = existingEditedUserMessage
+      ? priorSessionMessages.filter((message) => message.id !== existingEditedUserMessage.id)
+      : priorSessionMessages;
 
     const effectiveConversationState = buildEffectiveConversationState(
       session.metadata,
@@ -4766,6 +4825,239 @@ router.post('/chat', schoolAuthMiddleware, aiLimiter, async (req: AuthedRequest,
       workspaceModeFlags?.research === true ||
       workspaceContext?.researchModeRequested === true ||
       workspacePlusAction === 'web_research';
+    // ── Chat durability v1: durable logical turn idempotency + lifecycle ──
+    clientTurnId =
+      safeString(req.body?.clientTurnId).trim().slice(0, 128) || generateServerClientTurnId();
+    const isEditRegeneration = Boolean(existingEditedUserMessage);
+    const isNewLearnerMessage = shouldPersistUserMessage && !isEditRegeneration;
+    const reservedSlotCount = isEditRegeneration ? 1 : isNewLearnerMessage ? 2 : 1;
+
+    const clientTurnFingerprint = computeClientTurnFingerprint({
+      effectiveMessage,
+      attachments: attachmentList.map((attachment: any) => ({
+        name: safeString(attachment?.fileName),
+        kind: safeString(attachment?.kind),
+        mimeType: safeString(attachment?.mimeType || attachment?.type),
+        text: safeString(attachment?.text),
+        base64: safeString(attachment?.base64),
+      })),
+      editedMessageId: editedMessageId || null,
+      tutorAction: (tutorAction as unknown as Record<string, unknown>) || null,
+      inputOrigin: inputOrigin || null,
+      composerIntent: composerIntent || null,
+      linkedArtifactId: linkedArtifactId || null,
+      focusMode: focusModeRequested,
+      examMode: examModeRequested,
+      forceWebSearch: forceWebSearchRequested,
+      includeVideos: Boolean(req.body?.includeVideos),
+      workspace: workspaceContext
+        ? {
+            activeDestination: workspaceContext.activeDestination || null,
+            studyMode: workspaceContext.studyMode || null,
+            revisionCollectionId: workspaceContext.revisionCollectionId || null,
+            revisionItemId: workspaceContext.revisionItemId || null,
+            mediaItemId: workspaceContext.mediaItemId || null,
+          }
+        : null,
+      persistsLearnerMessage: isNewLearnerMessage,
+    });
+
+    // Hard learner-turn boundary BEFORE any new-turn side effects.
+    if (isNewLearnerMessage && isContinuationRequired((session as any).learnerTurnCount ?? 0)) {
+      return res.status(409).send({
+        code: 'conversation_continuation_required',
+        message: 'This conversation reached 100 learner turns. Start a continuation session to continue.',
+        learnerTurnCount: (session as any).learnerTurnCount ?? 0,
+        continuationAvailable: true,
+      });
+    }
+
+    const existingTurn = await findChatTurnByClientTurnId(prisma as any, sessionId, clientTurnId);
+    let newUserMessageNumber: number | null = null;
+
+    if (existingTurn) {
+      if (existingTurn.requestFingerprint !== clientTurnFingerprint) {
+        // Same id + different semantic content: never reuse the old turn.
+        return res.status(409).send({
+          code: 'client_turn_conflict',
+          message: 'This clientTurnId was already used with different content.',
+          clientTurnId,
+        });
+      }
+      if (existingTurn.invalidatedAt) {
+        return res.status(409).send({
+          code: 'client_turn_invalidated',
+          message: 'This turn was invalidated by an edit and cannot be replayed.',
+          clientTurnId,
+        });
+      }
+      switch (existingTurn.status) {
+        case CHAT_TURN_STATES.COMPLETED: {
+          // Never generate again — replay the persisted canonical response.
+          const persistedAssistant = existingTurn.assistantMessageId
+            ? await prisma.chatMessage.findUnique({ where: { id: existingTurn.assistantMessageId } })
+            : null;
+          if (!persistedAssistant) {
+            return res.status(409).send({
+              code: 'client_turn_invalidated',
+              message: 'Completed turn response is no longer available.',
+              clientTurnId,
+            });
+          }
+          const assistantMeta = asRecord((persistedAssistant as any).metadata) || {};
+          const lifecycleFields = deriveSessionLifecycleFields((session as any).learnerTurnCount ?? 0);
+          if (isStreaming) {
+            res.setHeader('Content-Type', 'text/event-stream');
+            res.setHeader('Cache-Control', 'no-cache');
+            res.setHeader('Connection', 'keep-alive');
+            res.flushHeaders();
+            const replayText = String((persistedAssistant as any).content || '');
+            for (let index = 0; index < replayText.length; index += 512) {
+              res.write(
+                `data: ${JSON.stringify({ type: 'token', content: replayText.slice(index, index + 512) })}\n\n`,
+              );
+            }
+            res.write(
+              `data: ${JSON.stringify({
+                type: 'done',
+                clientTurnId,
+                turnStatus: CHAT_TURN_STATES.COMPLETED,
+                replayed: true,
+                metadata: {
+                  messageId: (persistedAssistant as any).id,
+                  messageNumber: (persistedAssistant as any).messageNumber,
+                  sessionId: session.id,
+                  topic: session.topic,
+                  videoData: (assistantMeta as any).videoData ?? null,
+                  sources: (assistantMeta as any).sources ?? [],
+                  tutorState: getTutorStateFromMetadata(session.metadata),
+                  ...lifecycleFields,
+                },
+              })}\n\n`,
+            );
+            res.end();
+            return;
+          }
+          return res.status(200).send({
+            response: (persistedAssistant as any).content,
+            messageId: (persistedAssistant as any).id,
+            messageNumber: (persistedAssistant as any).messageNumber,
+            sessionId: session.id,
+            topic: session.topic,
+            conversationState: (session.metadata as any) || undefined,
+            videoData: (assistantMeta as any).videoData ?? null,
+            sources: (assistantMeta as any).sources ?? [],
+            tutorState: getTutorStateFromMetadata(session.metadata),
+            clientTurnId,
+            turnStatus: CHAT_TURN_STATES.COMPLETED,
+            replayed: true,
+            ...lifecycleFields,
+          });
+        }
+        case CHAT_TURN_STATES.GENERATING:
+        case 'FINALIZING':
+          // Deterministic in-progress conflict — never a second execution.
+          return res.status(409).send({
+            code: 'client_turn_in_progress',
+            message: 'This turn is currently generating. Retry after it settles.',
+            clientTurnId,
+          });
+        case CHAT_TURN_STATES.STOPPED:
+        case CHAT_TURN_STATES.FAILED_RETRYABLE: {
+          // Retry the existing turn: no new learner row, same reserved slot.
+          turnAttemptId = generateChatTurnAttemptId();
+          const retryClaimed = await beginChatTurnRetry(prisma as any, existingTurn.id, turnAttemptId);
+          if (!retryClaimed) {
+            return res.status(409).send({
+              code: 'client_turn_in_progress',
+              message: 'This turn is currently generating. Retry after it settles.',
+              clientTurnId,
+            });
+          }
+          activeTurn = existingTurn;
+          break;
+        }
+        case CHAT_TURN_STATES.ACCEPTED: {
+          // Crash recovery: conditional claim, single owner of execution.
+          turnAttemptId = generateChatTurnAttemptId();
+          const claimed = await claimChatTurnForGeneration(prisma as any, existingTurn.id, turnAttemptId);
+          if (!claimed) {
+            return res.status(409).send({
+              code: 'client_turn_in_progress',
+              message: 'This turn is currently generating. Retry after it settles.',
+              clientTurnId,
+            });
+          }
+          activeTurn = existingTurn;
+          break;
+        }
+        case CHAT_TURN_STATES.REJECTED:
+        default:
+          // Never silently retry a permanently rejected turn.
+          return res.status(409).send({
+            code: 'client_turn_invalidated',
+            message: 'This turn was permanently rejected and cannot be retried.',
+            clientTurnId,
+          });
+      }
+    }
+
+    if (!activeTurn) {
+      // New durable turn: reserve sequence slots and create the turn row
+      // atomically, then conditionally claim execution ownership.
+      try {
+        const createdTurn = await prisma.$transaction(async (tx) => {
+          const reservation = await reserveMessageNumbers(sessionId, reservedSlotCount, tx as any);
+          const assistantMessageNumber = reservation.numbers[reservation.numbers.length - 1];
+          const turn = await createAcceptedChatTurn(tx as any, {
+            sessionId,
+            clientTurnId,
+            requestFingerprint: clientTurnFingerprint,
+            assistantMessageNumber,
+          });
+          return { turn, reservation };
+        });
+        newUserMessageNumber = reservedSlotCount === 2 ? createdTurn.reservation.numbers[0] : null;
+        turnAttemptId = generateChatTurnAttemptId();
+        const claimed = await claimChatTurnForGeneration(prisma as any, createdTurn.turn.id, turnAttemptId);
+        if (!claimed) {
+          return res.status(409).send({
+            code: 'client_turn_in_progress',
+            message: 'This turn is currently generating. Retry after it settles.',
+            clientTurnId,
+          });
+        }
+        activeTurn = createdTurn.turn;
+      } catch (error: any) {
+        if (error?.code === 'P2002') {
+          // Lost a create race against a concurrent identical clientTurnId.
+          return res.status(409).send({
+            code: 'client_turn_in_progress',
+            message: 'This turn is currently being processed.',
+            clientTurnId,
+          });
+        }
+        throw error;
+      }
+    }
+
+    // Document quota: consumed at most once per logical turn, after the
+    // claim, so retried turns never double-consume. Preserves the existing
+    // quota limits and 429 semantics.
+    const quotaAlreadySettled = Boolean((activeTurn as any).userMessageId);
+    if (documentUploadCount > 0 && !quotaAlreadySettled) {
+      const quota = await consumeDocumentQuota(studentId, documentUploadCount);
+      if (!quota.allowed) {
+        await markChatTurnFailedRetryable(prisma as any, activeTurn.id, turnAttemptId, 'document_quota_exhausted').catch(() => {});
+        return res.status(429).send({
+          message: 'Daily document limit reached (2 per 24 hours).',
+          code: 'document_quota_exhausted',
+          clientTurnId,
+          ...quota,
+        });
+      }
+    }
+
     const redis = await getRedisClient();
     const cacheKey = buildScopedChatCacheKey({
       studentId,
@@ -4940,27 +5232,59 @@ router.post('/chat', schoolAuthMiddleware, aiLimiter, async (req: AuthedRequest,
               : workspaceStudyMode || provisionalTutorState.currentStudyMode || 'guided',
     };
 
-    const savedUserMessage = existingEditedUserMessage || (
-      shouldPersistUserMessage
-        ? await createChatMessage({
+    // ── Chat durability v1: persist the learner message exactly once ──
+    // (transactional anchor). Reserved slot + learnerTurnCount increment +
+    // turn linkage happen atomically; retries reuse the existing row.
+    let savedUserMessage: any = existingEditedUserMessage || (activeTurn as any).userMessageId || null;
+    if (savedUserMessage && (savedUserMessage as any).id) {
+      savedUserMessage = await prisma.chatMessage.findUnique({ where: { id: (savedUserMessage as any).id } });
+    }
+    if (isNewLearnerMessage && !(activeTurn as any).userMessageId && newUserMessageNumber !== null) {
+      savedUserMessage = await prisma.$transaction(async (tx) => {
+        const learnerRow = await createChatMessage(
+          {
             sessionId,
             role: 'user',
             content: effectiveMessage,
             timestamp: new Date(),
-            messageNumber: priorSessionMessages.length + 1,
+            messageNumber: newUserMessageNumber as number,
             metadata: toPrismaMetadata(userMessageMetadata),
-          })
-        : null
-    );
+          },
+          tx as any,
+        );
+        await tx.chatSession.update({
+          where: { id: sessionId },
+          data: { learnerTurnCount: { increment: 1 } },
+        });
+        await (tx as any).chatTurn.update({
+          where: { id: activeTurn.id },
+          data: { userMessageId: learnerRow.id },
+        });
+        return learnerRow;
+      });
+      activeTurn.userMessageId = (savedUserMessage as any).id;
+    }
 
-    if (savedUserMessage) {
+    // Safeguarding runs once per logical turn, anchored on the persisted
+    // learner row (exactly-once across retries).
+    const safeguardingAnchor = asRecord((activeTurn as any).checkpoint)?.safeguardingAnchoredMessageId;
+    if (savedUserMessage && safeguardingAnchor !== (savedUserMessage as any).id) {
       await createSafetyAlertIfNeeded({
         studentId,
         sessionId,
-        messageId: savedUserMessage.id,
+        messageId: (savedUserMessage as any).id,
         text: effectiveMessage,
         source: 'chat_route',
       });
+      await prisma.chatTurn
+        .update({
+          where: { id: activeTurn.id },
+          data: {
+            checkpoint: { safeguardingAnchoredMessageId: (savedUserMessage as any).id } as any,
+            checkpointKind: (activeTurn as any).checkpointKind || 'safeguarding-anchor',
+          },
+        })
+        .catch(() => {});
     }
 
     if (isStreaming) {
@@ -4973,6 +5297,18 @@ router.post('/chat', schoolAuthMiddleware, aiLimiter, async (req: AuthedRequest,
     let fullAiResponse = '';
     let firstTokenAt: number | null = null;
     const aiStartedAt = Date.now();
+    // Chat durability v1 §15: stateful streaming gate — only safe finalized
+    // chunks are emitted; raw provider tokens are never forwarded directly.
+    const createGate = createStreamingStudentFacingGate();
+
+    // Chat durability v1 §13 cancellation: request-scoped domain transition.
+    // A normal successful close (writableEnded) is NOT cancellation.
+    const handleClientDisconnect = () => {
+      if (res.writableEnded) return;
+      clientCancelled = true;
+    };
+    res.on('close', handleClientDisconnect);
+    req.on('aborted', handleClientDisconnect);
 
     const trimmedHistory = trimHistoryForModel(priorSessionMessages.map(m => ({
       id: m.id,
@@ -5010,9 +5346,14 @@ router.post('/chat', schoolAuthMiddleware, aiLimiter, async (req: AuthedRequest,
       workspaceContext: workspaceContext || undefined,
       tutorAction,
       onToken: isStreaming ? (token: string) => {
+        if (clientCancelled || res.writableEnded || (res as any).destroyed) return;
         if (!firstTokenAt) firstTokenAt = Date.now();
-        fullAiResponse += token;
-        res.write(`data: ${JSON.stringify({ type: 'token', content: token })}\n\n`);
+        // Chat durability v1: only safe finalized chunks are emitted.
+        const safeChunk = createGate.push(token);
+        if (safeChunk) {
+          fullAiResponse += safeChunk;
+          res.write(`data: ${JSON.stringify({ type: 'token', content: safeChunk })}\n\n`);
+        }
       } : undefined,
       onStatus: isStreaming
         ? (status: { phase?: string; label?: string; timestamp?: string }) => {
@@ -5033,9 +5374,26 @@ router.post('/chat', schoolAuthMiddleware, aiLimiter, async (req: AuthedRequest,
         : undefined,
     });
 
-    // If it was streaming, the fullAiResponse will be populated via onToken
-    // If it wasn't, we use aiResult.processedText
-    const finalContent = isStreaming ? fullAiResponse : aiResult.processedText;
+    // Chat durability v1 §13: a cancelled stream never becomes an ordinary
+    // completed turn — the attempt is transitioned GENERATING → STOPPED and
+    // the late result is discarded (no assistant row, no checkpoint, no done).
+    if (clientCancelled) {
+      await markChatTurnStopped(prisma as any, activeTurn.id, turnAttemptId).catch(() => {});
+      try { res.end(); } catch { /* already closed */ }
+      return;
+    }
+
+    // If it was streaming, the gate has emitted only safe finalized chunks;
+    // flush the remainder and canonicalize the persisted content.
+    // If it wasn't streaming, we canonicalize aiResult.processedText.
+    // Chat durability v1: student-facing output gate preserves real fenced
+    // code byte-for-byte while making prose LaTeX readable and HTML safe.
+    const gateRemainder = isStreaming ? createGate.flush() : '';
+    if (isStreaming && gateRemainder && !res.writableEnded) {
+      fullAiResponse += gateRemainder;
+      res.write(`data: ${JSON.stringify({ type: 'token', content: gateRemainder })}\n\n`);
+    }
+    const finalContent = isStreaming ? fullAiResponse : finalizeStudentFacingOutput(aiResult.processedText);
     const aiDoneAt = Date.now();
     const safeSources = sanitizeSources(aiResult.sources);
     const tutorArtifacts = effectiveArtifacts;
@@ -5266,13 +5624,42 @@ router.post('/chat', schoolAuthMiddleware, aiLimiter, async (req: AuthedRequest,
       },
     });
 
-    // Write AI Response with Metadata
-    const savedAiMsg = await createChatMessage({
+    // Chat durability v1: exact as-of-turn checkpoint from state that
+    // already exists here (historical state AS OF this assistant response).
+    const turnCheckpoint = buildExactTurnCheckpoint({
+      conversationState: aiResult.state,
+      tutorState,
+      activeSubject: resolvedSubjectForTurn || (tutorState as any).activeSubject,
+      activeTopic: resolvedTopicForTurn || (tutorState as any).activeTopic,
+      studyMode: (tutorState as any).currentStudyMode,
+      languageState: sessionLanguageState,
+      misconceptionFocus: (learnerLoopState as any)?.misconceptionFocus,
+      masteryRecoveryState: (learnerLoopState as any)?.weakTopicRecovery,
+      metacognitiveState: mergedMetacognitiveState,
+      artifacts: tutorArtifacts,
+      videoData: aiResult.videoData,
+      sources: safeSources,
+      learnerStage: (tutorState as any).learnerStage,
+      recommendedMode: (tutorState as any).recommendedNextAction,
+    });
+
+    const rawSuggestedTitle = aiResult.suggestedTitle?.trim() || '';
+    const suggestedTitle = rawSuggestedTitle ? normalizeTitleCandidate(rawSuggestedTitle, effectiveMessage) : '';
+    const derivedTopic = suggestedTitle || deriveTitleFromText(effectiveMessage || finalContent);
+    const shouldSetTopic = Boolean(derivedTopic && isPlaceholderTitle(session.topic));
+
+    // Chat durability v1: guarded completion transaction — persist assistant
+    // row at its reserved sequence + exact checkpoint + session continuity,
+    // and mark COMPLETED atomically. Stale/cancelled attempts are discarded.
+    const completion = await finalizeChatTurnCompletion(prisma as any, {
       sessionId,
-      role: 'model',
-      content: finalContent,
-      timestamp: new Date(),
-      messageNumber: priorSessionMessages.length + (savedUserMessage ? 2 : 1),
+      turnId: activeTurn.id,
+      attemptId: turnAttemptId,
+      assistantMessage: {
+        content: finalContent,
+        role: 'model',
+        messageNumber: (activeTurn as any).assistantMessageNumber,
+        timestamp: new Date(),
         metadata: toPrismaMetadata({
           videoData: aiResult.videoData,
           video: aiResult.videoData,
@@ -5284,56 +5671,51 @@ router.post('/chat', schoolAuthMiddleware, aiLimiter, async (req: AuthedRequest,
           videoWhyRecommended: videoSnapshot.activeVideoWhyRecommended,
           ...assistantMetadata,
         }),
+      },
+      checkpoint: turnCheckpoint as any,
+      checkpointKind: 'exact',
+      sessionPatch: {
+        ...(shouldSetTopic ? { topic: derivedTopic } : {}),
+        summarization: turnCheckpoint.continuitySummary || null,
+        metadata: mergeSessionMetadata({
+          existing: session.metadata,
+          conversationState: aiResult.state as ConversationState,
+          tutorState,
+          tutorArtifacts,
+          tutorRevisionNotes,
+          systemNotices,
+        }) as any,
+      },
     });
+
+    if (!completion.completed || !completion.assistantMessage) {
+      // The attempt lost ownership (cancelled or superseded): discard the
+      // late provider result. Never resurrect it.
+      logger.warn(
+        { sessionId, clientTurnId, reason: completion.reason },
+        '[Backend] Stale turn completion discarded',
+      );
+      if (res.headersSent && !res.writableEnded) {
+        res.write(
+          `data: ${JSON.stringify({ type: 'error', error: { code: 'client_turn_stale', message: 'This turn was stopped or superseded.' } })}\n\n`,
+        );
+      }
+      try { res.end(); } catch { /* already closed */ }
+      return;
+    }
+
+    const savedAiMsg = completion.assistantMessage;
     recordAssistantEnvelopeAnalytics({
       userId: studentId,
       sessionId: session.id,
-      messageId: savedAiMsg.id,
+      messageId: (savedAiMsg as any).id,
       subject: resolvedSubjectForTurn || null,
       topic: resolvedTopicForTurn || null,
       assistantMetadata,
     });
 
-    // 4. Update Session Metadata & Title (CRITICAL FIX)
-    try {
-      const rawSuggested = aiResult.suggestedTitle?.trim() || '';
-      const suggested = rawSuggested ? normalizeTitleCandidate(rawSuggested, effectiveMessage) : '';
-      const derived = suggested || deriveTitleFromText(effectiveMessage || finalContent);
-      if (derived && isPlaceholderTitle(session.topic)) {
-        await prisma.chatSession.update({
-          where: { id: sessionId },
-          data: {
-            topic: derived,
-            updatedAt: new Date(),
-            metadata: mergeSessionMetadata({
-              existing: session.metadata,
-              conversationState: aiResult.state as ConversationState,
-              tutorState,
-              tutorArtifacts,
-              tutorRevisionNotes,
-              systemNotices,
-            }) as any,
-          }
-        });
-      } else {
-        await prisma.chatSession.update({
-          where: { id: sessionId },
-          data: {
-            updatedAt: new Date(),
-            metadata: mergeSessionMetadata({
-              existing: session.metadata,
-              conversationState: aiResult.state as ConversationState,
-              tutorState,
-              tutorArtifacts,
-              tutorRevisionNotes,
-              systemNotices,
-            }) as any,
-          }
-        });
-      }
-    } catch (e) {
-      logger.warn({ sessionId, error: String(e) }, '[Backend] Session metadata update failed');
-    }
+    // Session metadata/title/continuity updates now happen inside the
+    // guarded completion transaction above — no second write here.
 
     try {
       await applyDeterministicMasteryUpdate({
@@ -5363,11 +5745,19 @@ router.post('/chat', schoolAuthMiddleware, aiLimiter, async (req: AuthedRequest,
       await redis.set(cacheKey, JSON.stringify(cacheData), { EX: 86400 }); // Cache for 24h
     }
 
+    const chatSessionLifecycle = deriveSessionLifecycleFields(((session as any).learnerTurnCount ?? 0) + (isNewLearnerMessage ? 1 : 0));
+
     if (isStreaming) {
+      // Chat durability v1 SSE terminal law: the completion transaction has
+      // committed, so exactly one truthful `done` is emitted (never before
+      // persistence).
       res.write(`data: ${JSON.stringify({
         type: 'done',
+        clientTurnId,
+        turnStatus: CHAT_TURN_STATES.COMPLETED,
           metadata: {
-            messageId: savedAiMsg.id,
+            messageId: (savedAiMsg as any).id,
+            messageNumber: (savedAiMsg as any).messageNumber,
             sessionId: session.id,
             topic: aiResult.suggestedTitle || session.topic,
             state: aiResult.state,
@@ -5375,6 +5765,7 @@ router.post('/chat', schoolAuthMiddleware, aiLimiter, async (req: AuthedRequest,
             sources: safeSources,
             tutorState,
             assistantMetadata,
+            ...chatSessionLifecycle,
           }
         })}\n\n`);
       res.end();
@@ -5382,8 +5773,9 @@ router.post('/chat', schoolAuthMiddleware, aiLimiter, async (req: AuthedRequest,
     }
 
     res.status(200).send({
-      response: aiResult.processedText,
-      messageId: savedAiMsg.id,
+      response: finalContent,
+      messageId: (savedAiMsg as any).id,
+      messageNumber: (savedAiMsg as any).messageNumber,
       sessionId: session.id,
       topic: aiResult.suggestedTitle || session.topic,
       conversationState: aiResult.state,
@@ -5391,10 +5783,13 @@ router.post('/chat', schoolAuthMiddleware, aiLimiter, async (req: AuthedRequest,
       sources: safeSources,
       tutorState,
       assistantMetadata,
+      clientTurnId,
+      turnStatus: CHAT_TURN_STATES.COMPLETED,
+      ...chatSessionLifecycle,
     });
 
     // Background Tasks
-    if (session.ChatMessage.length === 0 && isPlaceholderTitle(session.topic)) {
+    if (priorSessionMessages.length === 0 && isPlaceholderTitle(session.topic)) {
       generateTopicInBackground(sessionId, effectiveMessage);
     }
     if (pineconeIndex) {
@@ -5404,6 +5799,11 @@ router.post('/chat', schoolAuthMiddleware, aiLimiter, async (req: AuthedRequest,
 
   } catch (error) {
     logger.error({ error: String(error), userId: req.user?.id }, '[Backend] Error in /chat');
+    // Chat durability v1: a failed generation leaves the turn retryable —
+    // the learner row and its reserved assistant slot survive for the retry.
+    if (activeTurn && turnAttemptId) {
+      await markChatTurnFailedRetryable(prisma as any, activeTurn.id, turnAttemptId, 'generation_failed').catch(() => {});
+    }
     try {
       const studentId = req.user?.id;
       if (studentId) {
@@ -5423,7 +5823,353 @@ router.post('/chat', schoolAuthMiddleware, aiLimiter, async (req: AuthedRequest,
     } catch {
       // no-op
     }
+    // Chat durability v1: never attempt an ordinary error response once SSE
+    // has begun.
+    if (res.headersSent) {
+      if (!res.writableEnded) {
+        res.write(
+          `data: ${JSON.stringify({ type: 'error', error: { code: 'generation_failed_retryable', message: 'Generation failed. You can retry this turn.' } })}\n\n`,
+        );
+        res.end();
+      }
+      return;
+    }
     res.status(500).send({ message: 'Internal server error' });
+  }
+});
+
+// ── Chat durability v1: keyset-paginated message history ──
+router.get('/session/:id/messages', schoolAuthMiddleware, async (req: AuthedRequest, res: Response) => {
+  try {
+    const session = await prisma.chatSession.findFirst({
+      where: { id: req.params.id, studentId: req.user!.id },
+      select: { id: true },
+    });
+    if (!session) return res.status(404).send({ message: 'Session not found' });
+
+    const limitRaw = Number(req.query.limit ?? 40);
+    const limit = Number.isFinite(limitRaw) ? Math.min(100, Math.max(1, Math.floor(limitRaw))) : 40;
+
+    let beforeMessageNumber: number | null = null;
+    if (req.query.beforeMessageNumber !== undefined) {
+      const beforeRaw = Number(req.query.beforeMessageNumber);
+      if (!Number.isFinite(beforeRaw) || !Number.isInteger(beforeRaw) || beforeRaw <= 0) {
+        return res.status(400).send({ message: 'beforeMessageNumber must be a positive integer' });
+      }
+      beforeMessageNumber = beforeRaw;
+    }
+
+    const rows = await prisma.chatMessage.findMany({
+      where: {
+        sessionId: session.id,
+        ...(beforeMessageNumber !== null ? { messageNumber: { lt: beforeMessageNumber } } : {}),
+      },
+      orderBy: [{ messageNumber: 'desc' }, { id: 'desc' }],
+      take: limit + 1,
+    });
+
+    const hasMore = rows.length > limit;
+    const page = rows.slice(0, limit).reverse();
+    const oldestReturned = page.length > 0 ? (page[0] as any).messageNumber : null;
+
+    res.status(200).send({
+      messages: page.map(mapSessionMessagePayload),
+      pageInfo: {
+        hasMore,
+        nextBeforeMessageNumber: hasMore ? oldestReturned : null,
+      },
+    });
+  } catch (error) {
+    logger.error({ err: error, userId: req.user?.id }, '[GET /session/:id/messages] Failed');
+    res.status(500).send({ message: 'Failed to load messages' });
+  }
+});
+
+async function resolveBranchCheckpoint(parentSession: any, branchMessage: any) {
+  const completedTurn = await findCompletedTurnForAssistantMessage(prisma as any, parentSession.id, branchMessage.id);
+  if (completedTurn?.checkpoint) {
+    return { checkpoint: asRecord(completedTurn.checkpoint) as Record<string, unknown>, checkpointKind: 'exact' as const };
+  }
+  // Legacy reconstruction: only information at or before the branch point.
+  const prefix = await prisma.chatMessage.findMany({
+    where: { sessionId: parentSession.id, messageNumber: { lte: branchMessage.messageNumber } },
+    orderBy: [{ messageNumber: 'asc' }, { id: 'asc' }],
+  });
+  return {
+    checkpoint: reconstructLegacyCheckpoint({
+      sessionTopic: parentSession.topic,
+      messagesUpToPoint: prefix as any,
+    }) as unknown as Record<string, unknown>,
+    checkpointKind: 'reconstructed' as const,
+  };
+}
+
+function buildLineageChildMetadata(checkpoint: Record<string, unknown>, extra: Record<string, unknown>) {
+  const conversationState = asRecord(checkpoint.conversationState) || {};
+  const tutorState = asRecord(checkpoint.tutorState) || {};
+  return {
+    ...(Object.keys(conversationState).length > 0 ? { ...conversationState } : {}),
+    ...(Object.keys(tutorState).length > 0 ? { tutorState } : {}),
+    branchCheckpoint: checkpoint,
+    ...extra,
+  } as any;
+}
+
+// Branch in New Chat: independent child transcript from a selected
+// assistant message; the parent is never mutated.
+router.post('/session/:id/branch', schoolAuthMiddleware, async (req: AuthedRequest, res: Response) => {
+  try {
+    const parent = await prisma.chatSession.findFirst({
+      where: { id: req.params.id, studentId: req.user!.id },
+      include: { ChatMessage: { orderBy: [{ messageNumber: 'asc' }, { id: 'asc' }] } },
+    });
+    if (!parent) return res.status(404).send({ message: 'Session not found' });
+
+    const fromMessageId = safeString(req.body?.fromMessageId).trim();
+    if (!fromMessageId) return res.status(400).send({ message: 'fromMessageId is required' });
+    const clientRequestId = safeString(req.body?.clientRequestId).trim().slice(0, 128) || null;
+
+    const branchMessage = await prisma.chatMessage.findFirst({
+      where: { id: fromMessageId, sessionId: parent.id },
+    });
+    if (!branchMessage) return res.status(404).send({ message: 'Branch message not found' });
+    if (branchMessage.role !== 'model' && branchMessage.role !== 'assistant') {
+      return res.status(400).send({ message: 'Branch point must be a completed assistant message' });
+    }
+
+    const lineageFingerprint = computeLineageRequestFingerprint({
+      parentSessionId: parent.id,
+      lineageType: 'branch',
+      branchedFromMessageId: fromMessageId,
+    });
+
+    const reuse = await resolveLineageRequestReuse(prisma as any, {
+      parentSessionId: parent.id,
+      lineageType: 'branch',
+      clientRequestId,
+      fingerprint: lineageFingerprint,
+    });
+    if (reuse.conflict) {
+      return res.status(409).send({
+        code: 'lineage_request_conflict',
+        message: 'This clientRequestId was already used with a different branch point.',
+      });
+    }
+    if (reuse.reuse && reuse.child) {
+      const existingChild = await prisma.chatSession.findFirst({
+        where: { id: reuse.child.id, studentId: req.user!.id },
+        include: { ChatMessage: { orderBy: [{ messageNumber: 'asc' }, { id: 'asc' }] } },
+      });
+      if (existingChild) {
+        return res.status(200).send({
+          session: buildSessionResponsePayload(existingChild),
+          reused: true,
+        });
+      }
+    }
+
+    const { checkpoint, checkpointKind } = await resolveBranchCheckpoint(parent, branchMessage);
+
+    try {
+      const child = await prisma.$transaction(async (tx) => {
+        const copied = await tx.chatMessage.findMany({
+          where: { sessionId: parent.id, messageNumber: { lte: branchMessage.messageNumber } },
+          orderBy: [{ messageNumber: 'asc' }, { id: 'asc' }],
+        });
+        const createdChild = await tx.chatSession.create({
+          data: {
+            id: `sess-${randomUUID()}`,
+            studentId: parent.studentId,
+            topic: parent.topic,
+            isActive: false,
+            updatedAt: new Date(),
+            summarization: (checkpoint as any).continuitySummary || null,
+            metadata: buildLineageChildMetadata(checkpoint, {
+              branch: {
+                parentSessionId: parent.id,
+                branchedFromMessageId: fromMessageId,
+                checkpointKind,
+                lineageDepth: ((parent as any).lineageDepth || 0) + 1,
+              },
+            }),
+            parentSessionId: parent.id,
+            rootSessionId: (parent as any).rootSessionId || parent.id,
+            lineageType: 'branch',
+            lineageDepth: ((parent as any).lineageDepth || 0) + 1,
+            branchedFromMessageId: fromMessageId,
+            lineageRequestId: clientRequestId,
+            lineageRequestFingerprint: lineageFingerprint,
+            nextMessageNumber: copied.length + 1,
+            learnerTurnCount: copied.filter((message) => message.role === 'user').length,
+          },
+        });
+        for (let index = 0; index < copied.length; index += 1) {
+          const source = copied[index];
+          await tx.chatMessage.create({
+            data: {
+              id: `msg-${randomUUID()}`,
+              sessionId: createdChild.id,
+              role: source.role,
+              content: source.content,
+              timestamp: source.timestamp,
+              messageNumber: index + 1,
+              originMessageId: source.id,
+              metadata: (source.metadata ?? undefined) as any,
+            },
+          });
+        }
+        return createdChild;
+      });
+
+      const childFull = await prisma.chatSession.findFirst({
+        where: { id: child.id },
+        include: { ChatMessage: { orderBy: [{ messageNumber: 'asc' }, { id: 'asc' }] } },
+      });
+      return res.status(201).send({
+        session: childFull ? buildSessionResponsePayload(childFull) : child,
+        lineage: {
+          parentSessionId: parent.id,
+          rootSessionId: (child as any).rootSessionId,
+          lineageType: (child as any).lineageType,
+          lineageDepth: (child as any).lineageDepth,
+          branchedFromMessageId: (child as any).branchedFromMessageId,
+          checkpointKind,
+        },
+        ...deriveSessionLifecycleFields((child as any).learnerTurnCount ?? 0),
+      });
+    } catch (error: any) {
+      if (error?.code === 'P2002') {
+        // Concurrent identical branch request won — return the same child.
+        const winner = await prisma.chatSession.findFirst({
+          where: { parentSessionId: parent.id, lineageType: 'branch', lineageRequestId: clientRequestId || undefined },
+        });
+        if (winner) {
+          return res.status(200).send({ session: winner, reused: true });
+        }
+      }
+      throw error;
+    }
+  } catch (error) {
+    logger.error({ err: error, userId: req.user?.id }, '[POST /session/:id/branch] Failed');
+    res.status(500).send({ message: 'Failed to branch session' });
+  }
+});
+
+// Continue in New Chat: fresh transcript, legitimate continuity.
+router.post('/session/:id/continue', schoolAuthMiddleware, async (req: AuthedRequest, res: Response) => {
+  try {
+    const source = await prisma.chatSession.findFirst({
+      where: { id: req.params.id, studentId: req.user!.id },
+    });
+    if (!source) return res.status(404).send({ message: 'Session not found' });
+
+    const clientRequestId = safeString(req.body?.clientRequestId).trim().slice(0, 128) || null;
+    const lineageFingerprint = computeLineageRequestFingerprint({
+      parentSessionId: source.id,
+      lineageType: 'continuation',
+    });
+
+    const reuse = await resolveLineageRequestReuse(prisma as any, {
+      parentSessionId: source.id,
+      lineageType: 'continuation',
+      clientRequestId,
+      fingerprint: lineageFingerprint,
+    });
+    if (reuse.conflict) {
+      return res.status(409).send({
+        code: 'lineage_request_conflict',
+        message: 'This clientRequestId was already used for a different continuation.',
+      });
+    }
+    if (reuse.reuse && reuse.child) {
+      const existingChild = await prisma.chatSession.findFirst({
+        where: { id: reuse.child.id, studentId: req.user!.id },
+        include: { ChatMessage: { orderBy: [{ messageNumber: 'asc' }, { id: 'asc' }] } },
+      });
+      if (existingChild) {
+        return res.status(200).send({ session: buildSessionResponsePayload(existingChild), reused: true });
+      }
+    }
+
+    // Latest accepted exact completed-turn checkpoint; legacy sessions fall
+    // back to the safest deterministic reconstruction from the transcript.
+    const latestExactTurn = await findLatestExactCompletedTurn(prisma as any, source.id);
+    let checkpoint: Record<string, unknown>;
+    let checkpointKind: 'exact' | 'reconstructed';
+    if (latestExactTurn?.checkpoint) {
+      checkpoint = (asRecord(latestExactTurn.checkpoint) || {}) as Record<string, unknown>;
+      checkpointKind = 'exact';
+    } else {
+      const transcript = await prisma.chatMessage.findMany({
+        where: { sessionId: source.id },
+        orderBy: [{ messageNumber: 'asc' }, { id: 'asc' }],
+      });
+      checkpoint = reconstructLegacyCheckpoint({
+        sessionTopic: source.topic,
+        messagesUpToPoint: transcript as any,
+      }) as unknown as Record<string, unknown>;
+      checkpointKind = 'reconstructed';
+    }
+
+    let child;
+    try {
+      child = await prisma.chatSession.create({
+        data: {
+          id: `sess-${randomUUID()}`,
+          studentId: source.studentId,
+          topic: source.topic,
+          isActive: false,
+          updatedAt: new Date(),
+          summarization: (checkpoint as any).continuitySummary || null,
+          metadata: buildLineageChildMetadata(checkpoint, {
+            continuation: {
+              parentSessionId: source.id,
+              checkpointKind,
+              lineageDepth: ((source as any).lineageDepth || 0) + 1,
+            },
+          }),
+          parentSessionId: source.id,
+          rootSessionId: (source as any).rootSessionId || source.id,
+          lineageType: 'continuation',
+          lineageDepth: ((source as any).lineageDepth || 0) + 1,
+          branchedFromMessageId: null,
+          lineageRequestId: clientRequestId,
+          lineageRequestFingerprint: lineageFingerprint,
+          nextMessageNumber: 1,
+          learnerTurnCount: 0,
+        },
+      });
+    } catch (error: any) {
+      if (error?.code === 'P2002') {
+        const winner = await prisma.chatSession.findFirst({
+          where: { parentSessionId: source.id, lineageType: 'continuation', lineageRequestId: clientRequestId || undefined },
+        });
+        if (winner) {
+          return res.status(200).send({ session: winner, reused: true });
+        }
+      }
+      throw error;
+    }
+
+    const childFull = await prisma.chatSession.findFirst({
+      where: { id: child.id },
+      include: { ChatMessage: { orderBy: [{ messageNumber: 'asc' }, { id: 'asc' }] } },
+    });
+    return res.status(201).send({
+      session: childFull ? buildSessionResponsePayload(childFull) : child,
+      lineage: {
+        parentSessionId: source.id,
+        rootSessionId: (child as any).rootSessionId,
+        lineageType: (child as any).lineageType,
+        lineageDepth: (child as any).lineageDepth,
+        branchedFromMessageId: null,
+        checkpointKind,
+      },
+      ...deriveSessionLifecycleFields((child as any).learnerTurnCount ?? 0),
+    });
+  } catch (error) {
+    logger.error({ err: error, userId: req.user?.id }, '[POST /session/:id/continue] Failed');
+    res.status(500).send({ message: 'Failed to continue session' });
   }
 });
 
@@ -5453,7 +6199,7 @@ router.post('/message', schoolAuthMiddleware, rateLimiter, async (req: AuthedReq
       return res.status(404).send({ message: 'Session not found.' });
     }
 
-    const count = await prisma.chatMessage.count({ where: { sessionId } });
+    const reservation = await reserveMessageNumbers(sessionId, 1);
 
     let fallbackTitle: string | null = null;
     if (message?.role === 'model') {
@@ -5473,7 +6219,7 @@ router.post('/message', schoolAuthMiddleware, rateLimiter, async (req: AuthedReq
           const ts = message.timestamp ? new Date(message.timestamp) : new Date();
           return isNaN(ts.getTime()) ? new Date() : ts;
         })(),
-        messageNumber: count + 1,
+        messageNumber: reservation.numbers[0],
         metadata: toPrismaMetadata(buildStoredMessageMetadata(message)),
       },
     });
@@ -10145,7 +10891,9 @@ router.post('/voice-chat', schoolAuthMiddleware, sttLimiter, upload.single('audi
         where: { id: sessionId },
         include: {
           StudentProfile: { select: { name: true, gradeLevel: true, userId: true } },
-          ChatMessage: { orderBy: { timestamp: 'asc' }, take: 60 }
+          // Chat durability v1: bounded LATEST window in canonical sequence
+          // order (never the first/oldest rows).
+          ChatMessage: { orderBy: [{ messageNumber: 'desc' }, { id: 'desc' }], take: 60 }
         }
       }),
       getOrCreateCopilotPreferences(studentId),
@@ -10153,6 +10901,7 @@ router.post('/voice-chat', schoolAuthMiddleware, sttLimiter, upload.single('audi
     ]);
 
     if (!session) throw new Error('Session not found');
+    const priorVoiceMessages: any[] = [...(session.ChatMessage ?? [])].reverse();
     const effectiveVoiceSessionLanguageState = normalizeSessionLanguageState(
       incomingVoiceLanguageState || preferenceMetadata.sessionLanguageState,
       preferences?.preferredLanguage,
@@ -10186,7 +10935,7 @@ router.post('/voice-chat', schoolAuthMiddleware, sttLimiter, upload.single('audi
     })}\n\n`);
 
     const preAiSemanticSnapshot = buildSemanticSessionSnapshot([
-      ...session.ChatMessage.map((message) => ({
+      ...priorVoiceMessages.map((message) => ({
         role: message.role,
         content: message.content,
         metadata: message.metadata,
@@ -10302,7 +11051,7 @@ router.post('/voice-chat', schoolAuthMiddleware, sttLimiter, upload.single('audi
     const emotionalAICopilot = await getEmotionalAICopilot();
     const aiResult = await emotionalAICopilot({
       text: userText,
-      chatHistory: trimHistoryForModel(session.ChatMessage.map(m => ({
+      chatHistory: trimHistoryForModel(priorVoiceMessages.map(m => ({
         id: m.id,
         role: m.role as "user" | "model",
         content: m.content,
@@ -10341,13 +11090,14 @@ router.post('/voice-chat', schoolAuthMiddleware, sttLimiter, upload.single('audi
     }
     await ttsDispatchChain;
 
-    // 4. Persistence (Post-Stream)
+    // 4. Persistence (Post-Stream) — monotonic allocator, never array length.
+    const voiceReservation = await reserveMessageNumbers(sessionId, 2);
     const savedVoiceUserMessage = await createChatMessage({
       sessionId,
       role: 'user',
       content: userText,
       timestamp: new Date(),
-      messageNumber: session.ChatMessage.length + 1,
+      messageNumber: voiceReservation.numbers[0],
         metadata: toPrismaMetadata({
           language: buildMessageLanguageMetadata({
             text: userText,
@@ -10365,6 +11115,10 @@ router.post('/voice-chat', schoolAuthMiddleware, sttLimiter, upload.single('audi
       text: userText,
       source: 'voice_chat',
     });
+    // Chat durability v1: server-authoritative learner turn count.
+    await prisma.chatSession
+      .update({ where: { id: sessionId }, data: { learnerTurnCount: { increment: 1 } } })
+      .catch(() => {});
 
     const safeSources = sanitizeSources(aiResult.sources);
     const systemNotices = buildChatSystemNotices({
@@ -10377,7 +11131,7 @@ router.post('/voice-chat', schoolAuthMiddleware, sttLimiter, upload.single('audi
       tutorState: provisionalTutorState,
     });
     const postAiSemanticSnapshot = buildSemanticSessionSnapshot([
-      ...session.ChatMessage.map((message) => ({
+      ...priorVoiceMessages.map((message) => ({
         role: message.role,
         content: message.content,
         metadata: message.metadata,
@@ -10462,9 +11216,9 @@ router.post('/voice-chat', schoolAuthMiddleware, sttLimiter, upload.single('audi
     const savedVoiceAiMessage = await createChatMessage({
       sessionId,
       role: 'model',
-      content: fullAiResponse || aiResult.processedText,
+      content: finalizeStudentFacingOutput(fullAiResponse || aiResult.processedText),
       timestamp: new Date(),
-      messageNumber: session.ChatMessage.length + 2,
+      messageNumber: voiceReservation.numbers[1],
         metadata: toPrismaMetadata({
           videoData: aiResult.videoData || null,
           video: aiResult.videoData || null,
