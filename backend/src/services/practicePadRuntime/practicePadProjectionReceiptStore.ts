@@ -182,19 +182,39 @@ export function createPracticePadProjectionReceiptStore(db: PracticeProjectionRe
       projection: PracticeProjectionName,
       state: PracticeProjectionState,
       errorMessage?: string | null,
+      /**
+       * Stale-lease guard. When supplied, the state transition applies
+       * ONLY while this worker still owns the PostgreSQL claim; a worker
+       * that lost its lease gets null back and must re-read instead of
+       * overwriting receipt truth. Omitted callers keep legacy behavior.
+       */
+      expectedClaimedBy?: string | null,
     ): Promise<PracticeProjectionReceipt | null> {
       const column = projectionColumn(projection);
       try {
         const errorJson =
           state === 'FAILED' ? JSON.stringify({ message: String(errorMessage || 'projection failed').slice(0, 500) }) : null;
-        await db.$executeRawUnsafe(
-          `UPDATE "PracticePadProjectionReceipt"
-           SET "${column}" = $2, "lastErrorJson" = $3, "updatedAt" = CURRENT_TIMESTAMP
-           WHERE "receiptKey" = $1`,
-          receiptKey,
-          state,
-          errorJson,
-        );
+        if (expectedClaimedBy != null) {
+          const affected = (await db.$executeRawUnsafe(
+            `UPDATE "PracticePadProjectionReceipt"
+             SET "${column}" = $2, "lastErrorJson" = $3, "updatedAt" = CURRENT_TIMESTAMP
+             WHERE "receiptKey" = $1 AND "claimedBy" = $4`,
+            receiptKey,
+            state,
+            errorJson,
+            expectedClaimedBy,
+          )) as unknown as number;
+          if (Number(affected) === 0) return null;
+        } else {
+          await db.$executeRawUnsafe(
+            `UPDATE "PracticePadProjectionReceipt"
+             SET "${column}" = $2, "lastErrorJson" = $3, "updatedAt" = CURRENT_TIMESTAMP
+             WHERE "receiptKey" = $1`,
+            receiptKey,
+            state,
+            errorJson,
+          );
+        }
         return store.getReceipt(receiptKey);
       } catch (cause) {
         throw persistenceFailure('state update', cause);

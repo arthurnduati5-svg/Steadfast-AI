@@ -106,8 +106,19 @@ export async function reconcilePracticePadLearningProjections(args: {
       });
       continue;
     }
-    const claimed = await store.claimReceipt(receipt.receiptKey, workerId, leaseMs, nowMs());
-    if (!claimed) {
+    // ONE shared claimed path (same executor the immediate PP-10 path
+    // uses): claim → fresh read → skip SUCCEEDED → run next incomplete
+    // → durable conditional state update → release claim.
+    const claimed = await executeClaimedProjectionReceipt({
+      store,
+      receiptKey: receipt.receiptKey,
+      workerId,
+      leaseMs,
+      nowMs: nowMs(),
+      projectors: args.projectors,
+      projectorCalls: result.projectorCalls,
+    });
+    if (claimed.claim === 'LOST') {
       result.skippedClaim += 1;
       result.details.push({
         receiptKey: receipt.receiptKey,
@@ -119,16 +130,7 @@ export async function reconcilePracticePadLearningProjections(args: {
       });
       continue;
     }
-    // Post-claim freshness: a receipt completed by a faster replica after
-    // our bounded scan must not run again in this run.
-    const fresh = await store.getReceipt(receipt.receiptKey);
-    if (
-      fresh &&
-      fresh.memoryState === 'SUCCEEDED' &&
-      fresh.revisionState === 'SUCCEEDED' &&
-      fresh.growthState === 'SUCCEEDED'
-    ) {
-      await store.releaseClaim(receipt.receiptKey, workerId);
+    if (claimed.outcome === 'COMPLETED' && claimed.ranEffects === 0) {
       result.details.push({
         receiptKey: receipt.receiptKey,
         committedEvidenceId: receipt.committedEvidenceId,
@@ -140,40 +142,103 @@ export async function reconcilePracticePadLearningProjections(args: {
       continue;
     }
     result.processed += 1;
-    try {
-      const outcome = await reconcilePracticePadLearningProjectionReceipt({
-        store,
-        receipt,
-        projectors: args.projectors,
-        projectorCalls: result.projectorCalls,
-      });
-      if (outcome === 'COMPLETED') result.completed += 1;
-      else result.failed += 1;
-      const current = await store.getReceipt(receipt.receiptKey);
-      const ran: PracticeProjectionName[] = [];
-      const skippedAsSucceeded: PracticeProjectionName[] = [];
-      for (const name of ORDER) {
-        const state = current ? current[`${name}State` as const] : receipt[`${name}State` as const];
-        if (state === 'SUCCEEDED') skippedAsSucceeded.push(name);
-      }
-      result.details.push({
-        receiptKey: receipt.receiptKey,
-        committedEvidenceId: receipt.committedEvidenceId,
-        outcome,
-        ran,
-        skippedAsSucceeded,
-      });
-    } finally {
-      await store.releaseClaim(receipt.receiptKey, workerId);
+    if (claimed.outcome === 'COMPLETED') result.completed += 1;
+    else result.failed += 1;
+    const current = await store.getReceipt(receipt.receiptKey);
+    const ran: PracticeProjectionName[] = [];
+    const skippedAsSucceeded: PracticeProjectionName[] = [];
+    for (const name of ORDER) {
+      const state = current ? current[`${name}State` as const] : receipt[`${name}State` as const];
+      if (state === 'SUCCEEDED') skippedAsSucceeded.push(name);
     }
+    result.details.push({
+      receiptKey: receipt.receiptKey,
+      committedEvidenceId: receipt.committedEvidenceId,
+      outcome: claimed.outcome,
+      ran,
+      skippedAsSucceeded,
+    });
   }
   return result;
 }
 
 export type PracticeReceiptStoreForReconcile = Pick<
   typeof practicePadProjectionReceiptStore,
-  'getReceipt' | 'markProjectionState'
+  'getReceipt' | 'markProjectionState' | 'claimReceipt' | 'releaseClaim'
 >;
+
+export interface PracticeClaimedExecutionResult {
+  claim: 'OWNED' | 'LOST';
+  outcome: 'COMPLETED' | 'PARTIAL' | 'FAILED' | 'IN_PROGRESS_CLAIMED' | 'MISSING';
+  /** Projector effects executed by THIS call (0 for losers/completed). */
+  ranEffects: number;
+  receipt: PracticeProjectionReceipt | null;
+}
+
+/**
+ * THE shared single-receipt claimed execution path. BOTH the immediate
+ * production PP-10 path and the bounded batch reconciler above MUST use
+ * this (never an unclaimed executor, never a private claim wrapper):
+ *
+ *   claim → fresh read → skip already-SUCCEEDED stages → execute next
+ *   incomplete projection → durable conditional state update (bound to
+ *   the active claimedBy worker, so a stale worker cannot overwrite
+ *   receipt truth after losing its lease) → release claim.
+ *
+ * Claim loser: executes ZERO projectors; returns a truthful
+ * in-progress/completed read (never a fake failure).
+ */
+export async function executeClaimedProjectionReceipt(args: {
+  store: PracticeReceiptStoreForReconcile;
+  receiptKey: string;
+  workerId: string;
+  leaseMs: number;
+  nowMs: number;
+  projectors: PracticeProjectionProjectors;
+  projectorCalls?: Record<PracticeProjectionName, number>;
+}): Promise<PracticeClaimedExecutionResult> {
+  const claimed = await args.store.claimReceipt(args.receiptKey, args.workerId, args.leaseMs, args.nowMs);
+  if (!claimed) {
+    const current = await args.store.getReceipt(args.receiptKey);
+    const allSucceeded =
+      !!current &&
+      current.memoryState === 'SUCCEEDED' &&
+      current.revisionState === 'SUCCEEDED' &&
+      current.growthState === 'SUCCEEDED';
+    return {
+      claim: 'LOST',
+      outcome: allSucceeded ? 'COMPLETED' : 'IN_PROGRESS_CLAIMED',
+      ranEffects: 0,
+      receipt: current,
+    };
+  }
+  try {
+    const fresh = await args.store.getReceipt(args.receiptKey);
+    if (!fresh) {
+      return { claim: 'OWNED', outcome: 'MISSING', ranEffects: 0, receipt: null };
+    }
+    const callsBefore = {
+      memory: args.projectorCalls?.memory ?? 0,
+      revision: args.projectorCalls?.revision ?? 0,
+      growth: args.projectorCalls?.growth ?? 0,
+    };
+    const outcome = await reconcilePracticePadLearningProjectionReceipt({
+      store: args.store,
+      receipt: fresh,
+      projectors: args.projectors,
+      projectorCalls: args.projectorCalls,
+      claimOwner: args.workerId,
+    });
+    const ranEffects =
+      (args.projectorCalls ? args.projectorCalls.memory - callsBefore.memory : 0) +
+      (args.projectorCalls ? args.projectorCalls.revision - callsBefore.revision : 0) +
+      (args.projectorCalls ? args.projectorCalls.growth - callsBefore.growth : 0);
+    const current = await args.store.getReceipt(args.receiptKey);
+    return { claim: 'OWNED', outcome, ranEffects, receipt: current ?? fresh };
+  } finally {
+    await args.store.releaseClaim(args.receiptKey, args.workerId);
+  }
+}
 
 /**
  * ONE single-receipt projection executor shared by BOTH:
@@ -191,6 +256,13 @@ export async function reconcilePracticePadLearningProjectionReceipt(args: {
   receipt: PracticeProjectionReceipt;
   projectors: PracticeProjectionProjectors;
   projectorCalls?: Record<PracticeProjectionName, number>;
+  /**
+   * Active claim owner. When supplied, every durable state transition is
+   * conditional on this worker still owning the claim (stale-lease
+   * safety); a lost lease surfaces as a truthful PARTIAL via fresh read,
+   * never as overwritten truth.
+   */
+  claimOwner?: string | null;
 }): Promise<'COMPLETED' | 'PARTIAL' | 'FAILED'> {
   let receipt = args.receipt;
   const calls = args.projectorCalls;
@@ -211,7 +283,15 @@ export async function reconcilePracticePadLearningProjectionReceipt(args: {
     try {
       if (calls) calls[name] += 1;
       await args.projectors[name](admitted);
-      const updated = await args.store.markProjectionState(receipt.receiptKey, name, 'SUCCEEDED');
+      const updated = await args.store.markProjectionState(
+        receipt.receiptKey,
+        name,
+        'SUCCEEDED',
+        null,
+        args.claimOwner ?? null,
+      );
+      // Null with a claim owner means the lease was lost mid-run: keep
+      // the fresh durable truth (re-read below); do not overwrite.
       if (updated) receipt = updated;
     } catch (err) {
       failed = name;
@@ -220,6 +300,7 @@ export async function reconcilePracticePadLearningProjectionReceipt(args: {
         name,
         'FAILED',
         (err as Error)?.message || String(err),
+        args.claimOwner ?? null,
       );
       if (updated) receipt = updated;
       break; // ordering policy: later projections wait for retry

@@ -7,6 +7,14 @@ vi.mock('../lib/prisma', () => ({
     $queryRaw: vi.fn(),
     $executeRawUnsafe: vi.fn(),
     $queryRawUnsafe: vi.fn(),
+    // Durability-seal stub: persistence succeeds in-mock so requireDurable
+    // paths exercise the durable branch; in-memory maps stay authoritative
+    // for assertions. Isolated-DB proof remains UNVERIFIED (no local PG).
+    spacedReviewItem: {
+      create: vi.fn(async () => ({})),
+      findUnique: vi.fn(async () => null),
+      findMany: vi.fn(async () => []),
+    },
   },
 }));
 
@@ -294,8 +302,11 @@ function prodBindings(current: PracticePadCheckResult, history: PracticePadCheck
 }
 
 /** In-memory PP-12 receipt double with production-equivalent semantics. */
-function createFakeReceiptStore() {
-  const rows = new Map<string, PracticeProjectionReceipt>();
+function createFakeReceiptStore(shared?: Map<string, PracticeProjectionReceipt>) {
+  // Shared-state injection models TWO independent store instances
+  // (replicas) over one PostgreSQL truth: claim ownership is decided
+  // by the shared row, never by instance identity.
+  const rows = shared ?? new Map<string, PracticeProjectionReceipt>();
   const nowIso = () => new Date().toISOString();
   const keyFor = (attemptId: string, idempotencyKey: string) =>
     createHash('sha256').update(`${attemptId}::${idempotencyKey}`).digest('hex');
@@ -348,9 +359,13 @@ function createFakeReceiptStore() {
       projection: 'memory' | 'revision' | 'growth',
       state: 'PENDING' | 'SUCCEEDED' | 'FAILED',
       errorMessage?: string | null,
+      expectedClaimedBy?: string | null,
     ): Promise<PracticeProjectionReceipt | null> {
       const row = rows.get(receiptKey);
       if (!row) return null;
+      // Stale-lease guard mirrors the conditional SQL update: a worker
+      // that lost its claim changes nothing and learns it via null.
+      if (expectedClaimedBy != null && row.claimedBy !== expectedClaimedBy) return null;
       const column = projection === 'memory' ? 'memoryState' : projection === 'revision' ? 'revisionState' : 'growthState';
       row[column] = state;
       row.lastErrorJson = state === 'FAILED' ? JSON.stringify({ message: String(errorMessage || 'projection failed').slice(0, 500) }) : null;
@@ -363,10 +378,20 @@ function createFakeReceiptStore() {
       }
       return null;
     },
-    async claimReceipt(receiptKey: string, workerId: string): Promise<boolean> {
+    async claimReceipt(receiptKey: string, workerId: string, leaseMs?: number, nowMs?: number): Promise<boolean> {
       const row = rows.get(receiptKey);
-      if (!row || row.claimedBy) return false;
+      if (!row) return false;
+      // Lease semantics mirror PostgreSQL: an unclaimed row, or a row
+      // whose lease expired, is claimable; a live foreign claim loses.
+      const lease = typeof leaseMs === 'number' && leaseMs > 0 ? leaseMs : 60_000;
+      const now = typeof nowMs === 'number' ? nowMs : Date.now();
+      if (row.claimedBy != null && row.claimedBy !== workerId) {
+        const at = row.claimedAt ? Date.parse(row.claimedAt) : NaN;
+        if (Number.isFinite(at) && now - at < lease) return false;
+      }
       row.claimedBy = workerId;
+      row.claimedAt = new Date(now).toISOString();
+      row.updatedAt = nowIso();
       return true;
     },
     async releaseClaim(receiptKey: string, workerId: string): Promise<void> {
@@ -844,6 +869,10 @@ describe('PP-10 → PP-12 final seal', () => {
       getReceipt: (...a: Parameters<ReturnType<typeof createFakeReceiptStore>['getReceipt']>) => innerStore.getReceipt(...a),
       markProjectionState: (...a: Parameters<ReturnType<typeof createFakeReceiptStore>['markProjectionState']>) =>
         innerStore.markProjectionState(...a),
+      claimReceipt: (...a: Parameters<ReturnType<typeof createFakeReceiptStore>['claimReceipt']>) =>
+        innerStore.claimReceipt(...a),
+      releaseClaim: (...a: Parameters<ReturnType<typeof createFakeReceiptStore>['releaseClaim']>) =>
+        innerStore.releaseClaim(...a),
     };
     const res = await integratePracticePadLearningCanonical(
       { identity: SEAL_ID, attemptId: 'att-seal', checkId: 'chk-seal', idempotencyKey: 'practice-pad-learning:chk-seal' },
@@ -1006,5 +1035,189 @@ describe('PP-10 → PP-12 final seal', () => {
 
   it('zero live model calls', () => {
     expect(PP10_LIVE_MODEL_CALLS).toBe(0);
+  });
+});
+
+// ── Durability seal: shared claimed executor + crash-idempotency ──
+import { executeClaimedProjectionReceipt } from '../services/practicePadRuntime/practicePadProjectionReconciler';
+import {
+  pp10RevisionIdempotencyKey,
+} from '../services/practicePadRuntime/practicePadLearningIntegrationService';
+import { deterministicReviewId } from '../services/spacedReviewService';
+
+describe('PP-10 durability seal: concurrency + crash-idempotency', () => {
+  it('two simultaneous executions of the SAME receipt: one owner, zero duplicate effects, all SUCCEEDED', async () => {
+    const shared = new Map();
+    const storeA = createFakeReceiptStore(shared) as never;
+    const storeB = createFakeReceiptStore(shared) as never;
+    const seed = await (storeA as ReturnType<typeof createFakeReceiptStore>).ensureReceipt({
+      schoolId: 's-dur',
+      studentId: 'l-dur',
+      attemptId: 'a-dur',
+      idempotencyKey: 'k-dur',
+      committedEvidenceId: 'ev-dur',
+      candidateJson: '{}',
+    });
+    const calls = { memory: 0, revision: 0, growth: 0 };
+    const projectors = {
+      memory: async () => {
+        calls.memory += 1;
+        await new Promise((r) => setTimeout(r, 20));
+      },
+      revision: async () => {
+        calls.revision += 1;
+      },
+      growth: async () => {
+        calls.growth += 1;
+      },
+    };
+    const [ra, rb] = await Promise.all([
+      executeClaimedProjectionReceipt({
+        store: storeA,
+        receiptKey: seed.receiptKey,
+        workerId: 'w-A',
+        leaseMs: 60_000,
+        nowMs: Date.now(),
+        projectors,
+      }),
+      executeClaimedProjectionReceipt({
+        store: storeB,
+        receiptKey: seed.receiptKey,
+        workerId: 'w-B',
+        leaseMs: 60_000,
+        nowMs: Date.now(),
+        projectors,
+      }),
+    ]);
+    const owned = [ra, rb].filter((r) => r.claim === 'OWNED');
+    const lost = [ra, rb].filter((r) => r.claim === 'LOST');
+    expect(owned).toHaveLength(1);
+    expect(lost).toHaveLength(1);
+    expect(owned[0].outcome).toBe('COMPLETED');
+    expect(lost[0].ranEffects).toBe(0);
+    expect(lost[0].outcome).toBe('IN_PROGRESS_CLAIMED');
+    expect(calls).toEqual({ memory: 1, revision: 1, growth: 1 });
+    const final = await (storeA as ReturnType<typeof createFakeReceiptStore>).getReceipt(seed.receiptKey);
+    expect(final?.memoryState).toBe('SUCCEEDED');
+    expect(final?.revisionState).toBe('SUCCEEDED');
+    expect(final?.growthState).toBe('SUCCEEDED');
+  });
+
+  it('a stale worker cannot overwrite receipt truth after losing its lease', async () => {
+    const store = createFakeReceiptStore() as unknown as ReturnType<typeof createFakeReceiptStore>;
+    const seed = await store.ensureReceipt({
+      schoolId: 's-dur',
+      studentId: 'l-dur',
+      attemptId: 'a-stale',
+      idempotencyKey: 'k-stale',
+      committedEvidenceId: 'ev-stale',
+      candidateJson: '{}',
+    });
+    expect(await store.claimReceipt(seed.receiptKey, 'w-1', 60_000, 1_000)).toBe(true);
+    // Lease expires; a second worker steals the claim (PostgreSQL truth).
+    expect(await store.claimReceipt(seed.receiptKey, 'w-2', 60_000, 200_000)).toBe(true);
+    // Stale worker's conditional transition is a no-op that reports loss.
+    expect(await store.markProjectionState(seed.receiptKey, 'memory', 'SUCCEEDED', null, 'w-1')).toBeNull();
+    const after = await store.getReceipt(seed.receiptKey);
+    expect(after?.memoryState).toBe('PENDING');
+    // Active owner still transitions normally.
+    const marked = await store.markProjectionState(seed.receiptKey, 'memory', 'SUCCEEDED', null, 'w-2');
+    expect(marked?.memoryState).toBe('SUCCEEDED');
+  });
+
+  it('A: memory durable effect succeeds then crash before receipt marker → retry appends no duplicate evidence', async () => {
+    // Isolated modules: no database here, so force the explicit
+    // in-memory fallback (fresh module state, availability probe fails).
+    vi.resetModules();
+    const prismaMod = (await import('../lib/prisma')) as { default: { $queryRaw: { mockRejectedValue: (e: unknown) => void } } };
+    prismaMod.default.$queryRaw.mockRejectedValue(new Error('no db in durability proof'));
+    const freshIntegration = (await import(
+      '../services/practicePadRuntime/practicePadLearningIntegrationService'
+    )) as typeof import('../services/practicePadRuntime/practicePadLearningIntegrationService');
+    const freshMemory = (await import('../services/learnerMemoryService')) as typeof import('../services/learnerMemoryService');
+    freshMemory._clearMemoryStoreForTest();
+    const id = { schoolId: 's-crash-a', studentId: 'l-crash-a', verifiedSchool: true };
+    const facts: PP10AdmittedLearningFacts = {
+      committedEvidenceId: 'ev-crash-a',
+      attemptId: 'a-crash-a',
+      schoolId: id.schoolId,
+      studentId: id.studentId,
+      checkId: 'c-crash-a',
+      documentVersion: 2,
+      skillId: 'sk-a',
+      subject: 'Math',
+      topic: 'Add',
+      deterministicOutcome: 'correct',
+      supportQuality: 'INDEPENDENT',
+      recoveryClassification: 'UNRESOLVED',
+      transferIndependent: false,
+    };
+    await freshIntegration.pp10RecordLearnerMemoryDefault(id, facts);
+    // Crash before the receipt memoryState=SUCCEEDED marker (receipt untouched).
+    await freshIntegration.pp10RecordLearnerMemoryDefault(id, facts);
+    const mems = await freshMemory.learnerMemoryService.listLearnerMemory(id as never, { limit: 10 });
+    const marker = freshIntegration.pp10MemoryEvidenceMarker('ev-crash-a');
+    const hits = mems.flatMap((m) => m.evidence).filter((e) => e.summary.includes(marker));
+    expect(hits).toHaveLength(1);
+  });
+
+  it('B: revision durable effect succeeds then crash before receipt marker → retry reuses one review identity', async () => {
+    const id = { schoolId: 's-crash-b', studentId: 'l-crash-b', verifiedSchool: true };
+    const facts: PP10AdmittedLearningFacts = {
+      committedEvidenceId: 'ev-crash-b',
+      attemptId: 'a-crash-b',
+      schoolId: id.schoolId,
+      studentId: id.studentId,
+      checkId: 'c-crash-b',
+      documentVersion: 2,
+      skillId: 'sk-b',
+      subject: 'Math',
+      topic: 'Add',
+      deterministicOutcome: 'incorrect',
+      supportQuality: 'SELF_CORRECTED',
+      recoveryClassification: 'SELF_CORRECTED',
+      transferIndependent: false,
+    };
+    const r1 = (await pp10ScheduleRevisionReviewDefault(id, facts)) as { reviewId: string } | null;
+    // Crash before the receipt revisionState=SUCCEEDED marker.
+    const r2 = (await pp10ScheduleRevisionReviewDefault(id, facts)) as { reviewId: string } | null;
+    expect(r1).not.toBeNull();
+    expect(r2).not.toBeNull();
+    expect(r2?.reviewId).toBe(r1?.reviewId);
+    expect(r1?.reviewId).toBe(deterministicReviewId(pp10RevisionIdempotencyKey('ev-crash-b', 'sk-b'), 'sk-b'));
+  });
+
+  it('C: DB persistence failure with requireDurable=true throws — revision is never marked SUCCEEDED on a swallowed write', async () => {
+    vi.resetModules();
+    const prismaMod = (await import('../lib/prisma')) as {
+      default: Record<string, unknown>;
+    };
+    prismaMod.default.$queryRaw = Object.assign(async () => 1, { mockRejectedValue: () => undefined });
+    (prismaMod.default as Record<string, unknown>).spacedReviewItem = {
+      create: async () => {
+        throw new Error('db down (injected)');
+      },
+      findUnique: async () => null,
+      findMany: async () => [],
+    };
+    const fresh = (await import('../services/spacedReviewService')) as typeof import('../services/spacedReviewService');
+    const id = { schoolId: 's-crash-c', studentId: 'l-crash-c' } as never;
+    const attempt = {
+      outcome: 'correct',
+      skillIds: ['sk-c'],
+      subject: 'Math',
+      topic: 'Add',
+    } as never;
+    await expect(
+      fresh.spacedReviewService.scheduleReviewFromAttempt(id, attempt, null, {
+        idempotencyKey: 'pp10:ev-crash-c:sk-c',
+        requireDurable: true,
+      }),
+    ).rejects.toThrow(/requireDurable/);
+    // Legacy callers without options keep existing degrade-to-memory behavior
+    // (different skill: the failed durable attempt already holds this window).
+    const legacyAttempt = { outcome: 'correct', skillIds: ['sk-c2'], subject: 'Math', topic: 'Add' } as never;
+    const legacy = await fresh.spacedReviewService.scheduleReviewFromAttempt(id, legacyAttempt, null);
+    expect(legacy).not.toBeNull();
   });
 });

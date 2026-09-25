@@ -337,14 +337,38 @@ function createFakeReceiptStoreB() {
       projection: 'memory' | 'revision' | 'growth',
       state: 'PENDING' | 'SUCCEEDED' | 'FAILED',
       errorMessage?: string | null,
+      expectedClaimedBy?: string | null,
     ): Promise<PracticeProjectionReceipt | null> {
       const row = rows.get(receiptKey);
       if (!row) return null;
+      if (expectedClaimedBy != null && row.claimedBy !== expectedClaimedBy) return null;
       const column = projection === 'memory' ? 'memoryState' : projection === 'revision' ? 'revisionState' : 'growthState';
       row[column] = state;
       row.lastErrorJson = state === 'FAILED' ? JSON.stringify({ message: String(errorMessage || 'projection failed').slice(0, 500) }) : null;
       row.updatedAt = nowIso();
       return { ...row };
+    },
+    async claimReceipt(receiptKey: string, workerId: string, leaseMs?: number, nowMs?: number): Promise<boolean> {
+      const row = rows.get(receiptKey);
+      if (!row) return false;
+      const lease = typeof leaseMs === 'number' && leaseMs > 0 ? leaseMs : 60_000;
+      const now = typeof nowMs === 'number' ? nowMs : Date.now();
+      if (row.claimedBy != null && row.claimedBy !== workerId) {
+        const at = row.claimedAt ? Date.parse(row.claimedAt) : NaN;
+        if (Number.isFinite(at) && now - at < lease) return false;
+      }
+      row.claimedBy = workerId;
+      row.claimedAt = new Date(now).toISOString();
+      row.updatedAt = nowIso();
+      return true;
+    },
+    async releaseClaim(receiptKey: string, workerId: string): Promise<void> {
+      const row = rows.get(receiptKey);
+      if (row && row.claimedBy === workerId) {
+        row.claimedBy = null;
+        row.claimedAt = null;
+        row.updatedAt = nowIso();
+      }
     },
   };
 }

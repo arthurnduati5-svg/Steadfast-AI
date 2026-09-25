@@ -42,7 +42,7 @@ import { spacedReviewService } from '../spacedReviewService';
 import { nextPracticeService } from '../nextPracticeService';
 import { practicePadProjectionReceiptStore } from './practicePadProjectionReceiptStore';
 import {
-  reconcilePracticePadLearningProjectionReceipt,
+  executeClaimedProjectionReceipt,
   type PracticeProjectionProjectors,
 } from './practicePadProjectionReconciler';
 import type { ResolvedTutorIdentity } from '../tutorStateContracts';
@@ -641,7 +641,7 @@ export interface PP10CanonicalOverrides {
    */
   receiptStore?: Pick<
     typeof practicePadProjectionReceiptStore,
-    'ensureReceipt' | 'getReceipt' | 'markProjectionState'
+    'ensureReceipt' | 'getReceipt' | 'markProjectionState' | 'claimReceipt' | 'releaseClaim'
   >;
   clock?: () => string;
 }
@@ -701,9 +701,24 @@ function pp10TutorIdentityOf(identity: { schoolId: string; studentId: string }):
 }
 
 /**
+ * Stable PP-10 evidence marker carried in exactly one learner-memory
+ * evidence summary. Crash/duplicate retries locate this marker through
+ * the EXISTING canonical memory scope owner and return success WITHOUT
+ * appending again. No new memory table; no raw work/ink in the marker.
+ */
+export function pp10MemoryEvidenceMarker(committedEvidenceId: string): string {
+  return `pp10-evidence:${committedEvidenceId}`;
+}
+
+/**
  * Default learner-memory owner: the EXISTING learnerMemoryService.
  * Factual outcome/skill/support wording only — no suspicion, no
  * cheating labels, no misconception labels, no raw work.
+ *
+ * Crash-idempotent: the SAME committedEvidenceId always resolves to the
+ * same marker evidence. A retry after a crash between the memory effect
+ * and the receipt success marker finds the marker and succeeds without
+ * a second append/create.
  */
 export async function pp10RecordLearnerMemoryDefault(
   identity: { schoolId: string; studentId: string; verifiedSchool: boolean },
@@ -717,7 +732,49 @@ export async function pp10RecordLearnerMemoryDefault(
       : facts.deterministicOutcome === 'incorrect'
         ? 'recent_mistake'
         : 'practice_pattern';
-  return learnerMemoryService.createLearnerMemory(pp10TutorIdentityOf(identity), {
+  const tutor = pp10TutorIdentityOf(identity);
+  const marker = pp10MemoryEvidenceMarker(facts.committedEvidenceId);
+  const markerSummary =
+    `Check ${facts.checkId}: ${outcomeText}. Canonical evidence ${facts.committedEvidenceId}. Marker ${marker}.`.slice(0, 1200);
+  // Idempotency gate: an existing memory in the canonical scope that
+  // already carries this evidence marker means the durable effect
+  // already happened (e.g. crash before the receipt marker).
+  try {
+    const scoped = await learnerMemoryService.listLearnerMemory(tutor, {
+      kind: kind as never,
+      subject: facts.subject,
+      topic: facts.topic,
+      limit: 10,
+    });
+    for (const mem of scoped ?? []) {
+      if (Array.isArray(mem.evidence) && mem.evidence.some((e) => typeof e?.summary === 'string' && e.summary.includes(marker))) {
+        return mem;
+      }
+    }
+    const target = (scoped ?? [])[0] ?? null;
+    if (target) {
+      return learnerMemoryService.appendEvidenceToLearnerMemory(tutor, target.memoryId, [
+        {
+          evidenceId: `evd_pp10_${facts.committedEvidenceId}`.slice(0, 80),
+          eventId: null,
+          source: 'practice_attempt',
+          summary: markerSummary,
+          observedAt: new Date().toISOString(),
+          subject: facts.subject,
+          topic: facts.topic,
+          skillIds: facts.skillId ? [facts.skillId] : [],
+          artifactId: null,
+          artifactBlockId: null,
+          confidence: facts.deterministicOutcome === 'correct' ? 0.6 : 0.4,
+          safeQuote: null,
+        } as never,
+      ]);
+    }
+  } catch {
+    // Scope lookup is best-effort idempotency only; fall through to the
+    // canonical create path rather than failing the projection.
+  }
+  return learnerMemoryService.createLearnerMemory(tutor, {
     kind,
     visibility: 'system_only',
     subject: facts.subject,
@@ -733,7 +790,7 @@ export async function pp10RecordLearnerMemoryDefault(
     evidence: [
       {
         source: 'practice_attempt',
-        summary: `Check ${facts.checkId}: ${outcomeText}. Canonical evidence ${facts.committedEvidenceId}.`.slice(0, 1200),
+        summary: markerSummary,
         subject: facts.subject,
         topic: facts.topic,
         skillIds: facts.skillId ? [facts.skillId] : [],
@@ -745,10 +802,20 @@ export async function pp10RecordLearnerMemoryDefault(
 }
 
 /**
+ * Stable PP-10 revision key: one committed evidence + one skill always
+ * resolves to one durable review identity across crash retries.
+ */
+export function pp10RevisionIdempotencyKey(committedEvidenceId: string, skillId: string | null): string {
+  return `pp10:${committedEvidenceId}:${skillId ?? 'noskill'}`;
+}
+
+/**
  * Default revision/spaced-review owner: the EXISTING
  * spacedReviewService. Receives a sanitized attempt built from admitted
  * facts only (outcome + skill + subject/topic) — never the raw
- * document, ink, or integrity signals.
+ * document, ink, or integrity signals. Crash-safe: stable idempotency
+ * key (deterministic review identity, no duplicate review) with
+ * requireDurable=true (a swallowed DB write can never read SUCCEEDED).
  */
 export async function pp10ScheduleRevisionReviewDefault(
   identity: { schoolId: string; studentId: string; verifiedSchool: boolean },
@@ -787,6 +854,10 @@ export async function pp10ScheduleRevisionReviewDefault(
     pp10TutorIdentityOf(identity),
     sanitizedAttempt as Parameters<typeof spacedReviewService.scheduleReviewFromAttempt>[1],
     null,
+    {
+      idempotencyKey: pp10RevisionIdempotencyKey(facts.committedEvidenceId, facts.skillId),
+      requireDurable: true,
+    },
   );
 }
 
@@ -910,7 +981,7 @@ export function __resolvePP10CanonicalBindings(overrides: PP10CanonicalOverrides
   growthOwner: PP10DownstreamOwners['recommendGrowth'];
   receiptStore: Pick<
     typeof practicePadProjectionReceiptStore,
-    'ensureReceipt' | 'getReceipt' | 'markProjectionState'
+    'ensureReceipt' | 'getReceipt' | 'markProjectionState' | 'claimReceipt' | 'releaseClaim'
   >;
 } {
   const evidenceOwner =
@@ -995,8 +1066,8 @@ export function buildPP10SafeProjectionCandidate(candidate: PP10EvidenceCandidat
  *   → memory (durable memory=SUCCEEDED)
  *   → revision (durable revision=SUCCEEDED)
  *   → Growth (durable growth=SUCCEEDED)
- * Projection execution runs through reconcilePracticePadLearningProjectionReceipt —
- * the SAME single-receipt executor the bounded batch reconciler uses.
+ * Projection execution runs through executeClaimedProjectionReceipt —
+ * the SAME claimed single-receipt executor the bounded batch reconciler uses.
  * Mastery is never invoked here: commitPracticeLearningEvidence already
  * owns the one canonical mastery consequence.
  */
@@ -1486,8 +1557,29 @@ export async function integratePracticePadLearningCanonical(
   try {
     // Fresh read: a replay whose receipt already completed (or a faster
     // concurrent run) must observe current durable truth, not a stale copy.
-    const current = (await receiptStore.getReceipt(receiptKey)) ?? null;
-    if (!current) {
+    // Claimed execution (the SAME shared path the batch reconciler uses):
+    // acquire the PostgreSQL receipt claim under a bounded worker identity
+    // derived from server-owned request identity (never client data), run
+    // only incomplete projections, mark states conditional on the active
+    // claim, then release. A claim loser executes ZERO projectors and
+    // returns the truthful durable state — never a fake failure.
+    const workerId = `pp10:${kernelResult.candidate.attemptId}:${kernelResult.candidate.checkId}`;
+    const claimed = await executeClaimedProjectionReceipt({
+      store: receiptStore,
+      receiptKey,
+      workerId,
+      leaseMs: 60_000,
+      nowMs: Date.now(),
+      projectors: execProjectors,
+    });
+    if (claimed.claim === 'LOST') {
+      // Another worker owns execution. Canonical evidence is committed
+      // and authoritative; projections resume/complete under the owner
+      // (retry or batch reconciliation). No projector ran here.
+      kernelResult.deduplicated = true;
+      return kernelResult;
+    }
+    if (claimed.outcome === 'MISSING') {
       return {
         ok: false,
         code: 'DOWNSTREAM_PROJECTION_FAILED',
@@ -1495,16 +1587,11 @@ export async function integratePracticePadLearningCanonical(
         order: kernelResult.order,
       };
     }
-    const projectionOutcome = await reconcilePracticePadLearningProjectionReceipt({
-      store: receiptStore,
-      receipt: current,
-      projectors: execProjectors,
-    });
-    if (projectionOutcome !== 'COMPLETED') {
+    if (claimed.outcome !== 'COMPLETED') {
       return {
         ok: false,
         code: 'DOWNSTREAM_PROJECTION_FAILED',
-        message: `Downstream projection ${projectionOutcome}; committed evidence ${kernelResult.committedEvidenceId} remains authoritative.`,
+        message: `Downstream projection ${claimed.outcome}; committed evidence ${kernelResult.committedEvidenceId} remains authoritative.`,
         order: kernelResult.order,
       };
     }

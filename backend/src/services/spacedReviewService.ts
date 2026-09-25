@@ -4,6 +4,7 @@
 // learned skills.  Uses v1 interval policy — not over-engineered.
 // ─────────────────────────────────────────────────────────────
 
+import { createHash } from 'crypto';
 import prisma from '../lib/prisma';
 import type {
   SpacedReviewItem,
@@ -82,6 +83,30 @@ function isSameDueWindow(dateA: string, dateB: string, windowDays: number): bool
 
 // ── SpacedReviewService ──
 
+/**
+ * Smallest backward-compatible durability extension for crash-safe
+ * callers (Practice Pad PP-10). Existing 3-arg callers keep existing
+ * behavior: random review IDs, same-window dedupe, swallowed
+ * persistence failures (in-memory fallback).
+ *
+ * When options.idempotencyKey is supplied:
+ *   - review identity is deterministic (stable key + skillId), so an
+ *     identical retry reuses the SAME durable review — no duplicate.
+ * When options.requireDurable is true:
+ *   - a database persistence failure THROWS instead of degrading to
+ *     in-memory-only success (production must never mark SUCCEEDED
+ *     on a swallowed write).
+ */
+export interface ScheduleReviewOptions {
+  idempotencyKey?: string;
+  requireDurable?: boolean;
+}
+
+/** Deterministic review identity for a stable caller key + skill. No migration: the existing PK carries it. */
+export function deterministicReviewId(idempotencyKey: string, skillId: string): string {
+  return `pp10_${createHash('sha256').update(`${idempotencyKey}::${skillId}`).digest('hex').slice(0, 24)}`;
+}
+
 export class SpacedReviewService {
   /**
    * Schedule review from a practice attempt and optional mastery snapshot.
@@ -91,6 +116,7 @@ export class SpacedReviewService {
     identity: ResolvedTutorIdentity,
     attempt: PracticeAttempt,
     masterySnapshot: SkillMasterySnapshot | null,
+    options?: ScheduleReviewOptions,
   ): Promise<SpacedReviewItem | null> {
     const outcome = attempt.outcome;
 
@@ -117,6 +143,20 @@ export class SpacedReviewService {
     const items: SpacedReviewItem[] = [];
 
     for (const skillId of skillIds) {
+      // Stable-identity reuse comes FIRST: an identical retry (same
+      // caller key) must return its durable review even inside the same
+      // due window, instead of degrading to a null duplicate.
+      const stableId =
+        options?.idempotencyKey != null && options.idempotencyKey !== ''
+          ? deterministicReviewId(options.idempotencyKey, skillId)
+          : null;
+      if (stableId) {
+        const reused = await this._getStableReview(identity, stableId);
+        if (reused) {
+          items.push(reused);
+          continue;
+        }
+      }
       const dk = dedupeKey(identity.schoolId, identity.studentId, skillId);
       const existingIds = reviewDedupeKey.get(dk) || [];
 
@@ -143,7 +183,7 @@ export class SpacedReviewService {
       if (isDuplicate) continue;
 
       const now = nowISO();
-      const reviewId = generateId();
+      const reviewId = stableId ?? generateId();
       const review: SpacedReviewItem = {
         reviewId,
         schoolId: identity.schoolId,
@@ -171,7 +211,7 @@ export class SpacedReviewService {
       dedupes.push(reviewId);
       reviewDedupeKey.set(dk, dedupes);
 
-      await this._persistPrismaReview(review);
+      await this._persistPrismaReview(review, options?.requireDurable === true ? { requireDurable: true } : undefined);
       items.push(review);
     }
 
@@ -307,7 +347,20 @@ export class SpacedReviewService {
 
   // ── Prisma helpers ──
 
-  private async _persistPrismaReview(r: SpacedReviewItem): Promise<void> {
+  /** Stable-identity read: in-memory first, then the durable row. Scope-checked. */
+  private async _getStableReview(
+    identity: ResolvedTutorIdentity,
+    reviewId: string,
+  ): Promise<SpacedReviewItem | null> {
+    const mem = reviewStore.get(reviewId);
+    if (mem) {
+      if (mem.schoolId !== identity.schoolId || mem.studentId !== identity.studentId) return null;
+      return mem;
+    }
+    return this._getPrismaReview(identity, reviewId);
+  }
+
+  private async _persistPrismaReview(r: SpacedReviewItem, options?: { requireDurable?: boolean }): Promise<void> {
     const available = await isPrismaAvailable();
     if (!available) return;
     try {
@@ -328,8 +381,21 @@ export class SpacedReviewService {
           completedAt: r.completedAt ? new Date(r.completedAt) : null,
         },
       });
-    } catch {
-      // in-memory fallback
+    } catch (err) {
+      // Create race: a concurrent worker with the same stable identity
+      // won the row — reuse it instead of duplicating or failing.
+      try {
+        const winner = await (prisma as any).spacedReviewItem.findUnique({ where: { id: r.reviewId } });
+        if (winner) return;
+      } catch {
+        // Read-back failed; fall through to durable handling below.
+      }
+      if (options?.requireDurable === true) {
+        throw new Error(
+          `SpacedReviewItem persistence failed and requireDurable=true; refusing in-memory-only success. Cause: ${String((err as Error)?.message || err)}`,
+        );
+      }
+      // Legacy fallback: in-memory copy only.
     }
   }
 
