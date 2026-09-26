@@ -11,7 +11,7 @@ import {
 import {
   CHAT_TURN_STATES,
   deriveSessionLifecycleFields,
-  isContinuationRequired,
+  shouldRejectNewLearnerTurnForContinuation,
   computeClientTurnFingerprint,
   computeLineageRequestFingerprint,
   generateServerClientTurnId,
@@ -4862,16 +4862,9 @@ router.post('/chat', schoolAuthMiddleware, aiLimiter, async (req: AuthedRequest,
       persistsLearnerMessage: isNewLearnerMessage,
     });
 
-    // Hard learner-turn boundary BEFORE any new-turn side effects.
-    if (isNewLearnerMessage && isContinuationRequired((session as any).learnerTurnCount ?? 0)) {
-      return res.status(409).send({
-        code: 'conversation_continuation_required',
-        message: 'This conversation reached 100 learner turns. Start a continuation session to continue.',
-        learnerTurnCount: (session as any).learnerTurnCount ?? 0,
-        continuationAvailable: true,
-      });
-    }
-
+    // Chat durability v1: the 100-turn hard limit applies ONLY to genuinely
+    // NEW logical learner turns. Existing durable turns (replay/retry/
+    // in-progress/conflict) are resolved first below and always bypass it.
     const existingTurn = await findChatTurnByClientTurnId(prisma as any, sessionId, clientTurnId);
     let newUserMessageNumber: number | null = null;
 
@@ -5000,6 +4993,25 @@ router.post('/chat', schoolAuthMiddleware, aiLimiter, async (req: AuthedRequest,
             clientTurnId,
           });
       }
+    }
+
+    // Hard learner-turn boundary: enforced ONLY when this is genuinely a NEW
+    // logical learner turn (no existing durable turn). Replays/retries of an
+    // existing turn at count >= 100 proceed via the semantics above and never
+    // reach this gate. Thresholds (80/95/100) are unchanged.
+    if (
+      shouldRejectNewLearnerTurnForContinuation({
+        learnerTurnCount: (session as any).learnerTurnCount ?? 0,
+        isNewLearnerMessage,
+        hasExistingTurn: Boolean(existingTurn),
+      })
+    ) {
+      return res.status(409).send({
+        code: 'conversation_continuation_required',
+        message: 'This conversation reached 100 learner turns. Start a continuation session to continue.',
+        learnerTurnCount: (session as any).learnerTurnCount ?? 0,
+        continuationAvailable: true,
+      });
     }
 
     if (!activeTurn) {

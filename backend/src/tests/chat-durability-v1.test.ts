@@ -9,15 +9,19 @@
 
 import { describe, it, expect } from 'vitest';
 import {
+  CHAT_TURN_FINALIZING,
   CHAT_TURN_STATES,
   NEW_LEARNER_TURN_LIMIT,
   deriveSessionLifecycleFields,
+  finalizeChatTurnCompletion,
   isContinuationRequired,
+  markChatTurnStopped,
   resolveContinuationStage,
   computeClientTurnFingerprint,
   computeLineageRequestFingerprint,
   generateServerClientTurnId,
   generateChatTurnAttemptId,
+  shouldRejectNewLearnerTurnForContinuation,
   stableStringify,
 } from '../services/chatTurnDurabilityService';
 import {
@@ -211,5 +215,203 @@ describe('chat durability v1 — exact checkpoint', () => {
       ] as any,
     }) as unknown as Record<string, unknown>;
     expect(typeof checkpoint.continuitySummary).toBe('string');
+  });
+});
+
+describe('chat durability v1 — 100-turn gate bypasses existing turns', () => {
+  it('count 100 + existing COMPLETED turn replays instead of rejecting', () => {
+    expect(
+      shouldRejectNewLearnerTurnForContinuation({
+        learnerTurnCount: 100,
+        isNewLearnerMessage: true,
+        hasExistingTurn: true,
+      }),
+    ).toBe(false);
+  });
+
+  it('count 100 + existing STOPPED turn retries instead of rejecting', () => {
+    expect(
+      shouldRejectNewLearnerTurnForContinuation({
+        learnerTurnCount: 100,
+        isNewLearnerMessage: true,
+        hasExistingTurn: true,
+      }),
+    ).toBe(false);
+  });
+
+  it('count 100 + existing FAILED_RETRYABLE turn retries instead of rejecting', () => {
+    expect(
+      shouldRejectNewLearnerTurnForContinuation({
+        learnerTurnCount: 100,
+        isNewLearnerMessage: true,
+        hasExistingTurn: true,
+      }),
+    ).toBe(false);
+  });
+
+  it('count 100 + no existing turn rejects a new learner turn', () => {
+    expect(
+      shouldRejectNewLearnerTurnForContinuation({
+        learnerTurnCount: 100,
+        isNewLearnerMessage: true,
+        hasExistingTurn: false,
+      }),
+    ).toBe(true);
+    expect(
+      shouldRejectNewLearnerTurnForContinuation({
+        learnerTurnCount: 101,
+        isNewLearnerMessage: true,
+        hasExistingTurn: false,
+      }),
+    ).toBe(true);
+  });
+
+  it('non-persisting requests and pre-limit counts are never gated', () => {
+    expect(
+      shouldRejectNewLearnerTurnForContinuation({
+        learnerTurnCount: 100,
+        isNewLearnerMessage: false,
+        hasExistingTurn: false,
+      }),
+    ).toBe(false);
+    expect(
+      shouldRejectNewLearnerTurnForContinuation({
+        learnerTurnCount: 99,
+        isNewLearnerMessage: true,
+        hasExistingTurn: false,
+      }),
+    ).toBe(false);
+    expect(NEW_LEARNER_TURN_LIMIT).toBe(100);
+  });
+});
+
+describe('chat durability v1 — completion CAS vs cancellation race', () => {
+  const completionInput = (turnId: string, attemptId: string) => ({
+    sessionId: 'sess-1',
+    turnId,
+    attemptId,
+    assistantMessage: { content: 'assistant reply', messageNumber: 2 },
+    checkpoint: { schemaVersion: 1 },
+    checkpointKind: 'exact',
+  });
+
+  /** Smallest deterministic in-memory ChatTurn store with CAS updateMany. */
+  function createFakeFinalizeDb(initialTurn: Record<string, any>) {
+    const turns = new Map<string, any>([[initialTurn.id, { ...initialTurn }]]);
+    const messages: any[] = [];
+    let sessionUpdates = 0;
+    const matchesStatus = (turnStatus: string, cond: any): boolean => {
+      if (cond === undefined) return true;
+      if (typeof cond === 'string') return turnStatus === cond;
+      if (cond && Array.isArray(cond.in)) return cond.in.includes(turnStatus);
+      return false;
+    };
+    const db: any = {
+      chatTurn: {
+        findUnique: async ({ where }: any) => {
+          const turn = turns.get(where.id);
+          return turn ? { ...turn } : null;
+        },
+        findFirst: async () => null,
+        create: async ({ data }: any) => {
+          const row = { id: `turn-${turns.size + 1}`, ...data };
+          turns.set(row.id, row);
+          return { ...row };
+        },
+        update: async ({ where, data }: any) => {
+          const turn = turns.get(where.id);
+          if (!turn) throw new Error('turn not found');
+          Object.assign(turn, data);
+          return { ...turn };
+        },
+        updateMany: async ({ where, data }: any) => {
+          const turn = turns.get(where.id);
+          if (!turn) return { count: 0 };
+          if (!matchesStatus(turn.status, where.status)) return { count: 0 };
+          if (where.activeAttemptId !== undefined && turn.activeAttemptId !== where.activeAttemptId) {
+            return { count: 0 };
+          }
+          Object.assign(turn, data);
+          return { count: 1 };
+        },
+      },
+      chatSession: {
+        findFirst: async () => null,
+        update: async () => {
+          sessionUpdates += 1;
+          return {};
+        },
+      },
+      chatMessage: {
+        create: async ({ data }: any) => {
+          const row = { id: `msg-${messages.length + 1}`, ...data };
+          messages.push(row);
+          return { ...row };
+        },
+      },
+      $transaction: async (fn: any) => fn(db),
+    };
+    return { db, turns, messages, getSessionUpdates: () => sessionUpdates };
+  }
+
+  it('A: GENERATING + correct attempt finalizes with assistant + checkpoint', async () => {
+    const { db, turns, messages, getSessionUpdates } = createFakeFinalizeDb({
+      id: 'turn-A',
+      status: CHAT_TURN_STATES.GENERATING,
+      activeAttemptId: 'att-1',
+    });
+    const result = await finalizeChatTurnCompletion(db, completionInput('turn-A', 'att-1'));
+    expect(result.completed).toBe(true);
+    expect(messages.length).toBe(1);
+    expect(turns.get('turn-A').status).toBe(CHAT_TURN_STATES.COMPLETED);
+    expect(turns.get('turn-A').assistantMessageId).toBe(messages[0].id);
+    expect(turns.get('turn-A').checkpoint).toEqual({ schemaVersion: 1 });
+    expect(getSessionUpdates()).toBe(1);
+  });
+
+  it('B: STOPPED before finalize creates no assistant and never COMPLETES', async () => {
+    const { db, turns, messages, getSessionUpdates } = createFakeFinalizeDb({
+      id: 'turn-B',
+      status: CHAT_TURN_STATES.GENERATING,
+      activeAttemptId: 'att-1',
+    });
+    // Cancellation wins first.
+    expect(await markChatTurnStopped(db, 'turn-B', 'att-1')).toBe(true);
+    expect(turns.get('turn-B').status).toBe(CHAT_TURN_STATES.STOPPED);
+    const result = await finalizeChatTurnCompletion(db, completionInput('turn-B', 'att-1'));
+    expect(result.completed).toBe(false);
+    expect(result.reason).toBe('not_generating');
+    expect(messages.length).toBe(0);
+    expect(turns.get('turn-B').status).toBe(CHAT_TURN_STATES.STOPPED);
+    expect(getSessionUpdates()).toBe(0);
+  });
+
+  it('C: mismatched activeAttemptId creates no assistant (stale provider attempt)', async () => {
+    const { db, turns, messages, getSessionUpdates } = createFakeFinalizeDb({
+      id: 'turn-C',
+      status: CHAT_TURN_STATES.GENERATING,
+      activeAttemptId: 'att-1',
+    });
+    const result = await finalizeChatTurnCompletion(db, completionInput('turn-C', 'att-stale'));
+    expect(result.completed).toBe(false);
+    expect(result.reason).toBe('stale_attempt');
+    expect(messages.length).toBe(0);
+    expect(turns.get('turn-C').status).toBe(CHAT_TURN_STATES.GENERATING);
+    expect(getSessionUpdates()).toBe(0);
+  });
+
+  it('D: only one concurrent claimant can own FINALIZING', async () => {
+    const { db, turns, messages } = createFakeFinalizeDb({
+      id: 'turn-D',
+      status: CHAT_TURN_STATES.GENERATING,
+      activeAttemptId: 'att-1',
+    });
+    const first = await finalizeChatTurnCompletion(db, completionInput('turn-D', 'att-1'));
+    const second = await finalizeChatTurnCompletion(db, completionInput('turn-D', 'att-1'));
+    expect(first.completed).toBe(true);
+    expect(second.completed).toBe(false);
+    expect(messages.length).toBe(1);
+    expect(turns.get('turn-D').status).toBe(CHAT_TURN_STATES.COMPLETED);
+    expect(CHAT_TURN_FINALIZING).toBe('FINALIZING');
   });
 });

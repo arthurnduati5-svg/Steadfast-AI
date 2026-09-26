@@ -77,6 +77,22 @@ export function isContinuationRequired(learnerTurnCount: number): boolean {
   return Math.max(0, Math.floor(learnerTurnCount)) >= NEW_LEARNER_TURN_LIMIT;
 }
 
+/**
+ * Deterministic 100-turn gate: rejects ONLY a genuinely NEW logical learner
+ * turn at count >= 100. Existing durable turns (replay/retry/in-progress/
+ * conflict) always bypass this gate — the caller must resolve the existing
+ * ChatTurn first and pass hasExistingTurn accordingly.
+ */
+export function shouldRejectNewLearnerTurnForContinuation(args: {
+  learnerTurnCount: number;
+  isNewLearnerMessage: boolean;
+  hasExistingTurn: boolean;
+}): boolean {
+  if (!args.isNewLearnerMessage) return false;
+  if (args.hasExistingTurn) return false;
+  return isContinuationRequired(args.learnerTurnCount);
+}
+
 // ── Identity helpers ──
 
 export function generateServerClientTurnId(): string {
@@ -448,24 +464,41 @@ export interface ChatTurnCompletionResult {
 /**
  * §12 guarded completion transaction. Generation itself never holds a
  * transaction open; this short transaction:
- *   1. verifies the turn is still GENERATING owned by this attempt,
+ *   1. atomically claims finalization (GENERATING + matching attempt →
+ *      FINALIZING) via compare-and-set updateMany,
  *   2. persists the assistant message at its reserved sequence,
  *   3. persists the exact checkpoint,
  *   4. updates session rolling continuity metadata,
- *   5. marks the turn COMPLETED with assistantMessageId + completedAt.
+ *   5. marks the turn COMPLETED (FINALIZING → COMPLETED).
  * Invariant: COMPLETED never exists without its canonical assistant row
- * and checkpoint. Late/stale attempts (STOPPED, mismatched attempt id)
- * are discarded — never resurrected.
+ * and checkpoint. Late/stale attempts (STOPPED, mismatched attempt id,
+ * lost CAS race) create NO assistant row, write NO checkpoint and update
+ * NO session continuity — never resurrected. Cancellation (GENERATING →
+ * STOPPED for the matching attempt) cannot overwrite an owned FINALIZING
+ * turn, and finalization cannot overwrite a STOPPED turn.
  */
 export async function finalizeChatTurnCompletion(
   db: ChatTurnDb,
   input: ChatTurnCompletionInput,
 ): Promise<ChatTurnCompletionResult> {
   const runInTransaction = async (tx: ChatTurnDb): Promise<ChatTurnCompletionResult> => {
-    const turn = await tx.chatTurn.findUnique({ where: { id: input.turnId } });
-    if (!turn) return { completed: false, reason: 'not_generating' };
-    if (turn.activeAttemptId !== input.attemptId) return { completed: false, reason: 'stale_attempt' };
-    if (turn.status !== CHAT_TURN_STATES.GENERATING) return { completed: false, reason: 'not_generating' };
+    // Atomic ownership claim: only a GENERATING turn owned by this exact
+    // attempt may enter FINALIZING. Count !== 1 means cancelled, already
+    // finalized/completed, failed, rejected, or a stale provider attempt.
+    const claim = await tx.chatTurn.updateMany({
+      where: {
+        id: input.turnId,
+        status: CHAT_TURN_STATES.GENERATING,
+        activeAttemptId: input.attemptId,
+      },
+      data: { status: CHAT_TURN_FINALIZING },
+    });
+    if (claim.count !== 1) {
+      const current = await tx.chatTurn.findUnique({ where: { id: input.turnId } });
+      if (!current) return { completed: false, reason: 'not_generating' };
+      if (current.activeAttemptId !== input.attemptId) return { completed: false, reason: 'stale_attempt' };
+      return { completed: false, reason: 'not_generating' };
+    }
 
     const assistantMessage = await tx.chatMessage.create({
       data: {
