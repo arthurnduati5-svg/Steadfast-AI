@@ -229,6 +229,7 @@ export interface ChatTurnDb {
   };
   chatSession: {
     update(args: any): Promise<any>;
+    updateMany(args: any): Promise<{ count: number }>;
     findFirst(args: any): Promise<any>;
   };
   chatMessage: {
@@ -238,6 +239,51 @@ export interface ChatTurnDb {
 }
 
 export const defaultChatTurnDb: ChatTurnDb = prisma as unknown as ChatTurnDb;
+
+/**
+ * Database-atomic new-learner-turn capacity admission (compare-and-set).
+ *
+ * This is the authoritative concurrency guard for the 100-turn boundary:
+ * `ChatSession.updateMany` with `WHERE id + learnerTurnCount < 100` and
+ * `SET learnerTurnCount = learnerTurnCount + 1`. Only the transaction that
+ * receives `count === 1` owns the final capacity slot; every competing NEW
+ * logical turn against the same slot receives `count !== 1` and must be
+ * surfaced as `conversation_continuation_required` without creating a
+ * ChatTurn, persisting a learner message, or starting generation.
+ *
+ * Replays/retries of an EXISTING ChatTurn must never call this — they reuse
+ * the slot consumed by the winning admission. Callers that reserved capacity
+ * in the acceptance transaction must NOT increment learnerTurnCount again in
+ * the later learner-message persistence path. A transaction that throws
+ * before durable acceptance rolls this reservation back atomically.
+ */
+export async function reserveNewLearnerTurnCapacity(
+  db: ChatTurnDb,
+  sessionId: string,
+): Promise<boolean> {
+  const result = await db.chatSession.updateMany({
+    where: { id: sessionId, learnerTurnCount: { lt: NEW_LEARNER_TURN_LIMIT } },
+    data: { learnerTurnCount: { increment: 1 } },
+  });
+  return result.count === 1;
+}
+
+/** Typed marker for a lost learner-turn capacity race (maps to 409). */
+export const LEARNER_TURN_CAPACITY_ERROR = 'CONVERSATION_CONTINUATION_REQUIRED';
+
+export function isLearnerTurnCapacityError(error: unknown): boolean {
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    (error as { code?: unknown }).code === LEARNER_TURN_CAPACITY_ERROR
+  );
+}
+
+export function createLearnerTurnCapacityError(): Error & { code: string } {
+  const error = new Error('conversation_continuation_required') as Error & { code: string };
+  error.code = LEARNER_TURN_CAPACITY_ERROR;
+  return error;
+}
 
 export async function findChatTurnByClientTurnId(
   db: ChatTurnDb,

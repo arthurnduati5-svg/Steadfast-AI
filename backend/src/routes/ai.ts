@@ -18,6 +18,9 @@ import {
   generateChatTurnAttemptId,
   findChatTurnByClientTurnId,
   createAcceptedChatTurn,
+  reserveNewLearnerTurnCapacity,
+  createLearnerTurnCapacityError,
+  isLearnerTurnCapacityError,
   claimChatTurnForGeneration,
   beginChatTurnRetry,
   markChatTurnStopped,
@@ -4867,6 +4870,10 @@ router.post('/chat', schoolAuthMiddleware, aiLimiter, async (req: AuthedRequest,
     // in-progress/conflict) are resolved first below and always bypass it.
     const existingTurn = await findChatTurnByClientTurnId(prisma as any, sessionId, clientTurnId);
     let newUserMessageNumber: number | null = null;
+    // Chat durability v1: true once the NEW-turn acceptance transaction has
+    // atomically reserved this turn's learner-turn capacity slot. The later
+    // learner-message persistence path must then NOT increment again.
+    let learnerTurnCapacityReserved = false;
 
     if (existingTurn) {
       if (existingTurn.requestFingerprint !== clientTurnFingerprint) {
@@ -5015,10 +5022,24 @@ router.post('/chat', schoolAuthMiddleware, aiLimiter, async (req: AuthedRequest,
     }
 
     if (!activeTurn) {
-      // New durable turn: reserve sequence slots and create the turn row
-      // atomically, then conditionally claim execution ownership.
+      // New durable turn: atomically reserve the learner-turn capacity slot
+      // (database compare-and-set, authoritative over the snapshot gate
+      // above), then reserve sequence slots and create the turn row — all in
+      // ONE transaction so a failed acceptance rolls the slot back and never
+      // leaks capacity. Only count === 1 owns the final slot; the loser
+      // throws a typed error mapped below to 409
+      // conversation_continuation_required with no turn, no learner message
+      // and no generation. Replays/retries never enter this block.
       try {
         const createdTurn = await prisma.$transaction(async (tx) => {
+          let capacityReserved = false;
+          if (isNewLearnerMessage) {
+            const owned = await reserveNewLearnerTurnCapacity(tx as any, sessionId);
+            if (!owned) {
+              throw createLearnerTurnCapacityError();
+            }
+            capacityReserved = true;
+          }
           const reservation = await reserveMessageNumbers(sessionId, reservedSlotCount, tx as any);
           const assistantMessageNumber = reservation.numbers[reservation.numbers.length - 1];
           const turn = await createAcceptedChatTurn(tx as any, {
@@ -5027,9 +5048,10 @@ router.post('/chat', schoolAuthMiddleware, aiLimiter, async (req: AuthedRequest,
             requestFingerprint: clientTurnFingerprint,
             assistantMessageNumber,
           });
-          return { turn, reservation };
+          return { turn, reservation, capacityReserved };
         });
         newUserMessageNumber = reservedSlotCount === 2 ? createdTurn.reservation.numbers[0] : null;
+        learnerTurnCapacityReserved = createdTurn.capacityReserved === true;
         turnAttemptId = generateChatTurnAttemptId();
         const claimed = await claimChatTurnForGeneration(prisma as any, createdTurn.turn.id, turnAttemptId);
         if (!claimed) {
@@ -5041,6 +5063,17 @@ router.post('/chat', schoolAuthMiddleware, aiLimiter, async (req: AuthedRequest,
         }
         activeTurn = createdTurn.turn;
       } catch (error: any) {
+        if (isLearnerTurnCapacityError(error)) {
+          // Lost the atomic race for the final learner-turn slot: no ChatTurn
+          // was created, no learner message persisted, no generation started,
+          // no slot consumed by this request.
+          return res.status(409).send({
+            code: 'conversation_continuation_required',
+            message: 'This conversation reached 100 learner turns. Start a continuation session to continue.',
+            learnerTurnCount: 100,
+            continuationAvailable: true,
+          });
+        }
         if (error?.code === 'P2002') {
           // Lost a create race against a concurrent identical clientTurnId.
           return res.status(409).send({
@@ -5245,8 +5278,11 @@ router.post('/chat', schoolAuthMiddleware, aiLimiter, async (req: AuthedRequest,
     };
 
     // ── Chat durability v1: persist the learner message exactly once ──
-    // (transactional anchor). Reserved slot + learnerTurnCount increment +
-    // turn linkage happen atomically; retries reuse the existing row.
+    // (transactional anchor). The reserved slot + turn linkage happen
+    // atomically; retries reuse the existing row. The learner-turn capacity
+    // slot was already atomically reserved in the acceptance transaction
+    // above, so this path must NOT increment learnerTurnCount again for a
+    // turn that owns its reservation (exactly one slot per logical turn).
     let savedUserMessage: any = existingEditedUserMessage || (activeTurn as any).userMessageId || null;
     if (savedUserMessage && (savedUserMessage as any).id) {
       savedUserMessage = await prisma.chatMessage.findUnique({ where: { id: (savedUserMessage as any).id } });
@@ -5264,10 +5300,12 @@ router.post('/chat', schoolAuthMiddleware, aiLimiter, async (req: AuthedRequest,
           },
           tx as any,
         );
-        await tx.chatSession.update({
-          where: { id: sessionId },
-          data: { learnerTurnCount: { increment: 1 } },
-        });
+        if (!learnerTurnCapacityReserved) {
+          await tx.chatSession.update({
+            where: { id: sessionId },
+            data: { learnerTurnCount: { increment: 1 } },
+          });
+        }
         await (tx as any).chatTurn.update({
           where: { id: activeTurn.id },
           data: { userMessageId: learnerRow.id },

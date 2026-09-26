@@ -12,11 +12,17 @@ import {
   CHAT_TURN_FINALIZING,
   CHAT_TURN_STATES,
   NEW_LEARNER_TURN_LIMIT,
+  beginChatTurnRetry,
+  claimChatTurnForGeneration,
+  createAcceptedChatTurn,
+  createLearnerTurnCapacityError,
   deriveSessionLifecycleFields,
   finalizeChatTurnCompletion,
   isContinuationRequired,
+  isLearnerTurnCapacityError,
   markChatTurnStopped,
   resolveContinuationStage,
+  reserveNewLearnerTurnCapacity,
   computeClientTurnFingerprint,
   computeLineageRequestFingerprint,
   generateServerClientTurnId,
@@ -413,5 +419,249 @@ describe('chat durability v1 — completion CAS vs cancellation race', () => {
     expect(messages.length).toBe(1);
     expect(turns.get('turn-D').status).toBe(CHAT_TURN_STATES.COMPLETED);
     expect(CHAT_TURN_FINALIZING).toBe('FINALIZING');
+  });
+});
+
+describe('chat durability v1 — atomic new-turn capacity admission (99 → 100 race)', () => {
+  // Deterministic proof of the database compare-and-set guard. The fake below
+  // is faithful to the production path: ChatSession.updateMany with
+  // WHERE id + learnerTurnCount < 100, single-transaction acceptance
+  // (capacity → turn row), and learner-message persistence WITHOUT a second
+  // increment. A live-DB concurrency probe is NOT_RUN here (no usable local
+  // PostgreSQL in this environment); the CAS contract itself is proven.
+
+  function createCapacityFakeDb(initialCount: number) {
+    const sessions = new Map<string, any>([['sess-cap', { id: 'sess-cap', learnerTurnCount: initialCount }]]);
+    const turns = new Map<string, any>();
+    const messages: any[] = [];
+    let turnSeq = 0;
+    let sessionPlainUpdates = 0;
+    const db: any = {
+      chatSession: {
+        findFirst: async () => null,
+        update: async ({ where, data }: any) => {
+          sessionPlainUpdates += 1;
+          const session = sessions.get(where.id);
+          if (!session) throw new Error('session not found');
+          session.learnerTurnCount += data?.learnerTurnCount?.increment ?? 0;
+          return { ...session };
+        },
+        updateMany: async ({ where, data }: any) => {
+          const session = sessions.get(where.id);
+          if (!session) return { count: 0 };
+          const lt = where?.learnerTurnCount?.lt;
+          if (lt !== undefined && !(session.learnerTurnCount < lt)) return { count: 0 };
+          session.learnerTurnCount += data?.learnerTurnCount?.increment ?? 0;
+          return { count: 1 };
+        },
+      },
+      chatTurn: {
+        findUnique: async ({ where }: any) => {
+          if (where.id) {
+            const turn = turns.get(where.id);
+            return turn ? { ...turn } : null;
+          }
+          const key = where.sessionId_clientTurnId;
+          if (key) {
+            for (const turn of turns.values()) {
+              if (turn.sessionId === key.sessionId && turn.clientTurnId === key.clientTurnId) {
+                return { ...turn };
+              }
+            }
+          }
+          return null;
+        },
+        findFirst: async () => null,
+        create: async ({ data }: any) => {
+          for (const turn of turns.values()) {
+            if (turn.sessionId === data.sessionId && turn.clientTurnId === data.clientTurnId) {
+              const conflict: any = new Error('unique constraint');
+              conflict.code = 'P2002';
+              throw conflict;
+            }
+          }
+          turnSeq += 1;
+          const row = { id: `turn-cap-${turnSeq}`, status: CHAT_TURN_STATES.ACCEPTED, ...data };
+          turns.set(row.id, row);
+          return { ...row };
+        },
+        update: async ({ where, data }: any) => {
+          const turn = turns.get(where.id);
+          if (!turn) throw new Error('turn not found');
+          Object.assign(turn, data);
+          return { ...turn };
+        },
+        updateMany: async ({ where, data }: any) => {
+          const turn = turns.get(where.id);
+          if (!turn) return { count: 0 };
+          if (where.status !== undefined) {
+            const cond = where.status;
+            const ok =
+              typeof cond === 'string' ? turn.status === cond : cond?.in?.includes(turn.status) ?? false;
+            if (!ok) return { count: 0 };
+          }
+          if (where.activeAttemptId !== undefined && turn.activeAttemptId !== where.activeAttemptId) {
+            return { count: 0 };
+          }
+          Object.assign(turn, data);
+          return { count: 1 };
+        },
+      },
+      chatMessage: {
+        create: async ({ data }: any) => {
+          const row = { id: `msg-cap-${messages.length + 1}`, ...data };
+          messages.push(row);
+          return { ...row };
+        },
+      },
+      $transaction: async (fn: any) => {
+        const countSnapshot = sessions.get('sess-cap')!.learnerTurnCount;
+        const turnsSnapshot = new Map(turns);
+        const messagesSnapshot = messages.length;
+        try {
+          return await fn(db);
+        } catch (error) {
+          sessions.get('sess-cap')!.learnerTurnCount = countSnapshot;
+          turns.clear();
+          for (const [key, value] of turnsSnapshot) turns.set(key, value);
+          messages.length = messagesSnapshot;
+          throw error;
+        }
+      },
+    };
+    const getCount = () => sessions.get('sess-cap')!.learnerTurnCount;
+    return { db, turns, messages, getCount, getSessionPlainUpdates: () => sessionPlainUpdates };
+  }
+
+  /** Mirrors the route's NEW-turn acceptance transaction (capacity + turn). */
+  async function acceptNewTurn(db: any, clientTurnId: string) {
+    return db.$transaction(async (tx: any) => {
+      const owned = await reserveNewLearnerTurnCapacity(tx, 'sess-cap');
+      if (!owned) throw createLearnerTurnCapacityError();
+      return createAcceptedChatTurn(tx, {
+        sessionId: 'sess-cap',
+        clientTurnId,
+        requestFingerprint: `fp-${clientTurnId}`,
+        assistantMessageNumber: 10,
+      });
+    });
+  }
+
+  /** Mirrors the route's learner-message persistence (no second increment). */
+  async function persistLearnerMessageWithoutSecondIncrement(db: any, turnId: string) {
+    const learnerRow = await db.chatMessage.create({
+      data: { sessionId: 'sess-cap', role: 'user', content: 'final slot turn', messageNumber: 9 },
+    });
+    await db.chatTurn.update({ where: { id: turnId }, data: { userMessageId: learnerRow.id } });
+    return learnerRow;
+  }
+
+  it('first NEW admission at 99 succeeds and produces count 100', async () => {
+    const { db, turns, messages, getCount, getSessionPlainUpdates } = createCapacityFakeDb(99);
+    expect(
+      shouldRejectNewLearnerTurnForContinuation({
+        learnerTurnCount: 99,
+        isNewLearnerMessage: true,
+        hasExistingTurn: false,
+      }),
+    ).toBe(false);
+    const turn = await acceptNewTurn(db, 'client-new-1');
+    expect(turn.clientTurnId).toBe('client-new-1');
+    expect(getCount()).toBe(100);
+    const learnerRow = await persistLearnerMessageWithoutSecondIncrement(db, turn.id);
+    expect(learnerRow.id).toBeTruthy();
+    expect(turns.get(turn.id).userMessageId).toBe(learnerRow.id);
+    expect(messages.length).toBe(1);
+    // Exactly one slot consumed: reservation only, never a second increment.
+    expect(getSessionPlainUpdates()).toBe(0);
+    expect(getCount()).toBe(100);
+  });
+
+  it('competing second NEW admission loses with no turn, message or generation', async () => {
+    const { db, turns, messages, getCount } = createCapacityFakeDb(99);
+    const winner = await acceptNewTurn(db, 'client-new-1');
+    expect(getCount()).toBe(100);
+    let error: any = null;
+    try {
+      await acceptNewTurn(db, 'client-new-2');
+    } catch (err) {
+      error = err;
+    }
+    expect(isLearnerTurnCapacityError(error)).toBe(true);
+    // Loser persists nothing and owns no generation.
+    expect(turns.size).toBe(1);
+    expect(turns.has(winner.id)).toBe(true);
+    expect(messages.length).toBe(0);
+    expect(await claimChatTurnForGeneration(db, 'missing-turn', 'att-loser')).toBe(false);
+    expect(getCount()).toBe(100);
+    // Snapshot gate agrees the slot is now closed for genuinely new turns.
+    expect(
+      shouldRejectNewLearnerTurnForContinuation({
+        learnerTurnCount: getCount(),
+        isNewLearnerMessage: true,
+        hasExistingTurn: false,
+      }),
+    ).toBe(true);
+  });
+
+  it('retry of the winning turn never reserves again; count cannot exceed 100', async () => {
+    const { db, turns, getCount } = createCapacityFakeDb(99);
+    const winner = await acceptNewTurn(db, 'client-new-1');
+    await persistLearnerMessageWithoutSecondIncrement(db, winner.id);
+    // Move the winner through generation so a retry can be claimed.
+    expect(await claimChatTurnForGeneration(db, winner.id, 'att-win')).toBe(true);
+    expect(await markChatTurnStopped(db, winner.id, 'att-win')).toBe(true);
+    // Retry of the EXISTING turn bypasses the gate and never touches capacity.
+    expect(
+      shouldRejectNewLearnerTurnForContinuation({
+        learnerTurnCount: getCount(),
+        isNewLearnerMessage: true,
+        hasExistingTurn: true,
+      }),
+    ).toBe(false);
+    expect(await beginChatTurnRetry(db, winner.id, 'att-retry')).toBe(true);
+    expect(getCount()).toBe(100);
+    // Every further genuinely NEW admission loses; the counter never exceeds 100.
+    for (let i = 0; i < 5; i += 1) {
+      await expect(acceptNewTurn(db, `client-new-loser-${i}`)).rejects.toMatchObject({
+        code: 'CONVERSATION_CONTINUATION_REQUIRED',
+      });
+    }
+    expect(getCount()).toBe(100);
+    expect(turns.size).toBe(1);
+  });
+
+  it('failed acceptance rolls its capacity slot back (no leak)', async () => {
+    const { db, turns, getCount } = createCapacityFakeDb(99);
+    // A concurrently-committed identical clientTurnId already owns the turn row.
+    await db.chatTurn.create({
+      data: {
+        sessionId: 'sess-cap',
+        clientTurnId: 'client-same',
+        requestFingerprint: 'fp-client-same',
+        status: CHAT_TURN_STATES.ACCEPTED,
+        assistantMessageNumber: 10,
+      },
+    });
+    expect(getCount()).toBe(99);
+    // This attempt reserves capacity (99 → 100) then loses turn creation with
+    // P2002; the single transaction rolls the slot back to 99.
+    let error: any = null;
+    try {
+      await db.$transaction(async (tx: any) => {
+        expect(await reserveNewLearnerTurnCapacity(tx, 'sess-cap')).toBe(true);
+        await createAcceptedChatTurn(tx, {
+          sessionId: 'sess-cap',
+          clientTurnId: 'client-same',
+          requestFingerprint: 'fp-client-same',
+          assistantMessageNumber: 11,
+        });
+      });
+    } catch (err) {
+      error = err;
+    }
+    expect(error?.code).toBe('P2002');
+    expect(getCount()).toBe(99);
+    expect(turns.size).toBe(1);
   });
 });
