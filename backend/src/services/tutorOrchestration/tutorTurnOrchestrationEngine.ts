@@ -242,6 +242,7 @@ export async function orchestrateTutorTurn(
         requestId,
         messageText: input.messageText,
         plan,
+        intent,
         hint,
         stepCheck,
         mistakeAnalysis,
@@ -252,6 +253,8 @@ export async function orchestrateTutorTurn(
         learnerAge: input.learnerAge,
         deenSourceSensitive: deenSensitive,
         curriculumDirectives: curriculumPacket.teachingMethodRules,
+        pacingDirective,
+        preferredLanguage: input.preferredLanguage,
       });
 
       // Call safe generation through the existing Task 009 gateway.

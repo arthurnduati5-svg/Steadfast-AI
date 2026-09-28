@@ -37,6 +37,7 @@ const DEEN_INVENTION_PATTERNS = [
 
 const GUIDING_QUESTION_PATTERNS = [
   /\?/,
+  /؟/,
   /what do you think/i,
   /can you/i,
   /how would you/i,
@@ -44,6 +45,18 @@ const GUIDING_QUESTION_PATTERNS = [
   /try to/i,
   /your turn/i,
 ];
+
+// R11: ordinary tutoring responses must contain at most ONE learner-facing
+// question. Both ASCII '?' and Arabic '؟' count. This is deterministic — no
+// second AI call and no complex NLP. Exemptions mirror the guiding-question
+// exemption set (policy-controlled responses).
+const QUESTION_MARK_PATTERN = /[?؟]/g;
+const QUESTION_OVERLOAD_LIMIT = 1;
+const QUESTION_OVERLOAD_EXEMPT_MOVES = new Set([
+  'safe_refusal',
+  'deen_referral',
+  'safety_support_message',
+]);
 
 export function validateOrchestrationOutput(input: OutputValidationInput): OutputValidationResult {
   const violations: string[] = [];
@@ -84,6 +97,13 @@ export function validateOrchestrationOutput(input: OutputValidationInput): Outpu
     const hasGuidingQuestion = GUIDING_QUESTION_PATTERNS.some(p => p.test(text));
     if (!hasGuidingQuestion && !input.includesGuidingQuestion) {
       violations.push('missing_guiding_question');
+    }
+
+    if (!QUESTION_OVERLOAD_EXEMPT_MOVES.has(input.responseMove)) {
+      const questionCount = (text.match(QUESTION_MARK_PATTERN) || []).length;
+      if (questionCount > QUESTION_OVERLOAD_LIMIT) {
+        violations.push('question_overload');
+      }
     }
   }
 
