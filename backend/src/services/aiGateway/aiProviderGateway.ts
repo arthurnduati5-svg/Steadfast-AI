@@ -11,11 +11,20 @@ export interface AIProviderGatewayInput {
   routingDecision: ModelRoutingDecision;
 }
 
+export interface AIProviderGatewayOptions {
+  /** Bounded per-call timeout in ms (R9). */
+  timeoutMs?: number;
+  /** Bounded max output tokens forwarded to the provider (R9). */
+  maxOutputTokens?: number;
+}
+
 export async function generate(
   input: AIProviderGatewayInput,
   healthService: ProviderHealthService,
-  timeoutMs: number = 30000,
+  options: AIProviderGatewayOptions | number = {},
 ): Promise<ProviderGenerationResult> {
+  const timeoutMs = typeof options === 'number' ? options : options.timeoutMs;
+  const maxOutputTokens = typeof options === 'number' ? undefined : options.maxOutputTokens;
   const { generationRequest, promptBundle, routingDecision } = input;
 
   if (!generationRequest.policyPacket) {
@@ -85,6 +94,7 @@ export async function generate(
       modelId: routingDecision.modelId || 'default',
       prompt: promptBundle.prompt,
       generationMode: 'socratic_tutoring',
+      maxOutputTokens,
       timeoutMs,
     });
 

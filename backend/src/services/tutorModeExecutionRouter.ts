@@ -100,7 +100,10 @@ async function executeSocraticMode(input: ModeExecutionInput): Promise<TutorMode
     return {
       mode: input.mode,
       learnerFacingResponse: result.responseText,
-      evidenceWritten: true,
+      // R7: derive truth from actual canonical orchestration evidence/commit
+      // result — never hardcode true.
+      evidenceWritten: ((result.evidenceWrite as { evidenceWritten?: boolean } | undefined)?.evidenceWritten === true)
+        || (result.learningCommit?.attempted === true && result.learningCommit.ok === true && (result.learningCommit.attemptPersisted || result.learningCommit.stepEvidencePersisted)),
       nextRecommendedAction: 'continue',
       agencyOptions: [
         { label: 'Continue learning', action: 'continue' },
@@ -121,21 +124,32 @@ async function executeSocraticMode(input: ModeExecutionInput): Promise<TutorMode
 async function executeAttemptChecking(input: ModeExecutionInput): Promise<TutorModeExecutionResult> {
   const practiceAttemptModule = await import('./practiceAttemptService');
   try {
+    // R7: evidenceWritten=true derives ONLY from actual successful persistence.
     const recordAttempt = (practiceAttemptModule as any).recordAttempt || (practiceAttemptModule as any).practiceAttemptService?.recordAttempt;
-    if (typeof recordAttempt === 'function') {
-      await recordAttempt({
+    if (typeof recordAttempt !== 'function') {
+      return {
+        mode: input.mode,
+        learnerFacingResponse: 'I have received your answer. Let me check it.',
+        evidenceWritten: false,
+        nextRecommendedAction: 'continue',
+      };
+    }
+
+    const recordResult = await recordAttempt({
       schoolId: input.identity.schoolId,
       studentId: input.identity.studentId,
       subject: input.subject,
       topic: input.topic,
       learnerAnswer: input.attemptText || input.message || '',
     });
-    }
+
+    const persisted = recordResult === true
+      || (recordResult && typeof recordResult === 'object' && (recordResult.record !== null || recordResult.ok === true || recordResult.persisted === true));
 
     return {
       mode: input.mode,
       learnerFacingResponse: 'I have received your answer. Let me check it.',
-      evidenceWritten: true,
+      evidenceWritten: persisted === true,
       nextRecommendedAction: 'continue',
     };
   } catch {
@@ -156,10 +170,12 @@ async function executeRevision(input: ModeExecutionInput): Promise<TutorModeExec
     const explanation = typeof getExplanation === 'function'
       ? await getExplanation(input.identity.schoolId, input.identity.studentId, input.activeRevisionItemId, input.skillTag)
       : undefined;
+    // R7: retrieving/generating an explanation is NOT learning evidence.
+    // No actual evidence write happens in this mode.
     return {
       mode: input.mode,
       learnerFacingResponse: explanation?.explanation || 'Let us review what you have learned.',
-      evidenceWritten: true,
+      evidenceWritten: false,
       nextRecommendedAction: 'continue',
       revisionItem: explanation?.revisionItem ? { id: explanation.revisionItem.id } : undefined,
       agencyOptions: [
@@ -200,10 +216,11 @@ async function executeRemediation(input: ModeExecutionInput): Promise<TutorModeE
         })
       : undefined;
 
+    // R7: planning a remediation path is not learner evidence of any kind.
     return {
       mode: input.mode,
       learnerFacingResponse: 'Let us strengthen the foundations before moving forward.',
-      evidenceWritten: true,
+      evidenceWritten: false,
       nextRecommendedAction: 'continue',
       remediationPath: path ? { id: path.id, steps: (path as any).steps } : undefined,
       agencyOptions: [
@@ -244,10 +261,11 @@ async function executeChallenge(input: ModeExecutionInput): Promise<TutorModeExe
         })
       : undefined;
 
+    // R7: generating a challenge question is tutor activity, not learner evidence.
     return {
       mode: input.mode,
       learnerFacingResponse: result.challenge?.learnerPrompt || 'Here is a challenge for you.',
-      evidenceWritten: true,
+      evidenceWritten: false,
       nextRecommendedAction: 'continue',
       challenge: result?.challenge ? { id: (result.challenge as any).id } : undefined,
       remediationPath: result?.remediationPath ? { id: (result.remediationPath as any).id } : undefined,
@@ -287,10 +305,11 @@ async function executeReflection(input: ModeExecutionInput): Promise<TutorModeEx
         })
       : undefined;
 
+    // R7: building a reflection state is not validated learner evidence.
     return {
       mode: input.mode,
       learnerFacingResponse: 'What did you learn today? Reflecting helps you remember.',
-      evidenceWritten: true,
+      evidenceWritten: false,
       nextRecommendedAction: 'progress_summary',
       agencyOptions: [
         { label: 'See my progress', action: 'continue' },
@@ -314,10 +333,11 @@ async function executeProgressSummary(input: ModeExecutionInput): Promise<TutorM
     const narrative = typeof getNarrative === 'function'
       ? await getNarrative(input.identity.schoolId, input.identity.studentId)
       : undefined;
+    // R7: reading a progress narrative is not a learning evidence write.
     return {
       mode: input.mode,
       learnerFacingResponse: narrative || 'Here is a summary of your progress.',
-      evidenceWritten: true,
+      evidenceWritten: false,
       nextRecommendedAction: 'session_complete',
       progressSummary: narrative,
       agencyOptions: [
@@ -356,7 +376,8 @@ async function executeDeenReferral(input: ModeExecutionInput): Promise<TutorMode
   return {
     mode: input.mode,
     learnerFacingResponse: 'This question is best answered by a qualified Islamic teacher or scholar. I will note this for your teacher.',
-    evidenceWritten: true,
+    // R7/R5-J: deen referral is not mastery/understanding evidence.
+    evidenceWritten: false,
     nextRecommendedAction: 'session_complete',
     agencyOptions: [
       { label: 'Continue with other topics', action: 'continue' },
@@ -369,7 +390,8 @@ async function executeSafeguardingPause(input: ModeExecutionInput): Promise<Tuto
   return {
     mode: input.mode,
     learnerFacingResponse: 'I am here to support you. Please reach out to a trusted adult, teacher, or counsellor who can help you.',
-    evidenceWritten: true,
+    // R7/R5-A: safety turns produce no learning evidence.
+    evidenceWritten: false,
     nextRecommendedAction: 'complete',
   };
 }
@@ -378,7 +400,8 @@ async function executeTeacherHelpSuggested(input: ModeExecutionInput): Promise<T
   return {
     mode: input.mode,
     learnerFacingResponse: 'I think this question would benefit from your teacher\'s guidance. I will save a note for them.',
-    evidenceWritten: true,
+    // R7: suggesting teacher help is not validated learner evidence.
+    evidenceWritten: false,
     nextRecommendedAction: 'session_complete',
     agencyOptions: [
       { label: 'End session', action: 'complete' },

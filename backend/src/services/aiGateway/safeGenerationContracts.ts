@@ -35,6 +35,12 @@ export interface SafeGenerationRequest {
       safeSummary: string;
       createdAt?: string;
     }>;
+    /**
+     * Already-backend-authorized prepared tutor context (R3-D). Rendered
+     * deliberately (bounded fields only) by policyAwarePromptBuilder —
+     * never serialized blindly. Never weakens hard policy directives.
+     */
+    preparedPromptPacket?: import('../chatPipelineContracts').ChatPromptPacket;
   };
   clientContext?: {
     displayMode?: 'widget' | 'fullscreen';

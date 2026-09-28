@@ -170,6 +170,11 @@ export interface IntegratedChatResponseMeta {
     supportedKept: number;
     missingSourceFallback: boolean;
   };
+  /** R6: truthful bounded protected-persistence status (no raw internals) */
+  learningCommit?: {
+    attempted: boolean;
+    ok: boolean;
+  };
 }
 
 // ── Integrated Chat Response ──

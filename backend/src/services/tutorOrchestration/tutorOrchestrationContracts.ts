@@ -37,6 +37,12 @@ export interface TutorTurnOrchestrationInput {
   learnerGrade?: string;
   learnerAge?: number;
   preferredLanguage?: string;
+  /**
+   * Already-backend-authorized prepared prompt packet from the Live Chat
+   * pipeline preparation (R3). Type-only import — the contract is not
+   * duplicated here. Precedence: hard policy > prepared context.
+   */
+  preparedPromptPacket?: import('../chatPipelineContracts').ChatPromptPacket;
   clientContext?: {
     displayMode?: 'widget' | 'fullscreen';
     activeSchoolPage?: string;
@@ -79,5 +85,18 @@ export interface TutorTurnOrchestrationResult {
     curriculumTrack?: string;
     subjectModuleId?: string;
     allowedMode?: string;
+  };
+  /**
+   * Truthful bounded protected-persistence status for this turn (R6).
+   * attempted=false when the turn carried no validated learning signal.
+   */
+  learningCommit?: {
+    attempted: boolean;
+    ok: boolean;
+    attemptPersisted: boolean;
+    stepEvidencePersisted: boolean;
+    masteryAggregated: boolean;
+    revisionScheduled: boolean;
+    warnings: string[];
   };
 }

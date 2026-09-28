@@ -1,6 +1,6 @@
 import type { TutorTurnPolicyInput, TutorTurnPolicyPacket } from '../tutorTurnPolicy/tutorTurnPolicyContracts';
 import type { SafeGenerationRequest, SafeGenerationResponse } from './safeGenerationContracts';
-import type { PolicyAwarePromptBundle } from './promptBoundaryContracts';
+import type { PolicyAwarePromptBundle, TutorMessageGenerationExecutionContext } from './promptBoundaryContracts';
 import type { ModelRoutingDecision } from './modelRoutingContracts';
 import type { ProviderGenerationResult } from './modelProviderContracts';
 import type { GenerationOutputValidationResult } from './generationOutputValidationContracts';
@@ -23,6 +23,37 @@ export interface TutorMessageGenerationServiceConfig {
   useMockProvider?: boolean;
 }
 
+// ── R9: bounded generation budget (one turn) ──
+const TOTAL_GENERATION_DEADLINE_MS = 10000;
+const MAX_PROVIDER_CALLS_PER_TURN = 2;
+const MAX_OUTPUT_TOKENS = 640;
+const BUDGET_VIOLATION_CODE = 'runtime_budget_exhausted';
+
+interface TurnBudgetState {
+  startedAt: number;
+  providerCalls: number;
+}
+
+function remainingBudgetMs(budget: TurnBudgetState): number {
+  return TOTAL_GENERATION_DEADLINE_MS - (Date.now() - budget.startedAt);
+}
+
+function budgetExceeded(budget: TurnBudgetState): boolean {
+  return budget.providerCalls >= MAX_PROVIDER_CALLS_PER_TURN || remainingBudgetMs(budget) <= 0;
+}
+
+function budgetFallback(requestId: string, violationCode: string): SafeGenerationResponse {
+  return {
+    requestId,
+    decision: 'fallback',
+    responseText: 'I am not able to generate a response right now. Please try again.',
+    validation: { valid: false, repaired: false, fallbackUsed: true, violationCodes: [violationCode] },
+    policyTags: ['runtime_budget_exhausted'],
+    archiveMetadata: { shouldArchive: false, archiveUserMessage: true, archiveAssistantMessage: false },
+    safeMemoryMetadata: { shouldUpdateSafeMemory: false, safeSignals: [] },
+  };
+}
+
 function generateRequestId(): string {
   return `gen_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 }
@@ -31,8 +62,12 @@ export async function generateTutorMessage(
   input: TutorTurnPolicyInput,
   healthService: ProviderHealthService = defaultProviderHealthService,
   config: TutorMessageGenerationServiceConfig = {},
+  executionContext: TutorMessageGenerationExecutionContext = {},
 ): Promise<SafeGenerationResponse> {
   const requestId = input.requestId || generateRequestId();
+
+  // R9: bounded orchestration state for this tutor turn.
+  const budget: TurnBudgetState = { startedAt: Date.now(), providerCalls: 0 };
 
   logger.info({ requestId, tutorLearnerId: input.tutorLearnerId }, 'Starting tutor message generation');
 
@@ -57,6 +92,8 @@ export async function generateTutorMessage(
   const safeContext = {
     curriculumContext: policyPacket.curriculumContext,
     deenPolicyContext: deenCtx,
+    // R3-D: prepared packet is an already-backend-authorized generation context.
+    preparedPromptPacket: executionContext.preparedPromptPacket,
   };
 
   const safeGenRequest: SafeGenerationRequest = {
@@ -122,7 +159,8 @@ export async function generateTutorMessage(
       {
         defaultProviderId: config.defaultProviderId,
         fallbackProviderIds: config.fallbackProviderIds,
-        useMockInTest: config.useMockProvider ?? process.env.NODE_ENV === 'test',
+        // R4: mock may only activate in test mode.
+        useMockInTest: config.useMockProvider === true && process.env.NODE_ENV === 'test',
       },
     );
   } catch (error: unknown) {
@@ -163,33 +201,37 @@ export async function generateTutorMessage(
     };
   }
 
-  let providerResult: ProviderGenerationResult;
-  try {
-    providerResult = await callProvider(
+  // R9: bounded provider call — respects call budget, remaining deadline,
+  // and max output tokens. Returns null when the budget forbids the call.
+  const callProviderBounded = async (routing: ModelRoutingDecision): Promise<ProviderGenerationResult | null> => {
+    if (budgetExceeded(budget)) {
+      return null;
+    }
+    const remainingMs = remainingBudgetMs(budget);
+    const timeoutMs = Math.min(7000, remainingMs);
+    if (timeoutMs <= 0) {
+      return null;
+    }
+    budget.providerCalls += 1;
+    return callProvider(
       {
         generationRequest: safeGenRequest,
         promptBundle,
-        routingDecision,
+        routingDecision: routing,
       },
       healthService,
-    );
-  } catch (error: unknown) {
-    const errorMessage = error instanceof Error ? error.message : 'Unknown provider error';
-    logger.error({ requestId, error: errorMessage }, 'Provider call failed');
-    return {
-      requestId,
-      decision: 'fallback',
-      responseText: 'I am not able to generate a response right now. Please try again.',
-      provider: {
-        providerId: routingDecision.providerId || 'unknown',
-        modelId: routingDecision.modelId || 'unknown',
-        routedBy: 'aiProviderGateway',
+      {
+        timeoutMs,
+        maxOutputTokens: MAX_OUTPUT_TOKENS,
       },
-      validation: { valid: false, repaired: false, fallbackUsed: true, violationCodes: ['provider_exception'] },
-      policyTags: [],
-      archiveMetadata: { shouldArchive: false, archiveUserMessage: true, archiveAssistantMessage: false },
-      safeMemoryMetadata: { shouldUpdateSafeMemory: false, safeSignals: [] },
-    };
+    );
+  };
+
+  let providerResult: ProviderGenerationResult | null = await callProviderBounded(routingDecision);
+
+  if (providerResult === null) {
+    logger.warn({ requestId }, 'Generation budget exhausted before first provider call');
+    return budgetFallback(requestId, BUDGET_VIOLATION_CODE);
   }
 
   if (!providerResult.ok || !providerResult.text) {
@@ -203,6 +245,12 @@ export async function generateTutorMessage(
       });
     }
 
+    // R9: this fallback attempt is provider call #2 (of max 2).
+    if (budgetExceeded(budget)) {
+      logger.warn({ requestId }, 'Generation budget exhausted before fallback provider call');
+      return budgetFallback(requestId, BUDGET_VIOLATION_CODE);
+    }
+
     logger.info({ requestId, providerId: routingDecision.providerId, fallbacks: routingDecision.fallbackProviderIds }, 'Provider failed, trying fallback');
     const fallbackRouting: ModelRoutingDecision = {
       ...routingDecision,
@@ -213,14 +261,7 @@ export async function generateTutorMessage(
     };
 
     try {
-      providerResult = await callProvider(
-        {
-          generationRequest: safeGenRequest,
-          promptBundle,
-          routingDecision: fallbackRouting,
-        },
-        healthService,
-      );
+      providerResult = await callProviderBounded(fallbackRouting);
     } catch (fallbackError: unknown) {
       const fbMsg = fallbackError instanceof Error ? fallbackError.message : 'Unknown fallback error';
       logger.error({ requestId, error: fbMsg }, 'Fallback provider also failed');
@@ -237,6 +278,11 @@ export async function generateTutorMessage(
           errorMessage: fbMsg,
         },
       });
+    }
+
+    if (providerResult === null) {
+      logger.warn({ requestId }, 'Generation budget exhausted after failed primary provider call');
+      return budgetFallback(requestId, BUDGET_VIOLATION_CODE);
     }
   }
 
@@ -268,7 +314,21 @@ export async function generateTutorMessage(
   }
 
   if (validationResult.decision === 'requires_regeneration') {
-    logger.info({ requestId }, 'Output invalid, attempting single regeneration');
+    // R9: single output-validation regeneration is allowed ONLY if both the
+    // provider-call budget (max 2 total) and the deadline still have room.
+    // Never primary + fallback + regeneration.
+    if (budgetExceeded(budget)) {
+      logger.warn({ requestId, providerCalls: budget.providerCalls }, 'Regeneration skipped: generation budget exhausted');
+      return assembleSafeResponse({
+        requestId,
+        generationRequest: safeGenRequest,
+        generationPolicy,
+        providerResult,
+        validationResult,
+      });
+    }
+
+    logger.info({ requestId }, 'Output invalid, attempting single regeneration within budget');
 
     const retryRouting: ModelRoutingDecision = {
       ...routingDecision,
@@ -276,16 +336,9 @@ export async function generateTutorMessage(
     };
 
     try {
-      const retryResult = await callProvider(
-        {
-          generationRequest: safeGenRequest,
-          promptBundle,
-          routingDecision: retryRouting,
-        },
-        healthService,
-      );
+      const retryResult = await callProviderBounded(retryRouting);
 
-      if (retryResult.ok && retryResult.text) {
+      if (retryResult && retryResult.ok && retryResult.text) {
         const retryValidation = await validateGenerationOutput({
           requestId,
           draftOutput: retryResult.text,
@@ -317,6 +370,8 @@ export async function generateTutorMessage(
     valid: finalResponse.validation.valid,
     repaired: finalResponse.validation.repaired,
     fallbackUsed: finalResponse.validation.fallbackUsed,
+    providerCalls: budget.providerCalls,
+    durationMs: Date.now() - budget.startedAt,
     shouldArchive: finalResponse.archiveMetadata.shouldArchive,
     shouldUpdateMemory: finalResponse.safeMemoryMetadata.shouldUpdateSafeMemory,
   }, 'Tutor message generation complete');

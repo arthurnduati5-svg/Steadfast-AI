@@ -1,5 +1,93 @@
 import type { PolicyAwarePromptInput, PolicyAwarePromptBundle } from './promptBoundaryContracts';
 
+// Defensive final string bound for the composed prompt (R3-G).
+// ChatPromptAssembler bounds its own contents; this is the last-resort cap.
+const MAX_PROMPT_LENGTH = 24000;
+const MAX_PREPARED_INSTRUCTION_LINES = 24;
+const MAX_PREPARED_INSTRUCTION_LENGTH = 400;
+const MAX_PREPARED_CONTEXT_LINES = 16;
+const MAX_PREPARED_CONTEXT_LENGTH = 400;
+
+/**
+ * Render the prepared ChatPromptPacket deliberately (R3-G).
+ * Only already-bounded, backend-authorized fields are included:
+ * systemInstructions, developerInstructions, tutorTaskInstruction,
+ * bounded allowedContext, forbiddenContext, citationPolicy.
+ * No raw archives, raw private memory, secrets, auth material, or
+ * arbitrary full object dumps are ever serialized here.
+ */
+function buildPreparedContextSection(input: PolicyAwarePromptInput): string | null {
+  const packet = input.safeContext?.preparedPromptPacket;
+  if (!packet) return null;
+
+  const clamp = (s: string, max: number): string => (s.length > max ? s.slice(0, max) : s);
+  const boundedLines = (lines: unknown, maxLines: number, maxLen: number): string[] => {
+    if (!Array.isArray(lines)) return [];
+    return (lines as unknown[])
+      .map((l) => String(l ?? '').trim())
+      .filter(Boolean)
+      .slice(0, maxLines)
+      .map((l) => clamp(l, maxLen));
+  };
+
+  const parts: string[] = [];
+
+  const systemLines = boundedLines(packet.systemInstructions, MAX_PREPARED_INSTRUCTION_LINES, MAX_PREPARED_INSTRUCTION_LENGTH);
+  if (systemLines.length > 0) {
+    parts.push(`Prepared tutor instructions:\n${systemLines.map((l) => `- ${l}`).join('\n')}`);
+  }
+
+  const developerLines = boundedLines(packet.developerInstructions, MAX_PREPARED_INSTRUCTION_LINES, MAX_PREPARED_INSTRUCTION_LENGTH);
+  if (developerLines.length > 0) {
+    parts.push(`Prepared developer guidance:\n${developerLines.map((l) => `- ${l}`).join('\n')}`);
+  }
+
+  const taskInstruction = String(packet.tutorTaskInstruction ?? '').trim();
+  if (taskInstruction) {
+    parts.push(`Prepared tutor task: ${clamp(taskInstruction, MAX_PREPARED_INSTRUCTION_LENGTH)}`);
+  }
+
+  // Bounded allowed context: only safe scalar summaries from the packet.
+  const allowed = packet.allowedContext ?? {};
+  const contextLines: string[] = [];
+  const socraticPolicy = allowed.socraticPolicy;
+  if (socraticPolicy && typeof socraticPolicy === 'object') {
+    const sp = socraticPolicy as Record<string, unknown>;
+    if (sp.supportMode) contextLines.push(`Support mode: ${String(sp.supportMode)}`);
+    if (sp.challengeLevel) contextLines.push(`Challenge level: ${String(sp.challengeLevel)}`);
+    if (sp.safeContextSummary) contextLines.push(`Learner context summary: ${clamp(String(sp.safeContextSummary), MAX_PREPARED_CONTEXT_LENGTH)}`);
+  }
+  if (typeof allowed.personalization === 'string' && allowed.personalization.trim()) {
+    contextLines.push(`Personalization: ${clamp(allowed.personalization.trim(), MAX_PREPARED_CONTEXT_LENGTH)}`);
+  }
+  if (Array.isArray(allowed.artifactReasoningEvidence) && allowed.artifactReasoningEvidence.length > 0) {
+    for (const ev of allowed.artifactReasoningEvidence.slice(0, 4)) {
+      const evText = String(ev ?? '').trim();
+      if (evText) contextLines.push(`Artifact evidence: ${clamp(evText, MAX_PREPARED_CONTEXT_LENGTH)}`);
+    }
+  }
+  if (contextLines.length > 0) {
+    parts.push(`Prepared learning context (backend-authorized):\n${contextLines.slice(0, MAX_PREPARED_CONTEXT_LINES).join('\n')}`);
+  }
+
+  const forbiddenLines = boundedLines(packet.forbiddenContext, MAX_PREPARED_INSTRUCTION_LINES, MAX_PREPARED_INSTRUCTION_LENGTH);
+  if (forbiddenLines.length > 0) {
+    parts.push(`Prepared forbidden context reminders:\n${forbiddenLines.map((l) => `- ${l}`).join('\n')}`);
+  }
+
+  const citationPolicy = packet.citationPolicy;
+  if (citationPolicy && typeof citationPolicy === 'object') {
+    const cp = citationPolicy as Record<string, unknown>;
+    if (cp.allowSourceChips === false) {
+      parts.push('Citation policy: source chips disabled. Do not fabricate citations or URLs.');
+    } else if (Array.isArray(cp.verifiedSourceIds) && cp.verifiedSourceIds.length > 0) {
+      parts.push(`Citation policy: only verified source IDs may be cited (${cp.verifiedSourceIds.length} verified).`);
+    }
+  }
+
+  return parts.length > 0 ? parts.join('\n\n') : null;
+}
+
 function buildSystemDirective(input: PolicyAwarePromptInput): string {
   const lines: string[] = [];
   lines.push('You are a Socratic Islamic tutor. Your role is to guide the student to discover answers themselves.');
@@ -86,12 +174,19 @@ function buildContextSection(input: PolicyAwarePromptInput): string {
     parts.push(`Recent conversation:\n${recent}`);
   }
 
+  // R3-E: prepared packet context is consumed AFTER hard policy directives
+  // (precedence law) and can never remove or weaken the hard directives above.
+  const preparedSection = buildPreparedContextSection(input);
+  if (preparedSection) parts.push(preparedSection);
+
   return parts.join('\n');
 }
 
 export function buildPolicyAwarePrompt(input: PolicyAwarePromptInput): PolicyAwarePromptBundle {
   const systemDirective = buildSystemDirective(input);
   const contextSection = buildContextSection(input);
+  // R3-F: input.messageText is the authoritative learner message. A prepared
+  // packet's learnerMessage may NEVER replace it.
   const studentMessage = input.messageText;
 
   const promptParts: string[] = [];
@@ -104,7 +199,13 @@ export function buildPolicyAwarePrompt(input: PolicyAwarePromptInput): PolicyAwa
   promptParts.push(`\n---\n\nStudent message:\n${studentMessage}`);
   promptParts.push(`\n---\n\nResponse (Socratic, one guiding question, no final answer):`);
 
-  const prompt = promptParts.join('\n');
+  let prompt = promptParts.join('\n');
+
+  // Defensive final bound (R3-G) — last-resort cap even though the assembler
+  // already bounds packet contents.
+  if (prompt.length > MAX_PROMPT_LENGTH) {
+    prompt = prompt.slice(0, MAX_PROMPT_LENGTH);
+  }
 
   const redactedPreview = prompt.length > 200 ? prompt.slice(0, 200) + '...' : prompt;
 
@@ -116,6 +217,7 @@ export function buildPolicyAwarePrompt(input: PolicyAwarePromptInput): PolicyAwa
   if (input.safeContext?.safeMemoryContext) includedContextTypes.push('safe_memory_summary');
   if (input.safeContext?.recentSafeTurnSummaries) includedContextTypes.push('bounded_safe_recent_turns');
   if (input.safeContext?.deenPolicyContext) includedContextTypes.push('deen_policy_boundary');
+  if (input.safeContext?.preparedPromptPacket) includedContextTypes.push('prepared_prompt_packet_bounded');
 
   excludedContextTypes.push('raw_conversation_archive', 'raw_private_memory', 'raw_auth_token', 'teacher_only_notes', 'safeguarding_details', 'unbounded_history', 'unapproved_islamic_source');
 

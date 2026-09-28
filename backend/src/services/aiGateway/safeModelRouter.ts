@@ -80,10 +80,12 @@ export async function routeModel(
     };
   }
 
+  // R4: mock routing is TEST-only. Explicit mock config may route to the
+  // mock provider only when NODE_ENV === 'test'.
   const primaryProviderId = input.preferredProviderId || config.defaultProviderId || 'mock-provider';
   const fallbackIds = config.fallbackProviderIds || [];
 
-  if (config.useMockInTest || primaryProviderId === 'mock-provider') {
+  if (process.env.NODE_ENV === 'test' && (config.useMockInTest || primaryProviderId === 'mock-provider')) {
     const mockAdapter = healthService.getAdapter('mock-provider');
     if (mockAdapter) {
       const status = await mockAdapter.getStatus();
@@ -98,6 +100,17 @@ export async function routeModel(
         };
       }
     }
+  }
+
+  // Mock as a primary provider ID is still test-only (R4): production traffic
+  // must never resolve to the mock provider.
+  if (primaryProviderId === 'mock-provider' && process.env.NODE_ENV !== 'test') {
+    return {
+      allowedToRoute: false,
+      routedBy: 'safeModelRouter',
+      fallbackProviderIds: [],
+      reason: 'Mock provider cannot be the production routing target.',
+    };
   }
 
   const primaryAdapter = healthService.getAdapter(primaryProviderId);
@@ -136,25 +149,13 @@ export async function routeModel(
     }
   }
 
-  const mockAdapter = healthService.getAdapter('mock-provider');
-  if (mockAdapter) {
-    const status = await mockAdapter.getStatus();
-    if (status === 'available') {
-      return {
-        allowedToRoute: true,
-        providerId: 'mock-provider',
-        modelId: 'mock-model-v1',
-        routedBy: 'safeModelRouter',
-        fallbackProviderIds: [],
-        reason: 'All configured providers unavailable. Falling back to mock provider.',
-      };
-    }
-  }
-
+  // R4: NO last-resort production fallback to mock-provider. If no production
+  // provider is configured/available, return a truthful routing failure so
+  // callers produce a safe unavailable response — never synthetic mock text.
   return {
     allowedToRoute: false,
     routedBy: 'safeModelRouter',
     fallbackProviderIds: [],
-    reason: 'No available provider found.',
+    reason: 'No production model provider is configured or available.',
   };
 }

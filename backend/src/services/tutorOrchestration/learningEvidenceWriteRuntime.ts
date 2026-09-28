@@ -4,6 +4,23 @@ import type { SocraticHint } from './hintLadderContracts';
 import type { StepCheckResult } from './stepCheckingContracts';
 import type { MistakeAnalysis } from './mistakeTaxonomyContracts';
 
+/**
+ * R5 — Learning evidence must represent LEARNER behavior, not tutor activity.
+ *
+ * Frozen semantics:
+ * A. serious_safety_risk           → evidenceWritten=false
+ * B. validated incorrect attempt   → evidenceWritten=true (mistake/attempt)
+ * C. validated correct step        → evidenceWritten=true (attempt; no auto-mastery)
+ * D. unevaluated submitted attempt → observed attempt, LOW confidence, no correctness implied
+ * E. tutor supplied hint only      → evidenceWritten=false
+ * F. tutor generated practice      → evidenceWritten=false
+ * G. tutor explained a concept     → evidenceWritten=false
+ * H. learner expressed confusion   → evidenceWritten=false
+ * I. learner asked a question      → evidenceWritten=false
+ * J. deen question/referral        → no mastery/understanding evidence
+ * K. revision request              → no proof-of-learning evidence
+ * General default: evidenceWritten=false.
+ */
 export interface EvidenceWriteInput {
   requestId: string;
   tutorLearnerId: string;
@@ -16,6 +33,7 @@ export interface EvidenceWriteInput {
 }
 
 export function writeLearningEvidence(input: EvidenceWriteInput): LearningEvidenceWriteResult {
+  // A. Safety turn — never a learning evidence event.
   if (input.intent === 'serious_safety_risk') {
     return {
       requestId: input.requestId,
@@ -25,6 +43,53 @@ export function writeLearningEvidence(input: EvidenceWriteInput): LearningEviden
     };
   }
 
+  // B/C. Validated learner step (correct or incorrect) is real learner evidence.
+  if (input.stepCheck && input.stepCheck.status === 'correct') {
+    return {
+      requestId: input.requestId,
+      evidenceWritten: true,
+      evidenceType: 'attempt',
+      skillTag: input.skillTag,
+      confidence: 'high',
+      reason: 'Learner step validated as correct (single attempt - not permanent mastery).',
+    };
+  }
+
+  if (input.stepCheck && input.stepCheck.status === 'incorrect') {
+    if (input.mistakeAnalysis && input.mistakeAnalysis.category !== 'unknown') {
+      return {
+        requestId: input.requestId,
+        evidenceWritten: true,
+        evidenceType: 'mistake',
+        skillTag: input.skillTag || input.mistakeAnalysis.revisionTag,
+        confidence: input.mistakeAnalysis.confidence === 'high' ? 'high' : input.mistakeAnalysis.confidence === 'medium' ? 'medium' : 'low',
+        reason: `Validated incorrect attempt. Mistake classified: ${input.mistakeAnalysis.category}.`,
+      };
+    }
+    return {
+      requestId: input.requestId,
+      evidenceWritten: true,
+      evidenceType: 'attempt',
+      skillTag: input.skillTag,
+      confidence: 'medium',
+      reason: 'Learner step validated as incorrect.',
+    };
+  }
+
+  // D. Learner submitted an attempt without a correctness verdict:
+  //    observed attempt only, LOW confidence, no correctness/mastery implied.
+  if (input.stepCheck || input.intent === 'submit_attempt' || input.responseMove === 'attempt_feedback') {
+    return {
+      requestId: input.requestId,
+      evidenceWritten: true,
+      evidenceType: 'attempt',
+      skillTag: input.skillTag,
+      confidence: 'low',
+      reason: 'Learner attempt observed without a correctness verdict - no mastery implied.',
+    };
+  }
+
+  // B (alternative). A validated mistake without any step check verdict.
   if (input.mistakeAnalysis && input.mistakeAnalysis.category !== 'unknown') {
     return {
       requestId: input.requestId,
@@ -32,91 +97,38 @@ export function writeLearningEvidence(input: EvidenceWriteInput): LearningEviden
       evidenceType: 'mistake',
       skillTag: input.skillTag || input.mistakeAnalysis.revisionTag,
       confidence: input.mistakeAnalysis.confidence === 'high' ? 'high' : input.mistakeAnalysis.confidence === 'medium' ? 'medium' : 'low',
-      reason: `Mistake classified: ${input.mistakeAnalysis.category}. Strategy: ${input.mistakeAnalysis.feedbackStrategy}`,
+      reason: `Validated learner mistake classified: ${input.mistakeAnalysis.category}. Strategy: ${input.mistakeAnalysis.feedbackStrategy}`,
     };
   }
 
-  if (input.stepCheck && input.stepCheck.status === 'correct') {
+  // J. Deen question/referral — no mastery/understanding evidence.
+  if (input.intent === 'ask_deen_question' || input.responseMove === 'deen_referral') {
     return {
       requestId: input.requestId,
-      evidenceWritten: true,
-      evidenceType: 'concept_understood',
-      skillTag: input.skillTag,
-      confidence: 'high',
-      reason: 'Learner demonstrated correct understanding.',
+      evidenceWritten: false,
+      evidenceType: 'none',
+      reason: 'Deen referral turn - no mastery or understanding evidence recorded.',
     };
   }
 
-  if (input.hint) {
+  // K. Revision request — workflow intent, not proof of learning.
+  if (input.intent === 'ask_for_revision' || input.responseMove === 'revision_prompt') {
     return {
       requestId: input.requestId,
-      evidenceWritten: true,
-      evidenceType: 'hint_used',
-      skillTag: input.skillTag,
-      confidence: 'medium',
-      reason: `Hint level ${input.hint.hintLevel} provided to learner.`,
+      evidenceWritten: false,
+      evidenceType: 'none',
+      reason: 'Revision request drives workflow intent only - not learning evidence.',
     };
   }
 
-  if (input.responseMove === 'practice_question') {
-    return {
-      requestId: input.requestId,
-      evidenceWritten: true,
-      evidenceType: 'practice_completed',
-      skillTag: input.skillTag,
-      confidence: 'medium',
-      reason: 'Practice question generated for learner.',
-    };
-  }
-
-  if (input.responseMove === 'attempt_feedback' || input.intent === 'submit_attempt') {
-    return {
-      requestId: input.requestId,
-      evidenceWritten: true,
-      evidenceType: 'attempt',
-      skillTag: input.skillTag,
-      confidence: 'low',
-      reason: 'Learner submitted an attempt for review.',
-    };
-  }
-
-  if (input.intent === 'ask_concept' || input.intent === 'express_confusion') {
-    return {
-      requestId: input.requestId,
-      evidenceWritten: true,
-      evidenceType: 'concept_understood',
-      skillTag: input.skillTag,
-      confidence: 'low',
-      reason: 'Concept explanation provided to learner.',
-    };
-  }
-
-  if (input.intent === 'ask_deen_question') {
-    return {
-      requestId: input.requestId,
-      evidenceWritten: true,
-      evidenceType: 'revision_needed',
-      skillTag: input.skillTag || 'deen_question',
-      confidence: 'low',
-      reason: 'Deen question referred per policy.',
-    };
-  }
-
-  if (input.intent === 'ask_for_revision') {
-    return {
-      requestId: input.requestId,
-      evidenceWritten: true,
-      evidenceType: 'revision_needed',
-      skillTag: input.skillTag,
-      confidence: 'medium',
-      reason: 'Revision request processed.',
-    };
-  }
-
+  // E/F/G/H/I + general default (evidenceWritten=false):
+  // tutor hint, tutor practice question, tutor explanation, learner
+  // confusion, learner questions, and all other tutor activity are NOT
+  // learner evidence.
   return {
     requestId: input.requestId,
-    evidenceWritten: true,
+    evidenceWritten: false,
     evidenceType: 'none',
-    reason: 'Turn completed - general tracking.',
+    reason: 'No validated learner behavior this turn - no evidence recorded.',
   };
 }

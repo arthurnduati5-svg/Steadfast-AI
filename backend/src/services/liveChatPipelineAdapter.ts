@@ -12,7 +12,7 @@ import { chatContextIntegrationService } from './chatContextIntegrationService';
 import { chatPromptAssembler } from './chatPromptAssembler';
 import { chatResponseSafetyService } from './chatResponseSafetyService';
 import { chatPostTurnEventService } from './chatPostTurnEventService';
-import { liveChatAiAdapter } from './liveChatAiAdapter';
+import { orchestrateTutorTurn } from './tutorOrchestration/tutorTurnOrchestrationEngine';
 import { videoChatTriggerService } from './videoChatTriggerService';
 import { videoChatRequestBuilder } from './videoChatRequestBuilder';
 import { videoChatSafetyService } from './videoChatSafetyService';
@@ -895,21 +895,39 @@ export class LiveChatPipelineAdapter {
     let aiSources: unknown[] = [];
     let aiFollowUps: string[] = [];
     let aiWarnings: string[] = [];
+    let learningCommit: import('./tutorOrchestration/tutorOrchestrationContracts').TutorTurnOrchestrationResult['learningCommit'] = undefined;
 
     if (isPureVideoRequest && hasSafeRecommendations) {
       // Pure video request with safe recommendations — skip AI, use deterministic composer
       aiAnswer = videoAnswerAddon;
       videoAnswerAddon = ''; // Already included in aiAnswer
     } else if (prepared.promptPacket) {
-      // Call the real AI service with the assembled prompt packet
-      const aiOutput = await liveChatAiAdapter.callExistingAiService(
-        prepared.promptPacket,
-        input.identity.studentId,
-      );
-      aiAnswer = aiOutput.answer;
-      aiSources = aiOutput.sources;
-      aiFollowUps = aiOutput.followUps;
-      aiWarnings = aiOutput.warnings;
+      // R2: canonical learner-facing tutor generation. Live Chat DELEGATES to
+      // tutorTurnOrchestrationEngine — never a legacy second generation path
+      // (liveChatAiAdapter / aiService). R3: the prepared prompt packet is
+      // passed through so the backend-bounded context reaches generation.
+      const orchestrationResult = await orchestrateTutorTurn({
+        requestId: prepared.executionContext.executionId,
+        schoolId: input.identity.schoolId,
+        tutorLearnerId: input.identity.studentId,
+        tutorSessionId: input.request.sessionId || `live_${input.identity.studentId}_${prepared.executionContext.executionId}`,
+        messageText: input.request.message || '',
+        learnerGrade: input.identity.grade,
+        learnerAge: undefined,
+        preferredLanguage: (input.identity as any).preferredLanguage,
+        preparedPromptPacket: prepared.promptPacket,
+        clientContext: {
+          displayMode: 'widget',
+          subjectHint: input.request.activeSubject || undefined,
+          topicHint: input.request.activeTopic || undefined,
+        },
+      });
+
+      aiAnswer = orchestrationResult.responseText;
+      aiSources = [];
+      aiFollowUps = [];
+      aiWarnings = [];
+      learningCommit = orchestrationResult.learningCommit;
     } else {
       aiAnswer = 'I can help you with that. What specific topic are you studying?';
     }
@@ -1018,6 +1036,11 @@ export class LiveChatPipelineAdapter {
         unsupportedDowngraded: citationResult.unsupportedClaimsDowngraded,
         supportedKept: citationResult.supportedClaimsKept,
         missingSourceFallback: citationResult.missingSourceFallbackApplied,
+      } : undefined,
+      // R6: truthful bounded protected-persistence status (no raw internals).
+      learningCommit: learningCommit ? {
+        attempted: learningCommit.attempted,
+        ok: learningCommit.ok,
       } : undefined,
     };
 

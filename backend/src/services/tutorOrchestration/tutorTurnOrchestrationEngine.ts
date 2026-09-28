@@ -254,7 +254,12 @@ export async function orchestrateTutorTurn(
         curriculumDirectives: curriculumPacket.teachingMethodRules,
       });
 
-      // Call safe generation through the existing Task 009 gateway
+      // Call safe generation through the existing Task 009 gateway.
+      // R3: the authoritative learner message remains input.messageText; the
+      // pedagogy prompt is the policy-owned instruction payload for generation.
+      // R4: mock routing may only activate in test mode — production traffic
+      // must receive a truthful safe degradation, never synthetic mock text.
+      // R3: the prepared Live Chat packet is a GENERATION context (not policy).
       const safeResponse: SafeGenerationResponse = await generateTutorMessage({
         requestId,
         schoolId: input.schoolId,
@@ -268,7 +273,10 @@ export async function orchestrateTutorTurn(
       },
       undefined,
       {
-        useMockProvider: process.env.NODE_ENV === 'test' || !process.env.OPENAI_API_KEY,
+        useMockProvider: process.env.NODE_ENV === 'test',
+      },
+      {
+        preparedPromptPacket: input.preparedPromptPacket,
       });
 
       responseText = safeResponse.responseText;
@@ -351,7 +359,10 @@ export async function orchestrateTutorTurn(
 
     const result = assembleTutorTurnResult(assemblerInput);
 
-    // Step 14b: Non-blocking Task 011 integration (practice persistence, mastery, revision)
+    // Step 14b: R6 — awaited protected Task 011 commit when the turn carries a
+    // validated persistence-worthy learning signal. Ordinary explanation turns,
+    // tutor-generated questions, hints, greetings, and safety turns skip all
+    // Task011 DB work (attempted=false, zero DB latency).
     const task011Identity: ResolvedTutorIdentity = {
       schoolId: input.schoolId,
       studentId: input.tutorLearnerId,
@@ -361,34 +372,88 @@ export async function orchestrateTutorTurn(
     const isCorrect = stepCheck?.status === 'correct';
     const isPartial = stepCheck?.status === 'partially_correct';
     const isIncorrect = stepCheck?.status === 'incorrect';
+    const hasValidatedOutcome = isCorrect || isPartial || isIncorrect;
+    const hasObservedAttempt = stepCheck !== undefined || plan.responseMove === 'attempt_feedback';
+    const isSafetyTurn = intent === 'serious_safety_risk';
+    const isIntegrityBlocked = policyTags.includes('academic_integrity_blocked') || policyTags.includes('no_final_answer_blocked');
 
-    task011TutorTurnIntegrationService.processValidatedTutorTurn(
-      task011Identity,
-      {
-        requestId,
-        subject: curriculumPacket.subject?.name || curriculumPacket.subject?.normalizedName || input.clientContext?.subjectHint || null,
-        topic: input.clientContext?.topicHint || null,
-        skillIds: skillTag ? [skillTag] : [],
-        curriculumTrack: curriculumPacket.curriculumTrack,
-        subjectModuleId: curriculumPacket.subject?.subjectId || curriculumPacket.subjectModule?.moduleId || null,
-        outcome: isCorrect ? 'correct' : isPartial ? 'partially_correct' : isIncorrect ? 'incorrect' : 'not_evaluated',
-        hintLevelUsed: hint?.hintLevel ? parseInt(String(hint.hintLevel), 10) : 0,
-        attemptNumber: 1,
-        confidence: stepCheck ? (isCorrect ? 0.7 : 0.3) : 0.3,
-        mistakeCategories: mistakeAnalysis?.category ? [mistakeAnalysis.category] : [],
-        validationModes: plan.validationRequirements ?? [],
-        safeSummary: result.responseText?.slice(0, 500) || 'Tutor turn completed',
-        learnerResponseSummary: input.messageText?.slice(0, 500) || null,
-        expectedAnswerSummary: null,
-        isPracticeAttempt: (stepCheck !== undefined) || (plan.responseMove === 'attempt_feedback') || (plan.responseMove === 'practice_question'),
-        isSafetyTurn: intent === 'serious_safety_risk',
-        isIntegrityBlocked: policyTags.includes('academic_integrity_blocked') || policyTags.includes('no_final_answer_blocked'),
-        isDeenTurn: curriculumPacket.curriculumTrack === 'madrasa_deen' || deenSensitive,
-        isSourceSensitive: deenSensitive,
-      },
-    ).catch((err: Error) => {
-      logger.warn({ requestId, error: err.message }, 'Task 011 integration failed (non-blocking)');
-    });
+    // R6.1: only validated learning signals justify a protected commit.
+    // R5 truth: unobserved attempts, hints, explanations, questions do not.
+    const persistenceJustified = !isSafetyTurn && (hasValidatedOutcome || hasObservedAttempt || isIntegrityBlocked);
+
+    let learningCommit: TutorTurnOrchestrationResult['learningCommit'] = {
+      attempted: false,
+      ok: true,
+      attemptPersisted: false,
+      stepEvidencePersisted: false,
+      masteryAggregated: false,
+      revisionScheduled: false,
+      warnings: [],
+    };
+
+    if (persistenceJustified) {
+      try {
+        const task011Result = await task011TutorTurnIntegrationService.processValidatedTutorTurn(
+          task011Identity,
+          {
+            requestId,
+            subject: curriculumPacket.subject?.name || curriculumPacket.subject?.normalizedName || input.clientContext?.subjectHint || null,
+            topic: input.clientContext?.topicHint || null,
+            skillIds: skillTag ? [skillTag] : [],
+            curriculumTrack: curriculumPacket.curriculumTrack,
+            subjectModuleId: curriculumPacket.subject?.subjectId || curriculumPacket.subjectModule?.moduleId || null,
+            outcome: hasValidatedOutcome
+              ? (isCorrect ? 'correct' : isPartial ? 'partially_correct' : 'incorrect')
+              : 'not_evaluated',
+            hintLevelUsed: hint?.hintLevel ? parseInt(String(hint.hintLevel), 10) : 0,
+            attemptNumber: 1,
+            confidence: stepCheck ? (isCorrect ? 0.7 : 0.3) : 0.3,
+            mistakeCategories: mistakeAnalysis?.category ? [mistakeAnalysis.category] : [],
+            validationModes: plan.validationRequirements ?? [],
+            safeSummary: result.responseText?.slice(0, 500) || 'Tutor turn completed',
+            learnerResponseSummary: input.messageText?.slice(0, 500) || null,
+            expectedAnswerSummary: null,
+            isPracticeAttempt: hasObservedAttempt || hasValidatedOutcome,
+            isSafetyTurn,
+            isIntegrityBlocked,
+            isDeenTurn: curriculumPacket.curriculumTrack === 'madrasa_deen' || deenSensitive,
+            isSourceSensitive: deenSensitive,
+          },
+        );
+
+        learningCommit = {
+          attempted: true,
+          ok: task011Result.ok === true,
+          attemptPersisted: task011Result.persistenceResult?.attemptPersisted === true,
+          stepEvidencePersisted: task011Result.persistenceResult?.stepEvidencePersisted === true,
+          masteryAggregated: task011Result.persistenceResult?.masteryAggregated === true,
+          revisionScheduled: task011Result.persistenceResult?.revisionScheduled === true,
+          warnings: (task011Result.warnings || []).slice(0, 5).map((w: string) => String(w).slice(0, 120)),
+        };
+
+        if (!learningCommit.ok) {
+          logger.warn({ requestId }, 'Task 011 protected commit did not fully succeed');
+        }
+      } catch (err: unknown) {
+        const errMsg = err instanceof Error ? err.message : 'Unknown persistence error';
+        logger.warn({ requestId, error: errMsg }, 'Task 011 protected commit failed');
+        learningCommit = {
+          attempted: true,
+          ok: false,
+          attemptPersisted: false,
+          stepEvidencePersisted: false,
+          masteryAggregated: false,
+          revisionScheduled: false,
+          warnings: ['Protected learning commit failed.'].slice(0, 5),
+        };
+      }
+
+      // R6.6: never claim safe-memory success when the protected commit failed.
+      if (!learningCommit.ok) {
+        result.safeMemoryMetadata.shouldUpdateSafeMemory = false;
+        result.safeMemoryMetadata.safeSignals = [];
+      }
+    }
 
     logger.info({
       requestId,
@@ -397,9 +462,14 @@ export async function orchestrateTutorTurn(
       stateTransition: stateTransition.finalState,
       evidenceWritten: evidenceWrite.evidenceWritten,
       revisionUpdated: revisionUpdate.revisionUpdated,
+      learningCommitAttempted: learningCommit.attempted,
+      learningCommitOk: learningCommit.ok,
     }, 'Tutor turn orchestration complete');
 
-    return result;
+    return {
+      ...result,
+      learningCommit,
+    };
   } catch (error: unknown) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown orchestration error';
     logger.error({ requestId, error: errorMessage }, 'Tutor turn orchestration failed');
