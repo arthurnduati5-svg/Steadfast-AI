@@ -178,6 +178,14 @@ export async function orchestrateTutorTurn(
         } | undefined)?.artifactReasoningEvidence ?? null,
       preparedVideoContext: null,
       deenSourceSensitive: deenSensitive,
+      // AI-INTELLIGENCE-03R R3: verified identity already supplied to the
+      // canonical tutor runtime — threaded as authenticated seal context only.
+      // Never re-resolved; never taken from user/body IDs.
+      sealIdentity: {
+        schoolId: input.schoolId,
+        studentId: input.tutorLearnerId,
+        sessionId: input.tutorSessionId,
+      },
     });
     const specialistResult = specialistOutcome.result;
 

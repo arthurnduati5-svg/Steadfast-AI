@@ -7,6 +7,7 @@ import type {
   ResearchSource,
 } from '../lib/types';
 import { evaluateResearchSource, summarizeSourceTrust, inferVideoTrustTier } from './sourceTrustService';
+import type { ResearchSourceCandidate, ResearchSourceOrigin } from './researchSourceTrustContracts';
 
 export type RunResearchModeArgs = {
   query: string;
@@ -22,6 +23,12 @@ export type RunResearchModeResult = {
   result: ResearchResult;
   notices: ResearchNotice[];
   recommendedVideo?: RecommendedVideo | null;
+  /**
+   * R1: provenance-preserving candidates derived ONLY from fields actually
+   * returned by the research orchestrator. Never synthesized. Consumed by the
+   * canonical research source seal pipeline — no heuristic trust promotion.
+   */
+  sourceCandidates?: ResearchSourceCandidate[];
 };
 
 type OrchestratorSource = {
@@ -30,6 +37,59 @@ type OrchestratorSource = {
   url?: unknown;
   link?: unknown;
 };
+
+/**
+ * R1: preserve ONLY retrieval-provenance fields that genuinely exist on the
+ * orchestrator output. Inventing toolName/toolCallId/retrievedAt/etc. would
+ * fabricate verification evidence, so absent fields stay absent (null is
+ * never substituted for a value that was not returned).
+ */
+function normalizeSourceCandidates(rawSources: unknown): ResearchSourceCandidate[] {
+  if (!Array.isArray(rawSources)) return [];
+  const candidates: ResearchSourceCandidate[] = [];
+  for (const raw of rawSources) {
+    if (typeof raw !== 'object' || raw === null) continue;
+    const record = raw as Record<string, unknown>;
+    const title = safeString(record.sourceName || record.title).trim() || null;
+    const url = safeString(record.url || record.link).trim() || null;
+    if (!title && !url) continue;
+    const candidate: ResearchSourceCandidate = { title, url };
+    const provenanceKeys = [
+      'snippet',
+      'sourceId',
+      'retrievalRecordId',
+      'toolName',
+      'toolCallId',
+      'retrievedAt',
+      'contentHash',
+    ] as const;
+    for (const key of provenanceKeys) {
+      const value = record[key];
+      if (typeof value === 'string' && value.trim()) {
+        candidate[key] = value.trim();
+      }
+    }
+    // Origin/model classification is orchestrator-declared provenance — pass
+    // through ONLY recognized canonical origin values, never synthesized.
+    const VALID_ORIGINS: readonly ResearchSourceOrigin[] = [
+      'web_search',
+      'research_tool',
+      'artifact_context',
+      'video_context',
+      'tutor_context',
+      'learner_memory',
+      'model_output',
+      'fallback',
+      'unknown',
+    ];
+    const declaredOrigin = record.origin;
+    if (typeof declaredOrigin === 'string' && (VALID_ORIGINS as readonly string[]).includes(declaredOrigin)) {
+      candidate.origin = declaredOrigin as ResearchSourceOrigin;
+    }
+    candidates.push(candidate);
+  }
+  return candidates.slice(0, 6);
+}
 
 type OrchestratorVideo = {
   id?: unknown;
@@ -241,7 +301,9 @@ export async function runResearchMode(args: RunResearchModeArgs): Promise<RunRes
       1100
     ) || 'I could not gather enough external evidence yet, but I can still guide this topic step by step.';
 
-  const sources = parseSources((orchestrated as { sources?: unknown })?.sources);
+  const rawOrchestratorSources = (orchestrated as { sources?: unknown })?.sources;
+  const sources = parseSources(rawOrchestratorSources);
+  const sourceCandidates = normalizeSourceCandidates(rawOrchestratorSources);
   const trustSummary = summarizeSourceTrust(sources);
   const confidenceState = safeString((orchestrated as { confidenceState?: unknown })?.confidenceState).trim();
   const orchestratorNotices = parseNotices((orchestrated as { notices?: unknown })?.notices);
@@ -310,6 +372,7 @@ export async function runResearchMode(args: RunResearchModeArgs): Promise<RunRes
           : undefined,
     },
     notices,
+    sourceCandidates,
     recommendedVideo: mapRecommendedVideo(
       (orchestrated as { videoData?: unknown })?.videoData,
       (orchestrated as { videoWhyRecommended?: unknown })?.videoWhyRecommended

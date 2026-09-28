@@ -38,6 +38,11 @@ import {
 
 // Research specialist — existing production bridge, invoked at most once.
 import { runResearchMode } from '../researchModeService';
+// Canonical source-seal pipeline — the ONLY authority that may promote a web
+// source into learner-visible verified state. Trust tiers are advisory only.
+import { sealResearchSources } from '../researchSourceSealService';
+import type { ResearchTrustedSource } from '../researchSourceTrustContracts';
+import type { VerifiedSource } from '../sourceVerificationContracts';
 import { logger } from '../../utils/logger';
 
 // ── Specialist routing input ──
@@ -67,6 +72,16 @@ export interface TutorSpecialistRoutingInput {
   } | null;
   /** Deen-sensitive turn: generic web research must not bypass approved-source rules (R10). */
   deenSourceSensitive?: boolean;
+  /**
+   * Verified identity values already supplied to the canonical tutor runtime
+   * (AI-INTELLIGENCE-03R R3). Used ONLY as authenticated context for the
+   * canonical source seal. Never re-resolved; never taken from user/body IDs.
+   */
+  sealIdentity?: {
+    schoolId: string;
+    studentId?: string | null;
+    sessionId?: string | null;
+  } | null;
 }
 
 // ── Step 1: deterministic specialist decision (R3) ──
@@ -354,6 +369,38 @@ function runVideoSpecialist(input: TutorSpecialistRoutingInput): TutorSpecialist
 
 // ── R5/R6: Research specialist — policy-gated, max ONE call, truth-first ──
 
+/**
+ * R4/R5: map a sealed source to VerifiedSource ONLY when the canonical seal
+ * classified it as a verified, displayable web source with real evidence.
+ * No heuristic alternative exists. Every mapped field is a truthful known
+ * value from the sealed packet — unknowns stay omitted or 'unknown'.
+ */
+function mapSealedVerifiedSource(source: ResearchTrustedSource): VerifiedSource | null {
+  if (source.kind !== 'verified_web') return null;
+  if (source.trustStatus !== 'verified') return null;
+  if (source.displayPolicy !== 'show_as_verified_citation') return null;
+  if (!Array.isArray(source.evidence) || source.evidence.length === 0) return null;
+  if (typeof source.url !== 'string' || !source.url) return null;
+  if (source.blockReasons.length > 0) return null;
+
+  // retrievedAt is surfaced only when genuine retrieval evidence carries one.
+  const retrievedAt = source.evidence.find((e) => typeof e.retrievedAt === 'string' && e.retrievedAt)?.retrievedAt;
+
+  return {
+    id: source.sourceId,
+    sourceType: 'web',
+    title: source.title || 'Verified source',
+    url: source.url,
+    domain: source.domain || undefined,
+    ...(retrievedAt ? { retrievedAt } : {}),
+    freshnessStatus: 'unknown',
+    verificationStatus: 'verified',
+    supportsClaimIds: [],
+    safeSummary: source.safeSummary || source.title || 'Verified source',
+    rawContentIncluded: false,
+  };
+}
+
 export async function runResearchSpecialist(
   input: TutorSpecialistRoutingInput,
 ): Promise<TutorSpecialistResult> {
@@ -421,38 +468,60 @@ export async function runResearchSpecialist(
     };
   }
 
-  // R6 source truth: only existing canonical trust conversion may populate
-  // verifiedSources. Sources come from the existing sourceTrustService
-  // evaluation inside runResearchMode; only evaluated/trusted entries pass.
-  const orchestratorSources = (researchOutcome.result as { sources?: unknown[] })?.sources || [];
-  const verifiedSources = orchestratorSources
-    .filter((s): s is { sourceName?: unknown; title?: unknown; url?: unknown; trustTier?: unknown } =>
-      typeof s === 'object' && s !== null)
-    .filter((s) => {
-      const tier = String(s.trustTier || '').toLowerCase();
-      // Only explicitly trusted/tier-1 sources may be promoted; otherwise no
-      // clean canonical conversion → verifiedSources stays empty (fail closed).
-      return tier === 'trusted' || tier === 'tier_1' || tier === 'tier1';
-    })
-    .slice(0, 3)
-    .map((s) => ({
-      id: `research_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
-      sourceType: 'web' as const,
-      title: String(s.title || s.sourceName || '').slice(0, 120),
-      url: typeof s.url === 'string' && s.url.startsWith('http') ? s.url.slice(0, 300) : undefined,
-      freshnessStatus: 'fresh' as const,
-      verificationStatus: 'verified' as const,
-      supportsClaimIds: [],
-      safeSummary: String(s.title || s.sourceName || '').slice(0, 200),
-      rawContentIncluded: false as const,
-    }));
+  // R1: provenance-preserving candidates from ACTUAL orchestrator output.
+  // Ordinary ResearchSource records (title/url/domain/trustTier only) MAY
+  // become candidates, but carry no fabricated retrieval evidence — the
+  // canonical seal is therefore EXPECTED to classify them as unverified.
+  // That fail-closed outcome is correct and is never worked around.
+  const candidates = researchOutcome.sourceCandidates || [];
+
+  // R8: at most ONE canonical seal invocation for this research result.
+  let sealOutput: ReturnType<typeof sealResearchSources> | null = null;
+  try {
+    sealOutput = sealResearchSources({
+      candidates,
+      authenticatedSchoolId: input.sealIdentity?.schoolId || 'unknown',
+      authenticatedStudentId: input.sealIdentity?.studentId ?? null,
+      authenticatedSessionId: input.sealIdentity?.sessionId ?? null,
+    });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'unknown seal error';
+    logger.warn({ requestId: input.requestId, error: message }, 'Canonical source seal failed');
+    return {
+      kind: 'research',
+      status: 'degraded',
+      promptDirectives: [],
+      evidenceSections: [],
+      verifiedSources: [],
+      warnings: ['Canonical source verification failed — research content must not be presented as verified.'],
+      metadata: { degradedReasonCode: 'source_seal_error', errorSummary: message.slice(0, 120) },
+    };
+  }
+
+  // R4: ONLY canonically sealed verified web sources may become VerifiedSource.
+  // trustTier is advisory quality assessment and NEVER a verification authority.
+  const verifiedSources = (sealOutput.packet.verifiedWebSources || [])
+    .map(mapSealedVerifiedSource)
+    .filter((s): s is VerifiedSource => s !== null)
+    .slice(0, 3);
 
   const noVerifiedSources = verifiedSources.length === 0;
+  const hasCandidates = candidates.length > 0;
+
+  // R6: truthful status. Never 'ready' merely because a research summary exists.
+  const status = noVerifiedSources ? 'degraded' : 'ready';
+  const degradedReasonCode = noVerifiedSources
+    ? hasCandidates
+      ? 'research_sources_unverified'
+      : 'research_sources_missing'
+    : undefined;
 
   const directives: string[] = [];
   if (noVerifiedSources) {
     directives.push(
-      'Current external evidence is insufficient. Do not invent or state fresh claims as verified facts.',
+      'Current external evidence is NOT verified. Do not present current or fresh claims as verified facts.',
+      'Do not invent citations, sources, URLs, or references.',
+      'State evidence limitations honestly; stable background explanation may continue only when safe.',
     );
   } else {
     directives.push(
@@ -460,24 +529,32 @@ export async function runResearchSpecialist(
     );
   }
 
-  const evidenceSections: string[] = orchestratorSources
-    .filter((s): s is { title?: unknown; sourceName?: unknown } => typeof s === 'object' && s !== null)
-    .slice(0, 3)
-    .map((s) => `Research source: ${String(s.title || s.sourceName || 'untitled').slice(0, 200)}`);
+  // R7: safe research summary is retained as BOUNDED UNVERIFIED context —
+  // never as verified evidence.
+  const evidenceSections: string[] = [];
+  if (researchOutcome.result.summary) {
+    evidenceSections.push(`Unverified research context (do not cite as verified): ${researchOutcome.result.summary.slice(0, 600)}`);
+  }
 
   return boundTutorSpecialistResult({
     kind: 'research',
-    status: noVerifiedSources ? 'degraded' : 'ready',
+    status,
     promptDirectives: directives,
     evidenceSections,
     verifiedSources,
     warnings: noVerifiedSources
-      ? ['No trustworthy verified sources found for a freshness-required claim.']
+      ? [
+          hasCandidates
+            ? 'Research returned sources but the canonical seal verified none — no genuine retrieval evidence.'
+            : 'No research sources returned for a freshness-required claim.',
+        ]
       : [],
     metadata: {
       researchMode: researchOutcome.mode,
-      sourceCount: orchestratorSources.length,
+      sourceCount: candidates.length,
       verifiedSourceCount: verifiedSources.length,
+      sealOk: sealOutput.ok,
+      ...(degradedReasonCode ? { degradedReasonCode } : {}),
     },
   });
 }

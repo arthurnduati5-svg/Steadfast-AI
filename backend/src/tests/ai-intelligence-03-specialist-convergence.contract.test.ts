@@ -19,7 +19,15 @@ vi.mock('../services/researchModeService', () => ({
   })),
 }));
 
+// AI-INTELLIGENCE-03R: keep the REAL canonical seal behavior, but wrap it as a
+// spy so seal call bounds (max 1 per turn) are directly provable.
+vi.mock('../services/researchSourceSealService', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../services/researchSourceSealService')>();
+  return { ...actual, sealResearchSources: vi.fn(actual.sealResearchSources) };
+});
+
 import { runResearchMode } from '../services/researchModeService';
+import { sealResearchSources } from '../services/researchSourceSealService';
 import { decideSpecialist } from '../services/tutorOrchestration/tutorSpecialistRuntime';
 import { composePedagogyPrompt } from '../services/tutorOrchestration/tutorPedagogyPromptComposer';
 import { mapTutorIntentResolutionToTurnIntent } from '../services/tutorOrchestration/tutorIntentCompatibilityMapper';
@@ -234,7 +242,7 @@ describe('AI-INTELLIGENCE-03 specialist convergence', () => {
     );
   });
 
-  it('TEST D — research degradation: no trustworthy sources → degraded, empty verifiedSources, no-fabrication directive, no fake URL', async () => {
+  it('TEST D — research degradation: no sources → degraded, empty verifiedSources, no-fabrication directive, no fake URL', async () => {
     const { runResearchSpecialist } = await import('../services/tutorOrchestration/tutorSpecialistRuntime');
     const result = await runResearchSpecialist({
       ...baseRoutingInput,
@@ -250,9 +258,10 @@ describe('AI-INTELLIGENCE-03 specialist convergence', () => {
     expect(result.kind).toBe('research');
     expect(result.status).toBe('degraded');
     expect(result.verifiedSources).toHaveLength(0);
+    expect(result.metadata.degradedReasonCode).toBe('research_sources_missing');
     expect(
       result.promptDirectives.some((d) =>
-        /do not invent or state fresh claims as verified facts/i.test(d),
+        /do not present current or fresh claims as verified facts/i.test(d),
       ),
     ).toBe(true);
     const allText = JSON.stringify(result);
@@ -392,5 +401,195 @@ describe('AI-INTELLIGENCE-03 specialist convergence', () => {
     expect(mapTutorIntentResolutionToTurnIntent(makeResolution({ primaryIntent: 'check_answer' }))).toBe('submit_attempt');
     expect(mapTutorIntentResolutionToTurnIntent(makeResolution({ status: 'unsafe', primaryIntent: 'unsafe' }))).toBe('serious_safety_risk');
     expect(mapTutorIntentResolutionToTurnIntent(makeResolution({ status: 'needs_clarification', primaryIntent: 'clarification_needed' }))).toBe('unknown');
+  });
+
+  // ── AI-INTELLIGENCE-03R — canonical research source verification ──
+
+  describe('AI-INTELLIGENCE-03R canonical source verification', () => {
+    const researchInput = {
+      ...baseRoutingInput,
+      sourceFreshnessDecision: makeFreshness({
+        sourceNeed: 'web_current',
+        shouldRetrieveExternalSource: true,
+        allowedSourceTypes: ['web'],
+        queryPrivacyRisk: 'low',
+        safeSearchQuery: 'latest photosynthesis findings',
+      }),
+    } as const;
+
+    function mockResearchOutcome(overrides: {
+      resultSources?: unknown[];
+      sourceCandidates?: unknown[];
+      summary?: string;
+    }): void {
+      vi.mocked(runResearchMode).mockResolvedValueOnce({
+        mode: 'web_research',
+        intent: 'current_events',
+        queryUsed: 'latest photosynthesis findings',
+        result: {
+          summary: overrides.summary,
+          sources: (overrides.resultSources || []) as never,
+        },
+        notices: [],
+        recommendedVideo: null,
+        sourceCandidates: overrides.sourceCandidates as never,
+      } as never);
+    }
+
+    it('TEST 1 — high trustTier WITHOUT retrieval evidence never promotes: degraded, zero verifiedSources', async () => {
+      const { runResearchSpecialist } = await import('../services/tutorOrchestration/tutorSpecialistRuntime');
+
+      // Research returns a real-looking URL and trustTier: 'high' but NO
+      // retrieval provenance (no toolName/toolCallId/retrievedAt/etc.).
+      mockResearchOutcome({
+        resultSources: [
+          {
+            title: 'Credible-Looking Journal Article',
+            url: 'https://www.nature.com/articles/photosynthesis-2026',
+            domain: 'nature.com',
+            trustTier: 'high',
+          },
+        ],
+        // Candidate normalization preserves ONLY actually-returned provenance —
+        // trustTier is advisory and no evidence fields exist.
+        sourceCandidates: [
+          { title: 'Credible-Looking Journal Article', url: 'https://www.nature.com/articles/photosynthesis-2026' },
+        ],
+      });
+
+      const result = await runResearchSpecialist(researchInput);
+
+      // trustTier === 'high' is NOT canonical verification.
+      expect(result.verifiedSources).toHaveLength(0);
+      expect(result.status).toBe('degraded');
+      expect(result.metadata.degradedReasonCode).toBe('research_sources_unverified');
+      expect(
+        result.warnings.some((w) => /canonical seal verified none/i.test(w)),
+      ).toBe(true);
+      expect(
+        result.promptDirectives.some((d) => /evidence is not verified/i.test(d)),
+      ).toBe(true);
+      expect(result.promptDirectives.some((d) => /do not invent citations/i.test(d))).toBe(true);
+    });
+
+    it('TEST 2 — genuine retrieval evidence CAN verify through the canonical seal', async () => {
+      const { runResearchSpecialist } = await import('../services/tutorOrchestration/tutorSpecialistRuntime');
+
+      mockResearchOutcome({
+        resultSources: [
+          { title: 'Peer-Reviewed Photosynthesis Study', url: 'https://www.nature.com/articles/study-2026' },
+        ],
+        sourceCandidates: [
+          {
+            title: 'Peer-Reviewed Photosynthesis Study',
+            url: 'https://www.nature.com/articles/study-2026',
+            snippet: 'Measured chlorophyll fluorescence under controlled conditions.',
+            toolCallId: 'call_research_abc123',
+            retrievedAt: '2026-09-28T00:00:00.000Z',
+          },
+        ],
+      });
+
+      const result = await runResearchSpecialist(researchInput);
+
+      expect(result.status).toBe('ready');
+      expect(result.verifiedSources).toHaveLength(1);
+      const verified = result.verifiedSources[0]!;
+      expect(verified.verificationStatus).toBe('verified');
+      expect(verified.sourceType).toBe('web');
+      expect(verified.url).toBe('https://www.nature.com/articles/study-2026');
+      expect(verified.rawContentIncluded).toBe(false);
+      expect(verified.retrievedAt).toBe('2026-09-28T00:00:00.000Z');
+      // Truthful mapping: no fabricated freshness or claim support.
+      expect(verified.freshnessStatus).toBe('unknown');
+      expect(verified.supportsClaimIds).toHaveLength(0);
+    });
+
+    it('TEST 3 — blocked/placeholder URL never promotes even WITH retrieval evidence', async () => {
+      const { runResearchSpecialist } = await import('../services/tutorOrchestration/tutorSpecialistRuntime');
+
+      mockResearchOutcome({
+        sourceCandidates: [
+          {
+            title: 'Placeholder Study',
+            url: 'https://example.com/fake-study',
+            toolCallId: 'call_research_def456',
+            retrievedAt: '2026-09-28T00:00:00.000Z',
+          },
+        ],
+      });
+
+      const result = await runResearchSpecialist(researchInput);
+
+      expect(result.verifiedSources).toHaveLength(0);
+      expect(result.status).toBe('degraded');
+    });
+
+    it('TEST 4 — model-generated source never promotes regardless of URL appearance', async () => {
+      const { runResearchSpecialist } = await import('../services/tutorOrchestration/tutorSpecialistRuntime');
+
+      mockResearchOutcome({
+        sourceCandidates: [
+          {
+            title: 'Invented Journal Reference',
+            url: 'https://journal.edufindings.org/invented-paper',
+            origin: 'model_output',
+            toolCallId: 'call_research_ghi789',
+          },
+        ],
+      });
+
+      const result = await runResearchSpecialist(researchInput);
+
+      expect(result.verifiedSources).toHaveLength(0);
+      expect(result.status).toBe('degraded');
+    });
+
+    it('TEST 5 — call bounds: max 1 research call and max 1 canonical seal call per turn; existing math/artifact/video routing unchanged', async () => {
+      const { runResearchSpecialist } = await import('../services/tutorOrchestration/tutorSpecialistRuntime');
+
+      mockResearchOutcome({
+        sourceCandidates: [
+          {
+            title: 'Peer-Reviewed Photosynthesis Study',
+            url: 'https://www.nature.com/articles/study-2026',
+            toolCallId: 'call_research_bounds',
+          },
+        ],
+      });
+
+      await runResearchSpecialist(researchInput);
+
+      // One learner turn → at most one research execution and one canonical seal.
+      expect(vi.mocked(runResearchMode).mock.calls.length).toBeLessThanOrEqual(1);
+      expect(vi.mocked(sealResearchSources).mock.calls.length).toBeLessThanOrEqual(1);
+      expect(vi.mocked(sealResearchSources).mock.calls[0]?.[0]?.candidates).toHaveLength(1);
+      // Verified identity is threaded, never re-resolved from user/body IDs.
+      expect(vi.mocked(sealResearchSources).mock.calls[0]?.[0]?.authenticatedSchoolId).toBe('unknown');
+
+      // R11 — no other specialist regression: routing decisions remain identical.
+      const mathDecision = decideSpecialist({
+        ...baseRoutingInput,
+        messageText: 'help me solve 2/3 divided by 4/5',
+        resolvedIntent: makeResolution({ primaryIntent: 'explain' }),
+      });
+      expect(mathDecision.kind).toBe('math');
+
+      const artifactDecision = decideSpecialist({
+        ...baseRoutingInput,
+        messageText: 'explain the worksheet example',
+        resolvedIntent: makeResolution({ primaryIntent: 'artifact_question_help' }),
+        preparedArtifactEvidence: { groundingStatus: 'grounded', summary: 'evidence' },
+      });
+      expect(artifactDecision.kind).toBe('artifact');
+
+      const videoDecision = decideSpecialist({
+        ...baseRoutingInput,
+        messageText: 'show me that video again',
+        resolvedIntent: makeResolution({ primaryIntent: 'video_help' }),
+        preparedVideoContext: { status: 'recommended', recommendationCount: 2 },
+      });
+      expect(videoDecision.kind).toBe('video');
+    });
   });
 });
