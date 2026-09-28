@@ -472,8 +472,10 @@ describe('AI-INTELLIGENCE-03 specialist convergence', () => {
       expect(result.promptDirectives.some((d) => /do not invent citations/i.test(d))).toBe(true);
     });
 
-    it('TEST 2 — genuine retrieval evidence CAN verify through the canonical seal', async () => {
+    it('TEST 2 — genuine retrieval evidence CAN verify through the canonical seal; original candidate retrievedAt preserved exactly', async () => {
       const { runResearchSpecialist } = await import('../services/tutorOrchestration/tutorSpecialistRuntime');
+
+      const REAL_RETRIEVED_AT = '2026-09-28T10:11:12.123Z';
 
       mockResearchOutcome({
         resultSources: [
@@ -485,7 +487,7 @@ describe('AI-INTELLIGENCE-03 specialist convergence', () => {
             url: 'https://www.nature.com/articles/study-2026',
             snippet: 'Measured chlorophyll fluorescence under controlled conditions.',
             toolCallId: 'call_research_abc123',
-            retrievedAt: '2026-09-28T00:00:00.000Z',
+            retrievedAt: REAL_RETRIEVED_AT,
           },
         ],
       });
@@ -499,10 +501,41 @@ describe('AI-INTELLIGENCE-03 specialist convergence', () => {
       expect(verified.sourceType).toBe('web');
       expect(verified.url).toBe('https://www.nature.com/articles/study-2026');
       expect(verified.rawContentIncluded).toBe(false);
-      expect(verified.retrievedAt).toBe('2026-09-28T00:00:00.000Z');
+      expect(verified.retrievedAt).toBe(REAL_RETRIEVED_AT);
       // Truthful mapping: no fabricated freshness or claim support.
       expect(verified.freshnessStatus).toBe('unknown');
       expect(verified.supportsClaimIds).toHaveLength(0);
+    });
+
+    it('TEST 2a — verified source without candidate retrievedAt stays verified and exposes NO learner-visible retrievedAt (no seal fallback timestamp)', async () => {
+      const { runResearchSpecialist } = await import('../services/tutorOrchestration/tutorSpecialistRuntime');
+
+      mockResearchOutcome({
+        resultSources: [
+          { title: 'Verified Without Timestamp Study', url: 'https://www.nature.com/articles/no-timestamp-2026' },
+        ],
+        sourceCandidates: [
+          {
+            title: 'Verified Without Timestamp Study',
+            url: 'https://www.nature.com/articles/no-timestamp-2026',
+            snippet: 'Genuine tool retrieval evidence but no retrieval timestamp provided.',
+            toolCallId: 'call_research_notime_001',
+            // No retrievedAt on the original candidate — seal evidence time must not leak.
+          },
+        ],
+      });
+
+      const result = await runResearchSpecialist(researchInput);
+
+      // Timestamp absence MUST NOT make an otherwise verified source unverified.
+      expect(result.status).toBe('ready');
+      expect(result.verifiedSources).toHaveLength(1);
+      expect(result.verifiedSources[0]!.verificationStatus).toBe('verified');
+      // Seal/evidence fallback timestamp is NOT learner-visible retrieval truth.
+      expect(result.verifiedSources[0]!.retrievedAt).toBeUndefined();
+      expect(
+        Object.prototype.hasOwnProperty.call(result.verifiedSources[0], 'retrievedAt'),
+      ).toBe(false);
     });
 
     it('TEST 3 — blocked/placeholder URL never promotes even WITH retrieval evidence', async () => {

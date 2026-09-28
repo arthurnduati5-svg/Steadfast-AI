@@ -41,7 +41,10 @@ import { runResearchMode } from '../researchModeService';
 // Canonical source-seal pipeline — the ONLY authority that may promote a web
 // source into learner-visible verified state. Trust tiers are advisory only.
 import { sealResearchSources } from '../researchSourceSealService';
-import type { ResearchTrustedSource } from '../researchSourceTrustContracts';
+import type {
+  ResearchSourceCandidate,
+  ResearchTrustedSource,
+} from '../researchSourceTrustContracts';
 import type { VerifiedSource } from '../sourceVerificationContracts';
 import { logger } from '../../utils/logger';
 
@@ -370,12 +373,62 @@ function runVideoSpecialist(input: TutorSpecialistRoutingInput): TutorSpecialist
 // ── R5/R6: Research specialist — policy-gated, max ONE call, truth-first ──
 
 /**
+ * Resolve the ORIGINAL ResearchSourceCandidate corresponding to a sealed
+ * source. Deterministic and fail closed:
+ *   P1 — exact non-empty candidate.sourceId match (ambiguous → unresolved);
+ *   P2 — exact trimmed URL match (case-sensitive; URL paths may be cased);
+ *   P3 — when several candidates share the URL, exactly one must ALSO match
+ *        the sealed source's trimmed title; otherwise unresolved.
+ * Never guesses. The seal may generate sourceId when the candidate had none,
+ * hence the URL fallback.
+ */
+function resolveOriginalCandidate(
+  source: ResearchTrustedSource,
+  originalCandidates: ResearchSourceCandidate[],
+): ResearchSourceCandidate | null {
+  if (source.sourceId) {
+    const bySourceId = originalCandidates.filter(
+      (c) => typeof c.sourceId === 'string' && c.sourceId === source.sourceId,
+    );
+    if (bySourceId.length === 1) return bySourceId[0];
+    if (bySourceId.length > 1) return null;
+  }
+
+  const sourceUrl = typeof source.url === 'string' ? source.url.trim() : '';
+  if (!sourceUrl) return null;
+  const byUrl = originalCandidates.filter(
+    (c) => typeof c.url === 'string' && c.url.trim() === sourceUrl,
+  );
+  if (byUrl.length === 1) return byUrl[0];
+  if (byUrl.length > 1) {
+    const sourceTitle = typeof source.title === 'string' ? source.title.trim() : '';
+    if (sourceTitle) {
+      const byUrlAndTitle = byUrl.filter(
+        (c) => typeof c.title === 'string' && c.title.trim() === sourceTitle,
+      );
+      if (byUrlAndTitle.length === 1) return byUrlAndTitle[0];
+    }
+    return null;
+  }
+  return null;
+}
+
+/**
  * R4/R5: map a sealed source to VerifiedSource ONLY when the canonical seal
  * classified it as a verified, displayable web source with real evidence.
  * No heuristic alternative exists. Every mapped field is a truthful known
  * value from the sealed packet — unknowns stay omitted or 'unknown'.
+ *
+ * AI-INTELLIGENCE-03R.1 timestamp truth: `retrievedAt` is surfaced ONLY from
+ * the ORIGINAL candidate's own retrievedAt. The seal may build evidence with
+ * its own current timestamp when the candidate had none — that seal/evidence
+ * time is NEVER learner-visible retrieval truth. Timestamp absence never
+ * affects verification.
  */
-function mapSealedVerifiedSource(source: ResearchTrustedSource): VerifiedSource | null {
+function mapSealedVerifiedSource(
+  source: ResearchTrustedSource,
+  originalCandidates: ResearchSourceCandidate[],
+): VerifiedSource | null {
   if (source.kind !== 'verified_web') return null;
   if (source.trustStatus !== 'verified') return null;
   if (source.displayPolicy !== 'show_as_verified_citation') return null;
@@ -383,8 +436,11 @@ function mapSealedVerifiedSource(source: ResearchTrustedSource): VerifiedSource 
   if (typeof source.url !== 'string' || !source.url) return null;
   if (source.blockReasons.length > 0) return null;
 
-  // retrievedAt is surfaced only when genuine retrieval evidence carries one.
-  const retrievedAt = source.evidence.find((e) => typeof e.retrievedAt === 'string' && e.retrievedAt)?.retrievedAt;
+  // Timestamp truth: resolve the ORIGINAL candidate; preserve its retrievedAt
+  // exactly, or omit the property entirely when it was absent/empty/ambiguous.
+  const candidate = resolveOriginalCandidate(source, originalCandidates);
+  const candidateRetrievedAt =
+    typeof candidate?.retrievedAt === 'string' ? candidate.retrievedAt.trim() : '';
 
   return {
     id: source.sourceId,
@@ -392,7 +448,7 @@ function mapSealedVerifiedSource(source: ResearchTrustedSource): VerifiedSource 
     title: source.title || 'Verified source',
     url: source.url,
     domain: source.domain || undefined,
-    ...(retrievedAt ? { retrievedAt } : {}),
+    ...(candidateRetrievedAt ? { retrievedAt: candidateRetrievedAt } : {}),
     freshnessStatus: 'unknown',
     verificationStatus: 'verified',
     supportsClaimIds: [],
@@ -501,7 +557,7 @@ export async function runResearchSpecialist(
   // R4: ONLY canonically sealed verified web sources may become VerifiedSource.
   // trustTier is advisory quality assessment and NEVER a verification authority.
   const verifiedSources = (sealOutput.packet.verifiedWebSources || [])
-    .map(mapSealedVerifiedSource)
+    .map((source) => mapSealedVerifiedSource(source, candidates))
     .filter((s): s is VerifiedSource => s !== null)
     .slice(0, 3);
 
