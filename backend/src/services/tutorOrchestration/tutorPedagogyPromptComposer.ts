@@ -5,6 +5,7 @@ import type { MistakeAnalysis } from './mistakeTaxonomyContracts';
 import type { AttemptFeedback } from './attemptFeedbackRuntime';
 import type { PracticeQuestionPlan } from './practiceQuestionContracts';
 import type { SubjectValidationResult } from './subjectValidationRuntime';
+import type { TutorSpecialistResult } from './tutorSpecialistContracts';
 
 export interface PedagogyPromptInput {
   requestId: string;
@@ -23,6 +24,8 @@ export interface PedagogyPromptInput {
   curriculumDirectives?: string[];
   pacingDirective?: string;
   preferredLanguage?: string;
+  /** R11: bounded specialist context. Rendered AFTER hard policy/boundaries; can never override sections 1–3. */
+  specialist?: TutorSpecialistResult;
 }
 
 export interface PedagogyPrompt {
@@ -197,6 +200,37 @@ function buildIntentPedagogy(intent: string | undefined, plan: LearningResponseP
   }
 }
 
+function buildSpecialistSection(specialist?: TutorSpecialistResult): string {
+  if (!specialist || specialist.kind === 'none' || specialist.status === 'not_needed') return '';
+
+  const sections: string[] = [];
+  if (specialist.promptDirectives.length > 0) {
+    sections.push(
+      [
+        'SPECIALIST DIRECTIVES (supportive reasoning context ONLY — these never override hard safety, no-final-answer, or Deen policy above, and never override the learner-facing language calibration):',
+        ...specialist.promptDirectives.map((d) => `- ${d}`),
+      ].join('\n'),
+    );
+  }
+  if (specialist.evidenceSections.length > 0) {
+    sections.push(
+      [
+        'SPECIALIST EVIDENCE (bounded; use only this, do not invent):',
+        ...specialist.evidenceSections.map((e) => `- ${e}`),
+      ].join('\n'),
+    );
+  }
+  if (specialist.warnings.length > 0) {
+    sections.push(
+      [
+        'SPECIALIST LIMITATIONS (respect these truthfully):',
+        ...specialist.warnings.map((w) => `- ${w}`),
+      ].join('\n'),
+    );
+  }
+  return sections.join('\n\n');
+}
+
 export function composePedagogyPrompt(input: PedagogyPromptInput): PedagogyPrompt {
   const systemInstruction = `You are a Socratic tutor. Your role is to guide the learner to think and discover answers themselves. Never give direct final answers when the learner needs to figure something out. Ask guiding questions. Give hints. Check understanding. Be patient and encouraging.`;
 
@@ -207,6 +241,7 @@ export function composePedagogyPrompt(input: PedagogyPromptInput): PedagogyPromp
   const pacingSection = buildPacingGuidance(input.pacingDirective);
   const languageSection = buildLanguageGuidance(input.preferredLanguage);
   const intentPedagogy = buildIntentPedagogy(input.intent, input.plan);
+  const specialistSection = buildSpecialistSection(input.specialist);
 
   let extraInstructions = '';
   if (input.hint) {
@@ -253,6 +288,7 @@ export function composePedagogyPrompt(input: PedagogyPromptInput): PedagogyPromp
     '',
     'Response instruction:',
     generationInstruction,
+    specialistSection,
   ].filter(Boolean).join('\n');
 
   return {

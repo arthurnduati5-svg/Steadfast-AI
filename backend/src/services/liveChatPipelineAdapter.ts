@@ -906,6 +906,8 @@ export class LiveChatPipelineAdapter {
       // tutorTurnOrchestrationEngine — never a legacy second generation path
       // (liveChatAiAdapter / aiService). R3: the prepared prompt packet is
       // passed through so the backend-bounded context reaches generation.
+      // R1: the already-resolved rich intent and source freshness decision are
+      // passed through — no second DB/context lookup.
       const orchestrationResult = await orchestrateTutorTurn({
         requestId: prepared.executionContext.executionId,
         schoolId: input.identity.schoolId,
@@ -916,6 +918,9 @@ export class LiveChatPipelineAdapter {
         learnerAge: undefined,
         preferredLanguage: (input.identity as any).preferredLanguage,
         preparedPromptPacket: prepared.promptPacket,
+        resolvedIntent: prepared.executionContext.intentResolution,
+        sourceFreshnessDecision:
+          (prepared.executionContext as any)._sourceFreshnessDecision || undefined,
         clientContext: {
           displayMode: 'widget',
           subjectHint: input.request.activeSubject || undefined,
@@ -924,7 +929,11 @@ export class LiveChatPipelineAdapter {
       });
 
       aiAnswer = orchestrationResult.responseText;
-      aiSources = [];
+      // R13: specialist verified sources reach the EXISTING final no-fake-source
+      // guard + citation integrity path below. They are not trusted directly.
+      aiSources = (orchestrationResult.specialist?.verifiedSourceCount ?? 0) > 0
+        ? await this._collectSpecialistVerifiedSources(orchestrationResult)
+        : [];
       aiFollowUps = [];
       aiWarnings = [];
       learningCommit = orchestrationResult.learningCommit;
@@ -1143,6 +1152,19 @@ export class LiveChatPipelineAdapter {
     }
 
     return { shouldCallVideoService: false, reasons: [] };
+  }
+
+  /**
+   * R13: specialist verified sources pass through to the EXISTING final
+   * no-fake-source guard + citation integrity path below. They come only
+   * from the specialist runtime's canonical trust conversion (bounded
+   * VerifiedSource contract) and the final guard remains authoritative:
+   * it may still reject any of them.
+   */
+  private async _collectSpecialistVerifiedSources(
+    orchestrationResult: import('./tutorOrchestration/tutorOrchestrationContracts').TutorTurnOrchestrationResult,
+  ): Promise<VerifiedSource[]> {
+    return (orchestrationResult.specialistVerifiedSources || []).slice(0, 5);
   }
 
   /**

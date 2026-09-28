@@ -1,3 +1,8 @@
+import type { TutorIntentResolution } from '../intentResolverContracts';
+import type { SourceFreshnessDecision } from '../sourceFreshnessContracts';
+import type { TutorSpecialistResult } from './tutorSpecialistContracts';
+import type { VerifiedSource } from '../sourceVerificationContracts';
+
 export type TutorTurnIntent =
   | 'ask_concept'
   | 'ask_for_hint'
@@ -43,6 +48,17 @@ export interface TutorTurnOrchestrationInput {
    * duplicated here. Precedence: hard policy > prepared context.
    */
   preparedPromptPacket?: import('../chatPipelineContracts').ChatPromptPacket;
+  /**
+   * R1: rich resolved intent from the canonical chat context pipeline.
+   * Authoritative for specialist routing when present. The simple
+   * classifyLearnerIntent(messageText) remains the fallback.
+   */
+  resolvedIntent?: TutorIntentResolution;
+  /**
+   * R1: already-resolved source freshness decision from Live Chat.
+   * No second DB/context lookup is performed for it.
+   */
+  sourceFreshnessDecision?: SourceFreshnessDecision;
   clientContext?: {
     displayMode?: 'widget' | 'fullscreen';
     activeSchoolPage?: string;
@@ -99,4 +115,24 @@ export interface TutorTurnOrchestrationResult {
     revisionScheduled: boolean;
     warnings: string[];
   };
+  /**
+   * R12: SAFE specialist observability only. Never raw source bodies,
+   * hidden prompts, provider responses, chain of thought, or private
+   * learner context.
+   */
+  specialist?: {
+    kind: import('./tutorSpecialistContracts').TutorSpecialistKind;
+    status: import('./tutorSpecialistContracts').TutorSpecialistStatus;
+    reasonCode: string;
+    evidenceSectionCount: number;
+    verifiedSourceCount: number;
+    degraded: boolean;
+    warnings: string[];
+  };
+  /**
+   * R13: bounded verified sources from the specialist (canonical trust
+   * conversion only). Consumed by the EXISTING final no-fake-source guard
+   * + citation integrity path — never bypassing them.
+   */
+  specialistVerifiedSources?: VerifiedSource[];
 }

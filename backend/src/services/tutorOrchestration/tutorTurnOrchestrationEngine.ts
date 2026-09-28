@@ -28,6 +28,8 @@ import { updateRevisionQueue } from './revisionQueueUpdateRuntime';
 import { composePedagogyPrompt } from './tutorPedagogyPromptComposer';
 import { validateOrchestrationOutput } from './tutorOrchestrationOutputValidator';
 import { assembleTutorTurnResult } from './tutorTurnResultAssembler';
+import { runSpecialist } from './tutorSpecialistRuntime';
+import { mapTutorIntentResolutionToTurnIntent } from './tutorIntentCompatibilityMapper';
 
 import { generateTutorMessage } from '../aiGateway/tutorMessageGenerationService';
 import { CurriculumEngine } from '../curriculumEngine';
@@ -146,7 +148,38 @@ export async function orchestrateTutorTurn(
     }
 
     // Step 2: Classify learner intent
-    const intent = classifyLearnerIntent(input.messageText);
+    // R1/R2: the rich canonical resolved intent is authoritative when present;
+    // the simple text classifier remains the deterministic fallback for callers
+    // without a rich resolution. The compatibility bridge deterministically
+    // translates the canonical resolution onto the pedagogical TutorTurnIntent
+    // — never re-inferring from raw text and never degrading a resolved
+    // specialist request back into generic clarification.
+    let intent = classifyLearnerIntent(input.messageText);
+    if (input.resolvedIntent) {
+      intent = mapTutorIntentResolutionToTurnIntent(input.resolvedIntent);
+    }
+
+    // R3/R4: ONE deterministic specialist decision per turn (may be none).
+    const specialistOutcome = await runSpecialist({
+      requestId,
+      messageText: input.messageText,
+      resolvedIntent: input.resolvedIntent,
+      sourceFreshnessDecision: input.sourceFreshnessDecision,
+      preparedArtifactEvidence:
+        (input.preparedPromptPacket?.allowedContext as {
+          artifactReasoningEvidence?: {
+            groundingStatus?: string;
+            summary?: string;
+            evidenceRefs?: string[];
+            citations?: string[];
+            warnings?: string[];
+            actionHint?: string;
+          };
+        } | undefined)?.artifactReasoningEvidence ?? null,
+      preparedVideoContext: null,
+      deenSourceSensitive: deenSensitive,
+    });
+    const specialistResult = specialistOutcome.result;
 
     // Step 3: Plan learning response with curriculum validation modes
     const validationModes = curriculumPacket.validationModes || (curriculumPacket.moduleDirective?.validationModes) || [];
@@ -255,6 +288,7 @@ export async function orchestrateTutorTurn(
         curriculumDirectives: curriculumPacket.teachingMethodRules,
         pacingDirective,
         preferredLanguage: input.preferredLanguage,
+        specialist: specialistResult ?? undefined,
       });
 
       // Call safe generation through the existing Task 009 gateway.
@@ -467,11 +501,30 @@ export async function orchestrateTutorTurn(
       revisionUpdated: revisionUpdate.revisionUpdated,
       learningCommitAttempted: learningCommit.attempted,
       learningCommitOk: learningCommit.ok,
+      // R12: bounded structured specialist observability — no raw learner message.
+      specialistKind: specialistResult?.kind ?? 'none',
+      specialistStatus: specialistResult?.status ?? 'not_needed',
+      externalCallMade: specialistOutcome.decision.requiresExternalRetrieval && specialistResult?.status !== 'blocked',
+      verifiedSourceCount: specialistResult?.verifiedSources.length ?? 0,
+      degradedReasonCode: specialistResult?.status === 'degraded' || specialistResult?.status === 'blocked'
+        ? String(specialistResult?.metadata.degradedReasonCode ?? 'degraded')
+        : null,
     }, 'Tutor turn orchestration complete');
 
     return {
       ...result,
       learningCommit,
+      // R12: SAFE specialist metadata only.
+      specialist: {
+        kind: specialistResult?.kind ?? 'none',
+        status: specialistResult?.status ?? 'not_needed',
+        reasonCode: specialistOutcome.decision.reasonCode,
+        evidenceSectionCount: specialistResult?.evidenceSections.length ?? 0,
+        verifiedSourceCount: specialistResult?.verifiedSources.length ?? 0,
+        degraded: specialistResult?.status === 'degraded' || specialistResult?.status === 'blocked',
+        warnings: specialistResult?.warnings ?? [],
+      },
+      specialistVerifiedSources: specialistResult?.verifiedSources ?? [],
     };
   } catch (error: unknown) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown orchestration error';
