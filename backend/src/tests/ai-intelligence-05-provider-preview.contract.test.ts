@@ -17,6 +17,9 @@
 // instantiate a real OpenAI SDK transport.
 
 import { describe, it, expect, vi, afterEach } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { join, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import {
   OpenAiModelAdapter,
   resolveOpenAiPreviewConfiguration,
@@ -666,5 +669,118 @@ describe('AI-05R.1 — qualification report validation table', () => {
     });
     expect(parseQualifiedProviderPreviewReport('not-json{{{').report).toBeNull();
     expect(parseQualifiedProviderPreviewReport(undefined).report).toBeNull();
+  });
+});
+
+describe('AI-INTELLIGENCE-05R.1 — fail-closed admission hardening', () => {
+  function runtimeRequest(schoolId: string, requestId: string) {
+    return {
+      requestId,
+      providerId: OPENAI_PREVIEW_PROVIDER_ID,
+      modelId: TEST_MODEL_ID,
+      prompt: TEST_PROMPT,
+      generationMode: 'socratic_tutoring' as const,
+      schoolId,
+    };
+  }
+
+  it('T22: malformed but valid JSON fails closed without throwing', () => {
+    const variants: Array<{ label: string; mutate: (r: Record<string, unknown>) => void }> = [
+      { label: 'bundle.capabilityScopes = null', mutate: (r) => { (r['bundle'] as Record<string, unknown>)['capabilityScopes'] = null; } },
+      {
+        label: "bundle.capabilityScopes = ['valid', 42]",
+        mutate: (r) => { (r['bundle'] as Record<string, unknown>)['capabilityScopes'] = ['valid', 42]; },
+      },
+      {
+        label: 'qualifiedCapabilityScopes = undefined',
+        mutate: (r) => { r['qualifiedCapabilityScopes'] = undefined; },
+      },
+      {
+        label: 'qualifiedCapabilityScopes = string',
+        mutate: (r) => { r['qualifiedCapabilityScopes'] = 'text.general_tutoring.en'; },
+      },
+      {
+        label: 'semanticCases.total = string',
+        mutate: (r) => { (r['semanticCases'] as Record<string, unknown>)['total'] = '8'; },
+      },
+      { label: 'latency = null', mutate: (r) => { r['latency'] = null; } },
+      {
+        label: 'bundle.maxOutputTokens = string',
+        mutate: (r) => { (r['bundle'] as Record<string, unknown>)['maxOutputTokens'] = '640'; },
+      },
+    ];
+    let rejected = 0;
+    for (const variant of variants) {
+      const clone = JSON.parse(JSON.stringify(makePassReport())) as Record<string, unknown>;
+      variant.mutate(clone);
+      let parsed: { report: unknown } | undefined;
+      expect(() => {
+        parsed = parseQualifiedProviderPreviewReport(JSON.stringify(clone));
+      }, variant.label).not.toThrow();
+      expect((parsed as unknown as { report: unknown }).report, variant.label).toBeNull();
+      rejected += 1;
+    }
+    expect(rejected).toBe(variants.length);
+  });
+
+  it('T23: malformed qualification JSON shape never throws at startup and never reaches transport', async () => {
+    const malformed = JSON.parse(JSON.stringify(makePassReport())) as Record<string, unknown>;
+    (malformed['bundle'] as Record<string, unknown>)['capabilityScopes'] = null;
+    setMatchingPreviewEnv(JSON.stringify(malformed));
+    const execute = vi.fn<ExecuteFn>().mockResolvedValue({ text: 'Must not dispatch.' });
+    let service: ProviderHealthService | undefined;
+    expect(() => {
+      service = new ProviderHealthService({ execute });
+    }).not.toThrow();
+    const adapter = (service as unknown as ProviderHealthService).getAdapter('openai-preview');
+    expect(adapter).toBeDefined();
+    const result = await (adapter as OpenAiModelAdapter).generate(runtimeRequest(TEST_SCHOOL, 'req-t23'));
+    expect(result.ok).toBe(false);
+    expect(result.errorCode).toBe('qualification_required');
+    expect(execute).toHaveBeenCalledTimes(0);
+  });
+
+  it('T24: sentinel runtime identities fail closed with zero transport calls', async () => {
+    const cases: Array<{ label: string; runtimeCommit: string; promptBundleHash: string }> = [
+      { label: 'unknown commit', runtimeCommit: 'unknown', promptBundleHash: 'pbh-001' },
+      { label: 'unversioned hash', runtimeCommit: 'real-commit', promptBundleHash: 'unversioned-at-qualification-time' },
+      { label: 'whitespace unknown commit', runtimeCommit: '  unknown  ', promptBundleHash: 'pbh-001' },
+      { label: 'whitespace unversioned hash', runtimeCommit: 'fdb1217', promptBundleHash: '  unversioned-at-qualification-time  ' },
+    ];
+    for (const entry of cases) {
+      setMatchingPreviewEnv(makePassReport());
+      process.env.STEADFAST_RUNTIME_COMMIT = entry.runtimeCommit;
+      process.env.STEADFAST_PROMPT_BUNDLE_HASH = entry.promptBundleHash;
+      const execute = vi.fn<ExecuteFn>().mockResolvedValue({ text: 'Must not dispatch.' });
+      const service = new ProviderHealthService({ execute });
+      const adapter = service.getAdapter('openai-preview');
+      expect(adapter, entry.label).toBeDefined();
+      const result = await (adapter as OpenAiModelAdapter).generate(runtimeRequest(TEST_SCHOOL, `req-t24-${entry.label}`));
+      expect(result.ok, entry.label).toBe(false);
+      expect(result.errorCode, entry.label).toBe('runtime_bundle_unresolved');
+      expect(execute, entry.label).toHaveBeenCalledTimes(0);
+    }
+  });
+
+  it('T25: ProviderHealthService uses OPENAI_ADAPTER_IDENTITY as the canonical identity', async () => {
+    const servicePath = join(dirname(fileURLToPath(import.meta.url)), '..', 'services', 'aiGateway', 'providerHealthService.ts');
+    const source = readFileSync(servicePath, 'utf8');
+    expect(source).toContain('OPENAI_ADAPTER_IDENTITY');
+    expect(source).not.toContain("'openai-model-adapter-v2'");
+    expect(source).not.toContain('"openai-model-adapter-v2"');
+    // Fully-qualified synthetic path still activates exactly once with the canonical identity.
+    setMatchingPreviewEnv(makePassReport());
+    const execute = vi.fn<ExecuteFn>().mockResolvedValue({
+      text: 'Eligible synthetic candidate.',
+      providerRequestId: 'resp-t25',
+      providerReportedModelId: TEST_MODEL_ID,
+      usage: { inputTokens: 5, outputTokens: 6, totalTokens: 11 },
+    });
+    const service = new ProviderHealthService({ execute });
+    const adapter = service.getAdapter('openai-preview');
+    expect(adapter).toBeDefined();
+    const result = await (adapter as OpenAiModelAdapter).generate(runtimeRequest(TEST_SCHOOL, 'req-t25'));
+    expect(result.ok).toBe(true);
+    expect(execute).toHaveBeenCalledTimes(1);
   });
 });

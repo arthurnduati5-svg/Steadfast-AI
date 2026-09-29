@@ -190,19 +190,139 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
+function isNonEmptyString(value: unknown): value is string {
+  return typeof value === 'string' && value.length > 0;
+}
+
+function isFinitePositiveNumber(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value) && value > 0;
+}
+
+function isFiniteNonNegativeNumber(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0;
+}
+
+function isFiniteNonNegativeInteger(value: unknown): value is number {
+  return (
+    typeof value === 'number' &&
+    Number.isFinite(value) &&
+    Number.isInteger(value) &&
+    value >= 0
+  );
+}
+
+function isStringArray(value: unknown, nonEmptyElements: boolean): value is string[] {
+  if (!Array.isArray(value)) return false;
+  for (const entry of value) {
+    if (typeof entry !== 'string') return false;
+    if (nonEmptyElements && entry.length === 0) return false;
+  }
+  return true;
+}
+
+function isValidQualificationBundle(bundle: unknown): bundle is ProviderQualificationBundle {
+  if (!isRecord(bundle)) return false;
+  if (bundle['provider'] !== 'openai') return false;
+  if (!isNonEmptyString(bundle['requestedModelId'])) return false;
+  const reported = bundle['providerReportedModelId'];
+  if (reported !== undefined && typeof reported !== 'string') return false;
+  if (!isNonEmptyString(bundle['runtimeCommit'])) return false;
+  if (!isNonEmptyString(bundle['promptBundleHash'])) return false;
+  if (!isNonEmptyString(bundle['adapterIdentity'])) return false;
+  if (!isNonEmptyString(bundle['sdkVersion'])) return false;
+  if (!isFinitePositiveNumber(bundle['maxOutputTokens'])) return false;
+  if (!isFinitePositiveNumber(bundle['providerTimeoutMs'])) return false;
+  if (!isFinitePositiveNumber(bundle['totalDeadlineMs'])) return false;
+  if (!isNonEmptyString(bundle['retryPolicyVersion'])) return false;
+  if (bundle['toolsEnabled'] !== false) return false;
+  if (!isNonEmptyString(bundle['qualificationCorpusVersion'])) return false;
+  if (!isStringArray(bundle['capabilityScopes'], true)) return false;
+  if (!isNonEmptyString(bundle['qualifiedAt'])) return false;
+  if (!isNonEmptyString(bundle['bundleHash'])) return false;
+  return true;
+}
+
+function isValidLatency(value: unknown): boolean {
+  if (!isRecord(value)) return false;
+  for (const key of ['minMs', 'p50Ms', 'p95Ms', 'maxMs'] as const) {
+    const entry = value[key];
+    if (entry !== null && !isFiniteNonNegativeNumber(entry)) return false;
+  }
+  return true;
+}
+
+function isValidReportedUsage(value: unknown): boolean {
+  if (value === null) return true;
+  if (!isRecord(value)) return false;
+  for (const key of ['inputTokens', 'outputTokens'] as const) {
+    const entry = value[key];
+    if (entry !== undefined && !isFiniteNonNegativeNumber(entry)) return false;
+  }
+  return true;
+}
+
 function isValidReportShape(report: ProviderQualificationReport): boolean {
   if (!isRecord(report)) return false;
-  const bundle = (report as Record<string, unknown>)['bundle'];
-  if (!isRecord(bundle)) return false;
-  const semanticCases = (report as Record<string, unknown>)['semanticCases'];
+  const record = report as unknown as Record<string, unknown>;
+  if (!isValidQualificationBundle(record['bundle'])) return false;
+  if (record['structuralQualification'] !== 'PASS' && record['structuralQualification'] !== 'FAIL') return false;
+  const liveConnectivity = record['liveConnectivityQualification'];
+  if (
+    liveConnectivity !== 'PASS' &&
+    liveConnectivity !== 'FAIL' &&
+    liveConnectivity !== 'BLOCKED_NO_CREDENTIAL' &&
+    liveConnectivity !== 'UNVERIFIED_PROVIDER_PENDING'
+  ) {
+    return false;
+  }
+  const semanticCases = record['semanticCases'];
   if (!isRecord(semanticCases)) return false;
-  if (typeof semanticCases['failed'] !== 'number') return false;
-  if (!Array.isArray(report.criticalFailures)) return false;
-  if (typeof report.providerIntegrationQualification !== 'string') return false;
-  if (typeof report.liveProviderQualification !== 'string') return false;
-  if (typeof report.providerSemanticQualification !== 'string') return false;
-  if (typeof bundle['qualifiedAt'] !== 'string' || (bundle['qualifiedAt'] as string).length === 0) return false;
-  if (typeof bundle['bundleHash'] !== 'string' || (bundle['bundleHash'] as string).length === 0) return false;
+  if (!isFiniteNonNegativeInteger(semanticCases['total'])) return false;
+  if (!isFiniteNonNegativeInteger(semanticCases['passed'])) return false;
+  if (!isFiniteNonNegativeInteger(semanticCases['failed'])) return false;
+  if (!isFiniteNonNegativeInteger(semanticCases['unverified'])) return false;
+  if (
+    (semanticCases['passed'] as number) +
+      (semanticCases['failed'] as number) +
+      (semanticCases['unverified'] as number) !==
+    (semanticCases['total'] as number)
+  ) {
+    return false;
+  }
+  if (!isStringArray(record['criticalFailures'], false)) return false;
+  if (!isStringArray(record['qualifiedCapabilityScopes'], false)) return false;
+  if (!isStringArray(record['excludedCapabilityScopes'], false)) return false;
+  if (!isFiniteNonNegativeInteger(record['providerAttempts'])) return false;
+  if (!isValidReportedUsage(record['reportedUsage'])) return false;
+  const usageStatus = record['usageStatus'];
+  if (usageStatus !== 'reported' && usageStatus !== 'partial' && usageStatus !== 'unknown' && usageStatus !== 'none') {
+    return false;
+  }
+  if (!isValidLatency(record['latency'])) return false;
+  if (record['providerIntegrationQualification'] !== 'PASS' && record['providerIntegrationQualification'] !== 'FAIL') {
+    return false;
+  }
+  const liveProvider = record['liveProviderQualification'];
+  if (
+    liveProvider !== 'PASS' &&
+    liveProvider !== 'FAIL' &&
+    liveProvider !== 'BLOCKED_NO_CREDENTIAL' &&
+    liveProvider !== 'UNVERIFIED_PROVIDER_PENDING'
+  ) {
+    return false;
+  }
+  const semantic = record['providerSemanticQualification'];
+  if (semantic !== 'PASS_MINIMUM_PREVIEW_SCOPE' && semantic !== 'FAIL' && semantic !== 'UNVERIFIED_PROVIDER_PENDING') {
+    return false;
+  }
+  if (record['schoolPilotQualification'] !== 'UNVERIFIED') return false;
+  if (record['activationEligibility'] !== 'PREVIEW_ELIGIBLE' && record['activationEligibility'] !== 'BLOCKED') {
+    return false;
+  }
+  if (record['activeTrafficState'] !== 'DISABLED' && record['activeTrafficState'] !== 'PREVIEW_ENABLED') {
+    return false;
+  }
+  if (!isStringArray(record['blockers'], false)) return false;
   return true;
 }
 
@@ -218,6 +338,10 @@ export function isQualificationReportPassing(report: ProviderQualificationReport
   if (report.providerSemanticQualification !== 'PASS_MINIMUM_PREVIEW_SCOPE') return false;
   if (report.criticalFailures.length !== 0) return false;
   if (report.semanticCases.failed !== 0) return false;
+  if (report.qualifiedCapabilityScopes.length === 0) return false;
+  for (const scope of report.qualifiedCapabilityScopes) {
+    if (!report.bundle.capabilityScopes.includes(scope)) return false;
+  }
   const bundle = report.bundle;
   const { bundleHash: _ignoredHash, qualifiedAt: _ignoredAt, ...material } = bundle;
   void _ignoredHash;
@@ -229,7 +353,7 @@ export function isQualificationReportPassing(report: ProviderQualificationReport
 export function parseQualifiedProviderPreviewReport(
   raw: string | undefined,
 ): { report: ProviderQualificationReport | null; reason?: string } {
-  if (raw === undefined || raw === null || raw.trim().length === 0) {
+  if (typeof raw !== 'string' || raw.trim().length === 0) {
     return { report: null, reason: 'qualification report is not configured' };
   }
   let parsed: unknown;

@@ -4,6 +4,7 @@ import { LocalModelAdapter } from './providers/localModelAdapter';
 import { CloudModelAdapter } from './providers/cloudModelAdapter';
 import {
   OpenAiModelAdapter,
+  OPENAI_ADAPTER_IDENTITY,
   OPENAI_PREVIEW_PROVIDER_ID,
   type OpenAIResponsesTransportLike,
   type OpenAiPreviewAdmission,
@@ -30,6 +31,25 @@ export interface ProviderHealthInput {
 // report, exact active bundle, qualified capability, emergency, key) agrees.
 const PREVIEW_SDK_VERSION = 'openai-sdk-6.x';
 
+const UNRESOLVED_RUNTIME_COMMIT = 'unknown';
+const UNRESOLVED_PROMPT_BUNDLE_HASH = 'unversioned-at-qualification-time';
+
+function isRuntimeCommitResolved(value: unknown): value is string {
+  if (typeof value !== 'string') return false;
+  const trimmed = value.trim();
+  if (trimmed.length === 0) return false;
+  if (trimmed === UNRESOLVED_RUNTIME_COMMIT) return false;
+  return true;
+}
+
+function isPromptBundleHashResolved(value: unknown): value is string {
+  if (typeof value !== 'string') return false;
+  const trimmed = value.trim();
+  if (trimmed.length === 0) return false;
+  if (trimmed === UNRESOLVED_PROMPT_BUNDLE_HASH) return false;
+  return true;
+}
+
 function readPreviewAdmission(
   modelId: string,
 ): OpenAiPreviewAdmission {
@@ -44,16 +64,17 @@ function readPreviewAdmission(
   const runtimeCommit = process.env.STEADFAST_RUNTIME_COMMIT ?? '';
   const promptBundleHash = process.env.STEADFAST_PROMPT_BUNDLE_HASH ?? '';
   // The CURRENT active bundle is reconstructed from current runtime facts —
-  // never by reusing the qualified bundle itself. Absent commit/hash means
-  // runtime preview is NOT eligible (no placeholder activation).
+  // never by reusing the qualified bundle itself. Placeholder identities are
+  // valid only as reporting placeholders, never as learner-preview activation
+  // identity: unresolved commit/hash means activeBundle = null.
   const activeBundle: OpenAiPreviewAdmission['activeBundle'] =
-    runtimeCommit && promptBundleHash
+    isRuntimeCommitResolved(runtimeCommit) && isPromptBundleHashResolved(promptBundleHash)
       ? {
           provider: 'openai',
           requestedModelId: modelId,
           runtimeCommit,
           promptBundleHash,
-          adapterIdentity: 'openai-model-adapter-v2',
+          adapterIdentity: OPENAI_ADAPTER_IDENTITY,
           sdkVersion: PREVIEW_SDK_VERSION,
           maxOutputTokens: 640,
           providerTimeoutMs: 7000,
