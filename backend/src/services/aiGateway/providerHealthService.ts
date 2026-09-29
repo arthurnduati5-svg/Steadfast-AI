@@ -2,6 +2,10 @@ import type { ModelProviderAdapter, ProviderStatus } from './modelProviderContra
 import { MockModelAdapter } from './providers/mockModelAdapter';
 import { LocalModelAdapter } from './providers/localModelAdapter';
 import { CloudModelAdapter } from './providers/cloudModelAdapter';
+import {
+  OpenAiModelAdapter,
+  resolveOpenAiPreviewConfiguration,
+} from './providers/openAiModelAdapter';
 
 export interface ProviderHealthEntry {
   providerId: string;
@@ -20,6 +24,20 @@ export class ProviderHealthService {
     this.registerAdapter(new MockModelAdapter());
     this.registerAdapter(new LocalModelAdapter());
     this.registerAdapter(new CloudModelAdapter());
+    // AI-INTELLIGENCE-05: register the real OpenAI adapter ONLY when the
+    // preview credential AND model are explicitly configured. No credential
+    // and no model must never resolve to a mock-capable success path.
+    const previewConfig = resolveOpenAiPreviewConfiguration();
+    if (previewConfig.configured && previewConfig.modelId) {
+      this.registerAdapter(
+        new OpenAiModelAdapter({
+          apiKey: process.env.OPENAI_API_KEY,
+          modelId: previewConfig.modelId,
+          baseUrl: process.env.OPENAI_BASE_URL,
+          sdkVersion: 'openai-sdk-6.x',
+        }),
+      );
+    }
   }
 
   registerAdapter(adapter: ModelProviderAdapter): void {

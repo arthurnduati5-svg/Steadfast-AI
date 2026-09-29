@@ -32,6 +32,15 @@ export interface ProviderGenerationRequest {
   maxOutputTokens?: number;
   temperature?: number;
   timeoutMs?: number;
+  /** AI-05: control envelope only — never model-visible content. */
+  schoolId?: string;
+}
+
+export interface ProviderUsageReport {
+  inputTokens?: number;
+  outputTokens?: number;
+  totalTokens?: number;
+  status: 'reported' | 'partial' | 'unknown';
 }
 
 export interface ProviderGenerationResult {
@@ -43,6 +52,12 @@ export interface ProviderGenerationResult {
   errorCode?: string;
   errorMessage?: string;
   latencyMs?: number;
+  /** AI-05: model id the provider reports it actually served, when available. */
+  reportedModelId?: string;
+  /** AI-05: provider request/correlation id, when available. */
+  providerRequestId?: string;
+  /** AI-05: truthful usage — missing usage is 'unknown', NEVER zero. */
+  usage?: ProviderUsageReport;
 }
 
 export interface ModelProviderAdapter {

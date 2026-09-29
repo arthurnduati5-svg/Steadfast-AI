@@ -96,6 +96,9 @@ export async function generate(
       generationMode: 'socratic_tutoring',
       maxOutputTokens,
       timeoutMs,
+      // AI-INTELLIGENCE-05: control envelope only. The adapter's privacy
+      // projection blocks schoolId from becoming model-visible content.
+      schoolId: generationRequest.schoolId,
     });
 
     if (!result.ok) {
