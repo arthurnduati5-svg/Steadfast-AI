@@ -1,4 +1,3 @@
-import OpenAI from 'openai';
 import type {
   ModelProviderAdapter,
   ProviderGenerationRequest,
@@ -7,24 +6,37 @@ import type {
   ProviderStatus,
 } from '../modelProviderContracts';
 import type { GenerationMode } from '../safeGenerationContracts';
+import {
+  OpenAIResponsesTransport,
+  OpenAIResponsesTransportError,
+} from './openAIResponsesTransport';
+import type {
+  OpenAIResponsesTransportRequest,
+  OpenAIResponsesTransportResult,
+} from './openAIResponsesTransport';
 
-// ── AI-INTELLIGENCE-05: canonical OpenAI provider adapter ──
+// ── AI-INTELLIGENCE-05R: canonical OpenAI provider adapter ──
 // Sits BELOW the canonical aiProviderGateway seam. This adapter translates:
 // prompt representation, output-token control, timeouts, usage fields,
 // provider errors, and provider request IDs. It MAY NOT decide pedagogy,
 // safety, school authorization, evidence, mastery, Deen policy, source
 // truth, academic integrity, or learner state.
 //
-// Transport law:
-// - NO SDK-level retries (the gateway owns retry; single retry owner).
-// - Real cancellation: AbortSignal is wired into the SDK request so the
-//   underlying provider request aborts on timeout. No uncancellable races.
+// Convergence law (05R):
+// - The adapter performs ZERO direct OpenAI network calls. The ONLY OpenAI
+//   execution owner is OpenAIResponsesTransport (Responses API), invoked
+//   exactly once per provider attempt.
+// - NO SDK-level retries (maxRetries: 0 inside the transport), NO transport
+//   retries, NO adapter retries. The gateway performs no transport retry
+//   loop either (single adapter.generate call) — retry owner is NONE.
+// - Real cancellation: AbortSignal is wired into the transport request so
+//   the underlying Responses API request aborts on timeout.
 // - Usage truth: missing usage is reported as status 'unknown', never zero.
-// - Malformed success law: HTTP 200 without usable text is
+// - Malformed success law: transport success without usable text is
 //   provider_malformed_response, never a fake success.
 // - Privacy law: the adapter enforces a private-provider projection
-//   checklist (no schoolId, no studentId, no email, no phone, no DB ids
-//   in model-visible content) and fails closed with
+//   checklist (no schoolId, no studentId, no email, no phone, no DB ids,
+//   no API key in model-visible content) and fails closed with
 //   'privacy_projection_blocked' before dispatch when violated.
 
 export const OPENAI_ADAPTER_IDENTITY = 'openai-model-adapter-v1';
@@ -43,11 +55,32 @@ export type CanonicalProviderErrorClass =
   | 'provider_usage_unknown'
   | 'provider_unknown_error';
 
+/** Adapter-level fail-closed gate codes (checked BEFORE transport). */
+export type AdapterGateErrorCode =
+  | 'misconfigured'
+  | 'privacy_projection_blocked'
+  | 'preview_disabled'
+  | 'school_not_authorized'
+  | 'emergency_disabled';
+
+/** Structural transport surface the adapter delegates to (fakeable in tests). */
+export interface OpenAIResponsesTransportLike {
+  execute(request: OpenAIResponsesTransportRequest): Promise<OpenAIResponsesTransportResult>;
+}
+
 export interface OpenAiModelAdapterConfig {
   apiKey?: string;
   modelId?: string;
   baseUrl?: string;
   sdkVersion: string;
+  /** Fail-closed preview gate. Undefined preserves existing callers (allow). */
+  previewEnabled?: boolean;
+  /** When set, request.schoolId must match or dispatch is refused. */
+  previewSchoolId?: string;
+  /** Fail-closed emergency kill switch. Undefined preserves existing callers. */
+  emergencyDisabled?: boolean;
+  /** Injected transport (tests). Defaults to the canonical SDK transport. */
+  transport?: OpenAIResponsesTransportLike;
 }
 
 export interface OpenAiUsageReport {
@@ -55,13 +88,6 @@ export interface OpenAiUsageReport {
   outputTokens?: number;
   totalTokens?: number;
   status: 'reported' | 'partial' | 'unknown';
-}
-
-interface OpenAiErrorShape {
-  status?: number;
-  message?: string;
-  code?: string;
-  error?: { message?: string; code?: string };
 }
 
 function isAbortError(error: unknown): boolean {
@@ -124,23 +150,21 @@ export class OpenAiModelAdapter implements ModelProviderAdapter {
   providerType = 'cloud' as const;
 
   private config: OpenAiModelAdapterConfig;
-  private client: OpenAI | null = null;
+  private injectedTransport: OpenAIResponsesTransportLike | null;
 
   constructor(config: OpenAiModelAdapterConfig) {
     this.config = config;
+    this.injectedTransport = config.transport ?? null;
   }
 
-  private getClient(): OpenAI | null {
-    if (!this.config.apiKey) return null;
-    if (!this.client) {
-      this.client = new OpenAI({
-        apiKey: this.config.apiKey,
-        baseURL: this.config.baseUrl,
-        maxRetries: 0,
-        timeout: undefined,
+  private getTransport(): OpenAIResponsesTransportLike {
+    if (!this.injectedTransport) {
+      this.injectedTransport = new OpenAIResponsesTransport({
+        apiKey: this.config.apiKey as string,
+        baseUrl: this.config.baseUrl,
       });
     }
-    return this.client;
+    return this.injectedTransport;
   }
 
   async getStatus(): Promise<ProviderStatus> {
@@ -175,7 +199,7 @@ export class OpenAiModelAdapter implements ModelProviderAdapter {
     const start = Date.now();
 
     const fail = (
-      errorCode: CanonicalProviderErrorClass | 'misconfigured' | 'privacy_projection_blocked',
+      errorCode: CanonicalProviderErrorClass | AdapterGateErrorCode,
       errorMessage: string,
       extra?: Partial<ProviderGenerationResult>,
     ): ProviderGenerationResult => ({
@@ -196,6 +220,17 @@ export class OpenAiModelAdapter implements ModelProviderAdapter {
       return fail('provider_invalid_request', 'Requested model does not match the configured preview model. No silent model fallback is permitted.');
     }
 
+    // Preview admission gates — fail closed BEFORE transport (zero transport calls).
+    if (this.config.previewEnabled === false) {
+      return fail('preview_disabled', 'OpenAI preview is disabled. No provider dispatch is permitted.');
+    }
+    if (this.config.emergencyDisabled === true) {
+      return fail('emergency_disabled', 'OpenAI preview emergency disable is active. No provider dispatch is permitted.');
+    }
+    if (this.config.previewSchoolId !== undefined && input.schoolId !== this.config.previewSchoolId) {
+      return fail('school_not_authorized', 'Authenticated school does not match the configured preview school. No provider dispatch is permitted.');
+    }
+
     // Privacy projection enforcement — fail closed BEFORE dispatch.
     const forbidden = detectForbiddenProviderContent(input.prompt);
     if (forbidden.length > 0) {
@@ -205,40 +240,38 @@ export class OpenAiModelAdapter implements ModelProviderAdapter {
       );
     }
 
-    const client = this.getClient();
-    if (!client) {
-      return fail('provider_auth_error', 'OpenAI client unavailable: missing API key.');
-    }
+    // Bounded controls: output never exceeds 640, timeout never exceeds 7000ms.
+    const maxOutputTokens = Math.min(input.maxOutputTokens ?? 640, 640);
+    const timeoutMs = Math.min(input.timeoutMs ?? 7000, 7000);
 
-    const timeoutMs = input.timeoutMs ?? 7000;
+    let timedOut = false;
     const controller = new AbortController();
-    const abort = setTimeout(() => controller.abort(), timeoutMs);
+    const abort = setTimeout(() => {
+      timedOut = true;
+      controller.abort();
+    }, timeoutMs);
 
     try {
-      const completion = await client.chat.completions.create(
-        {
-          model: input.modelId,
-          messages: [{ role: 'user', content: input.prompt }],
-          max_completion_tokens: input.maxOutputTokens ?? 640,
-          tools: undefined,
-          tool_choice: 'none',
-          stream: false,
-        },
-        { signal: controller.signal },
-      );
+      // EXACTLY ONE transport call per provider attempt. No retry here.
+      const result = await this.getTransport().execute({
+        modelId: input.modelId,
+        input: input.prompt,
+        maxOutputTokens,
+        timeoutMs,
+        abortSignal: controller.signal,
+      });
 
-      const text = completion.choices?.[0]?.message?.content;
-      if (typeof text !== 'string' || text.trim().length === 0) {
+      if (typeof result.text !== 'string' || result.text.trim().length === 0) {
         return fail('provider_malformed_response', 'OpenAI returned a success envelope without usable candidate text.');
       }
 
-      const rawUsage = completion.usage;
+      const rawUsage = result.usage;
       const usage: OpenAiUsageReport =
-        rawUsage && typeof rawUsage.prompt_tokens === 'number' && typeof rawUsage.completion_tokens === 'number'
+        rawUsage && typeof rawUsage.inputTokens === 'number' && typeof rawUsage.outputTokens === 'number'
           ? {
-              inputTokens: rawUsage.prompt_tokens,
-              outputTokens: rawUsage.completion_tokens,
-              totalTokens: typeof rawUsage.total_tokens === 'number' ? rawUsage.total_tokens : undefined,
+              inputTokens: rawUsage.inputTokens,
+              outputTokens: rawUsage.outputTokens,
+              totalTokens: typeof rawUsage.totalTokens === 'number' ? rawUsage.totalTokens : undefined,
               status: 'reported',
             }
           : { status: 'unknown' };
@@ -248,21 +281,38 @@ export class OpenAiModelAdapter implements ModelProviderAdapter {
         providerId: this.providerId,
         modelId: input.modelId,
         ok: true,
-        text,
+        text: result.text,
         latencyMs: Date.now() - start,
-        providerRequestId: completion.id,
-        reportedModelId: typeof completion.model === 'string' ? completion.model : undefined,
+        providerRequestId: result.providerRequestId,
+        reportedModelId: result.providerReportedModelId,
         usage,
       };
     } catch (error: unknown) {
-      if (isAbortError(error)) {
-        return fail('provider_timeout', `OpenAI request timed out after ${timeoutMs}ms and the underlying request was aborted.`);
+      if (error instanceof OpenAIResponsesTransportError) {
+        if (error.code === 'timeout') {
+          return fail('provider_timeout', `OpenAI request timed out after ${timeoutMs}ms and the underlying request was aborted.`);
+        }
+        if (error.code === 'cancelled') {
+          return fail(
+            timedOut ? 'provider_timeout' : 'provider_cancelled',
+            timedOut
+              ? `OpenAI request timed out after ${timeoutMs}ms and the underlying request was aborted.`
+              : 'OpenAI request was cancelled before completion.',
+          );
+        }
+        const errorClass = normalizeErrorClass(error.status, error);
+        return fail(errorClass, `OpenAI request failed (${errorClass}). Provider message: ${error.message}`);
       }
-      const errShape = error as OpenAiErrorShape;
-      const status = errShape?.status;
-      const errorClass = normalizeErrorClass(status, error);
-      const providerMessage = errShape?.error?.message ?? errShape?.message ?? 'Unknown provider error';
-      return fail(errorClass, `OpenAI request failed (${errorClass}). Provider message: ${providerMessage}`);
+      if (isAbortError(error)) {
+        return fail(
+          timedOut ? 'provider_timeout' : 'provider_cancelled',
+          timedOut
+            ? `OpenAI request timed out after ${timeoutMs}ms and the underlying request was aborted.`
+            : 'OpenAI request was cancelled before completion.',
+        );
+      }
+      const message = error instanceof Error ? error.message : 'Unknown provider error';
+      return fail('provider_unknown_error', `OpenAI request failed (provider_unknown_error). Provider message: ${message}`);
     } finally {
       clearTimeout(abort);
     }
