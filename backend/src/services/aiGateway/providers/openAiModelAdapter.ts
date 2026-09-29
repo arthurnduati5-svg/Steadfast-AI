@@ -14,6 +14,12 @@ import type {
   OpenAIResponsesTransportRequest,
   OpenAIResponsesTransportResult,
 } from './openAIResponsesTransport';
+import {
+  evaluatePreviewActivation,
+  isQualificationReportPassing,
+  type ProviderQualificationBundle,
+  type ProviderQualificationReport,
+} from '../providerPreviewQualificationContracts';
 
 // ── AI-INTELLIGENCE-05R: canonical OpenAI provider adapter ──
 // Sits BELOW the canonical aiProviderGateway seam. This adapter translates:
@@ -39,7 +45,9 @@ import type {
 //   no API key in model-visible content) and fails closed with
 //   'privacy_projection_blocked' before dispatch when violated.
 
-export const OPENAI_ADAPTER_IDENTITY = 'openai-model-adapter-v1';
+export const OPENAI_PREVIEW_PROVIDER_ID = 'openai-preview';
+
+export const OPENAI_ADAPTER_IDENTITY = 'openai-model-adapter-v2';
 
 /** Canonical provider failure classes (AI-05 §24). */
 export type CanonicalProviderErrorClass =
@@ -61,7 +69,24 @@ export type AdapterGateErrorCode =
   | 'privacy_projection_blocked'
   | 'preview_disabled'
   | 'school_not_authorized'
-  | 'emergency_disabled';
+  | 'emergency_disabled'
+  | 'qualification_required'
+  | 'requalification_required'
+  | 'capability_not_qualified'
+  | 'runtime_bundle_unresolved';
+
+/** Explicit execution mode (05R.1 §7). No permissive default. */
+export type OpenAiAdapterExecutionMode = 'qualification' | 'runtime_preview';
+
+/** Explicit runtime preview admission facts (05R.1 §16). */
+export interface OpenAiPreviewAdmission {
+  previewEnabled: boolean;
+  previewSchoolId: string;
+  emergencyDisabled: boolean;
+  qualificationReport: ProviderQualificationReport | null;
+  activeBundle: Omit<ProviderQualificationBundle, 'bundleHash' | 'qualifiedAt'> | null;
+  capabilityScope: string;
+}
 
 /** Structural transport surface the adapter delegates to (fakeable in tests). */
 export interface OpenAIResponsesTransportLike {
@@ -73,12 +98,10 @@ export interface OpenAiModelAdapterConfig {
   modelId?: string;
   baseUrl?: string;
   sdkVersion: string;
-  /** Fail-closed preview gate. Undefined preserves existing callers (allow). */
-  previewEnabled?: boolean;
-  /** When set, request.schoolId must match or dispatch is refused. */
-  previewSchoolId?: string;
-  /** Fail-closed emergency kill switch. Undefined preserves existing callers. */
-  emergencyDisabled?: boolean;
+  /** REQUIRED execution mode: 'qualification' produces evidence, 'runtime_preview' consumes it. */
+  executionMode: OpenAiAdapterExecutionMode;
+  /** REQUIRED for runtime_preview; absent is allowed only in qualification mode. */
+  previewAdmission?: OpenAiPreviewAdmission;
   /** Injected transport (tests). Defaults to the canonical SDK transport. */
   transport?: OpenAIResponsesTransportLike;
 }
@@ -146,7 +169,7 @@ export function resolveOpenAiPreviewConfiguration(): {
 }
 
 export class OpenAiModelAdapter implements ModelProviderAdapter {
-  providerId = 'openai-provider';
+  providerId = OPENAI_PREVIEW_PROVIDER_ID;
   providerType = 'cloud' as const;
 
   private config: OpenAiModelAdapterConfig;
@@ -170,6 +193,21 @@ export class OpenAiModelAdapter implements ModelProviderAdapter {
   async getStatus(): Promise<ProviderStatus> {
     if (!this.config.apiKey) return 'misconfigured';
     if (!this.config.modelId) return 'misconfigured';
+    if (this.config.executionMode === 'qualification') return 'available';
+    // runtime_preview: never claim available when structural admission cannot
+    // possibly succeed. Missing runtime facts → misconfigured; disabled or
+    // unqualified preview → unavailable (existing ProviderStatus values only).
+    const admission = this.config.previewAdmission;
+    if (!admission) return 'misconfigured';
+    if (!admission.previewSchoolId) return 'misconfigured';
+    if (!admission.activeBundle) return 'misconfigured';
+    if (!admission.activeBundle.runtimeCommit) return 'misconfigured';
+    if (!admission.activeBundle.promptBundleHash) return 'misconfigured';
+    if (!admission.capabilityScope) return 'misconfigured';
+    if (admission.emergencyDisabled) return 'unavailable';
+    if (!admission.previewEnabled) return 'unavailable';
+    if (!admission.qualificationReport) return 'unavailable';
+    if (!isQualificationReportPassing(admission.qualificationReport)) return 'unavailable';
     return 'available';
   }
 
@@ -220,15 +258,76 @@ export class OpenAiModelAdapter implements ModelProviderAdapter {
       return fail('provider_invalid_request', 'Requested model does not match the configured preview model. No silent model fallback is permitted.');
     }
 
-    // Preview admission gates — fail closed BEFORE transport (zero transport calls).
-    if (this.config.previewEnabled === false) {
-      return fail('preview_disabled', 'OpenAI preview is disabled. No provider dispatch is permitted.');
-    }
-    if (this.config.emergencyDisabled === true) {
-      return fail('emergency_disabled', 'OpenAI preview emergency disable is active. No provider dispatch is permitted.');
-    }
-    if (this.config.previewSchoolId !== undefined && input.schoolId !== this.config.previewSchoolId) {
-      return fail('school_not_authorized', 'Authenticated school does not match the configured preview school. No provider dispatch is permitted.');
+    // 05R.1 §8/§9: execution-mode admission gates — fail closed BEFORE transport.
+    if (this.config.executionMode === 'runtime_preview') {
+      const admission = this.config.previewAdmission;
+      if (!admission) {
+        return fail('qualification_required', 'Runtime preview admission facts are not configured. No provider dispatch is permitted.');
+      }
+      if (admission.emergencyDisabled === true) {
+        return fail('emergency_disabled', 'OpenAI preview emergency disable is active. No provider dispatch is permitted.');
+      }
+      if (admission.previewEnabled !== true) {
+        return fail('preview_disabled', 'OpenAI preview is disabled. No provider dispatch is permitted.');
+      }
+      if (!admission.previewSchoolId) {
+        return fail('school_not_authorized', 'Preview school is not configured. No provider dispatch is permitted.');
+      }
+      if (!input.schoolId || input.schoolId !== admission.previewSchoolId) {
+        return fail('school_not_authorized', 'Authenticated school does not match the configured preview school. No provider dispatch is permitted.');
+      }
+      if (!admission.qualificationReport || !isQualificationReportPassing(admission.qualificationReport)) {
+        return fail('qualification_required', 'No valid passed preview qualification report exists. No provider dispatch is permitted.');
+      }
+      const report = admission.qualificationReport;
+      if (
+        !admission.activeBundle ||
+        !admission.activeBundle.runtimeCommit ||
+        !admission.activeBundle.promptBundleHash
+      ) {
+        return fail('runtime_bundle_unresolved', 'Current runtime bundle identities are not configured. No provider dispatch is permitted.');
+      }
+      if (
+        !admission.capabilityScope ||
+        !report.qualifiedCapabilityScopes.includes(admission.capabilityScope) ||
+        !report.bundle.capabilityScopes.includes(admission.capabilityScope)
+      ) {
+        return fail('capability_not_qualified', 'Configured capability scope is not qualified. No provider dispatch is permitted.');
+      }
+      // Canonical activation authority: exact-bundle + school + credential law.
+      const gate = evaluatePreviewActivation(
+        {
+          previewEnabled: admission.previewEnabled,
+          previewSchoolId: admission.previewSchoolId,
+          previewModelId: this.config.modelId as string,
+          emergencyDisabled: admission.emergencyDisabled,
+          qualifiedBundle: report.bundle,
+        },
+        {
+          authenticatedSchoolId: input.schoolId || '',
+          activeBundle: admission.activeBundle,
+          capabilityScope: admission.capabilityScope,
+          apiKeyPresent: true,
+        },
+      );
+      if (gate.allowed !== true) {
+        if (gate.state === 'REQUALIFICATION_REQUIRED') {
+          return fail('requalification_required', `Active bundle does not match the qualified bundle. ${gate.blocker ?? ''}`.trim());
+        }
+        if (gate.state === 'EMERGENCY_DISABLED') {
+          return fail('emergency_disabled', gate.blocker ?? 'Emergency disable is active.');
+        }
+        if (gate.state === 'DISABLED') {
+          return fail('preview_disabled', gate.blocker ?? 'Preview is disabled.');
+        }
+        if ((gate.blocker ?? '').includes('Capability scope')) {
+          return fail('capability_not_qualified', gate.blocker as string);
+        }
+        if ((gate.blocker ?? '').toLowerCase().includes('school')) {
+          return fail('school_not_authorized', gate.blocker as string);
+        }
+        return fail('qualification_required', gate.blocker ?? 'Preview activation is not eligible.');
+      }
     }
 
     // Privacy projection enforcement — fail closed BEFORE dispatch.

@@ -4,8 +4,14 @@ import { LocalModelAdapter } from './providers/localModelAdapter';
 import { CloudModelAdapter } from './providers/cloudModelAdapter';
 import {
   OpenAiModelAdapter,
-  resolveOpenAiPreviewConfiguration,
+  OPENAI_PREVIEW_PROVIDER_ID,
+  type OpenAIResponsesTransportLike,
+  type OpenAiPreviewAdmission,
 } from './providers/openAiModelAdapter';
+import {
+  parseQualifiedProviderPreviewReport,
+  type ProviderQualificationBundle,
+} from './providerPreviewQualificationContracts';
 
 export interface ProviderHealthEntry {
   providerId: string;
@@ -17,24 +23,84 @@ export interface ProviderHealthInput {
   providerId?: string;
 }
 
+// ── AI-INTELLIGENCE-05R.1: canonical runtime preview environment wiring ──
+// The REAL ProviderHealthService-created OpenAI adapter runs in
+// 'runtime_preview' mode and fails closed unless the complete
+// preview-admission chain (enabled, school, model, passed qualification
+// report, exact active bundle, qualified capability, emergency, key) agrees.
+const PREVIEW_SDK_VERSION = 'openai-sdk-6.x';
+
+function readPreviewAdmission(
+  modelId: string,
+): OpenAiPreviewAdmission {
+  const previewEnabled = process.env.STEADFAST_OPENAI_PREVIEW_ENABLED === 'true';
+  const previewSchoolId = process.env.STEADFAST_OPENAI_PREVIEW_SCHOOL_ID ?? '';
+  const emergencyDisabled = process.env.STEADFAST_OPENAI_EMERGENCY_DISABLED === 'true';
+  const capabilityScope = process.env.STEADFAST_OPENAI_PREVIEW_CAPABILITY_SCOPE ?? '';
+  const { report } = parseQualifiedProviderPreviewReport(
+    process.env.STEADFAST_OPENAI_PREVIEW_QUALIFICATION_REPORT_JSON,
+  );
+
+  const runtimeCommit = process.env.STEADFAST_RUNTIME_COMMIT ?? '';
+  const promptBundleHash = process.env.STEADFAST_PROMPT_BUNDLE_HASH ?? '';
+  // The CURRENT active bundle is reconstructed from current runtime facts —
+  // never by reusing the qualified bundle itself. Absent commit/hash means
+  // runtime preview is NOT eligible (no placeholder activation).
+  const activeBundle: OpenAiPreviewAdmission['activeBundle'] =
+    runtimeCommit && promptBundleHash
+      ? {
+          provider: 'openai',
+          requestedModelId: modelId,
+          runtimeCommit,
+          promptBundleHash,
+          adapterIdentity: 'openai-model-adapter-v2',
+          sdkVersion: PREVIEW_SDK_VERSION,
+          maxOutputTokens: 640,
+          providerTimeoutMs: 7000,
+          totalDeadlineMs: 10000,
+          retryPolicyVersion: 'no-transport-retry-v1',
+          toolsEnabled: false,
+          qualificationCorpusVersion: 'pq-corpus-v1',
+          capabilityScopes: report ? [...report.bundle.capabilityScopes] : [],
+        } satisfies Omit<ProviderQualificationBundle, 'bundleHash' | 'qualifiedAt'>
+      : null;
+
+  return {
+    previewEnabled,
+    previewSchoolId,
+    emergencyDisabled,
+    qualificationReport: report,
+    activeBundle,
+    capabilityScope,
+  };
+}
+
 export class ProviderHealthService {
   private adapters: Map<string, ModelProviderAdapter> = new Map();
 
-  constructor() {
+  constructor(previewTransport?: OpenAIResponsesTransportLike) {
     this.registerAdapter(new MockModelAdapter());
     this.registerAdapter(new LocalModelAdapter());
     this.registerAdapter(new CloudModelAdapter());
     // AI-INTELLIGENCE-05: register the real OpenAI adapter ONLY when the
     // preview credential AND model are explicitly configured. No credential
     // and no model must never resolve to a mock-capable success path.
-    const previewConfig = resolveOpenAiPreviewConfiguration();
-    if (previewConfig.configured && previewConfig.modelId) {
+    // 05R.1: the registered adapter is the openai-preview ROUTE in
+    // runtime_preview mode with environment-derived admission facts. The
+    // adapter itself is the non-bypassable final admission boundary, so
+    // registration is allowed even while admission is currently blocked.
+    const apiKey = process.env.OPENAI_API_KEY;
+    const modelId = process.env.STEADFAST_OPENAI_PREVIEW_MODEL_ID;
+    if (apiKey && modelId) {
       this.registerAdapter(
         new OpenAiModelAdapter({
-          apiKey: process.env.OPENAI_API_KEY,
-          modelId: previewConfig.modelId,
+          apiKey,
+          modelId,
           baseUrl: process.env.OPENAI_BASE_URL,
-          sdkVersion: 'openai-sdk-6.x',
+          sdkVersion: PREVIEW_SDK_VERSION,
+          executionMode: 'runtime_preview',
+          previewAdmission: readPreviewAdmission(modelId),
+          transport: previewTransport,
         }),
       );
     }
@@ -79,6 +145,9 @@ export class ProviderHealthService {
   }
 
   getAdapter(providerId: string): ModelProviderAdapter | undefined {
+    if (providerId === OPENAI_PREVIEW_PROVIDER_ID) {
+      return this.adapters.get(OPENAI_PREVIEW_PROVIDER_ID);
+    }
     return this.adapters.get(providerId);
   }
 

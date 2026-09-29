@@ -180,3 +180,73 @@ export function evaluatePreviewActivation(
   }
   return { state: 'PREVIEW_ELIGIBLE', allowed: true };
 }
+
+// ── AI-INTELLIGENCE-05R.1: fail-closed qualification report parser ──
+// Runtime admission consumes a qualification REPORT (not a raw bundle) because
+// only the report carries the qualification verdict. Malformed optional preview
+// config must never throw at startup — it fails closed to null.
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function isValidReportShape(report: ProviderQualificationReport): boolean {
+  if (!isRecord(report)) return false;
+  const bundle = (report as Record<string, unknown>)['bundle'];
+  if (!isRecord(bundle)) return false;
+  const semanticCases = (report as Record<string, unknown>)['semanticCases'];
+  if (!isRecord(semanticCases)) return false;
+  if (typeof semanticCases['failed'] !== 'number') return false;
+  if (!Array.isArray(report.criticalFailures)) return false;
+  if (typeof report.providerIntegrationQualification !== 'string') return false;
+  if (typeof report.liveProviderQualification !== 'string') return false;
+  if (typeof report.providerSemanticQualification !== 'string') return false;
+  if (typeof bundle['qualifiedAt'] !== 'string' || (bundle['qualifiedAt'] as string).length === 0) return false;
+  if (typeof bundle['bundleHash'] !== 'string' || (bundle['bundleHash'] as string).length === 0) return false;
+  return true;
+}
+
+/**
+ * Report-level qualification verdict (05R.1 §11). Accepts a parsed report as
+ * qualified ONLY when every verdict field passes. Bundle/model currency is
+ * enforced separately by the exact-bundle admission gate.
+ */
+export function isQualificationReportPassing(report: ProviderQualificationReport): boolean {
+  if (!isValidReportShape(report)) return false;
+  if (report.providerIntegrationQualification !== 'PASS') return false;
+  if (report.liveProviderQualification !== 'PASS') return false;
+  if (report.providerSemanticQualification !== 'PASS_MINIMUM_PREVIEW_SCOPE') return false;
+  if (report.criticalFailures.length !== 0) return false;
+  if (report.semanticCases.failed !== 0) return false;
+  const bundle = report.bundle;
+  const { bundleHash: _ignoredHash, qualifiedAt: _ignoredAt, ...material } = bundle;
+  void _ignoredHash;
+  void _ignoredAt;
+  if (computeBundleHash(material) !== bundle.bundleHash) return false;
+  return true;
+}
+
+export function parseQualifiedProviderPreviewReport(
+  raw: string | undefined,
+): { report: ProviderQualificationReport | null; reason?: string } {
+  if (raw === undefined || raw === null || raw.trim().length === 0) {
+    return { report: null, reason: 'qualification report is not configured' };
+  }
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return { report: null, reason: 'qualification report is not valid JSON' };
+  }
+  if (!isRecord(parsed)) {
+    return { report: null, reason: 'qualification report has the wrong shape' };
+  }
+  const candidate = parsed as unknown as ProviderQualificationReport;
+  if (!isValidReportShape(candidate)) {
+    return { report: null, reason: 'qualification report has the wrong shape' };
+  }
+  if (!isQualificationReportPassing(candidate)) {
+    return { report: null, reason: 'qualification report did not pass' };
+  }
+  return { report: candidate };
+}

@@ -39,7 +39,7 @@ const QUALIFICATION_CORPUS_VERSION = 'pq-corpus-v1';
 const MAX_OUTPUT_TOKENS = 640;
 const PROVIDER_TIMEOUT_MS = 7000;
 const TOTAL_DEADLINE_MS = 10000;
-const RETRY_POLICY_VERSION = 'gateway-retry-v1';
+const RETRY_POLICY_VERSION = 'no-transport-retry-v1';
 
 function percentile(sorted: number[], p: number): number | null {
   if (sorted.length === 0) return null;
@@ -91,7 +91,7 @@ async function main(): Promise<void> {
     process.exit(0);
   }
 
-  const adapter = new OpenAiModelAdapter({ apiKey, modelId, sdkVersion: 'openai-sdk-6.x' });
+  const adapter = new OpenAiModelAdapter({ apiKey, modelId, sdkVersion: 'openai-sdk-6.x', executionMode: 'qualification' });
 
   const bundleWithoutHash = {
     provider: 'openai' as const,
@@ -125,7 +125,7 @@ async function main(): Promise<void> {
     const start = Date.now();
     const result = await adapter.generate({
       requestId: `pq-${c.caseId.toLowerCase()}`,
-      providerId: 'openai-provider',
+      providerId: 'openai-preview',
       modelId,
       prompt: `You are a Socratic tutor for a school learning platform. Guide the learner without giving final answers. Case: ${c.prompt}`,
       generationMode: 'socratic_tutoring',
