@@ -1,5 +1,11 @@
 import { createHash, randomUUID } from 'crypto';
 import prisma from '../lib/prisma';
+import {
+  resolveRegistryIdentityForLegacyAsset,
+  upsertMediaResource,
+  updateUserMediaResourceState,
+  type MediaResourceStore,
+} from './mediaResourceRegistryService';
 
 export type MediaAssetKind =
   | 'audio_recap'
@@ -903,5 +909,104 @@ export async function recordMediaAssetInteraction(args: {
     revisionItemId
   );
 
-  return rows[0] ? mapMediaAssetRow(rows[0]) : null;
+  // STREAM-2 canonical bridge (exact production service logic, injectable).
+  // UserMediaResourceState is the canonical learner-resource state owner:
+  // canonical persistence MUST succeed before success is reported. No
+  // swallowing: a canonical failure throws MEDIA_RESOURCE_* and the caller
+  // observes failure, never false success. Legacy MediaAsset learner fields
+  // are a compatibility projection only. The external DTO shape is unchanged.
+  const bridged = rows[0] ? mapMediaAssetRow(rows[0]) : null;
+  if (bridged) {
+    await applyLegacyInteractionCanonicalBridge(
+      { userId: args.userId, action: args.action, bridged },
+      undefined,
+    );
+  }
+
+  return bridged;
+}
+
+// Structural subset of the legacy DTO consumed by the canonical bridge.
+// Production passes the full MediaAsset; tests inject this exact shape.
+export interface LegacyInteractionBridgedAsset {
+  videoProvider?: string | null;
+  videoId?: string | null;
+  sourceUrl?: string | null;
+  dedupeKey?: string | null;
+  assetKind: MediaAssetKind;
+  title: string;
+  summary: string | null;
+  subject: string | null;
+  topic: string | null;
+  language: string | null;
+  tags: string[];
+  thumbnailUrl: string | null;
+  durationSec: number | null;
+  sourceTrust: string | null;
+  safetyStatus: string | null;
+  isSaved?: boolean;
+  isPinned?: boolean;
+  isCompleted?: boolean;
+  isHelpful?: boolean | null;
+  playbackPosition?: number | null;
+}
+
+export async function applyLegacyInteractionCanonicalBridge(
+  args: {
+    userId: string;
+    action: MediaAssetInteractionAction;
+    bridged: LegacyInteractionBridgedAsset;
+  },
+  store?: MediaResourceStore,
+): Promise<{ resourceId: string; canonicalKey: string }> {
+  const identity = resolveRegistryIdentityForLegacyAsset({
+    userId: args.userId,
+    videoProvider: args.bridged.videoProvider,
+    videoId: args.bridged.videoId,
+    sourceUrl: args.bridged.sourceUrl,
+    dedupeKey: args.bridged.dedupeKey,
+    assetKind: args.bridged.assetKind,
+  });
+  const resource = await upsertMediaResource(
+    {
+      scope: identity.scope,
+      ownerUserId: identity.scope === 'USER' ? args.userId : null,
+      mediaKind: args.bridged.assetKind,
+      title: args.bridged.title,
+      summary: args.bridged.summary,
+      subject: args.bridged.subject,
+      topic: args.bridged.topic,
+      language: args.bridged.language,
+      tags: args.bridged.tags,
+      provider: args.bridged.videoProvider,
+      providerResourceId: args.bridged.videoId,
+      sourceUrl: args.bridged.sourceUrl,
+      thumbnailUrl: args.bridged.thumbnailUrl,
+      durationSec: args.bridged.durationSec,
+      sourceTrust: args.bridged.sourceTrust,
+      safetyStatus: args.bridged.safetyStatus,
+      stableResourceKey: identity.stableResourceKey,
+    },
+    store,
+  );
+  const playbackPosition =
+    typeof args.bridged.playbackPosition === 'number' && Number.isFinite(args.bridged.playbackPosition)
+      ? Math.max(0, Math.round(args.bridged.playbackPosition))
+      : undefined;
+  await updateUserMediaResourceState(
+    {
+      userId: args.userId,
+      resourceId: resource.id,
+      isSaved: args.bridged.isSaved,
+      isPinned: args.bridged.isPinned,
+      isCompleted: args.bridged.isCompleted,
+      isHelpful: args.bridged.isHelpful ?? null,
+      ...(typeof playbackPosition === 'number' ? { playbackPositionSec: playbackPosition } : {}),
+      recordOpen: args.action === 'open',
+      recordPlay: args.action === 'play',
+      recordReview: args.action === 'complete' || args.action === 'quick_check',
+    },
+    store,
+  );
+  return { resourceId: resource.id, canonicalKey: resource.canonicalKey };
 }
