@@ -1,0 +1,21 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "incremental": false,
+    "strict": true,
+    "skipLibCheck": true
+  },
+  "files": [],
+  "include": [
+    "src/contracts/mediaAiHandoffContracts.ts",
+    "src/services/mediaAiProcessingAuthorizationService.ts",
+    "src/services/mediaAiProcessingAuthorizationService.test.ts",
+    "src/services/permittedMediaProjectionService.ts",
+    "src/services/mediaTaxonomyContextService.ts",
+    "src/services/mediaSemanticProposalPort.ts",
+    "src/services/mediaSemanticProposalGovernanceService.ts",
+    "src/tests/task-media-ai-handoff.test.ts"
+  ],
+  "exclude": ["node_modules", "dist"]
+}
