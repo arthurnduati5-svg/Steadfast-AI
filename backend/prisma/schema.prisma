@@ -113,16 +113,21 @@ model ChatMessage {
   timestamp     DateTime       @default(now())
   messageNumber Int
   metadata      Json?
+  turnId        String?
+  originMessageId String?
   ChatSession   ChatSession    @relation(fields: [sessionId], references: [id], onDelete: Cascade)
   RevisionItem  RevisionItem[]
 
+  @@unique([sessionId, messageNumber])
   @@index([sessionId])
+  @@index([sessionId, turnId])
   @@index([timestamp])
 }
 
 model ChatSession {
   id                String              @id
   studentId         String
+  schoolId          String?
   startTime         DateTime            @default(now())
   endTime           DateTime?
   topic             String?
@@ -131,12 +136,82 @@ model ChatSession {
   createdAt         DateTime            @default(now())
   updatedAt         DateTime
   summarization     String?
+  lastMessageAt     DateTime?
+  lastOpenedAt      DateTime?
+  latestVisibleMessagePreview String?
+  messageCount      Int                 @default(0)
+  titleVersion      Int                 @default(0)
+  activeTurnId      String?
+  nextMessageNumber Int                 @default(1)
+  learnerTurnCount  Int                 @default(0)
+  parentSessionId   String?
+  rootSessionId     String?
+  lineageType       String?
+  lineageDepth      Int                 @default(0)
+  branchedFromMessageId String?
+  lineageRequestId  String?
+  lineageRequestFingerprint String?
   ChatMessage       ChatMessage[]
+  ChatTurn          ChatTurn[]
+  ChatTurnRequestRecord ChatTurnRequestRecord[]
   StudentProfile    StudentProfile      @relation(fields: [studentId], references: [userId], onDelete: Cascade)
   RevisionItem      RevisionItem[]
   VoiceSessionUsage VoiceSessionUsage[]
 
   @@index([studentId, updatedAt])
+  @@index([schoolId, studentId, lastMessageAt])
+  @@index([schoolId, studentId, lastOpenedAt])
+}
+
+model ChatTurn {
+  id                     String      @id
+  sessionId              String
+  clientTurnId           String
+  requestFingerprint     String
+  status                 String      @default("ACCEPTED")
+  userMessageId          String?
+  assistantMessageId     String?
+  assistantMessageNumber Int?
+  activeAttemptId        String?
+  retryCount             Int         @default(0)
+  checkpoint             Json?
+  checkpointKind         String?
+  errorCode              String?
+  invalidatedAt          DateTime?
+  createdAt              DateTime    @default(now())
+  startedAt              DateTime?
+  completedAt            DateTime?
+  stoppedAt              DateTime?
+  failedAt               DateTime?
+  updatedAt              DateTime
+  ChatSession            ChatSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@unique([sessionId, clientTurnId])
+  @@index([sessionId, status])
+  @@index([assistantMessageId])
+}
+
+model ChatTurnRequestRecord {
+  id                 String    @id
+  sessionId          String
+  schoolId           String?
+  studentId          String
+  clientTurnId       String
+  requestFingerprint String
+  status             String    @default("in_progress")
+  userMessageId      String?
+  assistantMessageId String?
+  responseMetadata   Json?
+  leaseExpiresAt     DateTime?
+  errorCode          String?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime
+  completedAt        DateTime?
+  ChatSession        ChatSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@unique([sessionId, clientTurnId])
+  @@index([sessionId, status])
+  @@index([sessionId, clientTurnId])
 }
 
 model CommittedLearningEvidenceProjection {
@@ -12550,4 +12625,174 @@ model TutorQualificationRubricRecord {
   updatedAt     DateTime @updatedAt
 
   @@unique([rubricId, rubricVersion])
+}
+
+// ── STREAM-2: canonical media resource registry + learner state separation ──
+// Additive only. MediaResource owns canonical content/resource identity;
+// UserMediaResourceState owns one learner's relationship to a resource.
+// MediaAsset is preserved for generated/private compatibility and MUST NOT
+// become a second canonical global registry.
+model MediaResource {
+  id                 String   @id @default(cuid())
+  canonicalKey       String   @unique
+  scope              String   @default("GLOBAL")
+  schoolId           String?
+  ownerUserId        String?
+  mediaKind          String
+  title              String
+  description        String?
+  summary            String?
+  subject            String?
+  topic              String?
+  subtopic           String?
+  language           String?
+  tags               String[] @default([])
+  provider           String?
+  providerResourceId String?
+  sourceUrl          String?
+  thumbnailUrl       String?
+  durationSec        Int?
+  sourceTrust        String?
+  safetyStatus       String?
+  metadata           Json?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  @@index([scope, schoolId])
+  @@index([provider, providerResourceId])
+  @@index([ownerUserId])
+  rightsGrants      MediaResourceRightsGrant[]
+  availabilityState MediaResourceAvailabilityState?
+  recommendationImpressions MediaRecommendationImpression[]
+  teacherRecommendations MediaTeacherRecommendation[]
+}
+
+// ── STREAM-3: media usage rights grants + availability state ──
+// Additive only. Rights (licensing truth) and availability (operational
+// truth) are separate owners; eligibility composes them in application code.
+// Empty grant territories cover nothing — global grants use the explicit
+// 'GLOBAL' marker. Prisma migration owns schema; no runtime DDL.
+model MediaResourceRightsGrant {
+  id                  String    @id @default(cuid())
+  resourceId          String
+  grantSource         String
+  evidenceRef         String?
+  permissions         String[]  @default([])
+  territories         String[]  @default([])
+  schoolScope         String    @default("GLOBAL")
+  schoolId            String?
+  validFrom           DateTime?
+  validUntil          DateTime?
+  revokedAt           DateTime?
+  revocationReason    String?
+  attributionRequired Boolean   @default(false)
+  attributionText     String?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+  resource            MediaResource @relation(fields: [resourceId], references: [id], onDelete: Cascade)
+
+  @@index([resourceId])
+  @@index([resourceId, revokedAt])
+}
+
+model MediaResourceAvailabilityState {
+  id                String   @id @default(cuid())
+  resourceId        String   @unique
+  status            String   @default("UNKNOWN")
+  checkedAt         DateTime @default(now())
+  nextCheckAt       DateTime?
+  providerStatus    String?
+  unavailableReason String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  resource          MediaResource @relation(fields: [resourceId], references: [id], onDelete: Cascade)
+
+  @@index([status])
+}
+
+model UserMediaResourceState {
+  id                  String   @id @default(cuid())
+  userId              String
+  resourceId          String
+  schoolId            String?
+  isSaved             Boolean  @default(false)
+  isPinned            Boolean  @default(false)
+  isCompleted         Boolean  @default(false)
+  isHelpful           Boolean?
+  playbackPositionSec Int      @default(0)
+  interactionCount    Int      @default(0)
+  completionCount     Int      @default(0)
+  lastOpenedAt        DateTime?
+  lastPlayedAt        DateTime?
+  lastReviewedAt      DateTime?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  @@unique([userId, resourceId])
+  @@index([schoolId, userId])
+  @@index([resourceId])
+}
+
+// ── STREAM-8: recommendation impressions + explicit learner feedback ──
+// Additive only. UserMediaResourceState remains the learner-resource
+// aggregate; these tables are the durable recommendation history (what was
+// shown, where, why) plus one current explicit feedback value per
+// impression. Canonical MediaResource.id owns impression identity. No
+// mastery/evidence/misconception/Revision/Growth fields live here.
+model MediaRecommendationImpression {
+  id               String   @id @default(cuid())
+  requestId        String
+  userId           String
+  schoolId         String?
+  resourceId       String
+  streamMode       String   @default("STUDY")
+  sectionId        String?
+  reasonCode       String?
+  position         Int      @default(0)
+  creativeTaxonomy String?
+  createdAt        DateTime @default(now())
+  resource         MediaResource @relation(fields: [resourceId], references: [id], onDelete: Cascade)
+  feedback         MediaRecommendationFeedback?
+
+  @@unique([requestId, resourceId])
+  @@index([userId, streamMode, createdAt])
+  @@index([resourceId, createdAt])
+  @@index([schoolId, createdAt])
+}
+
+model MediaRecommendationFeedback {
+  id           String   @id @default(cuid())
+  impressionId String   @unique
+  userId       String
+  schoolId     String?
+  resourceId   String
+  feedbackType String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  impression   MediaRecommendationImpression @relation(fields: [impressionId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([resourceId, createdAt])
+}
+
+// ── STREAM-11: durable teacher recommendation controls ──
+// Additive only. Teacher intent only — never a rights grant, safety/Deen/age
+// override, mastery signal, or ranking override. Canonical MediaResource.id
+// owns authority. Withdrawal preserves history (active = FALSE).
+model MediaTeacherRecommendation {
+  id            String    @id @default(cuid())
+  schoolId      String
+  teacherUserId String
+  resourceId    String
+  targetType    String    @default("LEARNER")
+  targetId      String
+  active        Boolean   @default(true)
+  expiresAt     DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  resource      MediaResource @relation(fields: [resourceId], references: [id], onDelete: Cascade)
+
+  @@unique([schoolId, teacherUserId, resourceId, targetType, targetId])
+  @@index([schoolId, createdAt])
+  @@index([resourceId])
 }

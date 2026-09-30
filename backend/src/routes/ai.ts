@@ -1,6 +1,27 @@
 import { randomUUID } from 'crypto';
 import { Router, Request, Response } from 'express';
 import { schoolAuthMiddleware } from '../middleware/schoolAuthMiddleware';
+import { requireVerifiedSchoolContext } from '../middleware/schoolContextGuardMiddleware';
+import {
+  buildChatSessionProjection,
+  CHAT_HISTORY_DEFAULT_LIMIT,
+  decodeHistoryCursor,
+  encodeHistoryCursor,
+  getSessionMessages,
+  normalizeHistoryLimit,
+  normalizeTranscriptLimit,
+  resolveDisplayTitle,
+  resolveTenantScope,
+  stripDuplicateRelationFields,
+} from '../services/chatDurableContract024';
+import {
+  acquireChatTurn,
+  appendChatMessageAtomic,
+  completeChatTurn,
+  failChatTurn,
+  persistSessionTitle,
+  rebuildSessionProjection,
+} from '../services/chatDurablePersistence024';
 import { rateLimiter } from '../middleware/rateLimiter';
 import prisma from '../utils/prismaClient';
 import { createChatMessage, updateChatMessage } from '../repositories/chatMessageRepository';
@@ -184,6 +205,94 @@ import {
 } from '../../../AI/ai/flows/emotional-ai-copilot.attachments.js';
 import { getYoutubeTranscriptFlow } from '../../../AI/ai/flows/get-youtube-transcript';
 import { isTrustedSource } from '../../../AI/lib/research/source-trust';
+
+// ─── Canonical media-stream ownership (STEADFAST-MEDIA-STREAM-1) ───
+// Study/Creative stream scoring, ranking helpers and recommendation-reason
+// construction are owned by backend/src/media-stream/*. This route module
+// keeps transport/application orchestration only and must not carry
+// independent copies of the canonical ranking algorithms.
+import { asBool, clamp, computeMediaStreamScore, computeStudyStreamScore, normalizeTopicLike, parseIsoDate, parseNumericSignal } from '../media-stream/scoring';
+import {
+  buildMediaNextMove,
+  buildMediaQuickChecks,
+  buildMediaStream,
+  buildMediaStreamReason,
+  buildStudyGuide,
+  buildStudyStreamReason,
+  clampMediaText,
+  extractMediaKeyPoints,
+} from '../media-stream/metadata';
+import { getMediaKindGroup, isCreativeExternalVideoAsset, parsePositiveInt, parseQueryBoolean, safeString } from '../media-stream/validation';
+import {
+  buildCreativeTopicSeeds,
+  buildMediaStreamDeckMeta,
+  buildMediaStreamEmptyState,
+  buildStudyStreamDeckMeta,
+  buildStudyStreamEmptyState,
+  buildStudyTopicSeeds,
+  collectRevisionItemsFromOverview,
+  deriveCreativeTopicSeedsFromAssets,
+  pushStreamNotice,
+} from '../media-stream/collections';
+// STREAM-5 — server-resolved Study context. Academic ranking truth comes
+// from the StudyContextSnapshot (canonical Growth/Revision/media-state
+// owners), never from client query parameters.
+import {
+  buildStudyRankingFieldsFromSnapshot,
+  resolveStudyStreamContext,
+} from '../services/studyStreamContextService';
+// STREAM-6 — deterministic Study section composer (additive; flat stream
+// preserved). Canonical MediaResource.id owns section deduplication.
+import {
+  composeStudySections,
+  toRankedCanonicalCandidate,
+} from '../media-stream/study-sections';
+import { resolveStudyEvidenceLaneContext } from '../services/studyEvidenceLaneService';
+import {
+  getMediaResourceById,
+  prismaMediaResourceStore,
+  resolveCanonicalResourcesForLegacyAssets,
+} from '../services/mediaResourceRegistryService';
+// STREAM-8 — recommendation impressions + explicit feedback (additive).
+import {
+  readRecentCreativeHistory,
+  readScopedImpression,
+  recordRecommendationFeedback,
+  recordRecommendationPage,
+} from '../services/mediaRecommendationService';
+// STREAM-10 — deterministic post-watch action orchestration (additive).
+import { composePostWatchActions } from '../services/mediaPostWatchActionService';
+// STREAM-11 — teacher resource controls (additive, Study-only).
+import {
+  createTeacherRecommendation,
+  isTeacherAuthorizedRole,
+  resolveTeacherRecommendationsForStudy,
+  withdrawTeacherRecommendation,
+} from '../services/mediaTeacherRecommendationService';
+// STREAM-12 — canonical teacher scope authority + server-owned media policy
+// (additive, backend-only). Production teacher wiring reuses the existing
+// identity/scope architecture; no parallel identity system.
+import {
+  createCanonicalTeacherRecommendationTargets,
+  isClassAuthorizedForTeacher,
+  isTeacherAuthorizedForLearner,
+  resolveCanonicalTargetLearner,
+} from '../services/mediaTeacherRecommendationAuthority';
+import {
+  extractResourceGrades,
+  prismaMediaClassificationStore,
+  resolveMediaExternalPolicy,
+} from '../services/mediaExternalPolicyService';
+import {
+  evaluateMediaResourceEligibility,
+  prismaMediaEligibilityStore,
+} from '../services/mediaResourceEligibilityService';
+import { getStudentClassIds } from '../services/task021ClassEnrollmentScopeService';
+// STREAM-9 — deterministic Creative diversity scheduler (additive).
+import {
+  resolveCreativeTaxonomy,
+  scheduleCreativeResources,
+} from '../media-stream/creative-scheduler';
 
 const router = Router();
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
@@ -557,45 +666,10 @@ const ALLOWED_TTS_VOICES = new Set(['alloy', 'sage', 'ash', 'verse', 'coral']);
 type VoiceLanguageMode = 'english' | 'swahili' | 'arabic' | 'english_sw' | 'arabic_english';
 const createLatencyTurnId = () => `backend_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 
-const safeString = (value: unknown) => (typeof value === 'string' ? value : '');
 const MAX_MEDIA_DATA_URL_BYTES = 2_000_000;
 const EDUCATIONAL_IMAGE_BLOCKLIST = /\b(nude|nudity|porn|explicit|sex|sexy|fetish|gore|blood|violent|violence|nsfw|weapon|drugs?)\b/i;
 const EDUCATIONAL_IMAGE_ALLOWLIST =
   /\b(diagram|labeled|labelled|timeline|concept map|mind map|flowchart|chart|table|illustration|study|worksheet|classroom|biology|chemistry|physics|math|mathematics|geography|history|literature|business|ict|coding|islamic|arabic|english|kiswahili|science|revision)\b/i;
-
-const clampMediaText = (value: string, maxChars = 1200) => {
-  const normalized = safeString(value).replace(/\s+/g, ' ').trim();
-  if (!normalized) return '';
-  return normalized.length <= maxChars ? normalized : `${normalized.slice(0, maxChars - 3).trimEnd()}...`;
-};
-
-const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
-
-function extractMediaKeyPoints(sourceText: string, topicHint?: string): string[] {
-  const normalized = safeString(sourceText).replace(/\r/g, '\n').trim();
-  if (!normalized) {
-    const topic = safeString(topicHint).trim() || 'this concept';
-    return [
-      `Start with the core idea behind ${topic}.`,
-      `Notice the worked step before trying your own example.`,
-      `Review one mistake to avoid when applying ${topic}.`,
-    ];
-  }
-  const sentences = normalized
-    .split(/(?<=[.!?])\s+/)
-    .map((sentence) => sentence.replace(/\s+/g, ' ').trim())
-    .filter(Boolean);
-  if (!sentences.length) return [];
-  return sentences.slice(0, 4).map((sentence) => clampMediaText(sentence, 160));
-}
-
-function buildMediaQuickChecks(topic: string): string[] {
-  const cleanTopic = safeString(topic).trim() || 'this topic';
-  return [
-    `In one sentence, what is the main idea in ${cleanTopic}?`,
-    `What is one common mistake to avoid in ${cleanTopic}?`,
-  ];
-}
 
 type MediaCollectionPayload = {
   id: string;
@@ -671,83 +745,6 @@ type MediaStreamRankingContext = {
   recentRevisionItemIds?: string[];
   revisionSeedTopics?: string[];
 };
-
-function getMediaKindGroup(asset: MediaAsset): 'audio' | 'video' | 'image' | 'explainer' | 'collection' | 'document' {
-  const kind = safeString(asset.assetKind).toLowerCase();
-  if (kind === 'audio_recap') return 'audio';
-  if (kind === 'video_recap') return 'video';
-  if (kind === 'generated_image' || kind === 'annotated_image') return 'image';
-  if (kind === 'visual_explainer' || kind === 'worksheet_explainer' || kind === 'media_card') return 'explainer';
-  if (kind === 'media_collection_item') return 'collection';
-  return 'document';
-}
-
-function parseIsoDate(value?: string | null): Date | null {
-  if (!value) return null;
-  const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? null : date;
-}
-
-function getRecencyBoost(updatedAt?: string | null): number {
-  const date = parseIsoDate(updatedAt);
-  if (!date) return 0;
-  const days = Math.max(0, (Date.now() - date.getTime()) / 86_400_000);
-  return Math.max(0, Math.round(22 * Math.exp(-days / 18)));
-}
-
-function normalizeTopicLike(value?: string | null): string {
-  return safeString(value).trim().toLowerCase();
-}
-
-function parseNumericSignal(value: unknown): number {
-  if (typeof value === 'number' && Number.isFinite(value)) return value;
-  if (typeof value === 'string' && value.trim()) {
-    const parsed = Number(value);
-    return Number.isFinite(parsed) ? parsed : 0;
-  }
-  return 0;
-}
-
-function asBool(value: unknown, fallback = false): boolean {
-  if (typeof value === 'boolean') return value;
-  if (typeof value === 'string') {
-    if (value === 'true') return true;
-    if (value === 'false') return false;
-  }
-  return fallback;
-}
-
-function parseQueryBoolean(value: unknown): boolean | undefined {
-  if (typeof value === 'boolean') return value;
-  if (typeof value === 'string') {
-    const normalized = value.trim().toLowerCase();
-    if (['true', '1', 'yes', 'on'].includes(normalized)) return true;
-    if (['false', '0', 'no', 'off'].includes(normalized)) return false;
-  }
-  return undefined;
-}
-
-function parseQueryList(value: unknown): string[] {
-  if (Array.isArray(value)) {
-    return value
-      .flatMap((entry) => safeString(entry).split(','))
-      .map((entry) => entry.trim())
-      .filter(Boolean);
-  }
-  if (typeof value === 'string') {
-    return value
-      .split(',')
-      .map((entry) => entry.trim())
-      .filter(Boolean);
-  }
-  return [];
-}
-
-function parsePositiveInt(value: unknown, fallback: number, min = 1, max = 100): number {
-  const parsed = Number(value);
-  if (!Number.isFinite(parsed)) return fallback;
-  return Math.min(max, Math.max(min, Math.round(parsed)));
-}
 
 async function resolveMediaSourceChatContext(args: {
   userId: string;
@@ -866,217 +863,7 @@ function inferCreativeSourceRole(video: { channelTitle?: string | null; title?: 
   return 'youtube_shorts';
 }
 
-function buildCreativeTopicSeeds(args: {
-  activeTopic?: string | null;
-  topic?: string | null;
-  query?: string | null;
-  weakTopics?: string[];
-  learningNeed?: string | null;
-}): string[] {
-  const chunks = [
-    safeString(args.activeTopic).trim(),
-    safeString(args.topic).trim(),
-    safeString(args.query).trim(),
-    ...(args.weakTopics || []).map((entry) => safeString(entry).trim()),
-    safeString(args.learningNeed).trim().replace(/_/g, ' '),
-  ].filter(Boolean);
-  const deduped = Array.from(new Set(chunks));
-  return deduped.slice(0, 4);
-}
-
-function deriveCreativeTopicSeedsFromAssets(assets: MediaAsset[]): string[] {
-  const ranked = [...assets]
-    .sort((left, right) => {
-      const leftScore =
-        parseNumericSignal(left.streamRankScore) +
-        (left.revisionItemId ? 24 : 0) +
-        (left.isHelpful ? 10 : 0) +
-        (left.isCompleted ? -8 : 10);
-      const rightScore =
-        parseNumericSignal(right.streamRankScore) +
-        (right.revisionItemId ? 24 : 0) +
-        (right.isHelpful ? 10 : 0) +
-        (right.isCompleted ? -8 : 10);
-      return rightScore - leftScore;
-    })
-    .slice(0, 10);
-  const seeds = ranked.flatMap((asset) => [
-    safeString(asset.topic).trim(),
-    safeString(asset.subtopic).trim(),
-    safeString(asset.revisionRelevance).trim(),
-    safeString(asset.weakTopicRelevance).trim(),
-    safeString(asset.subject).trim(),
-  ]);
-  return Array.from(new Set(seeds.filter(Boolean))).slice(0, 4);
-}
-
-function pushStreamNotice(
-  target: MediaStreamNoticePayload[],
-  notice: { id: string; tone: MediaStreamNoticePayload['tone']; message?: string | null }
-) {
-  const message = clampMediaText(safeString(notice.message).trim(), 220);
-  if (!message) return;
-  if (target.some((entry) => entry.id === notice.id || entry.message === message)) return;
-  target.push({
-    id: notice.id,
-    tone: notice.tone,
-    message,
-  });
-}
-
-function buildMediaStreamDeckMeta(args: {
-  streamMode: 'study' | 'creative';
-  seedTopics: string[];
-  sourceHealth?: {
-    youtubeFetched: boolean;
-    vimeoFetched: boolean;
-    usedCache: boolean;
-  } | null;
-}): MediaStreamDeckMetaPayload {
-  return {
-    modeIdentity: args.streamMode === 'creative' ? 'External discovery engine' : 'Guided revision continuity',
-    supportLabel: args.streamMode === 'creative' ? 'Creative orbit' : 'Learning orbit',
-    lineupLabel: args.streamMode === 'creative' ? 'Idea path' : 'Orbit lineup',
-    replenishes: args.streamMode === 'creative',
-    refillBatchSize: args.streamMode === 'creative' ? 3 : 0,
-    seedTopics: args.seedTopics.slice(0, 4),
-    sourceHealth: args.sourceHealth || null,
-  };
-}
-
-function buildMediaStreamEmptyState(args: {
-  streamMode: 'study' | 'creative';
-  seedTopics: string[];
-  hasAssets: boolean;
-}): MediaStreamEmptyStatePayload {
-  if (args.streamMode === 'creative') {
-    if (args.seedTopics.length === 0) {
-      return {
-        title: 'Creative Stream is waiting for saved context',
-        body: 'Save or generate a few study recaps first, then Creative Stream will turn those topics into trusted external discovery clips.',
-        hintChips: [],
-        primaryActionLabel: 'Open Study Stream',
-        primaryActionMode: 'study_stream',
-      };
-    }
-    return {
-      title: 'Creative Stream is regrouping around your topics',
-      body: `We filtered discovery clips hard to protect quality. Try another refresh around ${args.seedTopics[0] || 'your current topic'} or continue in Study Stream first.`,
-      hintChips: args.seedTopics.slice(0, 3),
-      primaryActionLabel: 'Open Study Stream',
-      primaryActionMode: 'study_stream',
-    };
-  }
-  if (args.hasAssets) {
-    return {
-      title: 'Study Stream is reorganizing your revision lane',
-      body: 'Your media library has assets, but none matched the current stream filters strongly enough yet.',
-      hintChips: args.seedTopics.slice(0, 3),
-      primaryActionLabel: 'Open Library',
-      primaryActionMode: 'library',
-    };
-  }
-  return {
-    title: 'No stream items yet',
-    body: 'Save or generate one recap, then Study Stream will build a guided revision lane from it.',
-    hintChips: [],
-    primaryActionLabel: 'Open Library',
-    primaryActionMode: 'library',
-  };
-}
-
 type GrowthRevisionItem = Awaited<ReturnType<typeof getRevisionOverview>>['recentItems'][number];
-
-function buildStudyTopicSeeds(args: {
-  activeTopic?: string | null;
-  weakTopics?: string[];
-  revisionItems?: GrowthRevisionItem[];
-}): string[] {
-  const revisionItems = args.revisionItems || [];
-  const seeds = [
-    safeString(args.activeTopic).trim(),
-    ...(args.weakTopics || []),
-    ...revisionItems.flatMap((item) => [
-      safeString(item.topic).trim(),
-      safeString(item.subtopic).trim(),
-      safeString(item.subject).trim(),
-    ]),
-  ];
-  return Array.from(new Set(seeds.filter(Boolean))).slice(0, 5);
-}
-
-function buildStudyStreamDeckMeta(args: {
-  activeTopic?: string | null;
-  weakTopics?: string[];
-  revisionItems?: GrowthRevisionItem[];
-}): MediaStreamDeckMetaPayload {
-  return {
-    modeIdentity: 'Focused revision lane',
-    supportLabel: 'Learning orbit',
-    lineupLabel: 'Next in lane',
-    replenishes: false,
-    refillBatchSize: 0,
-    seedTopics: buildStudyTopicSeeds(args),
-    sourceHealth: null,
-  };
-}
-
-function buildStudyStreamEmptyState(args: {
-  seedTopics: string[];
-  hasAssets: boolean;
-  hasRevisionHistory: boolean;
-}): MediaStreamEmptyStatePayload {
-  if (args.hasAssets) {
-    return {
-      title: 'Study Stream is tightening your revision lane',
-      body:
-        'You have saved recap media, but none fit the current revision path strongly enough yet. Open Library or keep revising to strengthen the lane.',
-      hintChips: args.seedTopics.slice(0, 3),
-      primaryActionLabel: 'Open Library',
-      primaryActionMode: 'library',
-    };
-  }
-  if (args.hasRevisionHistory) {
-    return {
-      title: 'Study Stream is waiting for recap media',
-      body:
-        'Your revision history is here, but there are no recap media items ready to anchor a focused lane yet. Save one recap and this lane will sequence it.',
-      hintChips: args.seedTopics.slice(0, 3),
-      primaryActionLabel: 'Open Library',
-      primaryActionMode: 'library',
-    };
-  }
-  return {
-    title: 'Study Stream is waiting for your first saved recap',
-    body:
-      'Save or generate one revision recap first. Study Stream will then turn it into a calm, one-card-at-a-time revision lane.',
-    hintChips: [],
-    primaryActionLabel: 'Open Library',
-    primaryActionMode: 'library',
-  };
-}
-
-function collectRevisionItemsFromOverview(overview: Awaited<ReturnType<typeof getRevisionOverview>>): GrowthRevisionItem[] {
-  const pool = [
-    ...(overview.recentItems || []),
-    ...(overview.ungroupedItems || []),
-    ...(overview.pinnedItems || []),
-    ...(overview.mistakeItems || []),
-    ...(overview.needsPracticeItems || []),
-    ...(overview.queuePreview?.dueNow || []),
-    ...(overview.queuePreview?.needsAttention || []),
-    ...(overview.queuePreview?.continuePractising || []),
-    ...(overview.queuePreview?.newItems || []),
-    ...(overview.queuePreview?.recentlyImproved || []),
-    ...(overview.collections || []).flatMap((collection) => collection.previewItems || []),
-  ];
-  const byId = new Map<string, GrowthRevisionItem>();
-  pool.forEach((item) => {
-    if (!item?.id) return;
-    if (!byId.has(item.id)) byId.set(item.id, item);
-  });
-  return [...byId.values()];
-}
 
 function buildGrowthActionPrompt(intent: GrowthActionIntent, args: { topic?: string | null; title?: string | null }): string | null {
   const topicOrTitle = safeString(args.topic || args.title).trim() || 'my current weak topic';
@@ -1133,407 +920,6 @@ function resolveGrowthActionPlan(args: {
     prompt,
     composerIntent: `growth_${args.intent}`,
   };
-}
-
-function getMediaSourceTrustBoost(sourceTrust: string, streamMode: 'study' | 'creative'): number {
-  const normalized = sourceTrust.toLowerCase();
-  if (normalized.includes('internal')) return streamMode === 'study' ? 16 : 10;
-  if (normalized.includes('verified') || normalized.includes('high')) return 14;
-  if (normalized.includes('trusted') || normalized.includes('medium')) return 10;
-  if (normalized.includes('low')) return 2;
-  return 6;
-}
-
-function getKindPreferenceBoost(
-  kind: ReturnType<typeof getMediaKindGroup>,
-  preferredRecapType?: string | null
-): number {
-  const preferred = safeString(preferredRecapType).trim().toLowerCase();
-  if (!preferred || preferred === 'mixed') return 0;
-  if (preferred === 'audio') return kind === 'audio' ? 14 : -2;
-  if (preferred === 'video') return kind === 'video' ? 14 : -2;
-  if (preferred === 'visual') return kind === 'image' || kind === 'explainer' ? 14 : -2;
-  return 0;
-}
-
-function computeMediaStreamScore(asset: MediaAsset, ctx: MediaStreamRankingContext): number {
-  const metadata = (asset.metadata || {}) as Record<string, unknown>;
-  const topic = normalizeTopicLike(asset.topic);
-  const subject = normalizeTopicLike(asset.subject);
-  const activeTopic = normalizeTopicLike(ctx.activeTopic);
-  const weakTopics = ctx.weakTopics.map((entry) => normalizeTopicLike(entry));
-  const kind = getMediaKindGroup(asset);
-  const duration = Number(asset.durationSec || parseNumericSignal(metadata.durationSec) || 0);
-  const completed = asBool(asset.isCompleted, asBool(metadata.isCompleted, false));
-  const helpful = asBool(asset.isHelpful, asBool(metadata.isHelpful, false));
-  const streamMode = ctx.streamMode === 'creative' ? 'creative' : 'study';
-  const sourceTrust = safeString(asset.sourceTrust || metadata.sourceTrust).trim().toLowerCase();
-  const transcriptAvailable = Boolean(safeString(asset.transcript).trim() || safeString(asset.transcriptSnippet).trim());
-  const hasExternalSource = Boolean(safeString(asset.sourceUrl).trim());
-  const schoolLevel = normalizeTopicLike(asset.schoolLevel || safeString(metadata.schoolLevel).trim());
-  const preferredSchoolLevel = normalizeTopicLike(ctx.schoolLevel);
-  const assetLanguage = normalizeTopicLike(asset.language || safeString(metadata.language).trim());
-  const preferredLanguage = normalizeTopicLike(ctx.language);
-  const learningNeed = normalizeTopicLike(ctx.learningNeed || ctx.shortFormSupport);
-  const creativeClarityScore = parseNumericSignal(metadata.clarityScore);
-  const creativeCreativityScore = parseNumericSignal(metadata.creativityScore);
-  const creativeIntuitionScore = parseNumericSignal(metadata.intuitionScore);
-  const creativeNoveltyScore = parseNumericSignal(metadata.noveltyScore);
-  const creativeCompositeScore = parseNumericSignal(metadata.streamRankScore) / 190;
-  const externalProvider = normalizeTopicLike(
-    asset.videoProvider ||
-      safeString(metadata.externalProvider).trim() ||
-      safeString(metadata.externalSourceType).trim()
-  );
-  const supportHints = normalizeTopicLike(
-    [
-      safeString(asset.bestUse).trim(),
-      safeString(asset.nextMove).trim(),
-      safeString(asset.summary).trim(),
-      safeString(metadata.learningNeed).trim(),
-      safeString(metadata.shortFormSupport).trim(),
-      ...(Array.isArray(asset.tags) ? asset.tags : []),
-    ].join(' ')
-  );
-  const recommendedScore =
-    parseNumericSignal(asset.streamRankScore) ||
-    parseNumericSignal(asset.recommendedScore) ||
-    parseNumericSignal(metadata.streamRankScore) ||
-    parseNumericSignal(metadata.recommendedScore);
-
-  let score = 20;
-  score += recommendedScore;
-  score += getRecencyBoost(asset.updatedAt);
-  if (!completed) score += 14;
-  if (helpful) score += 10;
-  if (activeTopic && (topic.includes(activeTopic) || activeTopic.includes(topic))) score += 34;
-  if (weakTopics.some((weak) => weak && (topic.includes(weak) || weak.includes(topic) || subject.includes(weak)))) score += 36;
-  if (ctx.preferredKind && ctx.preferredKind === kind) score += 12;
-  score += getKindPreferenceBoost(kind, ctx.preferredRecapType);
-  score += getMediaSourceTrustBoost(sourceTrust, streamMode);
-  if (transcriptAvailable) score += 6;
-  if (preferredSchoolLevel && schoolLevel && (schoolLevel.includes(preferredSchoolLevel) || preferredSchoolLevel.includes(schoolLevel))) {
-    score += 8;
-  }
-  if (preferredLanguage && assetLanguage && preferredLanguage === assetLanguage) score += 8;
-  if (learningNeed && supportHints.includes(learningNeed.replace(/_/g, ' '))) score += 10;
-  if (ctx.examMode && safeString(asset.examRelevance || metadata.examRelevance).trim()) score += 24;
-  if (ctx.focusMode && duration > 0 && duration <= 180) score += 12;
-  if (kind === 'video' || kind === 'audio') score += 8;
-  if (kind === 'collection') score += 6;
-  if (streamMode === 'study') {
-    if (asset.revisionItemId) score += 12;
-    if (kind === 'video' || kind === 'audio' || kind === 'explainer') score += 4;
-  } else {
-    if (!isCreativeExternalVideoAsset(asset)) score -= 90;
-    if (kind === 'video' || kind === 'explainer' || kind === 'image') score += 10;
-    if (hasExternalSource) score += ctx.allowExternalCreativeSuggestions === false ? -8 : 14;
-    if (!hasExternalSource) score += 4;
-    if (externalProvider.includes('youtube')) score += 10;
-    if (externalProvider.includes('vimeo')) score += 8;
-    score += Math.round(clamp(creativeClarityScore, 0, 1) * 16);
-    score += Math.round(clamp(creativeCreativityScore, 0, 1) * 16);
-    score += Math.round(clamp(creativeIntuitionScore, 0, 1) * 14);
-    score += Math.round(clamp(creativeNoveltyScore, 0, 1) * 10);
-    score += Math.round(clamp(creativeCompositeScore, 0, 1) * 18);
-  }
-  return Math.round(score);
-}
-
-function getStudySpacingBoost(asset: MediaAsset): number {
-  const metadata = (asset.metadata || {}) as Record<string, unknown>;
-  const lastTouch =
-    safeString(asset.lastReviewedAt).trim() ||
-    safeString(asset.lastPlayedAt).trim() ||
-    safeString(asset.lastOpenedAt).trim() ||
-    safeString(asset.updatedAt).trim() ||
-    safeString(metadata.lastTouchedAt).trim();
-  const date = parseIsoDate(lastTouch);
-  if (!date) return 0;
-  const days = Math.max(0, (Date.now() - date.getTime()) / 86_400_000);
-  if (days >= 1.5 && days <= 8) return 12;
-  if (days > 8 && days <= 21) return 8;
-  if (days < 0.35) return -8;
-  return 0;
-}
-
-function computeStudyStreamScore(asset: MediaAsset, ctx: MediaStreamRankingContext): number {
-  const metadata = (asset.metadata || {}) as Record<string, unknown>;
-  const topic = normalizeTopicLike(asset.topic);
-  const subject = normalizeTopicLike(asset.subject);
-  const activeTopic = normalizeTopicLike(ctx.activeTopic);
-  const weakTopics = ctx.weakTopics.map((entry) => normalizeTopicLike(entry));
-  const dueNowIds = new Set((ctx.dueNowRevisionItemIds || []).map((entry) => safeString(entry).trim()).filter(Boolean));
-  const needsAttentionIds = new Set((ctx.needsAttentionRevisionItemIds || []).map((entry) => safeString(entry).trim()).filter(Boolean));
-  const continueIds = new Set((ctx.continueRevisionItemIds || []).map((entry) => safeString(entry).trim()).filter(Boolean));
-  const recentIds = new Set((ctx.recentRevisionItemIds || []).map((entry) => safeString(entry).trim()).filter(Boolean));
-  const revisionItemId = safeString(asset.revisionItemId).trim();
-  const kind = getMediaKindGroup(asset);
-  const helpful = asBool(asset.isHelpful, asBool(metadata.isHelpful, false));
-  const completed = asBool(asset.isCompleted, asBool(metadata.isCompleted, false));
-  const interactionCount =
-    parseNumericSignal(asset.interactionCount) || parseNumericSignal(metadata.interactionCount);
-  const completionCount =
-    parseNumericSignal(asset.completionCount) || parseNumericSignal(metadata.completionCount);
-  const hasInternalTrust =
-    normalizeTopicLike(asset.sourceTrust || safeString(metadata.sourceTrust).trim()).includes('internal');
-  const activeRevisionItemId = safeString(ctx.activeRevisionItemId).trim();
-  const duration = Number(asset.durationSec || parseNumericSignal(metadata.durationSec) || 0);
-  const seedTopics = (ctx.revisionSeedTopics || []).map((entry) => normalizeTopicLike(entry));
-  const seedMatch = seedTopics.some((seed) => seed && (topic.includes(seed) || seed.includes(topic) || subject.includes(seed)));
-
-  let score = computeMediaStreamScore(asset, { ...ctx, streamMode: 'study' });
-  if (revisionItemId) score += 18;
-  if (revisionItemId && activeRevisionItemId && revisionItemId === activeRevisionItemId) score += 56;
-  if (revisionItemId && dueNowIds.has(revisionItemId)) score += 34;
-  if (revisionItemId && needsAttentionIds.has(revisionItemId)) score += 30;
-  if (revisionItemId && continueIds.has(revisionItemId)) score += 18;
-  if (revisionItemId && recentIds.has(revisionItemId)) score += 10;
-  if (seedMatch) score += 10;
-  if (helpful) score += 8;
-  if (!completed) score += 8;
-  if (completed && !helpful && !revisionItemId) score -= 8;
-  if (interactionCount > 0) score += Math.min(8, Math.round(interactionCount / 2));
-  if (completionCount > 0) score += Math.min(6, completionCount * 2);
-  if (hasInternalTrust) score += 6;
-  if (kind === 'video' || kind === 'audio') score += 6;
-  if (kind === 'image' || kind === 'explainer') score += 3;
-  if (kind === 'document') score -= 3;
-  if (duration > 0 && duration <= 420) score += 4;
-  score += getStudySpacingBoost(asset);
-
-  const weakMatch = weakTopics.some((weak) => weak && (topic.includes(weak) || weak.includes(topic) || subject.includes(weak)));
-  const activeMatch = activeTopic && topic && (topic.includes(activeTopic) || activeTopic.includes(topic));
-  if (!revisionItemId && !weakMatch && !activeMatch && !seedMatch && !helpful) {
-    score -= 18;
-  }
-
-  return Math.round(score);
-}
-
-function buildStudyStreamReason(asset: MediaAsset, ctx: MediaStreamRankingContext): string {
-  const metadata = (asset.metadata || {}) as Record<string, unknown>;
-  const topic = safeString(asset.topic).trim() || safeString(asset.title).trim() || 'this topic';
-  const revisionItemId = safeString(asset.revisionItemId).trim();
-  const activeRevisionItemId = safeString(ctx.activeRevisionItemId).trim();
-  const dueNowIds = new Set((ctx.dueNowRevisionItemIds || []).map((entry) => safeString(entry).trim()).filter(Boolean));
-  const needsAttentionIds = new Set((ctx.needsAttentionRevisionItemIds || []).map((entry) => safeString(entry).trim()).filter(Boolean));
-  const continueIds = new Set((ctx.continueRevisionItemIds || []).map((entry) => safeString(entry).trim()).filter(Boolean));
-  const weakTopics = ctx.weakTopics.map((entry) => normalizeTopicLike(entry));
-  const normalizedTopic = normalizeTopicLike(topic);
-  const activeTopic = normalizeTopicLike(ctx.activeTopic);
-  const helpful = asBool(asset.isHelpful, asBool(metadata.isHelpful, false));
-  const preferredRecapType = safeString(ctx.preferredRecapType).trim().toLowerCase();
-  const kind = getMediaKindGroup(asset);
-
-  if (revisionItemId && activeRevisionItemId && revisionItemId === activeRevisionItemId) {
-    return 'Continues the exact revision item you were already working on.';
-  }
-  if (revisionItemId && dueNowIds.has(revisionItemId)) {
-    return `Due for revisit now, so this recap brings ${topic} back in the right moment.`;
-  }
-  if (revisionItemId && needsAttentionIds.has(revisionItemId)) {
-    return `Returns now because ${topic} recently showed a weak or mistaken step.`;
-  }
-  if (revisionItemId && continueIds.has(revisionItemId)) {
-    return `Keeps continuity on ${topic} without making you restart from scratch.`;
-  }
-  if (activeTopic && normalizedTopic && (normalizedTopic.includes(activeTopic) || activeTopic.includes(normalizedTopic))) {
-    return `Stays on your current revision focus: ${topic}.`;
-  }
-  if (weakTopics.some((weak) => weak && (normalizedTopic.includes(weak) || weak.includes(normalizedTopic)))) {
-    return `Selected to rescue a weak pattern inside ${topic}.`;
-  }
-  if (helpful) {
-    return `You found this useful before, so it is resurfacing as a high-value recap.`;
-  }
-  if (preferredRecapType === 'audio' && kind === 'audio') {
-    return 'Matched to your audio revision preference for a calm revisit.';
-  }
-  if (preferredRecapType === 'video' && kind === 'video') {
-    return 'Matched to your video revision preference for a worked recap.';
-  }
-  if (preferredRecapType === 'visual' && (kind === 'image' || kind === 'explainer')) {
-    return 'Matched to your visual revision preference for quicker recognition.';
-  }
-  return 'Chosen from your saved recap history as the clearest useful next revisit.';
-}
-
-function buildStudyGuide(asset: MediaAsset, ctx: MediaStreamRankingContext, reason: string) {
-  const metadata = (asset.metadata || {}) as Record<string, unknown>;
-  const topic = safeString(asset.topic).trim() || safeString(asset.title).trim() || 'this topic';
-  const cue =
-    clampMediaText(
-      safeString(asset.keyIdea).trim() ||
-        (Array.isArray(asset.keyPoints) ? safeString(asset.keyPoints[0]).trim() : '') ||
-        safeString(asset.bestUse).trim() ||
-        safeString(asset.summary).trim(),
-      150
-    ) || `Look for the one move that makes ${topic} easier to remember.`;
-  const nextStep =
-    clampMediaText(safeString(asset.nextMove).trim(), 150) ||
-    (getMediaKindGroup(asset) === 'audio'
-      ? `Listen once, then say the main idea of ${topic} without notes.`
-      : `Review the recap, then answer one quick check on ${topic}.`);
-  const weakTopics = ctx.weakTopics.map((entry) => normalizeTopicLike(entry));
-  const normalizedTopic = normalizeTopicLike(topic);
-  const revisionItemId = safeString(asset.revisionItemId).trim();
-  const dueNowIds = new Set((ctx.dueNowRevisionItemIds || []).map((entry) => safeString(entry).trim()).filter(Boolean));
-  const needsAttentionIds = new Set((ctx.needsAttentionRevisionItemIds || []).map((entry) => safeString(entry).trim()).filter(Boolean));
-  const continueIds = new Set((ctx.continueRevisionItemIds || []).map((entry) => safeString(entry).trim()).filter(Boolean));
-  const helpful = asBool(asset.isHelpful, asBool(metadata.isHelpful, false));
-  const lineupReason =
-    revisionItemId && dueNowIds.has(revisionItemId)
-      ? 'due revisit'
-      : revisionItemId && needsAttentionIds.has(revisionItemId)
-        ? 'weak-step rescue'
-        : revisionItemId && continueIds.has(revisionItemId)
-          ? 'continue this topic'
-          : weakTopics.some((weak) => weak && (normalizedTopic.includes(weak) || weak.includes(normalizedTopic)))
-            ? 'reinforce weak pattern'
-            : helpful
-              ? 'repeat helpful recap'
-              : 'continue revision lane';
-
-  return {
-    whyNow: clampMediaText(reason, 170) || 'Selected as the clearest next revisit from your saved recap history.',
-    cue,
-    nextStep,
-    lineupReason,
-  };
-}
-
-function buildMediaStreamReason(asset: MediaAsset, ctx: MediaStreamRankingContext): string {
-  const metadata = (asset.metadata || {}) as Record<string, unknown>;
-  const topic = safeString(asset.topic).trim();
-  const activeTopic = safeString(ctx.activeTopic).trim();
-  const streamMode = ctx.streamMode === 'creative' ? 'creative' : 'study';
-  const sourceTrust = safeString(asset.sourceTrust || metadata.sourceTrust).trim().toLowerCase();
-  const creativeRole = safeString(metadata.externalRole || metadata.creativityType).trim().toLowerCase();
-  const learningGoal = safeString(metadata.learningGoal).trim();
-  const preferredRecapType = safeString(ctx.preferredRecapType).trim().toLowerCase();
-  if (streamMode === 'study') {
-    return buildStudyStreamReason(asset, ctx);
-  }
-  if (activeTopic && topic && topic.toLowerCase().includes(activeTopic.toLowerCase())) {
-    return `Matches your current focus on ${topic}.`;
-  }
-  const weakTopics = ctx.weakTopics.map((entry) => entry.toLowerCase());
-  if (topic && weakTopics.some((weak) => weak && topic.toLowerCase().includes(weak))) {
-    return `Supports weak-topic recovery for ${topic}.`;
-  }
-  if (streamMode === 'creative' && safeString(asset.sourceUrl).trim()) {
-    if (learningGoal) return clampMediaText(learningGoal, 160);
-    if (creativeRole.includes('reframe')) return 'Reframe-focused discovery card selected for conceptual shift.';
-    if (creativeRole.includes('transfer')) return 'Transfer-focused discovery card selected for applying the idea in a new case.';
-    if (creativeRole.includes('notice')) return 'Pattern-notice discovery card selected to sharpen observation.';
-    if (sourceTrust.includes('verified') || sourceTrust.includes('high') || sourceTrust.includes('trusted')) {
-      return 'Trusted short-form explainer for visual intuition.';
-    }
-    return 'Creative discovery item selected to unblock understanding.';
-  }
-  if (preferredRecapType === 'audio' && getMediaKindGroup(asset) === 'audio') {
-    return 'Matched to your audio recap preference.';
-  }
-  if (preferredRecapType === 'video' && getMediaKindGroup(asset) === 'video') {
-    return 'Matched to your video recap preference.';
-  }
-  if (preferredRecapType === 'visual' && (getMediaKindGroup(asset) === 'image' || getMediaKindGroup(asset) === 'explainer')) {
-    return 'Matched to your visual recap preference.';
-  }
-  if (ctx.examMode && safeString(asset.examRelevance || metadata.examRelevance).trim()) {
-    return 'Prioritized for exam-ready revision.';
-  }
-  if (ctx.focusMode) {
-    return 'Short, focused recap for low-noise progress.';
-  }
-  return 'Useful next recap based on recent learning activity.';
-}
-
-function buildMediaNextMove(asset: MediaAsset): string {
-  const bestUse = safeString(asset.bestUse).trim();
-  if (bestUse) return clampMediaText(bestUse, 140);
-  const topic = safeString(asset.topic).trim() || safeString(asset.title).trim() || 'this concept';
-  if (getMediaKindGroup(asset) === 'video') {
-    return `Watch this recap, then run one quick check on ${topic}.`;
-  }
-  if (getMediaKindGroup(asset) === 'audio') {
-    return `Listen once, then explain ${topic} back in your own words.`;
-  }
-  return `Review this visual, then save one correction to Revision for ${topic}.`;
-}
-
-function isCreativeExternalVideoAsset(asset: MediaAsset): boolean {
-  const metadata = (asset.metadata || {}) as Record<string, unknown>;
-  const provider = safeString(asset.videoProvider || metadata.externalProvider || metadata.externalSourceType).trim().toLowerCase();
-  const sourceUrl = safeString(asset.sourceUrl).trim().toLowerCase();
-  const videoKind = getMediaKindGroup(asset) === 'video';
-  if (!videoKind) return false;
-  if (!sourceUrl && !provider) return false;
-  if (provider.includes('youtube') || provider.includes('vimeo')) return true;
-  if (sourceUrl.includes('youtube.com') || sourceUrl.includes('youtu.be') || sourceUrl.includes('vimeo.com')) return true;
-  return false;
-}
-
-function buildMediaStream(items: MediaAsset[], ctx: MediaStreamRankingContext, limit = 40): MediaStreamPayload[] {
-  const scopedItems =
-    (ctx.streamMode || 'study') === 'creative'
-      ? items.filter((asset) => isCreativeExternalVideoAsset(asset))
-      : items;
-  const ranked = scopedItems
-    .map((asset) => {
-      const checks = Array.isArray(asset.quickChecks) ? asset.quickChecks : [];
-      const streamMode = ctx.streamMode === 'creative' ? 'creative' : 'study';
-      const reason = buildMediaStreamReason(asset, ctx);
-      return {
-        asset,
-        rankScore: streamMode === 'study' ? computeStudyStreamScore(asset, ctx) : computeMediaStreamScore(asset, ctx),
-        reason,
-        nextMove: buildMediaNextMove(asset),
-        quickCheck: checks[0] || buildMediaQuickChecks(asset.topic || asset.title)[0] || 'What is the one idea to remember here?',
-        studyGuide: streamMode === 'study' ? buildStudyGuide(asset, ctx, reason) : null,
-      } satisfies MediaStreamPayload;
-    })
-    .sort((a, b) => b.rankScore - a.rankScore || (parseIsoDate(b.asset.updatedAt)?.getTime() || 0) - (parseIsoDate(a.asset.updatedAt)?.getTime() || 0));
-
-  if ((ctx.streamMode || 'study') === 'creative') {
-    const target = Math.min(18, Math.max(8, limit));
-    return ranked.slice(0, target);
-  }
-
-  const deduped: MediaStreamPayload[] = [];
-  const seenKeys = new Set<string>();
-  const dominantTopic = normalizeTopicLike(ranked[0]?.asset.topic || ctx.activeTopic);
-  const sequenced = ranked
-    .map((item, index) => {
-      const topicKey = normalizeTopicLike(item.asset.topic || item.asset.title);
-      const subjectKey = normalizeTopicLike(item.asset.subject);
-      const sameDominantTopic =
-        dominantTopic && topicKey && (topicKey.includes(dominantTopic) || dominantTopic.includes(topicKey));
-      const sameSubject =
-        dominantTopic && !sameDominantTopic && normalizeTopicLike(ctx.activeTopic || '').length === 0
-          ? false
-          : subjectKey && normalizeTopicLike(ranked[0]?.asset.subject).includes(subjectKey);
-      const sequenceScore = item.rankScore + (sameDominantTopic ? 10 : 0) + (sameSubject ? 4 : 0) - index * 0.35;
-      return {
-        ...item,
-        rankScore: Math.round(sequenceScore),
-      };
-    })
-    .sort((a, b) => b.rankScore - a.rankScore);
-
-  for (const item of sequenced) {
-    const topicKey = normalizeTopicLike(item.asset.topic || item.asset.title);
-    const dedupeKey =
-      safeString(item.asset.revisionItemId).trim() ||
-      `${topicKey || normalizeTopicLike(item.asset.subject || item.asset.title)}:${getMediaKindGroup(item.asset)}`;
-    if (dedupeKey && seenKeys.has(dedupeKey)) continue;
-    if (dedupeKey) seenKeys.add(dedupeKey);
-    deduped.push(item);
-    if (deduped.length >= Math.min(100, Math.max(1, limit))) break;
-  }
-
-  return deduped;
 }
 
 function buildMediaCollections(items: MediaAsset[], limit = 40): MediaCollectionPayload[] {
@@ -1594,6 +980,7 @@ function buildMediaCollections(items: MediaAsset[], limit = 40): MediaCollection
 
 async function ingestCreativeExternalMediaAssets(args: {
   userId: string;
+  verifiedSchoolId?: string | null;
   topicSeeds: string[];
   subject?: string | null;
   learningNeed?: string | null;
@@ -1628,13 +1015,19 @@ async function ingestCreativeExternalMediaAssets(args: {
     subject: safeString(args.subject).trim() || null,
     topic: topicSeeds[0] || null,
     activeTopic: topicSeeds[0] || null,
-    weakTopics: topicSeeds,
+    // STREAM-9: topicSeeds are neutral curiosity seeds; weakness signals are
+    // never discovery inputs.
+    weakTopics: [],
     learningNeed: safeString(args.learningNeed).trim() || null,
     language: safeString(args.language).trim() || null,
     schoolLevel: safeString(args.schoolLevel).trim() || null,
     allowYouTube: true,
     allowVimeo: true,
     limit: Math.max(8, Math.min(14, Math.max(1, args.limit))),
+  }, {
+    // INTERNAL backend context for post-curation canonicalization only.
+    // Provider discovery input above never receives school identity.
+    verifiedSchoolId: safeString(args.verifiedSchoolId).trim() || null,
   });
 
   const rankedCandidates = deck.cards.slice(0, Math.max(1, Math.min(args.limit, 12)));
@@ -1653,7 +1046,8 @@ async function ingestCreativeExternalMediaAssets(args: {
         activeTopic: card.topic || topicSeeds[0] || null,
         topic: card.topic || topicSeeds[0] || null,
         subject: safeString(args.subject).trim() || null,
-        weakTopics: topicSeeds,
+        // STREAM-9: no weakness-derived prioritization in Creative output.
+        weakTopics: [],
         learningNeed: safeString(args.learningNeed).trim() || null,
         language: safeString(args.language).trim() || null,
       });
@@ -2876,20 +2270,28 @@ function mapSessionMessagePayload(message: any) {
 }
 
 function buildSessionResponsePayload(session: any) {
+  const canonicalMessages = getSessionMessages(session);
   const tutorState = getTutorStateFromMetadata(session.metadata);
   const tutorArtifacts = getTutorArtifactsFromMetadata(session.metadata);
   const tutorRevisionNotes = getTutorRevisionNotesFromMetadata(session.metadata);
   const summaryMeta = buildSessionSummaryMeta({
     topic: session.topic,
-    messages: session.messages || [],
+    messages: canonicalMessages,
     tutorState,
     tutorArtifacts,
     tutorRevisionNotes,
   });
-  return {
+  const projection = buildChatSessionProjection(session, canonicalMessages);
+  const payload = {
     ...session,
-    title: resolveSessionTitle(session.topic, session.messages || []),
-    messages: (session.messages || []).map(mapSessionMessagePayload),
+    title: projection.displayTitle,
+    displayTitle: projection.displayTitle,
+    titleVersion: projection.titleVersion,
+    lastMessageAt: projection.lastMessageAt,
+    lastOpenedAt: projection.lastOpenedAt,
+    latestVisibleMessagePreview: projection.latestVisibleMessagePreview,
+    messageCount: projection.messageCount,
+    messages: canonicalMessages.map(mapSessionMessagePayload),
     createdAt: session.createdAt instanceof Date ? session.createdAt.toISOString() : safeString(session.createdAt),
     updatedAt: session.updatedAt instanceof Date ? session.updatedAt.toISOString() : safeString(session.updatedAt),
     conversationState: (session.metadata as any || DEFAULT_CONVERSATION_STATE),
@@ -2903,6 +2305,7 @@ function buildSessionResponsePayload(session: any) {
     recentArtifactLabel: summaryMeta.recentArtifactLabel,
     revisionCount: summaryMeta.revisionCount,
   };
+  return stripDuplicateRelationFields(payload);
 }
 
 function mergeSessionMetadata(args: {
@@ -4411,24 +3814,26 @@ const getOrCreateStudentProfile = async (studentId: string) => {
 // ============================================================================
 // 1. PRELOAD LOGIC (GET /preload)
 // ============================================================================
-router.get('/preload', schoolAuthMiddleware, async (req: AuthedRequest, res: Response) => {
+router.get('/preload', schoolAuthMiddleware, requireVerifiedSchoolContext, async (req: AuthedRequest, res: Response) => {
   logger.info({ userId: req.user?.id }, '[API] /preload hit');
   try {
-    const studentUserId = req.user!.id;
+    const scope = resolveTenantScope(req);
+    const studentUserId = scope.studentId;
+    const tenantWhere: any = { studentId: studentUserId, schoolId: scope.schoolId };
 
     await getOrCreateStudentProfile(studentUserId);
 
     const [lastSession, history, revisionOverviewBase] = await Promise.all([
       prisma.chatSession.findFirst({
-        where: { studentId: studentUserId, ChatMessage: { some: {} } },
-        orderBy: { updatedAt: 'desc' },
-        include: { ChatMessage: { orderBy: { timestamp: 'desc' }, take: 12 } },
+        where: tenantWhere,
+        orderBy: [{ lastMessageAt: 'desc' }, { id: 'desc' }],
+        include: { ChatMessage: { orderBy: [{ messageNumber: 'desc' }], take: 12 } },
       }),
       prisma.chatSession.findMany({
-        where: { studentId: studentUserId, ChatMessage: { some: {} } },
+        where: tenantWhere,
         take: 10,
-        orderBy: { updatedAt: 'desc' },
-        include: { ChatMessage: { orderBy: { timestamp: 'asc' }, take: 3 } },
+        orderBy: [{ lastMessageAt: 'desc' }, { id: 'desc' }],
+        include: { ChatMessage: { orderBy: [{ messageNumber: 'asc' }], take: 3 } },
       }),
       getRevisionOverview({ userId: studentUserId, limit: 8 }),
     ]);
@@ -4445,20 +3850,15 @@ router.get('/preload', schoolAuthMiddleware, async (req: AuthedRequest, res: Res
       }
     };
 
+    // READ-PURE (§11): no title/summarization writes, no active-session writes, no AI.
+    // Display titles are derived fallbacks only, never persisted here.
     let resolvedLastSession = null;
     if (lastSession) {
       const resolvedPayload = buildSessionResponsePayload(lastSession);
-      const resolvedTitle = resolvedPayload.title;
-      if (resolvedTitle && resolvedTitle !== String(lastSession.topic || '').trim()) {
-        prisma.chatSession.update({
-          where: { id: lastSession.id },
-          data: { topic: resolvedTitle }
-        }).catch(() => { });
-      }
       resolvedLastSession = {
         ...resolvedPayload,
-        topic: resolvedTitle || lastSession.topic,
-        messages: [...(resolvedPayload.messages || [])].reverse(),
+        topic: (resolvedPayload as any).displayTitle || lastSession.topic,
+        messages: [...((resolvedPayload as any).messages || [])],
       };
     }
 
@@ -4468,37 +3868,19 @@ router.get('/preload', schoolAuthMiddleware, async (req: AuthedRequest, res: Res
       lastSession: resolvedLastSession,
       revisionOverview,
       history: filteredHistory.map((session: any) => {
-        const title = resolveSessionTitle(session.topic, session.ChatMessage || []);
-        const tutorState = getTutorStateFromMetadata(session.metadata);
-        const tutorArtifacts = getTutorArtifactsFromMetadata(session.metadata);
-        const tutorRevisionNotes = getTutorRevisionNotesFromMetadata(session.metadata);
-        const summaryMeta = buildSessionSummaryMeta({
-          topic: session.topic,
-          messages: session.ChatMessage || [],
-          tutorState,
-          tutorArtifacts,
-          tutorRevisionNotes,
-        });
-        if (title && title !== String(session.topic || '').trim()) {
-          prisma.chatSession.update({
-            where: { id: session.id },
-            data: { topic: title }
-          }).catch(() => { });
-        }
+        const msgs = getSessionMessages(session);
+        const projection = buildChatSessionProjection(session, msgs);
         return {
-          id: session.id,
-          title,
+          id: projection.id,
+          title: projection.displayTitle,
+          displayTitle: projection.displayTitle,
+          titleVersion: projection.titleVersion,
           createdAt: safeToISOString(session.createdAt),
           updatedAt: safeToISOString(session.updatedAt),
-          firstMessage: session.ChatMessage ? (session.ChatMessage[0]?.content || null) : null,
-          summary: summaryMeta.summary,
-          lastTutorFocus: summaryMeta.lastTutorFocus,
-          learningMode: summaryMeta.learningMode,
-          hadArtifacts: summaryMeta.hadArtifacts,
-          hadVideo: summaryMeta.hadVideo,
-          continuationStatus: summaryMeta.continuationStatus,
-          recentArtifactLabel: summaryMeta.recentArtifactLabel,
-          revisionCount: summaryMeta.revisionCount,
+          lastMessageAt: projection.lastMessageAt,
+          latestVisibleMessagePreview: projection.latestVisibleMessagePreview,
+          messageCount: projection.messageCount,
+          firstMessage: msgs[0]?.content || null,
         };
       })
     });
@@ -4511,7 +3893,7 @@ router.get('/preload', schoolAuthMiddleware, async (req: AuthedRequest, res: Res
 // ============================================================================
 // 2. NEW SESSION (POST /new-session)
 // ============================================================================
-router.post('/new-session', schoolAuthMiddleware, async (req: AuthedRequest, res: Response) => {
+router.post('/new-session', schoolAuthMiddleware, requireVerifiedSchoolContext, async (req: AuthedRequest, res: Response) => {
   try {
     const studentUserId = req.user!.id;
 
@@ -4519,7 +3901,7 @@ router.post('/new-session', schoolAuthMiddleware, async (req: AuthedRequest, res
 
     try {
       await prisma.chatSession.updateMany({
-        where: { studentId: studentUserId, isActive: true },
+        where: { studentId: studentUserId, isActive: true, ...(resolveTenantScope(req).schoolId ? { schoolId: resolveTenantScope(req).schoolId as string } : {}) },
         data: { isActive: false },
       });
     } catch (e) {
@@ -4530,6 +3912,7 @@ router.post('/new-session', schoolAuthMiddleware, async (req: AuthedRequest, res
       data: {
         id: randomUUID(),
         studentId: studentUserId,
+        schoolId: (resolveTenantScope(req).schoolId || undefined) as any,
         topic: null,
         isActive: true,
         metadata: DEFAULT_CONVERSATION_STATE,
@@ -4555,7 +3938,7 @@ router.post('/new-session', schoolAuthMiddleware, async (req: AuthedRequest, res
 // ============================================================================
 // 3. CHAT ROUTE (POST /chat) - VIDEO & TITLE PERSISTENCE
 // ============================================================================
-router.post('/chat', schoolAuthMiddleware, aiLimiter, async (req: AuthedRequest, res: Response) => {
+router.post('/chat', schoolAuthMiddleware, requireVerifiedSchoolContext, aiLimiter, async (req: AuthedRequest, res: Response) => {
   const isStreaming = req.query.stream === 'true';
   logger.info({ userId: req.user?.id, sessionId: req.body.sessionId, isStreaming }, '[API] /chat hit');
   const routeStartedAt = Date.now();
@@ -4639,6 +4022,7 @@ router.post('/chat', schoolAuthMiddleware, aiLimiter, async (req: AuthedRequest,
     }
 
     await getOrCreateStudentProfile(studentId);
+    const scope = resolveTenantScope(req);
 
     const [session, preferences, preferenceMetadata] = await Promise.all([
       prisma.chatSession.findUnique({
@@ -4655,6 +4039,50 @@ router.post('/chat', schoolAuthMiddleware, aiLimiter, async (req: AuthedRequest,
     if (!session || session.StudentProfile.userId !== studentId) {
       return res.status(404).send({ message: 'Session not found.' });
     }
+    // Tenant isolation: verified school must own the session when schoolId is known (§28).
+    if (scope.schoolId && (session as any).schoolId && (session as any).schoolId !== scope.schoolId) {
+      return res.status(404).send({ message: 'Session not found.' });
+    }
+    if (scope.schoolId && !(session as any).schoolId) {
+      // Legacy null-school rows are unavailable in strict live until backfilled (§7/§28).
+      if (String(process.env.STEADFAST_INTEGRATION_MODE || '').toLowerCase() === 'strict-live') {
+        return res.status(404).send({ message: 'Session not found.' });
+      }
+    }
+
+    // Durable turn acquisition (§17/§18). Frontend sends stable client turnId.
+    const clientTurnId = safeString(req.body?.turnId || req.body?.clientTurnId) || latencyTurnId;
+    const requestId = safeString((req as any).requestId) || randomUUID();
+    const turnAcquire = await acquireChatTurn({
+      sessionId,
+      schoolId: scope.schoolId,
+      studentId,
+      clientTurnId,
+      message: effectiveMessage,
+      editedMessageId,
+    });
+    if (turnAcquire.outcome === 'conflict') {
+      return res.status(409).send({ message: 'Turn ID reuse conflict.', code: 'TURN_ID_REUSE_CONFLICT', turnId: clientTurnId, retryable: false });
+    }
+    if (turnAcquire.outcome === 'session_busy') {
+      return res.status(409).send({ message: 'Another turn is in progress for this session.', code: 'SESSION_TURN_IN_PROGRESS', turnId: clientTurnId, retryable: true });
+    }
+    if (turnAcquire.outcome === 'replay' && turnAcquire.record?.status === 'completed') {
+      const replayUserId = turnAcquire.record.userMessageId;
+      const replayAssistantId = turnAcquire.record.assistantMessageId;
+      if (isStreaming) {
+        res.setHeader('Content-Type', 'text/event-stream');
+        res.setHeader('Cache-Control', 'no-cache, no-transform');
+        res.setHeader('X-Accel-Buffering', 'no');
+        res.write(`event: done\ndata: ${JSON.stringify({ type: 'done', turnId: clientTurnId, sessionId, userMessageId: replayUserId || null, assistantMessageId: replayAssistantId || null, replayed: true })}\n\n`);
+        return res.end();
+      }
+      return res.status(200).send({ turnId: clientTurnId, replayed: true, userMessageId: replayUserId || null, assistantMessageId: replayAssistantId || null });
+    }
+    // Claim the session for this turn (cleared on done/error/interrupt).
+    try {
+      await prisma.chatSession.update({ where: { id: sessionId }, data: { activeTurnId: clientTurnId } as any });
+    } catch { /* older DB: non-fatal */ }
 
     const existingEditedUserMessage = editedMessageId
       ? session.ChatMessage.find((message) => message.id === editedMessageId)
@@ -4940,18 +4368,41 @@ router.post('/chat', schoolAuthMiddleware, aiLimiter, async (req: AuthedRequest,
               : workspaceStudyMode || provisionalTutorState.currentStudyMode || 'guided',
     };
 
-    const savedUserMessage = existingEditedUserMessage || (
-      shouldPersistUserMessage
-        ? await createChatMessage({
-            sessionId,
-            role: 'user',
-            content: effectiveMessage,
-            timestamp: new Date(),
-            messageNumber: priorSessionMessages.length + 1,
-            metadata: toPrismaMetadata(userMessageMetadata),
-          })
-        : null
-    );
+    // Reuse existing learner message on safe retry (no duplicate learner history, §18).
+    let savedUserMessage: any = existingEditedUserMessage || null;
+    if (!savedUserMessage && turnAcquire.record?.userMessageId) {
+      try {
+        const existing = await prisma.chatMessage.findUnique({ where: { id: turnAcquire.record.userMessageId } });
+        if (existing) savedUserMessage = existing;
+      } catch { savedUserMessage = null; }
+    }
+    if (!savedUserMessage && shouldPersistUserMessage) {
+      try {
+        savedUserMessage = await appendChatMessageAtomic({
+          sessionId,
+          role: 'user',
+          content: effectiveMessage,
+          turnId: clientTurnId,
+          metadata: toPrismaMetadata(userMessageMetadata),
+        });
+      } catch {
+        // Fallback for DBs without new columns: legacy path (messageNumber from count).
+        savedUserMessage = await createChatMessage({
+          sessionId,
+          role: 'user',
+          content: effectiveMessage,
+          timestamp: new Date(),
+          messageNumber: priorSessionMessages.length + 1,
+          metadata: toPrismaMetadata(userMessageMetadata),
+        });
+      }
+      try {
+        await (prisma as any).chatTurnRequestRecord.update({
+          where: { sessionId_clientTurnId: { sessionId, clientTurnId } },
+          data: { userMessageId: savedUserMessage.id, updatedAt: new Date() },
+        });
+      } catch { /* non-fatal */ }
+    }
 
     if (savedUserMessage) {
       await createSafetyAlertIfNeeded({
@@ -4963,11 +4414,42 @@ router.post('/chat', schoolAuthMiddleware, aiLimiter, async (req: AuthedRequest,
       });
     }
 
+    // SSE lifecycle (§19/§20/§21): accepted → status/token → done|error, heartbeat, abort-safe.
+    let clientDisconnected = false;
+    let heartbeat: NodeJS.Timeout | null = null;
+    const clearHeartbeat = () => {
+      if (heartbeat) { clearInterval(heartbeat); heartbeat = null; }
+    };
     if (isStreaming) {
       res.setHeader('Content-Type', 'text/event-stream');
-      res.setHeader('Cache-Control', 'no-cache');
+      res.setHeader('Cache-Control', 'no-cache, no-transform');
+      res.setHeader('X-Accel-Buffering', 'no');
       res.setHeader('Connection', 'keep-alive');
       res.flushHeaders();
+      const startHeartbeat = () => {
+        clearHeartbeat();
+        heartbeat = setInterval(() => {
+          if (!clientDisconnected) {
+            try { res.write(`: heartbeat ${Date.now()}\n\n`); } catch { /* closed */ }
+          }
+        }, 15000);
+      };
+      startHeartbeat();
+      req.on('close', () => {
+        if (!res.writableEnded) {
+          clientDisconnected = true;
+          clearHeartbeat();
+          void failChatTurn({ sessionId, clientTurnId, status: 'interrupted', errorCode: 'CLIENT_DISCONNECT' }).then(() => {
+            prisma.chatSession.update({ where: { id: sessionId }, data: { activeTurnId: null } as any }).catch(() => {});
+          });
+        }
+      });
+      res.on('close', () => {
+        clientDisconnected = true;
+        clearHeartbeat();
+      });
+      // Canonical accepted event carries durable identities.
+      res.write(`event: accepted\ndata: ${JSON.stringify({ type: 'accepted', turnId: clientTurnId, sessionId, userMessageId: savedUserMessage?.id || null, userMessageNumber: (savedUserMessage as any)?.messageNumber || null, requestId })}\n\n`);
     }
 
     let fullAiResponse = '';
@@ -5010,18 +4492,21 @@ router.post('/chat', schoolAuthMiddleware, aiLimiter, async (req: AuthedRequest,
       workspaceContext: workspaceContext || undefined,
       tutorAction,
       onToken: isStreaming ? (token: string) => {
+        if (clientDisconnected) return;
         if (!firstTokenAt) firstTokenAt = Date.now();
         fullAiResponse += token;
-        res.write(`data: ${JSON.stringify({ type: 'token', content: token })}\n\n`);
+        res.write(`event: token\ndata: ${JSON.stringify({ type: 'token', turnId: clientTurnId, content: token })}\n\n`);
       } : undefined,
       onStatus: isStreaming
         ? (status: { phase?: string; label?: string; timestamp?: string }) => {
+            if (clientDisconnected) return;
             const phase = safeString(status?.phase).trim() || 'progress';
             const label = safeString(status?.label).trim() || 'Working...';
             const timestamp = safeString(status?.timestamp).trim() || new Date().toISOString();
             res.write(
-              `data: ${JSON.stringify({
+              `event: status\ndata: ${JSON.stringify({
                 type: 'status',
+                turnId: clientTurnId,
                 status: {
                   phase,
                   label,
@@ -5266,13 +4751,24 @@ router.post('/chat', schoolAuthMiddleware, aiLimiter, async (req: AuthedRequest,
       },
     });
 
-    // Write AI Response with Metadata
-    const savedAiMsg = await createChatMessage({
-      sessionId,
-      role: 'model',
-      content: finalContent,
-      timestamp: new Date(),
-      messageNumber: priorSessionMessages.length + (savedUserMessage ? 2 : 1),
+    // Interruption invariant (§21): late computation cannot mutate canonical state.
+    if (clientDisconnected) {
+      await failChatTurn({ sessionId, clientTurnId, status: 'interrupted', errorCode: 'CLIENT_DISCONNECT' });
+      try {
+        await prisma.chatSession.update({ where: { id: sessionId }, data: { activeTurnId: null } as any });
+      } catch { /* non-fatal */ }
+      try { res.end(); } catch { /* closed */ }
+      return;
+    }
+
+    // Write AI Response with Metadata — DONE only after persistence (§19).
+    let savedAiMsg: any = null;
+    try {
+      savedAiMsg = await appendChatMessageAtomic({
+        sessionId,
+        role: 'model',
+        content: finalContent,
+        turnId: clientTurnId,
         metadata: toPrismaMetadata({
           videoData: aiResult.videoData,
           video: aiResult.videoData,
@@ -5284,7 +4780,27 @@ router.post('/chat', schoolAuthMiddleware, aiLimiter, async (req: AuthedRequest,
           videoWhyRecommended: videoSnapshot.activeVideoWhyRecommended,
           ...assistantMetadata,
         }),
-    });
+      });
+    } catch {
+      savedAiMsg = await createChatMessage({
+        sessionId,
+        role: 'model',
+        content: finalContent,
+        timestamp: new Date(),
+        messageNumber: priorSessionMessages.length + (savedUserMessage ? 2 : 1),
+        metadata: toPrismaMetadata({
+          videoData: aiResult.videoData,
+          video: aiResult.videoData,
+          sources: safeSources,
+          suggestedTitle: aiResult.suggestedTitle,
+          tutorArtifacts,
+          videoContextSummary: videoSnapshot.activeVideoSummary,
+          videoConcepts: videoSnapshot.activeVideoConcepts,
+          videoWhyRecommended: videoSnapshot.activeVideoWhyRecommended,
+          ...assistantMetadata,
+        }),
+      });
+    }
     recordAssistantEnvelopeAnalytics({
       userId: studentId,
       sessionId: session.id,
@@ -5295,42 +4811,33 @@ router.post('/chat', schoolAuthMiddleware, aiLimiter, async (req: AuthedRequest,
     });
 
     // 4. Update Session Metadata & Title (CRITICAL FIX)
+    // Title + metadata: title changes route through the versioned helper and
+    // never touch lastMessageAt; tutor/metadata updates never touch it either (§9/§10).
+    let displayTitle = String(session.topic || 'New study session');
+    let titleVersion = Number((session as any).titleVersion || 0);
     try {
       const rawSuggested = aiResult.suggestedTitle?.trim() || '';
       const suggested = rawSuggested ? normalizeTitleCandidate(rawSuggested, effectiveMessage) : '';
       const derived = suggested || deriveTitleFromText(effectiveMessage || finalContent);
       if (derived && isPlaceholderTitle(session.topic)) {
-        await prisma.chatSession.update({
-          where: { id: sessionId },
-          data: {
-            topic: derived,
-            updatedAt: new Date(),
-            metadata: mergeSessionMetadata({
-              existing: session.metadata,
-              conversationState: aiResult.state as ConversationState,
-              tutorState,
-              tutorArtifacts,
-              tutorRevisionNotes,
-              systemNotices,
-            }) as any,
-          }
-        });
-      } else {
-        await prisma.chatSession.update({
-          where: { id: sessionId },
-          data: {
-            updatedAt: new Date(),
-            metadata: mergeSessionMetadata({
-              existing: session.metadata,
-              conversationState: aiResult.state as ConversationState,
-              tutorState,
-              tutorArtifacts,
-              tutorRevisionNotes,
-              systemNotices,
-            }) as any,
-          }
-        });
+        const titled = await persistSessionTitle({ sessionId, title: derived });
+        displayTitle = String((titled as any).topic || derived);
+        titleVersion = Number((titled as any).titleVersion || 0);
       }
+      await prisma.chatSession.update({
+        where: { id: sessionId },
+        data: {
+          updatedAt: new Date(),
+          metadata: mergeSessionMetadata({
+            existing: session.metadata,
+            conversationState: aiResult.state as ConversationState,
+            tutorState,
+            tutorArtifacts,
+            tutorRevisionNotes,
+            systemNotices,
+          }) as any,
+        }
+      });
     } catch (e) {
       logger.warn({ sessionId, error: String(e) }, '[Backend] Session metadata update failed');
     }
@@ -5363,19 +4870,53 @@ router.post('/chat', schoolAuthMiddleware, aiLimiter, async (req: AuthedRequest,
       await redis.set(cacheKey, JSON.stringify(cacheData), { EX: 86400 }); // Cache for 24h
     }
 
+    // Complete the turn ledger BEFORE emitting done (§19): done implies persistence.
+    const refreshed = await prisma.chatSession.findUnique({ where: { id: sessionId } }).catch(() => null);
+    const doneProjection = refreshed ? buildChatSessionProjection(refreshed) : buildChatSessionProjection({ id: sessionId, topic: displayTitle, titleVersion } as any);
+    await completeChatTurn({
+      sessionId,
+      clientTurnId,
+      userMessageId: savedUserMessage?.id || null,
+      assistantMessageId: savedAiMsg.id,
+      responseMetadata: { assistantMessageNumber: (savedAiMsg as any)?.messageNumber || null },
+    });
+    try {
+      await prisma.chatSession.update({ where: { id: sessionId }, data: { activeTurnId: null } as any });
+    } catch { /* non-fatal */ }
+    // Observability: IDs/timings only, never bodies (§48).
+    logger.info({
+      turnId: clientTurnId, requestId, sessionId,
+      userMessageId: savedUserMessage?.id || null,
+      assistantMessageId: savedAiMsg.id,
+      firstTokenMs: firstTokenAt ? Math.max(0, firstTokenAt - aiStartedAt) : undefined,
+      doneMs: Math.max(0, Date.now() - aiStartedAt),
+      status: 'completed',
+    }, '[ChatTurn] completed');
+
     if (isStreaming) {
-      res.write(`data: ${JSON.stringify({
+      clearHeartbeat();
+      res.write(`event: done\ndata: ${JSON.stringify({
         type: 'done',
-          metadata: {
-            messageId: savedAiMsg.id,
-            sessionId: session.id,
-            topic: aiResult.suggestedTitle || session.topic,
-            state: aiResult.state,
-            video: aiResult.videoData,
-            sources: safeSources,
-            tutorState,
-            assistantMetadata,
-          }
+        turnId: clientTurnId,
+        userMessageId: savedUserMessage?.id || null,
+        assistantMessageId: savedAiMsg.id,
+        assistantMessageNumber: (savedAiMsg as any)?.messageNumber || null,
+        sessionId: session.id,
+        displayTitle: doneProjection.displayTitle,
+        titleVersion: doneProjection.titleVersion,
+        lastMessageAt: doneProjection.lastMessageAt,
+        latestVisibleMessagePreview: doneProjection.latestVisibleMessagePreview,
+        messageCount: doneProjection.messageCount,
+        metadata: {
+          messageId: savedAiMsg.id,
+          sessionId: session.id,
+          topic: displayTitle,
+          state: aiResult.state,
+          video: aiResult.videoData,
+          sources: safeSources,
+          tutorState,
+          assistantMetadata,
+        }
         })}\n\n`);
       res.end();
       return;
@@ -5383,9 +4924,18 @@ router.post('/chat', schoolAuthMiddleware, aiLimiter, async (req: AuthedRequest,
 
     res.status(200).send({
       response: aiResult.processedText,
+      turnId: clientTurnId,
+      userMessageId: savedUserMessage?.id || null,
       messageId: savedAiMsg.id,
+      assistantMessageId: savedAiMsg.id,
+      assistantMessageNumber: (savedAiMsg as any)?.messageNumber || null,
       sessionId: session.id,
-      topic: aiResult.suggestedTitle || session.topic,
+      displayTitle: doneProjection.displayTitle,
+      titleVersion: doneProjection.titleVersion,
+      lastMessageAt: doneProjection.lastMessageAt,
+      latestVisibleMessagePreview: doneProjection.latestVisibleMessagePreview,
+      messageCount: doneProjection.messageCount,
+      topic: displayTitle,
       conversationState: aiResult.state,
       videoData: aiResult.videoData,
       sources: safeSources,
@@ -5393,7 +4943,7 @@ router.post('/chat', schoolAuthMiddleware, aiLimiter, async (req: AuthedRequest,
       assistantMetadata,
     });
 
-    // Background Tasks
+    // Background Tasks (vectors carry school/student/session scope where enabled, §30)
     if (session.ChatMessage.length === 0 && isPlaceholderTitle(session.topic)) {
       generateTopicInBackground(sessionId, effectiveMessage);
     }
@@ -5404,13 +4954,21 @@ router.post('/chat', schoolAuthMiddleware, aiLimiter, async (req: AuthedRequest,
 
   } catch (error) {
     logger.error({ error: String(error), userId: req.user?.id }, '[Backend] Error in /chat');
+    const errSessionId = safeString(req.body?.sessionId || req.body?.currentSessionId);
+    const errTurnId = safeString(req.body?.turnId || req.body?.clientTurnId);
+    if (errSessionId && errTurnId) {
+      await failChatTurn({ sessionId: errSessionId, clientTurnId: errTurnId, status: 'failed', errorCode: 'PROVIDER_FAILURE' });
+      try {
+        await prisma.chatSession.update({ where: { id: errSessionId }, data: { activeTurnId: null } as any });
+      } catch { /* non-fatal */ }
+    }
     try {
       const studentId = req.user?.id;
       if (studentId) {
         await recordTurnLatency({
           studentId,
-          sessionId: safeString(req.body?.sessionId || req.body?.currentSessionId),
-          turnId: safeString(req.body?.turnId) || createLatencyTurnId(),
+          sessionId: errSessionId,
+          turnId: errTurnId || createLatencyTurnId(),
           responseMode: safeString(req.body?.responseMode || 'default') || 'default',
           route: 'backend_chat',
           forceWebSearch: Boolean(req.body?.forceWebSearch),
@@ -5423,13 +4981,23 @@ router.post('/chat', schoolAuthMiddleware, aiLimiter, async (req: AuthedRequest,
     } catch {
       // no-op
     }
-    res.status(500).send({ message: 'Internal server error' });
+    // Semantic errors are never transformed into done (§19).
+    if (isStreaming && !res.writableEnded) {
+      // Heartbeat is released by the res 'close' handler on res.end() below; the
+      // try-scoped timer is intentionally not referenced from this catch scope.
+      try {
+        res.write(`event: error\ndata: ${JSON.stringify({ type: 'error', turnId: errTurnId || null, code: 'PROVIDER_FAILURE', message: 'The study service could not complete that turn. Your message is kept — please retry.', retryable: true })}\n\n`);
+        res.end();
+        return;
+      } catch { /* fall through */ }
+    }
+    res.status(500).send({ message: 'Internal server error', code: 'PROVIDER_FAILURE', retryable: true });
   }
 });
 
 // --- HELPER ROUTES ---
 
-router.post('/message', schoolAuthMiddleware, rateLimiter, async (req: AuthedRequest, res: Response) => {
+router.post('/message', schoolAuthMiddleware, requireVerifiedSchoolContext, rateLimiter, async (req: AuthedRequest, res: Response) => {
   try {
     const message = req.body?.message;
     const sessionId = safeString(req.body?.sessionId || req.body?.currentSessionId);
@@ -5442,18 +5010,17 @@ router.post('/message', schoolAuthMiddleware, rateLimiter, async (req: AuthedReq
       return res.status(400).send({ message: 'Message content required.' });
     }
     if (message.content.length > MAX_MESSAGE_CHARS) {
-      return res.status(413).send({ message: `Message too long (max ${MAX_MESSAGE_CHARS} characters).` });
+      return res.status(413).send({ message: `Message too long (max ${MAX_MESSAGE_CHARS} characters).`, code: 'MESSAGE_TOO_LONG' });
     }
 
-    const session = await prisma.chatSession.findUnique({
-      where: { id: sessionId },
+    const msgScope = resolveTenantScope(req);
+    const session = await prisma.chatSession.findFirst({
+      where: { id: sessionId, studentId: req.user!.id, ...(msgScope.schoolId ? { schoolId: msgScope.schoolId } : {}) },
       select: { id: true, studentId: true, topic: true, metadata: true },
     });
-    if (!session || session.studentId !== req.user!.id) {
-      return res.status(404).send({ message: 'Session not found.' });
+    if (!session) {
+      return res.status(404).send({ message: 'Session not found.', code: 'SESSION_NOT_FOUND' });
     }
-
-    const count = await prisma.chatMessage.count({ where: { sessionId } });
 
     let fallbackTitle: string | null = null;
     if (message?.role === 'model') {
@@ -5463,19 +5030,14 @@ router.post('/message', schoolAuthMiddleware, rateLimiter, async (req: AuthedReq
       }
     }
 
-    const savedMessage = await prisma.chatMessage.create({
-      data: {
-        id: randomUUID(),
-        sessionId,
-        role: message.role,
-        content: message.content,
-        timestamp: (() => {
-          const ts = message.timestamp ? new Date(message.timestamp) : new Date();
-          return isNaN(ts.getTime()) ? new Date() : ts;
-        })(),
-        messageNumber: count + 1,
-        metadata: toPrismaMetadata(buildStoredMessageMetadata(message)),
-      },
+    // Canonical atomic append (§16/§23/§24): MAX(messageNumber)+1 under transaction,
+    // projection (lastMessageAt/preview/messageCount) updated atomically. Never count()+1.
+    const savedMessage = await appendChatMessageAtomic({
+      sessionId,
+      role: message.role,
+      content: message.content,
+      turnId: safeString(req.body?.turnId || req.body?.clientTurnId).trim() || undefined,
+      metadata: toPrismaMetadata(buildStoredMessageMetadata(message)),
     });
 
     if (message.role === 'user') {
@@ -5502,9 +5064,14 @@ router.post('/message', schoolAuthMiddleware, rateLimiter, async (req: AuthedReq
           conversationState: nextConversationState,
         })),
         updatedAt: new Date(),
-        ...(fallbackTitle ? { topic: fallbackTitle } : {})
       },
     });
+    // Title writes route through the versioned helper: exactly one increment, no recency change.
+    if (fallbackTitle) {
+      try {
+        await persistSessionTitle({ sessionId, title: fallbackTitle });
+      } catch { /* non-fatal */ }
+    }
 
     res.status(200).send({ message: 'Message saved', savedMessage: mapSessionMessagePayload(savedMessage) });
   } catch (error) {
@@ -5513,15 +5080,16 @@ router.post('/message', schoolAuthMiddleware, rateLimiter, async (req: AuthedReq
   }
 });
 
-router.post('/messages/:id/edit', schoolAuthMiddleware, async (req: AuthedRequest, res: Response) => {
+router.post('/messages/:id/edit', schoolAuthMiddleware, requireVerifiedSchoolContext, async (req: AuthedRequest, res: Response) => {
   try {
     const studentUserId = req.user!.id;
     const nextContent = safeString(req.body?.content).trim();
     if (!nextContent) return res.status(400).send({ message: 'Edited content is required.' });
     if (nextContent.length > MAX_MESSAGE_CHARS) {
-      return res.status(413).send({ message: `Message too long (max ${MAX_MESSAGE_CHARS} characters).` });
+      return res.status(413).send({ message: `Message too long (max ${MAX_MESSAGE_CHARS} characters).`, code: 'MESSAGE_TOO_LONG' });
     }
 
+    const editScope = resolveTenantScope(req);
     const targetMessage = await prisma.chatMessage.findUnique({
       where: { id: req.params.id },
       include: {
@@ -5536,7 +5104,11 @@ router.post('/messages/:id/edit', schoolAuthMiddleware, async (req: AuthedReques
     });
 
     if (!targetMessage || targetMessage.ChatSession.studentId !== studentUserId) {
-      return res.status(404).send({ message: 'Message not found.' });
+      return res.status(404).send({ message: 'Message not found.', code: 'SESSION_NOT_FOUND' });
+    }
+    // Tenant isolation: verified school must own the session (§5/R1).
+    if (editScope.schoolId && (targetMessage.ChatSession as any).schoolId && (targetMessage.ChatSession as any).schoolId !== editScope.schoolId) {
+      return res.status(404).send({ message: 'Message not found.', code: 'SESSION_NOT_FOUND' });
     }
     if (targetMessage.role !== 'user') {
       return res.status(400).send({ message: 'Only student messages can be edited.' });
@@ -5562,7 +5134,7 @@ router.post('/messages/:id/edit', schoolAuthMiddleware, async (req: AuthedReques
       .slice(targetIndex + 1)
       .some((message) => message.role === 'user');
     if (laterUserTurnExists) {
-      return res.status(409).send({ message: 'Only the latest student turn can be edited safely.' });
+      return res.status(409).send({ message: 'Only the latest student turn can be edited safely.', code: 'LATEST_LEARNER_EDIT_ONLY' });
     }
 
     const priorTutorState = getTutorStateFromMetadata(session.metadata);
@@ -5647,7 +5219,7 @@ router.post('/messages/:id/edit', schoolAuthMiddleware, async (req: AuthedReques
       return tx.chatSession.findUnique({
         where: { id: session.id },
         include: {
-          ChatMessage: { orderBy: { timestamp: 'asc' } },
+          ChatMessage: { orderBy: { messageNumber: 'asc' } },
         },
       });
     });
@@ -5656,43 +5228,70 @@ router.post('/messages/:id/edit', schoolAuthMiddleware, async (req: AuthedReques
       return res.status(500).send({ message: 'Could not rebuild the edited session.' });
     }
 
-    return res.status(200).send(buildSessionResponsePayload(updatedSession));
+    // Recompute derived projection from canonical remaining history (§38/R9).
+    try {
+      await rebuildSessionProjection(session.id);
+    } catch { /* non-fatal: response still reflects canonical rows below */ }
+    const refreshedEdited = await prisma.chatSession.findFirst({
+      where: { id: session.id },
+      include: { ChatMessage: { orderBy: [{ messageNumber: 'desc' }], take: normalizeTranscriptLimit(req.query.limit) } },
+    });
+    const editedMsgs = getSessionMessages(refreshedEdited).sort((a: any, b: any) => Number(a.messageNumber) - Number(b.messageNumber));
+    const editedOldest = editedMsgs[0]?.messageNumber || 1;
+    const editedTotal = Number((refreshedEdited as any)?.messageCount || editedMsgs.length);
+    const editedHasEarlier = editedTotal > editedMsgs.length || editedOldest > 1;
+    const editedPayload = buildSessionResponsePayload({ ...((refreshedEdited as any) || updatedSession), ChatMessage: editedMsgs });
+    if (!editedMsgs.some((m: any) => m.id === targetMessage.id)) {
+      return res.status(500).send({ message: 'Edit persistence could not be confirmed.' });
+    }
+    return res.status(200).send({
+      ...editedPayload,
+      messages: editedMsgs.map(mapSessionMessagePayload),
+      transcriptPage: {
+        returnedCount: editedMsgs.length,
+        hasEarlier: editedHasEarlier,
+        nextBeforeMessageNumber: editedHasEarlier ? editedOldest : null,
+      },
+    });
   } catch (error) {
     logger.error({ error: String(error), messageId: req.params.id }, '[Backend] Message edit failed');
     return res.status(500).send({ message: 'Internal server error' });
   }
 });
 
-// ✅ SESSION PATCH (HARD DEBUG VERSION WITH DETAILED LOGS)
-router.patch('/session/:id', schoolAuthMiddleware, async (req: AuthedRequest, res: Response) => {
+// ✅ SESSION PATCH — title-versioned, recency-preserving (024)
+router.patch('/session/:id', schoolAuthMiddleware, requireVerifiedSchoolContext, async (req: AuthedRequest, res: Response) => {
   const curSessionId = req.params.id;
   try {
-    const studentUserId = req.user!.id;
-    const { title } = req.body;
+    const scope = resolveTenantScope(req);
+    const { title, titleVersion } = req.body as any;
 
-    logger.info({ sessionId: curSessionId, userId: studentUserId, title }, '[BACKEND PATCH] Starting Title Update');
-
-    // 1. Verify Session Exists & Belongs to User
-    const existingSession = await prisma.chatSession.findFirst({
-      where: { id: curSessionId, studentId: studentUserId }
-    });
+    const where: any = scope.schoolId
+      ? { id: curSessionId, studentId: scope.studentId, schoolId: scope.schoolId }
+      : { id: curSessionId, studentId: scope.studentId };
+    const existingSession = await prisma.chatSession.findFirst({ where });
 
     if (!existingSession) {
-      logger.error({ sessionId: curSessionId, userId: studentUserId }, '[BACKEND PATCH] ERROR: Session NOT FOUND or NOT OWNED');
-      return res.status(404).send({ message: 'Session not found.' });
+      return res.status(404).send({ message: 'Session not found.', code: 'SESSION_NOT_FOUND' });
     }
 
-    logger.info({ sessionId: curSessionId, userId: studentUserId, title }, '[BACKEND PATCH] ✅ Session found. Current Title: "' + existingSession.topic + '". Attempting DB Write...');
+    // Stale title responses are ignored by titleVersion (§10).
+    const currentVersion = Number((existingSession as any).titleVersion || 0);
+    if (Number.isFinite(Number(titleVersion)) && Number(titleVersion) < currentVersion) {
+      return res.status(200).json({
+        message: 'Stale title ignored',
+        session: buildChatSessionProjection(existingSession),
+      });
+    }
 
-    // 2. Perform Update (Hard Error if fails)
-    const safeTitle = normalizeTitleCandidate(safeString(title), existingSession.topic || '');
-    const updated = await prisma.chatSession.update({
-      where: { id: curSessionId },
-      data: { topic: safeTitle, updatedAt: new Date() },
-    });
-
-    logger.info({ sessionId: curSessionId, newTitle: updated.topic }, '[BACKEND PATCH] ✅ Success! DB Updated');
-    res.status(200).json({ message: 'Session updated', session: updated });
+    const safeTitle = normalizeTitleCandidate(safeString(title), (existingSession as any).topic || '');
+    // No-op same-title mutation must not bump titleVersion (§10/§39).
+    if (safeTitle === String((existingSession as any).topic || '').trim()) {
+      return res.status(200).json({ message: 'Session updated', session: buildChatSessionProjection(existingSession) });
+    }
+    // Central title mutation: exactly one version increment, never touches lastMessageAt.
+    const updated = await persistSessionTitle({ sessionId: curSessionId, title: safeTitle });
+    return res.status(200).json({ message: 'Session updated', session: buildChatSessionProjection(updated) });
 
   } catch (error) {
     logger.error({ sessionId: curSessionId, error: String(error) }, '[BACKEND PATCH] 💥 CRITICAL DB ERROR');
@@ -5700,107 +5299,208 @@ router.patch('/session/:id', schoolAuthMiddleware, async (req: AuthedRequest, re
   }
 });
 
-router.get('/history', schoolAuthMiddleware, async (req: AuthedRequest, res: Response) => {
+router.get('/history', schoolAuthMiddleware, requireVerifiedSchoolContext, async (req: AuthedRequest, res: Response) => {
   try {
-    const studentUserId = req.user!.id;
-    const { page = '1', limit = '10', search } = req.query;
-    const pageNum = parseInt(page as string), limitNum = parseInt(limit as string);
-    const skip = (pageNum - 1) * limitNum;
+    const scope = resolveTenantScope(req);
+    const limit = normalizeHistoryLimit(req.query.limit);
+    const cursorRaw = typeof req.query.cursor === 'string' ? req.query.cursor : null;
+    const cursor = cursorRaw ? decodeHistoryCursor(cursorRaw) : null;
+    if (cursorRaw && !cursor) return res.status(400).send({ message: 'Invalid history cursor.', code: 'INVALID_HISTORY_CURSOR' });
 
-    const whereClause: any = { studentId: studentUserId, ChatMessage: { some: {} } };
-    if (search) {
-      whereClause.OR = [
-        { topic: { contains: search as string, mode: 'insensitive' } },
-        { ChatMessage: { some: { content: { contains: search as string, mode: 'insensitive' } } } },
+    // Strict tenant scope: schoolId + studentId. Legacy null-school rows hidden.
+    const baseWhere: any = { studentId: scope.studentId, schoolId: scope.schoolId };
+    const cursorWhere: any = { ...baseWhere };
+    if (cursor?.lastMessageAt) {
+      const t = new Date(cursor.lastMessageAt);
+      cursorWhere.OR = [
+        { lastMessageAt: { lt: t } },
+        { lastMessageAt: t, id: { lt: cursor.id } },
+        { lastMessageAt: null, id: { lt: cursor.id } },
       ];
+    } else if (cursor?.id) {
+      cursorWhere.id = { lt: cursor.id };
     }
 
-    const [total, history] = await Promise.all([
-      prisma.chatSession.count({ where: whereClause }),
-      prisma.chatSession.findMany({
-        where: whereClause, skip, take: limitNum, orderBy: { updatedAt: 'desc' },
-        include: { ChatMessage: { orderBy: { timestamp: 'asc' }, take: 3 } }
-      })
-    ]);
+    const rows = await prisma.chatSession.findMany({
+      where: cursorWhere,
+      take: limit + 1,
+      orderBy: [{ lastMessageAt: 'desc' }, { id: 'desc' }],
+      include: { ChatMessage: { orderBy: [{ messageNumber: 'desc' }], take: 2 } },
+    });
 
-    // SELF-HEALING HISTORY: Rename old placeholder sessions using background summarization
-    const sessionsWithTitles = await Promise.all(history.map(async (s) => {
-      const currentTitle = String(s.topic || '').trim();
-      let title = resolveSessionTitle(currentTitle, s.ChatMessage || []);
-      if (title && title !== currentTitle) {
-        runSummarizationTask(s.id, studentUserId);
-        prisma.chatSession.update({
-          where: { id: s.id },
-          data: { topic: title }
-        }).catch(() => { });
-      }
-      const tutorState = getTutorStateFromMetadata(s.metadata);
-      const tutorArtifacts = getTutorArtifactsFromMetadata(s.metadata);
-      const tutorRevisionNotes = getTutorRevisionNotesFromMetadata(s.metadata);
-      const summaryMeta = buildSessionSummaryMeta({
-        topic: s.topic,
-        messages: s.ChatMessage || [],
-        tutorState,
-        tutorArtifacts,
-        tutorRevisionNotes,
-      });
-      return {
-        id: s.id,
-        title: title,
-        updatedAt: s.updatedAt.toISOString(),
-        createdAt: s.createdAt.toISOString(),
-        firstMessage: s.ChatMessage[0]?.content || null,
-        summary: summaryMeta.summary,
-        lastTutorFocus: summaryMeta.lastTutorFocus,
-        learningMode: summaryMeta.learningMode,
-        hadArtifacts: summaryMeta.hadArtifacts,
-        hadVideo: summaryMeta.hadVideo,
-        continuationStatus: summaryMeta.continuationStatus,
-        recentArtifactLabel: summaryMeta.recentArtifactLabel,
-        revisionCount: summaryMeta.revisionCount,
-      };
-    }));
+    const hasMore = rows.length > limit;
+    const page = hasMore ? rows.slice(0, limit) : rows;
+    const sessions = page.map((s: any) => {
+      const msgs = getSessionMessages(s).sort((a, b) => a.messageNumber - b.messageNumber);
+      return buildChatSessionProjection(s, msgs);
+    });
+    const last = page[page.length - 1];
+    const nextCursor = hasMore && last ? encodeHistoryCursor((last as any).lastMessageAt ? new Date((last as any).lastMessageAt).toISOString() : null, last.id) : null;
 
+    // Legacy page params remain for old consumers (non-canonical).
+    const legacyPage = Number(req.query.page) || 1;
     res.status(200).send({
-      sessions: sessionsWithTitles,
-      pagination: { page: pageNum, limit: limitNum, total, totalPages: Math.ceil(total / limitNum) }
+      sessions,
+      hasMore,
+      nextCursor,
+      pagination: { page: legacyPage, limit, total: undefined, totalPages: undefined },
     });
   } catch (error) {
     res.status(500).send({ message: 'Internal server error' });
   }
 });
 
-router.get('/session/:id', schoolAuthMiddleware, async (req: AuthedRequest, res: Response) => {
+// FAST CHAT BOOTSTRAP (§12): bounded, read-pure, no Revision/Media/Growth.
+router.get('/chat-bootstrap', schoolAuthMiddleware, requireVerifiedSchoolContext, async (req: AuthedRequest, res: Response) => {
   try {
-    const studentUserId = req.user!.id;
-    prisma.chatSession.updateMany({
-      where: { studentId: studentUserId, isActive: true, id: { not: req.params.id } },
-      data: { isActive: false },
-    }).catch(e => { });
-
-    const session = await prisma.chatSession.update({
-      where: { id: req.params.id, studentId: studentUserId },
-      data: { isActive: true },
-      include: { ChatMessage: { orderBy: { timestamp: 'asc' } } },
-    });
-
-    if (!session) return res.status(404).send({ message: 'Session not found.' });
-    return res.status(200).send(buildSessionResponsePayload(session));
-
+    const scope = resolveTenantScope(req);
+    const where: any = { studentId: scope.studentId, schoolId: scope.schoolId };
+    const [active, recent] = await Promise.all([
+      prisma.chatSession.findFirst({
+        where: { ...where, isActive: true },
+        orderBy: [{ lastMessageAt: 'desc' }, { id: 'desc' }],
+        include: { ChatMessage: { orderBy: [{ messageNumber: 'desc' }], take: CHAT_HISTORY_DEFAULT_LIMIT } },
+      }),
+      prisma.chatSession.findMany({
+        where,
+        take: CHAT_HISTORY_DEFAULT_LIMIT,
+        orderBy: [{ lastMessageAt: 'desc' }, { id: 'desc' }],
+        include: { ChatMessage: { orderBy: [{ messageNumber: 'desc' }], take: 2 } },
+      }),
+    ]);
+    const resolveSession = active || recent[0] || null;
+    let transcript: any[] = [];
+    let transcriptPage: any = { returnedCount: 0, hasEarlier: false, nextBeforeMessageNumber: null };
+    if (resolveSession) {
+      const full = await prisma.chatSession.findFirst({
+        where: { id: (resolveSession as any).id, ...where },
+        include: {
+          ChatMessage: { orderBy: [{ messageNumber: 'desc' }], take: normalizeTranscriptLimit(req.query.limit) },
+        },
+      });
+      const msgs = getSessionMessages(full).sort((a, b) => a.messageNumber - b.messageNumber);
+      transcript = msgs.map(mapSessionMessagePayload);
+      const total = Number((full as any)?.messageCount || msgs.length);
+      const oldest = msgs[0]?.messageNumber || 1;
+      transcriptPage = { returnedCount: msgs.length, hasEarlier: total > msgs.length && oldest > 1, nextBeforeMessageNumber: oldest > 1 ? oldest : null };
+    }
     res.status(200).send({
-      ...session,
-      messages: session.ChatMessage.map((msg: any) => ({
-        ...msg,
-        timestamp: msg.timestamp.toISOString(),
-        // ✅ RETURN SAVED VIDEO DATA
-        videoData: deriveVideoDataFromMessage(msg),
-        sources: extractSources(msg.metadata),
-        image: deriveImageFromMessage(msg),
-      })),
-      conversationState: (session.metadata as any || DEFAULT_CONVERSATION_STATE),
-      tutorState: getTutorStateFromMetadata(session.metadata),
+      identity: { studentId: scope.studentId, schoolId: scope.schoolId },
+      activeSession: resolveSession ? buildChatSessionProjection(resolveSession) : null,
+      transcript,
+      transcriptPage,
+      recentSessions: recent.map((s: any) => buildChatSessionProjection(s)),
+      hasMoreHistory: recent.length >= CHAT_HISTORY_DEFAULT_LIMIT,
+    });
+  } catch {
+    res.status(500).send({ message: 'Internal server error' });
+  }
+});
+
+router.get('/session/:id', schoolAuthMiddleware, requireVerifiedSchoolContext, async (req: AuthedRequest, res: Response) => {
+  try {
+    const scope = resolveTenantScope(req);
+    const limit = normalizeTranscriptLimit(req.query.limit);
+    const where: any = scope.schoolId
+      ? { id: req.params.id, studentId: scope.studentId, schoolId: scope.schoolId }
+      : { id: req.params.id, studentId: scope.studentId };
+    // READ-PURE: no isActive writes, no title/summarization writes, no AI.
+    const session = await prisma.chatSession.findFirst({ where });
+    if (!session) return res.status(404).send({ message: 'Session not found.' });
+    const total = Number((session as any).messageCount || 0);
+    const messages = await prisma.chatMessage.findMany({
+      where: { sessionId: session.id },
+      orderBy: [{ messageNumber: 'desc' }],
+      take: limit,
+    });
+    const chronological = [...messages].sort((a: any, b: any) => Number(a.messageNumber) - Number(b.messageNumber));
+    const oldest = chronological[0]?.messageNumber || 1;
+    const hasEarlier = total > chronological.length || (chronological.length > 0 && oldest > 1);
+    // Recoverable turn: at most one latest failed/interrupted ledger row.
+    let recoverableTurn: any = null;
+    try {
+      const failed = await (prisma as any).chatTurnRequestRecord.findFirst({
+        where: { sessionId: session.id, status: { in: ['failed', 'interrupted'] } },
+        orderBy: { updatedAt: 'desc' },
+      });
+      if (failed) {
+        recoverableTurn = { turnId: failed.clientTurnId, userMessageId: failed.userMessageId || null, status: failed.status, retryable: true };
+      }
+    } catch { recoverableTurn = null; }
+    const payload = buildSessionResponsePayload({ ...(session as any), ChatMessage: messages });
+    return res.status(200).send({
+      ...payload,
+      messages: chronological.map(mapSessionMessagePayload),
+      transcriptPage: { returnedCount: chronological.length, hasEarlier, nextBeforeMessageNumber: hasEarlier ? oldest : null },
+      recoverableTurn,
     });
   } catch (error) {
+    res.status(500).send({ message: 'Internal server error' });
+  }
+});
+
+router.get('/session/:id/messages', schoolAuthMiddleware, requireVerifiedSchoolContext, async (req: AuthedRequest, res: Response) => {
+  try {
+    const scope = resolveTenantScope(req);
+    const limit = normalizeTranscriptLimit(req.query.limit);
+    const before = Number(req.query.before);
+    const where: any = scope.schoolId
+      ? { id: req.params.id, studentId: scope.studentId, schoolId: scope.schoolId }
+      : { id: req.params.id, studentId: scope.studentId };
+    const session = await prisma.chatSession.findFirst({ where, select: { id: true } });
+    if (!session) return res.status(404).send({ message: 'Session not found.' });
+    const msgWhere: any = { sessionId: session.id };
+    if (Number.isFinite(before) && before > 1) msgWhere.messageNumber = { lt: Math.floor(before) };
+    const messages = await prisma.chatMessage.findMany({
+      where: msgWhere,
+      orderBy: [{ messageNumber: 'desc' }],
+      take: limit,
+    });
+    const chronological = [...messages].sort((a: any, b: any) => Number(a.messageNumber) - Number(b.messageNumber));
+    const oldest = chronological[0]?.messageNumber || 1;
+    return res.status(200).send({
+      messages: chronological.map(mapSessionMessagePayload),
+      transcriptPage: {
+        returnedCount: chronological.length,
+        hasEarlier: chronological.length >= limit && oldest > 1,
+        nextBeforeMessageNumber: chronological.length >= limit && oldest > 1 ? oldest : null,
+      },
+    });
+  } catch {
+    res.status(500).send({ message: 'Internal server error' });
+  }
+});
+
+// Explicit write endpoint for navigation persistence (§11/§24). No recency change.
+router.post('/session/:id/open', schoolAuthMiddleware, requireVerifiedSchoolContext, async (req: AuthedRequest, res: Response) => {
+  try {
+    const scope = resolveTenantScope(req);
+    const where: any = scope.schoolId
+      ? { id: req.params.id, studentId: scope.studentId, schoolId: scope.schoolId }
+      : { id: req.params.id, studentId: scope.studentId };
+    const session = await prisma.chatSession.findFirst({ where, select: { id: true } });
+    if (!session) return res.status(404).send({ message: 'Session not found.' });
+    let updated: any = null;
+    try {
+      updated = await prisma.chatSession.update({
+        where: { id: session.id },
+        data: { lastOpenedAt: new Date(), isActive: true } as any,
+      });
+    } catch {
+      updated = await prisma.chatSession.update({ where: { id: session.id }, data: { isActive: true } });
+    }
+    try {
+      await prisma.chatSession.updateMany({
+        where: { studentId: scope.studentId, isActive: true, id: { not: session.id }, ...(scope.schoolId ? { schoolId: scope.schoolId } : {}) },
+        data: { isActive: false },
+      });
+    } catch { /* non-fatal */ }
+    try {
+      const redis = await getRedisClient();
+      if (redis) await redis.del(`session:${session.id}`);
+    } catch { /* non-fatal */ }
+    return res.status(200).send({ ok: true, session: updated ? buildChatSessionProjection(updated) : { id: session.id } });
+  } catch {
     res.status(500).send({ message: 'Internal server error' });
   }
 });
@@ -7527,8 +7227,48 @@ router.get('/media/stream', schoolAuthMiddleware, async (req: AuthedRequest, res
   try {
     const limit = parsePositiveInt(req.query?.limit, 40, 1, 120);
     const streamMode = safeString(req.query?.streamMode).trim().toLowerCase() === 'creative' ? 'creative' : 'study';
-    const weakTopics = parseQueryList(req.query?.weakTopics);
     const requestedRevisionItemId = safeString(req.query?.revisionItemId).trim() || null;
+    // STREAM-5: Study academic truth is server-resolved. Client query values
+    // such as weakTopics/activeTopic/mastery/misconceptions/dueRevision/
+    // strengths/objectiveId/teacherRecommended/schoolLevel are accepted for
+    // compatibility but never trusted as authority. Only explicit
+    // presentation/intent hints (subject/topic/language/relatedResourceId)
+    // are preserved, and only under snapshot clientHints.
+    // STREAM-9: Creative mode never consumes weakness signals; downstream
+    // Creative ranking/scheduling receives weakTopics = [].
+    const clientActiveTopic = safeString(req.query?.activeTopic).trim() || null;
+    const studySnapshot =
+      streamMode === 'study'
+        ? await resolveStudyStreamContext(
+            {
+              learnerId: safeString(req.user?.id),
+              schoolId: safeString(req.user?.schoolId ?? (req as any)?.schoolId),
+              role: safeString(req.user?.role),
+              verified: true,
+            },
+            {
+              selectedSubject: safeString(req.query?.subject).trim() || null,
+              selectedTopic: safeString(req.query?.topic).trim() || null,
+              language: safeString(req.query?.language).trim() || null,
+              relatedResourceId: safeString(req.query?.relatedResourceId).trim() || null,
+            },
+          ).catch((error: unknown) => {
+            if (error instanceof Error && error.message.includes('[STUDY_CONTEXT_UNAUTHORIZED]')) {
+              res.status(401).send({
+                success: false,
+                message: 'Authentication required. Verified learner and school identity are required.',
+              });
+              return null;
+            }
+            throw error;
+          })
+        : null;
+    if (streamMode === 'study' && !studySnapshot) return;
+    const studyRanking = studySnapshot ? buildStudyRankingFieldsFromSnapshot(studySnapshot) : null;
+    // Study mode: academic ranking fields come from the server snapshot ONLY.
+    // Creative mode keeps its existing intent-driven behavior (not academic truth).
+    const weakTopics = studyRanking ? studyRanking.weakTopics : [];
+    const resolvedActiveTopic = studyRanking ? studyRanking.activeTopic : clientActiveTopic;
     const studyRevisionOverview =
       streamMode === 'study'
         ? await getRevisionOverview({
@@ -7538,7 +7278,7 @@ router.get('/media/stream', schoolAuthMiddleware, async (req: AuthedRequest, res
         : null;
     const studyRevisionItems = studyRevisionOverview ? collectRevisionItemsFromOverview(studyRevisionOverview) : [];
     const rankingContext: MediaStreamRankingContext = {
-      activeTopic: safeString(req.query?.activeTopic).trim() || null,
+      activeTopic: resolvedActiveTopic,
       weakTopics,
       examMode: parseQueryBoolean(req.query?.examMode) === true,
       focusMode: parseQueryBoolean(req.query?.focusMode) === true,
@@ -7547,21 +7287,27 @@ router.get('/media/stream', schoolAuthMiddleware, async (req: AuthedRequest, res
       preferredRecapType: (safeString(req.query?.preferredRecapType).trim().toLowerCase() as any) || null,
       shortFormSupport: (safeString(req.query?.shortFormSupport).trim().toLowerCase() as any) || null,
       allowExternalCreativeSuggestions: parseQueryBoolean(req.query?.allowExternalCreativeSuggestions) !== false,
-      learningNeed: safeString(req.query?.learningNeed).trim() || null,
-      schoolLevel: safeString(req.query?.schoolLevel).trim() || null,
-      language: safeString(req.query?.language).trim() || null,
+      learningNeed: streamMode === 'study' ? null : safeString(req.query?.learningNeed).trim() || null,
+      schoolLevel: streamMode === 'study' ? null : safeString(req.query?.schoolLevel).trim() || null,
+      language: studySnapshot ? studySnapshot.clientHints.language : safeString(req.query?.language).trim() || null,
       activeRevisionItemId: requestedRevisionItemId,
-      dueNowRevisionItemIds: studyRevisionOverview?.queuePreview?.dueNow?.map((item) => safeString(item.id).trim()).filter(Boolean) || [],
-      needsAttentionRevisionItemIds:
-        studyRevisionOverview?.queuePreview?.needsAttention?.map((item) => safeString(item.id).trim()).filter(Boolean) || [],
-      continueRevisionItemIds:
-        studyRevisionOverview?.queuePreview?.continuePractising?.map((item) => safeString(item.id).trim()).filter(Boolean) || [],
+      dueNowRevisionItemIds: studyRanking
+        ? studyRanking.dueNowRevisionItemIds
+        : studyRevisionOverview?.queuePreview?.dueNow?.map((item) => safeString(item.id).trim()).filter(Boolean) || [],
+      needsAttentionRevisionItemIds: studyRanking
+        ? []
+        : studyRevisionOverview?.queuePreview?.needsAttention?.map((item) => safeString(item.id).trim()).filter(Boolean) || [],
+      continueRevisionItemIds: studyRanking
+        ? studyRanking.continueRevisionItemIds
+        : studyRevisionOverview?.queuePreview?.continuePractising?.map((item) => safeString(item.id).trim()).filter(Boolean) || [],
       recentRevisionItemIds: studyRevisionItems.map((item) => safeString(item.id).trim()).filter(Boolean).slice(0, 24),
-      revisionSeedTopics: buildStudyTopicSeeds({
-        activeTopic: safeString(req.query?.activeTopic).trim() || null,
-        weakTopics,
-        revisionItems: studyRevisionItems,
-      }),
+      revisionSeedTopics: studyRanking && studyRanking.revisionSeedTopics.length > 0
+        ? studyRanking.revisionSeedTopics
+        : buildStudyTopicSeeds({
+            activeTopic: resolvedActiveTopic,
+            weakTopics,
+            revisionItems: studyRevisionItems,
+          }),
     };
     const sourceChatContext = await resolveMediaSourceChatContext({
       userId: req.user!.id,
@@ -7597,6 +7343,7 @@ router.get('/media/stream', schoolAuthMiddleware, async (req: AuthedRequest, res
       streamMode === 'creative' && rankingContext.allowExternalCreativeSuggestions
         ? await ingestCreativeExternalMediaAssets({
             userId: req.user!.id,
+            verifiedSchoolId: safeString((req.user as any)?.schoolId).trim() || null,
             topicSeeds: creativeSeedTopics,
             subject: safeString(req.query?.subject).trim() || null,
             learningNeed: rankingContext.learningNeed,
@@ -7656,7 +7403,312 @@ router.get('/media/stream', schoolAuthMiddleware, async (req: AuthedRequest, res
       new Map([...externalCreativeAssets, ...assets].map((asset) => [asset.id, asset] as const)).values()
     );
 
-    const stream = buildMediaStream(mergedAssets, rankingContext, limit);
+    let stream = buildMediaStream(mergedAssets, rankingContext, limit);
+    // STREAM-6: additive deterministic sections for Study mode only. The
+    // composer allocates only candidates already accepted above; assets
+    // without an existing canonical resource stay in the flat stream.
+    let studySections: { version: 'study-sections.v1'; sections: unknown[] } | undefined;
+    if (streamMode === 'study' && studySnapshot) {
+      const canonicalByLegacyId = await resolveCanonicalResourcesForLegacyAssets(
+        stream.map((entry) => entry.asset),
+      ).catch(() => new Map());
+      const rankedCandidates = [];
+      for (const entry of stream) {
+        const resource = canonicalByLegacyId.get(entry.asset.id);
+        if (!resource) continue;
+        rankedCandidates.push(toRankedCanonicalCandidate(entry, resource));
+      }
+      const relatedResourceId = studySnapshot.clientHints.relatedResourceId;
+      const relatedSource = relatedResourceId
+        ? await getMediaResourceById(relatedResourceId).catch(() => null)
+        : null;
+      // STREAM-7: deterministic evidence-lane targets from canonical
+      // server-derived learner state. The production prerequisite resolver
+      // reads the existing durable curriculum / Knowledge Graph persistence
+      // read-only; no media/client inference creates prerequisite truth.
+      const evidenceContext = await resolveStudyEvidenceLaneContext(studySnapshot);
+      const composition = composeStudySections({
+        candidates: rankedCandidates,
+        snapshot: studySnapshot,
+        relatedSource,
+        limit,
+        evidenceContext,
+      });
+      studySections = composition as { version: 'study-sections.v1'; sections: unknown[] };
+      // STREAM-11: teacher lane (additive, Study-only). Server-resolved from
+      // durable controls for this verified learner/school; learner request
+      // data can never forge teacher authority. Eligibility re-checked here
+      // via canonical STREAM-3; capped; deduped; never displaces Continue
+      // Watching / Saved; never touches Creative.
+      try {
+        const teacherSchoolId = safeString(req.user?.schoolId ?? (req as any)?.schoolId) || null;
+        const learnerId = safeString(req.user!.id);
+        // Verified enrollment + grade facts from canonical owners only.
+        const learnerClassIds = (() => {
+          try {
+            return teacherSchoolId ? getStudentClassIds(learnerId, teacherSchoolId) : [];
+          } catch {
+            return [];
+          }
+        })();
+        const learnerGrade = await resolveCanonicalTargetLearner(learnerId)
+          .then((learner) => (learner && teacherSchoolId && learner.schoolId === teacherSchoolId ? learner.grade ?? null : null))
+          .catch(() => null);
+        const resolved = await resolveTeacherRecommendationsForStudy(
+          { learnerId, schoolId: teacherSchoolId || '', learnerClassIds },
+          {
+            // STREAM-12 live wiring: per-resource server-owned policy plus
+            // canonical STREAM-3 PLAY_STREAM rights + availability. Any
+            // failure omits the recommendation (fail closed).
+            resolvePolicy: async (resourceId: string) => {
+              const resource = await getMediaResourceById(resourceId).catch(() => null);
+              if (!resource) return null;
+              const metadata =
+                resource.metadata && typeof resource.metadata === 'object'
+                  ? (resource.metadata as Record<string, unknown>)
+                  : {};
+              return resolveMediaExternalPolicy(
+                {
+                  resourceId,
+                  learner: { grade: learnerGrade },
+                  resource: { grades: extractResourceGrades(metadata) },
+                },
+                prismaMediaClassificationStore,
+              ).catch(() => null);
+            },
+            isEligible: async (resourceId: string) => {
+              try {
+                const resource = await getMediaResourceById(resourceId).catch(() => null);
+                if (!resource) return false;
+                const metadata =
+                  resource.metadata && typeof resource.metadata === 'object'
+                    ? (resource.metadata as Record<string, unknown>)
+                    : {};
+                const policy = await resolveMediaExternalPolicy(
+                  {
+                    resourceId,
+                    learner: { grade: learnerGrade },
+                    resource: { grades: extractResourceGrades(metadata) },
+                  },
+                  prismaMediaClassificationStore,
+                ).catch(() => null);
+                if (!policy) return false;
+                const verdict = await evaluateMediaResourceEligibility(
+                  {
+                    resourceId,
+                    requestedPermission: 'PLAY_STREAM',
+                    territory: null,
+                    schoolId: teacherSchoolId,
+                    now: Date.now(),
+                    externalPolicy: policy,
+                  },
+                  prismaMediaEligibilityStore,
+                );
+                return verdict.decision === 'ALLOW';
+              } catch {
+                return false;
+              }
+            },
+          },
+        );
+        if (resolved.length > 0 && studySections) {
+          const claimed = new Set<string>();
+          for (const section of studySections.sections as Array<{ items?: Array<{ resourceId?: unknown }> }>) {
+            for (const item of section?.items || []) {
+              const id = safeString(item?.resourceId).trim();
+              if (id) claimed.add(id);
+            }
+          }
+          const byResourceId = new Map(rankedCandidates.map((entry) => [entry.resourceId, entry] as const));
+          const teacherItems: Array<Record<string, unknown>> = [];
+          for (const entry of resolved) {
+            if (claimed.has(entry.resourceId)) continue;
+            const candidate = byResourceId.get(entry.resourceId);
+            if (!candidate) continue;
+            claimed.add(entry.resourceId);
+            teacherItems.push({
+              resourceId: entry.resourceId,
+              reasonCode: 'TEACHER_RECOMMENDED',
+              reasonText: 'Recommended by your teacher',
+              item: candidate.item,
+            });
+          }
+          if (teacherItems.length > 0) {
+            const sections = studySections.sections as Array<{ id?: unknown; items?: unknown[] }>;
+            let insertAt = sections.length;
+            for (let index = 0; index < sections.length; index += 1) {
+              const id = safeString(sections[index]?.id).trim();
+              if (id === 'continue_watching' || id === 'saved') insertAt = index + 1;
+            }
+            sections.splice(insertAt, 0, {
+              id: 'teacher_recommended',
+              title: 'Recommended by Your Teacher',
+              items: teacherItems,
+            });
+          }
+        }
+      } catch {
+        // Teacher-lane degradation never destroys the valid Study stream.
+      }
+    }
+    // STREAM-9: Creative diversity scheduling over already-eligible canonical
+    // candidates. The scheduler reorders only; it never makes blocked
+    // resources eligible and never runs over Study sections.
+    const creativeScheduleMeta = new Map<string, { creativeTaxonomy: string; scheduleReason: string }>();
+    let canonicalByLegacyId: Map<string, { id: string }> = new Map();
+    if (streamMode === 'creative') {
+      try {
+        canonicalByLegacyId = await resolveCanonicalResourcesForLegacyAssets(
+          stream.map((entry) => entry.asset),
+        ).catch(() => new Map());
+        const history = await readRecentCreativeHistory({
+          userId: req.user!.id,
+          schoolId: safeString(req.user?.schoolId ?? (req as any)?.schoolId) || null,
+        }).catch(() => ({ recentResourceIds: [], feedbackByResourceId: new Map(), taxonomyByResourceId: new Map() }));
+        const schedulerCandidates: Array<{ entry: (typeof stream)[number]; resourceId: string; provider: string | null; baseRank: number }> = [];
+        const legacyOnly: Array<(typeof stream)[number]> = [];
+        stream.forEach((entry, index) => {
+          const resource = canonicalByLegacyId.get(entry.asset.id);
+          if (!resource) {
+            legacyOnly.push(entry);
+            return;
+          }
+          schedulerCandidates.push({
+            entry,
+            resourceId: resource.id,
+            provider: safeString((entry.asset as { videoProvider?: unknown }).videoProvider).trim() || null,
+            baseRank: index,
+          });
+        });
+        if (schedulerCandidates.length > 0) {
+          const taxonomyByResource = new Map<string, string>();
+          for (const candidate of schedulerCandidates) {
+            const metadata = ((candidate.entry.asset.metadata || {}) as Record<string, unknown>);
+            taxonomyByResource.set(candidate.resourceId, resolveCreativeTaxonomy({
+              metadata,
+              creativityType: safeString(metadata.externalRole).trim() || null,
+              tags: Array.isArray(candidate.entry.asset.tags) ? candidate.entry.asset.tags : [],
+            }));
+          }
+          const scheduled = scheduleCreativeResources({
+            candidates: schedulerCandidates.map((candidate) => ({
+              item: candidate.entry,
+              resourceId: candidate.resourceId,
+              provider: candidate.provider,
+              baseRank: candidate.baseRank,
+            })),
+            taxonomyOf: (candidate) => (taxonomyByResource.get(candidate.resourceId) || 'UNCLASSIFIED') as never,
+            recentResourceIds: history.recentResourceIds,
+            feedbackByResourceId: history.feedbackByResourceId as Map<string, string>,
+            limit,
+          });
+          for (const item of scheduled) {
+            creativeScheduleMeta.set(item.resourceId, {
+              creativeTaxonomy: String((item as { creativeTaxonomy?: unknown }).creativeTaxonomy || 'UNCLASSIFIED'),
+              scheduleReason: String((item as { scheduleReason?: unknown }).scheduleReason || 'UNSEEN_FIRST'),
+            });
+          }
+          const orderedEntries = scheduled.map((item) => item.item);
+          stream = [...orderedEntries, ...legacyOnly].slice(0, limit);
+        }
+      } catch {
+        // Scheduler degradation never destroys valid availability.
+      }
+    }
+    // STREAM-8: impression persistence AFTER final ordering is known.
+    // Bounded page write; on failure the stream is still returned with
+    // recommendationTracking.status = UNAVAILABLE and no fake IDs.
+    let recommendationTracking: { requestId: string | null; status: 'AVAILABLE' | 'UNAVAILABLE' } = {
+      requestId: null,
+      status: 'UNAVAILABLE',
+    };
+    const impressionByResourceId = new Map<string, string>();
+    try {
+      const sectionOf = new Map<string, { sectionId: string | null; reasonCode: string | null }>();
+      if (studySections) {
+        for (const section of (studySections.sections || []) as Array<{ id?: unknown; items?: Array<{ resourceId?: unknown; reasonCode?: unknown }> }>) {
+          const sectionId = safeString(section?.id).trim() || null;
+          for (const item of section?.items || []) {
+            const resourceId = safeString(item?.resourceId).trim();
+            if (resourceId && !sectionOf.has(resourceId)) {
+              sectionOf.set(resourceId, { sectionId, reasonCode: safeString(item?.reasonCode).trim() || null });
+            }
+          }
+        }
+      }
+      const streamCanonicalByLegacyId = streamMode === 'creative' && canonicalByLegacyId.size > 0
+        ? canonicalByLegacyId
+        : await resolveCanonicalResourcesForLegacyAssets(
+            stream.map((entry) => entry.asset),
+          ).catch(() => new Map());
+      if (streamMode !== 'creative') canonicalByLegacyId = streamCanonicalByLegacyId;
+      const pageItems: Array<{ resourceId: string; sectionId: string | null; reasonCode: string | null; creativeTaxonomy: string | null }> = [];
+      const seenResources = new Set<string>();
+      for (const entry of stream) {
+        const resource = streamCanonicalByLegacyId.get(entry.asset.id);
+        if (!resource || seenResources.has(resource.id)) continue;
+        seenResources.add(resource.id);
+        const section = sectionOf.get(resource.id);
+        const scheduled = creativeScheduleMeta.get(resource.id);
+        pageItems.push({
+          resourceId: resource.id,
+          sectionId: streamMode === 'study' ? (section?.sectionId ?? null) : null,
+          reasonCode: streamMode === 'study' ? (section?.reasonCode ?? null) : (scheduled?.scheduleReason ?? null),
+          creativeTaxonomy: streamMode === 'creative' ? (scheduled?.creativeTaxonomy ?? null) : null,
+        });
+      }
+      if (pageItems.length > 0) {
+        const page = await recordRecommendationPage({
+          userId: req.user!.id,
+          schoolId: safeString(req.user?.schoolId ?? (req as any)?.schoolId) || null,
+          streamMode: streamMode === 'creative' ? 'CREATIVE' : 'STUDY',
+          items: pageItems,
+        });
+        recommendationTracking = { requestId: page.requestId, status: 'AVAILABLE' };
+        for (const impression of page.impressions) {
+          impressionByResourceId.set(impression.resourceId, impression.id);
+        }
+      } else {
+        recommendationTracking = { requestId: null, status: 'AVAILABLE' };
+      }
+    } catch {
+      recommendationTracking = { requestId: null, status: 'UNAVAILABLE' };
+    }
+    // Attach additive recommendation identity without altering section IDs,
+    // reason codes/text, flat fields, or Creative compatibility. Legacy-only
+    // items without a canonical resource stay visible with no recommendation.
+    const legacyToRecommendation = new Map<string, { impressionId: string; resourceId: string }>();
+    if (recommendationTracking.status === 'AVAILABLE') {
+      for (const entry of stream) {
+        const resource = canonicalByLegacyId.get(entry.asset.id);
+        if (!resource) continue;
+        const impressionId = impressionByResourceId.get(resource.id);
+        if (impressionId) {
+          legacyToRecommendation.set(entry.asset.id, { impressionId, resourceId: resource.id });
+        }
+      }
+    }
+    const trackedStream = stream.map((entry) => {
+      const recommendation = legacyToRecommendation.get(entry.asset.id);
+      return recommendation ? { ...entry, recommendation } : entry;
+    });
+    let trackedStudySections = studySections;
+    if (studySections && legacyToRecommendation.size > 0) {
+      trackedStudySections = {
+        version: studySections.version,
+        sections: (studySections.sections || []).map((section: unknown) => {
+          const typed = section as { id?: unknown; title?: unknown; items?: Array<Record<string, unknown>> };
+          return {
+            ...(typed as Record<string, unknown>),
+            items: (typed.items || []).map((item) => {
+              const resourceId = safeString((item as Record<string, unknown>).resourceId).trim();
+              const impressionId = resourceId ? impressionByResourceId.get(resourceId) : undefined;
+              return impressionId ? { ...item, recommendation: { impressionId, resourceId } } : item;
+            }),
+          };
+        }),
+      } as typeof studySections;
+    }
     const deck =
       streamMode === 'study'
         ? buildStudyStreamDeckMeta({
@@ -7692,8 +7744,10 @@ router.get('/media/stream', schoolAuthMiddleware, async (req: AuthedRequest, res
         : null;
 
     return res.status(200).send({
-      stream,
+      stream: trackedStream,
       streamMode,
+      ...(trackedStudySections ? { studySections: trackedStudySections } : {}),
+      recommendationTracking,
       notices,
       deck,
       emptyState,
@@ -7935,6 +7989,234 @@ router.post('/media/assets/:id/interaction', schoolAuthMiddleware, async (req: A
     return res.status(200).send({ asset });
   } catch (error) {
     logger.error({ error: String(error), userId: req.user?.id, assetId: req.params.id }, '[Backend] Media interaction failed');
+    return res.status(500).send({ message: 'Internal server error' });
+  }
+});
+
+// STREAM-8 — canonical recommendation feedback. impressionId is the
+// idempotency boundary; one current feedback value per impression.
+// Scoped fail-closed: cross-user/cross-school impressions return safe
+// not-found semantics. Writes recommendation history only — never mastery,
+// misconception, evidence, Revision, or Growth.
+router.post('/media/recommendations/:impressionId/feedback', schoolAuthMiddleware, async (req: AuthedRequest, res: Response) => {
+  try {
+    const impressionId = safeString(req.params.impressionId).trim();
+    if (!impressionId) {
+      return res.status(400).send({ message: 'impressionId is required.' });
+    }
+    const feedbackType = safeString(req.body?.feedbackType).trim();
+    const closed = new Set(['HELPFUL', 'NOT_HELPFUL', 'MORE_LIKE_THIS', 'LESS_LIKE_THIS', 'NOT_RELEVANT']);
+    if (!closed.has(feedbackType)) {
+      return res.status(400).send({ message: 'feedbackType must be one of HELPFUL, NOT_HELPFUL, MORE_LIKE_THIS, LESS_LIKE_THIS, NOT_RELEVANT.' });
+    }
+    try {
+      const result = await recordRecommendationFeedback({
+        userId: req.user!.id,
+        schoolId: safeString(req.user?.schoolId ?? (req as any)?.schoolId) || null,
+        impressionId,
+        feedbackType,
+      });
+      return res.status(200).send({ feedback: result.feedback, stateProjection: result.stateProjection });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (message.includes('RECOMMENDATION_INVALID_FEEDBACK')) {
+        return res.status(400).send({ message: 'feedbackType must be one of the closed V1 values.' });
+      }
+      if (message.includes('RECOMMENDATION_NOT_FOUND') || message.includes('RECOMMENDATION_UNAUTHORIZED')) {
+        return res.status(404).send({ message: 'Recommendation impression not found.' });
+      }
+      throw error;
+    }
+  } catch (error) {
+    logger.error({ error: String(error), userId: req.user?.id }, '[Backend] Recommendation feedback failed');
+    return res.status(500).send({ message: 'Internal server error' });
+  }
+});
+
+// STREAM-10 — canonical post-watch next-actions. The scoped STREAM-8
+// impression is authoritative for learner/school/resource/source-stream;
+// caller-supplied identity is never trusted. Finite deterministic intents
+// only — no execution, no mastery/evidence effect, no autoplay.
+router.get('/media/recommendations/:impressionId/next-actions', schoolAuthMiddleware, async (req: AuthedRequest, res: Response) => {
+  try {
+    const impressionId = safeString(req.params.impressionId).trim();
+    if (!impressionId) {
+      return res.status(400).send({ message: 'impressionId is required.' });
+    }
+    const schoolId = safeString(req.user?.schoolId ?? (req as any)?.schoolId) || null;
+    const impression = await readScopedImpression({
+      userId: req.user!.id,
+      schoolId,
+      impressionId,
+    }).catch(() => null);
+    if (!impression) {
+      return res.status(404).send({ message: 'Recommendation impression not found.' });
+    }
+    const resource = await getMediaResourceById(impression.resourceId).catch(() => null);
+    if (!resource) {
+      return res.status(404).send({ message: 'Recommendation impression not found.' });
+    }
+    const state = await prismaMediaResourceStore
+      .findState(req.user!.id, resource.id)
+      .catch(() => null);
+    const scopedState = state && (!state.schoolId || !schoolId || state.schoolId === schoolId) ? state : null;
+    const response = composePostWatchActions({
+      impressionId: impression.id,
+      resourceId: resource.id,
+      streamMode: impression.streamMode,
+      topic: resource.topic,
+      subject: resource.subject,
+      isSaved: scopedState?.isSaved ?? null,
+      isCompleted: scopedState?.isCompleted ?? null,
+    });
+    return res.status(200).send(response);
+  } catch (error) {
+    logger.error({ error: String(error), userId: req.user?.id }, '[Backend] Post-watch actions failed');
+    return res.status(500).send({ message: 'Internal server error' });
+  }
+});
+
+// STREAM-11 — teacher resource controls. Role, teacher identity, and school
+// are derived from verified authentication context only; the body carries
+// resource/target data alone. Study-only; eligibility re-checked at Study
+// consumption time.
+// STREAM-12 — live canonical teacher wiring. Identity resolves through
+// TutorLearnerIdentityMap; scope enforces active teacher assignment (never
+// same-school-only); CLASS requires teacher→class proof at creation and
+// verified enrollment at delivery. Policy/rights/availability re-check at
+// Study consumption time, so creation stays intent-only and fail-closed.
+
+function mapTeacherRecommendationError(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error);
+  if (message.includes('TEACHER_RECOMMENDATION_INVALID_INPUT')) return { status: 400, body: 'Invalid teacher recommendation input.' };
+  if (message.includes('TEACHER_RECOMMENDATION_UNAUTHORIZED')) return { status: 401, body: 'Authentication required. Verified teacher and school identity are required.' };
+  if (message.includes('TEACHER_RECOMMENDATION_FORBIDDEN')) return { status: 403, body: 'Teacher role is required.' };
+  if (message.includes('TEACHER_RECOMMENDATION_TARGET_FORBIDDEN')) {
+    return { status: 404, body: 'Target is out of scope.' };
+  }
+  if (message.includes('TEACHER_RECOMMENDATION_NOT_FOUND')) return { status: 404, body: 'Teacher recommendation not found.' };
+  throw error;
+}
+
+router.post('/media/teacher-recommendations', schoolAuthMiddleware, async (req: AuthedRequest, res: Response) => {
+  try {
+    const role = safeString(req.user?.role);
+    if (!isTeacherAuthorizedRole(role)) {
+      return res.status(403).send({ message: 'Teacher role is required.' });
+    }
+    const schoolId = safeString(req.user?.schoolId ?? (req as any)?.schoolId);
+    if (!schoolId) {
+      return res.status(401).send({ message: 'Authentication required. Verified teacher and school identity are required.' });
+    }
+    try {
+      const rec = await createTeacherRecommendation(
+        {
+          teacherUserId: req.user!.id,
+          teacherRole: role,
+          schoolId,
+          resourceId: safeString(req.body?.resourceId),
+          targetType: req.body?.targetType,
+          targetId: req.body?.targetId,
+          expiresAt: req.body?.expiresAt,
+        },
+        {
+          resources: {
+            resourceExists: async (resourceId: string) => {
+              const resource = await getMediaResourceById(resourceId).catch(() => null);
+              return Boolean(resource);
+            },
+            resourceUsableBySchool: async (resourceId: string, school: string) => {
+              const resource = await getMediaResourceById(resourceId).catch(() => null);
+              if (!resource) return false;
+              if (resource.scope === 'GLOBAL') return true;
+              if (resource.scope === 'SCHOOL') return safeString(resource.schoolId) === school;
+              return false;
+            },
+          },
+          // STREAM-12 canonical authorities: target learner resolves through
+          // TutorLearnerIdentityMap (unknown/inactive → null → fail closed);
+          // scope requires active teacher assignment; CLASS requires
+          // teacher→class proof. Body-supplied school ids are never trusted.
+          targets: createCanonicalTeacherRecommendationTargets(),
+          scope: {
+            isTeacherAuthorizedForLearner: async (teacherId: string, school: string, learnerId: string) => {
+              const learner = await resolveCanonicalTargetLearner(learnerId).catch(() => null);
+              if (!learner) return false;
+              return isTeacherAuthorizedForLearner(teacherId, school, learner);
+            },
+          },
+          classAuthority: {
+            isClassAuthorized: async (teacherId: string, school: string, classId: string) =>
+              isClassAuthorizedForTeacher(teacherId, school, classId),
+          },
+        },
+      );
+      // Creation-time eligibility is fail-closed: no authoritative external
+      // policy resolver exists, so no invented all-true evaluation runs here.
+      // Consumption always re-checks because rights/availability/safety can
+      // change later.
+      return res.status(201).send({ recommendation: rec, eligible: false });
+    } catch (error) {
+      const mapped = mapTeacherRecommendationError(error);
+      return res.status(mapped.status).send({ message: mapped.body });
+    }
+  } catch (error) {
+    logger.error({ error: String(error), userId: req.user?.id }, '[Backend] Teacher recommendation create failed');
+    return res.status(500).send({ message: 'Internal server error' });
+  }
+});
+
+router.post('/media/teacher-recommendations/:id/withdraw', schoolAuthMiddleware, async (req: AuthedRequest, res: Response) => {
+  try {
+    const role = safeString(req.user?.role);
+    if (!isTeacherAuthorizedRole(role)) {
+      return res.status(403).send({ message: 'Teacher role is required.' });
+    }
+    const schoolId = safeString(req.user?.schoolId ?? (req as any)?.schoolId);
+    if (!schoolId) {
+      return res.status(401).send({ message: 'Authentication required. Verified teacher and school identity are required.' });
+    }
+    const id = safeString(req.params.id).trim();
+    if (!id) return res.status(400).send({ message: 'Recommendation id is required.' });
+    try {
+      const { prismaMediaTeacherRecommendationStore } = await import('../services/mediaTeacherRecommendationService');
+      const existing = await prismaMediaTeacherRecommendationStore.findById(id).catch(() => null);
+      if (!existing || existing.schoolId !== schoolId) {
+        return res.status(404).send({ message: 'Teacher recommendation not found.' });
+      }
+      const isOwner = existing.teacherUserId === req.user!.id;
+      const isAdmin = safeString(role).toLowerCase() === 'admin' || safeString(role).toLowerCase() === 'school_admin';
+      if (!isOwner && !isAdmin) {
+        return res.status(404).send({ message: 'Teacher recommendation not found.' });
+      }
+      const withdrawn = await withdrawTeacherRecommendation({ recommendationId: id }, prismaMediaTeacherRecommendationStore);
+      return res.status(200).send({ recommendation: withdrawn });
+    } catch (error) {
+      const mapped = mapTeacherRecommendationError(error);
+      return res.status(mapped.status).send({ message: mapped.body });
+    }
+  } catch (error) {
+    logger.error({ error: String(error), userId: req.user?.id }, '[Backend] Teacher recommendation withdraw failed');
+    return res.status(500).send({ message: 'Internal server error' });
+  }
+});
+
+router.get('/media/teacher-recommendations', schoolAuthMiddleware, async (req: AuthedRequest, res: Response) => {
+  try {
+    const role = safeString(req.user?.role);
+    if (!isTeacherAuthorizedRole(role)) {
+      return res.status(403).send({ message: 'Teacher role is required.' });
+    }
+    const schoolId = safeString(req.user?.schoolId ?? (req as any)?.schoolId);
+    if (!schoolId) {
+      return res.status(401).send({ message: 'Authentication required. Verified teacher and school identity are required.' });
+    }
+    const { prismaMediaTeacherRecommendationStore } = await import('../services/mediaTeacherRecommendationService');
+    const records = await prismaMediaTeacherRecommendationStore.listForSchool(schoolId).catch(() => null);
+    if (!records) return res.status(500).send({ message: 'Internal server error' });
+    return res.status(200).send({ recommendations: records });
+  } catch (error) {
+    logger.error({ error: String(error), userId: req.user?.id }, '[Backend] Teacher recommendation list failed');
     return res.status(500).send({ message: 'Internal server error' });
   }
 });
@@ -9651,63 +9933,111 @@ router.get('/safety/chats', schoolAuthMiddleware, async (req: AuthedRequest, res
   }
 });
 
-router.post('/session/:id/delete', schoolAuthMiddleware, async (req: AuthedRequest, res: Response) => {
+router.post('/session/:id/delete', schoolAuthMiddleware, requireVerifiedSchoolContext, async (req: AuthedRequest, res: Response) => {
   try {
-    const { count } = await prisma.chatSession.deleteMany({
-      where: { id: req.params.id, studentId: req.user!.id }
-    });
-    if (count === 0) return res.status(404).send({ message: 'Session not found' });
+    const scope = resolveTenantScope(req);
+    const where: any = scope.schoolId
+      ? { id: req.params.id, studentId: scope.studentId, schoolId: scope.schoolId }
+      : { id: req.params.id, studentId: scope.studentId };
+    const target = await prisma.chatSession.findFirst({ where, select: { id: true } });
+    if (!target) return res.status(404).send({ message: 'Session not found' });
+    // Purge derived turn ledger first (FK-safe), then canonical session/messages cascade.
+    try {
+      await (prisma as any).chatTurnRequestRecord.deleteMany({ where: { sessionId: target.id } });
+    } catch { /* table may predate migration */ }
+    try {
+      await (prisma as any).chatTurn.deleteMany({ where: { sessionId: target.id } });
+    } catch { /* legacy table may be absent */ }
+    await prisma.chatSession.delete({ where: { id: target.id } });
+    // Evict caches; purge session-scoped vectors where the client supports filtered delete.
+    try {
+      const redis = await getRedisClient();
+      if (redis) await redis.del(`session:${target.id}`);
+    } catch { /* non-fatal */ }
+    try {
+      if (pineconeIndex && typeof (pineconeIndex as any).delete === 'function') {
+        await (pineconeIndex as any).delete({ filter: { sessionId: { $eq: target.id } } });
+      }
+    } catch { /* report gap: downstream vector delete unsupported */ }
     res.status(200).send({ message: 'Session deleted' });
   } catch (error) {
     res.status(500).send({ message: 'Internal server error' });
   }
 });
 
-router.get('/search', schoolAuthMiddleware, async (req: AuthedRequest, res: Response) => {
+router.get('/search', schoolAuthMiddleware, requireVerifiedSchoolContext, async (req: AuthedRequest, res: Response) => {
   try {
-    const studentId = req.user!.id;
-    const { q: query, mode = 'hybrid' } = req.query as any;
-    if (!query) return res.status(400).send({ message: 'Query required' });
+    const scope = resolveTenantScope(req);
+    const studentId = scope.studentId;
+    const schoolId = scope.schoolId;
+    const { q: query, mode = 'keyword' } = req.query as any;
+    if (!query || !String(query).trim()) return res.status(400).send({ message: 'Query required', code: 'SEARCH_QUERY_REQUIRED' });
 
-    let results: any[] = [];
-    const promises = [];
-
-    if (mode === 'keyword' || mode === 'hybrid') {
-      promises.push(
-        prisma.chatSession.findMany({
-          where: {
-            studentId,
-            ChatMessage: { some: {} },
-            OR: [
-              { topic: { contains: query, mode: 'insensitive' } },
-              { ChatMessage: { some: { content: { contains: query, mode: 'insensitive' } } } }
-            ]
-          },
-          select: { id: true, topic: true, updatedAt: true },
-          take: 10
-        }).then(sess => sess.map(s => ({ ...s, source: 'keyword', relevance: 0.5 })))
-      );
+    // Strict-live learner search uses the DB keyword path only unless vectors
+    // are proven scoped by schoolId + studentId (§29). Current Pinecone filter
+    // only carries studentId, so semantic is NOT multi-tenant-safe: deny it.
+    const requestedMode = String(mode || 'keyword');
+    if (requestedMode === 'semantic' || requestedMode === 'hybrid') {
+      return res.status(400).send({
+        message: 'Semantic search is unavailable until vectors are proven scoped by school and student.',
+        code: 'SEMANTIC_SEARCH_UNAVAILABLE',
+      });
     }
 
-    if ((mode === 'semantic' || mode === 'hybrid') && pineconeIndex) {
-      promises.push(
-        openai.embeddings.create({ model: 'text-embedding-ada-002', input: query })
-          .then(async (emb) => {
-            const vec = emb.data[0].embedding;
-            const matches = await pineconeIndex.query({
-              vector: vec, topK: 10, filter: { studentId: { $eq: studentId } }
-            });
-            const ids = matches.matches?.map(m => m.id) || [];
-            if (ids.length === 0) return [];
-            const sessions = await prisma.chatSession.findMany({ where: { id: { in: ids } }, select: { id: true, topic: true, updatedAt: true } });
-            return sessions.map(s => ({ ...s, source: 'semantic', relevance: 0.8 }));
-          })
-      );
+    const searchLimitRaw = Number(req.query.limit);
+    const searchLimit = Number.isFinite(searchLimitRaw)
+      ? Math.min(Math.max(Math.floor(searchLimitRaw), 1), 50)
+      : 10;
+    const searchCursorRaw = typeof req.query.cursor === 'string' ? req.query.cursor : null;
+    const searchCursor = searchCursorRaw ? decodeHistoryCursor(searchCursorRaw) : null;
+    if (searchCursorRaw && !searchCursor) {
+      return res.status(400).send({ message: 'Invalid search cursor.', code: 'INVALID_HISTORY_CURSOR' });
     }
-
-    const searchResults = await Promise.all(promises);
-    const unique = Array.from(new Map(searchResults.flat().map(item => [item.id, item])).values());
-    res.status(200).send(unique.slice(0, 10));
+    const searchBaseWhere: any = {
+      studentId,
+      ...(schoolId ? { schoolId } : { schoolId: null }),
+      OR: [
+        { topic: { contains: String(query), mode: 'insensitive' } },
+        { ChatMessage: { some: { content: { contains: String(query), mode: 'insensitive' } } } },
+      ],
+    };
+    const searchWhere: any = { ...searchBaseWhere };
+    if (searchCursor?.lastMessageAt) {
+      const t = new Date(searchCursor.lastMessageAt);
+      searchWhere.AND = [
+        ...(searchWhere.AND || []),
+        {
+          OR: [
+            { lastMessageAt: { lt: t } },
+            { lastMessageAt: t, id: { lt: searchCursor.id } },
+            { lastMessageAt: null, id: { lt: searchCursor.id } },
+          ],
+        },
+      ];
+    } else if (searchCursor?.id) {
+      searchWhere.AND = [...(searchWhere.AND || []), { id: { lt: searchCursor.id } }];
+    }
+    const sessions = await prisma.chatSession.findMany({
+      where: searchWhere,
+      include: { ChatMessage: { orderBy: [{ messageNumber: 'desc' }], take: 1 } },
+      orderBy: [{ lastMessageAt: 'desc' }, { id: 'desc' }],
+      take: searchLimit + 1,
+    });
+    const searchHasMore = sessions.length > searchLimit;
+    const searchPage = searchHasMore ? sessions.slice(0, searchLimit) : sessions;
+    const results = searchPage.map((s: any) => {
+      const projection = buildChatSessionProjection(s);
+      return { ...projection, source: 'keyword', relevance: 0.5 };
+    });
+    const searchLast = searchPage[searchPage.length - 1];
+    res.status(200).send({
+      results,
+      hasMore: searchHasMore,
+      nextCursor:
+        searchHasMore && searchLast
+          ? encodeHistoryCursor((searchLast as any).lastMessageAt ? new Date((searchLast as any).lastMessageAt).toISOString() : null, searchLast.id)
+          : null,
+    });
 
   } catch (error) {
     res.status(500).send({ message: 'Internal server error' });
@@ -10722,6 +11052,58 @@ router.post('/tts', schoolAuthMiddleware, ttsLimiter, async (req: AuthedRequest,
   } catch (error: any) {
     logger.error({ error: String(error), userId: req.user?.id }, '[TTS BACKEND] Error in TTS endpoint');
     res.status(500).send({ message: 'Failed to generate speech', error: error.message });
+  }
+});
+
+// STREAM-13 — canonical provider playback endpoint (additive).
+// POST /media/resources/:resourceId/playback { mode, territory }
+// Server flow: schoolAuth -> verified school -> canonical MediaResource ->
+// canonical learner grade -> resolveMediaExternalPolicy -> resolveMediaPlayback.
+import { resolveMediaPlayback } from '../services/mediaPlaybackOrchestrationService';
+import { mediaProviderRegistry } from '../services/mediaProviderPort';
+import { ensureMediaProvidersRegistered } from '../services/mediaProviderBootstrap';
+import { resolveCanonicalTargetLearner } from '../services/mediaTeacherRecommendationAuthority';
+
+router.post('/media/resources/:resourceId/playback', schoolAuthMiddleware, async (req: AuthedRequest, res: Response) => {
+  try {
+    ensureMediaProvidersRegistered(mediaProviderRegistry);
+    const resourceId = safeString((req.params as Record<string, unknown>)?.resourceId).trim();
+    const modeRaw = safeString((req.body as Record<string, unknown>)?.mode).trim().toUpperCase();
+    const territory = safeString((req.body as Record<string, unknown>)?.territory).trim().toUpperCase() || null;
+    if (!resourceId) return res.status(400).send({ message: 'resourceId is required.' });
+    if (modeRaw !== 'EMBED' && modeRaw !== 'STREAM') {
+      return res.status(400).send({ message: 'mode must be EMBED or STREAM.' });
+    }
+    const schoolId = safeString(req.user?.schoolId ?? (req as unknown as Record<string, unknown>)?.schoolId) || null;
+    if (!schoolId || !req.user?.id) return res.status(401).send({ message: 'Verified school context is required.' });
+    const resource = await getMediaResourceById(resourceId).catch(() => null);
+    if (!resource) return res.status(404).send({ message: 'Media resource was not found.' });
+    const metadata =
+      resource.metadata && typeof resource.metadata === 'object'
+        ? (resource.metadata as Record<string, unknown>)
+        : {};
+    const learnerGrade = await resolveCanonicalTargetLearner(safeString(req.user.id))
+      .then((learner) => (learner && schoolId && learner.schoolId === schoolId ? learner.grade ?? null : null))
+      .catch(() => null);
+    const policy = await resolveMediaExternalPolicy(
+      { resourceId, learner: { grade: learnerGrade }, resource: { grades: extractResourceGrades(metadata) } },
+      prismaMediaClassificationStore,
+    ).catch(() => null);
+    if (!policy) return res.status(403).send({ message: 'Playback is blocked by media policy.' });
+    const resolution = await resolveMediaPlayback(
+      { resourceId, mode: modeRaw as 'EMBED' | 'STREAM', territory, schoolId, externalPolicy: policy },
+      { resourceReader: { getMediaResourceById }, eligibilityStore: prismaMediaEligibilityStore, registry: mediaProviderRegistry },
+    );
+    if (resolution.status === 'READY') return res.status(200).send(resolution);
+    if (resolution.status === 'BLOCKED') {
+      if (resolution.reasonCodes.includes('RESOURCE_NOT_FOUND')) {
+        return res.status(404).send(resolution);
+      }
+      return res.status(403).send(resolution);
+    }
+    return res.status(502).send(resolution);
+  } catch {
+    return res.status(500).send({ message: 'Playback resolution failed.' });
   }
 });
 
