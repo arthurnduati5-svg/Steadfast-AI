@@ -10,6 +10,7 @@ import {
   type OpenAiPreviewAdmission,
 } from './providers/openAiModelAdapter';
 import {
+  OPENAI_PREVIEW_REASONING_EFFORT,
   parseQualifiedProviderPreviewReport,
   type ProviderQualificationBundle,
 } from './providerPreviewQualificationContracts';
@@ -81,6 +82,7 @@ function readPreviewAdmission(
           totalDeadlineMs: 10000,
           retryPolicyVersion: 'no-transport-retry-v1',
           toolsEnabled: false,
+          reasoningEffort: OPENAI_PREVIEW_REASONING_EFFORT,
           qualificationCorpusVersion: 'pq-corpus-v1',
           capabilityScopes: report ? [...report.bundle.capabilityScopes] : [],
         } satisfies Omit<ProviderQualificationBundle, 'bundleHash' | 'qualifiedAt'>

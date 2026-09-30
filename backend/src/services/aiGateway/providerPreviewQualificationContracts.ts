@@ -29,6 +29,16 @@ export type ActivationEligibilityStatus = 'PREVIEW_ELIGIBLE' | 'BLOCKED';
 
 export type ActiveTrafficState = 'DISABLED' | 'PREVIEW_ENABLED';
 
+export type OpenAiReasoningEffort =
+  | 'none'
+  | 'low'
+  | 'medium'
+  | 'high'
+  | 'xhigh'
+  | 'max';
+
+export const OPENAI_PREVIEW_REASONING_EFFORT: OpenAiReasoningEffort = 'low';
+
 export interface ProviderQualificationBundle {
   provider: 'openai';
   requestedModelId: string;
@@ -42,6 +52,7 @@ export interface ProviderQualificationBundle {
   totalDeadlineMs: number;
   retryPolicyVersion: string;
   toolsEnabled: false;
+  reasoningEffort: OpenAiReasoningEffort;
   qualificationCorpusVersion: string;
   capabilityScopes: string[];
   qualifiedAt?: string;
@@ -61,6 +72,7 @@ const MATERIAL_BUNDLE_FIELDS: Array<keyof ProviderQualificationBundle> = [
   'totalDeadlineMs',
   'retryPolicyVersion',
   'toolsEnabled',
+  'reasoningEffort',
   'qualificationCorpusVersion',
   'capabilityScopes',
 ];
@@ -220,6 +232,17 @@ function isStringArray(value: unknown, nonEmptyElements: boolean): value is stri
   return true;
 }
 
+function isOpenAiReasoningEffort(value: unknown): value is OpenAiReasoningEffort {
+  return (
+    value === 'none' ||
+    value === 'low' ||
+    value === 'medium' ||
+    value === 'high' ||
+    value === 'xhigh' ||
+    value === 'max'
+  );
+}
+
 function isValidQualificationBundle(bundle: unknown): bundle is ProviderQualificationBundle {
   if (!isRecord(bundle)) return false;
   if (bundle['provider'] !== 'openai') return false;
@@ -235,6 +258,7 @@ function isValidQualificationBundle(bundle: unknown): bundle is ProviderQualific
   if (!isFinitePositiveNumber(bundle['totalDeadlineMs'])) return false;
   if (!isNonEmptyString(bundle['retryPolicyVersion'])) return false;
   if (bundle['toolsEnabled'] !== false) return false;
+  if (!isOpenAiReasoningEffort(bundle['reasoningEffort'])) return false;
   if (!isNonEmptyString(bundle['qualificationCorpusVersion'])) return false;
   if (!isStringArray(bundle['capabilityScopes'], true)) return false;
   if (!isNonEmptyString(bundle['qualifiedAt'])) return false;

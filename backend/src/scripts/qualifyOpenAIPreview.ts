@@ -8,6 +8,7 @@
 import { OpenAiModelAdapter, OPENAI_ADAPTER_IDENTITY } from '../services/aiGateway/providers/openAiModelAdapter';
 import {
   computeBundleHash,
+  OPENAI_PREVIEW_REASONING_EFFORT,
   type ProviderQualificationBundle,
   type ProviderQualificationCaseResult,
   type ProviderQualificationReport,
@@ -105,6 +106,7 @@ async function main(): Promise<void> {
     totalDeadlineMs: TOTAL_DEADLINE_MS,
     retryPolicyVersion: RETRY_POLICY_VERSION,
     toolsEnabled: false as const,
+    reasoningEffort: OPENAI_PREVIEW_REASONING_EFFORT,
     qualificationCorpusVersion: QUALIFICATION_CORPUS_VERSION,
     capabilityScopes: QUALIFICATION_CASES.map((c) => c.capabilityScope).filter((v, i, a) => a.indexOf(v) === i),
   };

@@ -40,6 +40,7 @@ import {
   computeBundleHash,
   evaluatePreviewActivation,
   isQualifiedBundleValid,
+  OPENAI_PREVIEW_REASONING_EFFORT,
   parseQualifiedProviderPreviewReport,
   type ProviderQualificationBundle,
   type ProviderQualificationReport,
@@ -108,6 +109,7 @@ function makeBundle(overrides: Partial<ProviderQualificationBundle> = {}): Provi
     totalDeadlineMs: 10000,
     retryPolicyVersion: 'no-transport-retry-v1',
     toolsEnabled: false as const,
+    reasoningEffort: OPENAI_PREVIEW_REASONING_EFFORT,
     qualificationCorpusVersion: 'pq-corpus-v1',
     capabilityScopes: ['text.general_tutoring.en'],
   };
@@ -227,6 +229,7 @@ describe('AI-05 provider preview — admission gates', () => {
     totalDeadlineMs: 10000,
     retryPolicyVersion: 'no-transport-retry-v1',
     toolsEnabled: false as const,
+    reasoningEffort: OPENAI_PREVIEW_REASONING_EFFORT,
     qualificationCorpusVersion: 'pq-corpus-v1',
     capabilityScopes: ['text.general_tutoring.en'],
   };
@@ -290,6 +293,7 @@ describe('AI-05 provider preview — exact-bundle invalidation', () => {
     totalDeadlineMs: 10000,
     retryPolicyVersion: 'no-transport-retry-v1',
     toolsEnabled: false as const,
+    reasoningEffort: OPENAI_PREVIEW_REASONING_EFFORT,
     qualificationCorpusVersion: 'pq-corpus-v1',
     capabilityScopes: ['text.general_tutoring.en'],
   };
@@ -317,10 +321,22 @@ describe('AI-05 provider preview — exact-bundle invalidation', () => {
     expect(isQualifiedBundleValid(qualified, changed)).toBe(false);
   });
 
-  it('T11: stale adapter identity (v1) → qualification invalid against v2 runtime', () => {
+  it('T11: stale adapter identity (v1) → qualification invalid against v3 runtime', () => {
     const qualified = makeBundle({ adapterIdentity: 'openai-model-adapter-v1' });
-    expect(OPENAI_ADAPTER_IDENTITY).toBe('openai-model-adapter-v2');
+    expect(OPENAI_ADAPTER_IDENTITY).toBe('openai-model-adapter-v3');
     expect(isQualifiedBundleValid(qualified, activeBundle)).toBe(false);
+  });
+
+  it('T11b: reasoning effort change invalidates qualification', () => {
+    const qualified = makeBundle({ reasoningEffort: 'low' });
+    const changed = { ...activeBundle, reasoningEffort: 'medium' as const };
+    expect(isQualifiedBundleValid(qualified, changed)).toBe(false);
+    const gate = evaluatePreviewActivation(
+      { previewEnabled: true, previewSchoolId: 's1', previewModelId: TEST_MODEL_ID, emergencyDisabled: false, qualifiedBundle: qualified },
+      { authenticatedSchoolId: 's1', activeBundle: changed, capabilityScope: 'text.general_tutoring.en', apiKeyPresent: true },
+    );
+    expect(gate.state).toBe('REQUALIFICATION_REQUIRED');
+    expect(gate.allowed).toBe(false);
   });
 });
 
@@ -444,6 +460,7 @@ describe('AI-05R convergence — Responses execution proof', () => {
       input: TEST_PROMPT,
       maxOutputTokens: 5000,
       timeoutMs: 7000,
+      reasoningEffort: OPENAI_PREVIEW_REASONING_EFFORT,
     });
     expect(create).toHaveBeenCalledTimes(1);
     const [body, opts] = create.mock.calls[0] as [Record<string, unknown>, { signal?: AbortSignal }];
@@ -451,6 +468,8 @@ describe('AI-05R convergence — Responses execution proof', () => {
     expect(body['max_output_tokens']).toBeLessThanOrEqual(640);
     expect(body['store']).toBe(false);
     expect('tools' in body).toBe(false);
+    expect(body['reasoning']).toEqual({ effort: 'low' });
+    expect('reasoning_effort' in body).toBe(false);
     expect(opts.signal).toBeInstanceOf(AbortSignal);
     expect(out.text).toBe('Guided response.');
     expect(out.usage).toMatchObject({ inputTokens: 12, outputTokens: 34, totalTokens: 46 });
@@ -458,10 +477,11 @@ describe('AI-05R convergence — Responses execution proof', () => {
     expect(out.providerReportedModelId).toBe(TEST_MODEL_ID);
 
     // Pure body builder enforces the same law deterministically.
-    expect(buildResponsesCreateParams({ modelId: TEST_MODEL_ID, inputText: TEST_PROMPT, maxOutputTokens: 9999 })).toMatchObject({
+    expect(buildResponsesCreateParams({ modelId: TEST_MODEL_ID, inputText: TEST_PROMPT, maxOutputTokens: 9999, reasoningEffort: OPENAI_PREVIEW_REASONING_EFFORT })).toMatchObject({
       model: TEST_MODEL_ID,
       max_output_tokens: 640,
       store: false,
+      reasoning: { effort: 'low' },
     });
   });
 
@@ -479,6 +499,7 @@ describe('AI-05R convergence — Responses execution proof', () => {
     expect(execute).toHaveBeenCalledTimes(1);
     expect(execute.mock.calls[0][0].maxOutputTokens).toBeLessThanOrEqual(640);
     expect(execute.mock.calls[0][0].timeoutMs).toBeLessThanOrEqual(7000);
+    expect(execute.mock.calls[0][0].reasoningEffort).toBe('low');
     expect(execute.mock.calls[0][0].abortSignal).toBeInstanceOf(AbortSignal);
   });
 
@@ -707,6 +728,18 @@ describe('AI-INTELLIGENCE-05R.1 — fail-closed admission hardening', () => {
       {
         label: 'bundle.maxOutputTokens = string',
         mutate: (r) => { (r['bundle'] as Record<string, unknown>)['maxOutputTokens'] = '640'; },
+      },
+      {
+        label: 'bundle.reasoningEffort missing',
+        mutate: (r) => { delete (r['bundle'] as Record<string, unknown>)['reasoningEffort']; },
+      },
+      {
+        label: "bundle.reasoningEffort = 'minimal'",
+        mutate: (r) => { (r['bundle'] as Record<string, unknown>)['reasoningEffort'] = 'minimal'; },
+      },
+      {
+        label: 'bundle.reasoningEffort = 123',
+        mutate: (r) => { (r['bundle'] as Record<string, unknown>)['reasoningEffort'] = 123; },
       },
     ];
     let rejected = 0;

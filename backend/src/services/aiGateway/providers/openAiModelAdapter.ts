@@ -17,6 +17,7 @@ import type {
 import {
   evaluatePreviewActivation,
   isQualificationReportPassing,
+  OPENAI_PREVIEW_REASONING_EFFORT,
   type ProviderQualificationBundle,
   type ProviderQualificationReport,
 } from '../providerPreviewQualificationContracts';
@@ -47,7 +48,7 @@ import {
 
 export const OPENAI_PREVIEW_PROVIDER_ID = 'openai-preview';
 
-export const OPENAI_ADAPTER_IDENTITY = 'openai-model-adapter-v2';
+export const OPENAI_ADAPTER_IDENTITY = 'openai-model-adapter-v3';
 
 /** Canonical provider failure classes (AI-05 §24). */
 export type CanonicalProviderErrorClass =
@@ -357,6 +358,7 @@ export class OpenAiModelAdapter implements ModelProviderAdapter {
         input: input.prompt,
         maxOutputTokens,
         timeoutMs,
+        reasoningEffort: OPENAI_PREVIEW_REASONING_EFFORT,
         abortSignal: controller.signal,
       });
 

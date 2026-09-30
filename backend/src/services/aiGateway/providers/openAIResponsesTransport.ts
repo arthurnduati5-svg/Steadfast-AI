@@ -1,4 +1,6 @@
 import OpenAI from 'openai';
+import type { OpenAiReasoningEffort } from '../providerPreviewQualificationContracts';
+import { OPENAI_PREVIEW_REASONING_EFFORT } from '../providerPreviewQualificationContracts';
 
 // ── AI-INTELLIGENCE-05R: canonical OpenAI Responses transport ──
 // SINGLE OpenAI network owner for the canonical AI-05 preview path.
@@ -15,6 +17,7 @@ export interface OpenAIResponsesTransportRequest {
   input: string;
   maxOutputTokens: number;
   timeoutMs: number;
+  reasoningEffort: OpenAiReasoningEffort;
   abortSignal?: AbortSignal;
 }
 
@@ -82,17 +85,20 @@ export function buildResponsesCreateParams(input: {
   modelId: string;
   inputText: string;
   maxOutputTokens: number;
+  reasoningEffort: OpenAiReasoningEffort;
 }): {
   model: string;
   input: string;
   max_output_tokens: number;
   store: false;
+  reasoning: { effort: OpenAiReasoningEffort };
 } {
   return {
     model: input.modelId,
     input: input.inputText,
     max_output_tokens: Math.min(input.maxOutputTokens, 640),
     store: false,
+    reasoning: { effort: input.reasoningEffort },
   };
 }
 
@@ -153,6 +159,7 @@ export class OpenAIResponsesTransport {
         modelId: request.modelId,
         inputText: request.input,
         maxOutputTokens: request.maxOutputTokens,
+        reasoningEffort: request.reasoningEffort,
       });
       const response = await client.responses.create(body, { signal: controller.signal });
       const usage = response.usage
@@ -231,6 +238,7 @@ export function createFetchResponsesTransport(input: {
           input: request.prompt,
           maxOutputTokens: request.maxOutputTokens,
           timeoutMs: request.timeoutMs ?? 30000,
+          reasoningEffort: OPENAI_PREVIEW_REASONING_EFFORT,
           abortSignal: request.signal,
         });
         if (!out.text) {
