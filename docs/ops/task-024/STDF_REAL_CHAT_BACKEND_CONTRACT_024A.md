@@ -3,7 +3,7 @@
 Task: STDF-REAL-CHAT-BACKEND-CONTRACT-024A
 Status: BACKEND CONTRACT FROZEN. Implement 024B against this document only.
 
-- BACKEND COMMIT: `PENDING_STAMP` (stamped in the follow-up docs commit; verify with `git log --oneline -3`)
+- BACKEND COMMIT: `d2460f144085273b05a2ed1069edfd3706bdd59d` (`fix(chat): harden durable conversation contract`, on `main`)
 - Branch at implementation time: `main` (worktree was dirty; work applied in place, task hunks only)
 - MIGRATIONS:
   - `backend/prisma/migrations/20260925120000_chat_durability_v1` (pre-existing: ChatTurn table, allocator columns)
