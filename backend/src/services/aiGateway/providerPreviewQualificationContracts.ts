@@ -60,7 +60,14 @@ export interface ProviderQualificationBundle {
 }
 
 /** Material fields: changing ANY of these invalidates qualification. */
-const MATERIAL_BUNDLE_FIELDS: Array<keyof ProviderQualificationBundle> = [
+type MaterialBundleField =
+  keyof Omit<
+    ProviderQualificationBundle,
+    'bundleHash' | 'qualifiedAt'
+  >;
+
+const MATERIAL_BUNDLE_FIELDS:
+  readonly MaterialBundleField[] = [
   'provider',
   'requestedModelId',
   'runtimeCommit',

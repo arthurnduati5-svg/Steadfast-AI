@@ -67,12 +67,8 @@ export interface TutorSpecialistRoutingInput {
     warnings?: string[];
     actionHint?: string;
   } | null;
-  /** Prepared bounded video context already executed by Live Chat (R8). */
-  preparedVideoContext?: {
-    status?: string;
-    recommendationCount?: number;
-    summary?: string;
-  } | null;
+  /** Prepared bounded video context already executed by Live Chat (R8 + AI-STREAM-2 R15). */
+  preparedVideoContext?: import('./tutorSpecialistContracts').PreparedVideoTutorContext | null;
   /** Deen-sensitive turn: generic web research must not bypass approved-source rules (R10). */
   deenSourceSensitive?: boolean;
   /**
@@ -340,8 +336,78 @@ function runArtifactSpecialist(input: TutorSpecialistRoutingInput): TutorSpecial
 
 function runVideoSpecialist(input: TutorSpecialistRoutingInput): TutorSpecialistResult {
   const prepared = input.preparedVideoContext;
+  const resource = prepared?.resourceContext ?? null;
 
-  if (!prepared || prepared.recommendationCount === 0) {
+  // AI-STREAM-2 R19/R20: resource-aware video specialist. Semantic context is
+  // subordinate supporting evidence only — never curriculum, rights, safety,
+  // mastery, or source authority. Existing recommendation behavior preserved.
+  if (resource && resource.status === 'semantic_ready' && resource.semantic) {
+    const semantic = resource.semantic;
+    const directives: string[] = [
+      'RESOURCE-AWARE VIDEO SPECIALIST: Use only the bounded governed semantic evidence supplied for the active resource.',
+      'Treat semantic classifications as ADVISORY teaching context, not curriculum, rights, safety, mastery, or source authority.',
+      "Use the resource to make ONE useful Socratic instructional move relevant to the learner's question.",
+      'Do not dump the whole video summary.',
+      'Do not fabricate video contents, timestamps, titles, channels, URLs or claims outside supplied context.',
+      'Never bypass final-answer / integrity / Deen / safeguarding boundaries.',
+    ];
+    const evidenceSections: string[] = [];
+    if (semantic.summary) evidenceSections.push(`Resource summary: ${semantic.summary}`);
+    for (const point of (semantic.keyPoints || []).slice(0, 5)) {
+      evidenceSections.push(`Key point: ${point}`);
+    }
+    if ((semantic.concepts || []).length > 0) {
+      evidenceSections.push(`Concepts: ${semantic.concepts.slice(0, 4).join('; ')}`);
+    }
+    if ((semantic.skills || []).length > 0) {
+      evidenceSections.push(`Skills: ${semantic.skills.slice(0, 4).join('; ')}`);
+    }
+    if ((semantic.prerequisites || []).length > 0) {
+      evidenceSections.push(`Prerequisite signals: ${semantic.prerequisites.slice(0, 4).join('; ')}`);
+    }
+    if ((semantic.misconceptionTargets || []).length > 0) {
+      evidenceSections.push(`Misconception targets: ${semantic.misconceptionTargets.slice(0, 4).join('; ')}`);
+    }
+    return boundTutorSpecialistResult({
+      kind: 'video',
+      status: 'ready',
+      promptDirectives: directives,
+      evidenceSections,
+      verifiedSources: [],
+      warnings: (semantic.warnings || []).slice(0, 4),
+      metadata: {
+        recommendationCount: prepared?.recommendationCount ?? 0,
+        videoStatus: prepared?.status || 'resource_grounded',
+        semanticContextStatus: 'semantic_ready',
+        transcriptUsed: semantic.transcriptUsed,
+      },
+    });
+  }
+
+  // Safe fallback: existing session summary usable, semantic grounding absent.
+  if (resource && resource.status === 'safe_session_fallback' && resource.fallbackSummary) {
+    const evidence = [resource.fallbackSummary];
+    if (prepared?.summary) evidence.push(prepared.summary);
+    return boundTutorSpecialistResult({
+      kind: 'video',
+      status: 'degraded',
+      promptDirectives: [
+        'VIDEO SPECIALIST: semantic resource grounding unavailable — use only the safe session summary below; do not invent resource-specific content.',
+        'Do not fabricate video titles, channels, transcripts, or URLs.',
+      ],
+      evidenceSections: evidence,
+      verifiedSources: [],
+      warnings: ['Semantic resource grounding unavailable; ordinary Socratic tutoring continues.'],
+      metadata: {
+        recommendationCount: prepared?.recommendationCount ?? 0,
+        videoStatus: prepared?.status || 'recommended',
+        semanticContextStatus: 'safe_session_fallback',
+        degradedReasonCode: resource.reasonCode || 'semantic_unavailable',
+      },
+    });
+  }
+
+  if (!prepared || (prepared.recommendationCount === 0 && !resource)) {
     return {
       kind: 'video',
       status: 'degraded',
@@ -363,10 +429,10 @@ function runVideoSpecialist(input: TutorSpecialistRoutingInput): TutorSpecialist
     evidenceSections: prepared.summary ? [prepared.summary] : [],
     verifiedSources: [],
     warnings: [],
-    metadata: {
-      recommendationCount: prepared.recommendationCount,
-      videoStatus: prepared.status || 'recommended',
-    },
+      metadata: {
+        recommendationCount: prepared.recommendationCount ?? 0,
+        videoStatus: prepared.status || 'recommended',
+      },
   });
 }
 

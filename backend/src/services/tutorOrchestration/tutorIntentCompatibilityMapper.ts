@@ -47,6 +47,13 @@ export function mapTutorIntentResolutionToTurnIntent(
     return 'serious_safety_risk';
   }
 
+  // Structured canonical semantics → deterministic legacy intent: a task
+  // plan that expects the learner to ask for a hint first maps to the
+  // legacy hint pedagogical path. No raw-text inference.
+  if (resolution.task?.outputExpectation === 'hint_first') {
+    return 'ask_for_hint';
+  }
+
   switch (resolution.primaryIntent) {
     case 'check_answer':
     case 'artifact_question_help':
@@ -61,9 +68,6 @@ export function mapTutorIntentResolutionToTurnIntent(
     case 'revise':
     case 'study_plan':
       return 'ask_for_revision';
-
-    case 'hint':
-      return 'ask_for_hint';
 
     case 'explain':
       return 'ask_concept';

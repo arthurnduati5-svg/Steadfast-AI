@@ -561,6 +561,17 @@ export async function resolveTutorContext(
             ? 'partial'
             : 'no_data_yet',
       activeVideoId: state.activeVideoId || videoLearningContext?.activeVideoSession?.sessionVideoId || null,
+      // AI-STREAM-2 R4: single-resolution bounded active-video reference.
+      // Sourced ONLY from the already-resolved videoLearningContext above —
+      // no second VideoLearningSession state read. sessionVideoId is NOT a
+      // MediaAsset.id; mapping happens later via deterministic resolution.
+      activeVideoRef: videoLearningContext?.activeVideoSession
+        ? {
+            sessionVideoId: videoLearningContext.activeVideoSession.sessionVideoId,
+            provider: videoLearningContext.activeVideoSession.provider ?? null,
+            providerVideoId: videoLearningContext.activeVideoSession.providerVideoId ?? null,
+          }
+        : null,
       transcriptBlocks: [],
       recommendedVideoIds: videoLearningContext?.recentVideoSessions.map((s) => s.sessionVideoId) || [],
       notes: videoNotes,

@@ -50,6 +50,53 @@ export interface TutorSpecialistResult {
   metadata: Record<string, string | number | boolean>;
 }
 
+// ── AI-STREAM-2: bounded resource-aware video context ──
+
+export interface ActiveVideoRef {
+  sessionVideoId: string;
+  provider: string | null;
+  providerVideoId: string | null;
+}
+
+export interface PreparedMediaResourceTutorSemantic {
+  proposalVersion: string;
+  analysisBasis: 'METADATA_ONLY' | 'METADATA_AND_AUTHORIZED_TRANSCRIPT';
+  transcriptUsed: boolean;
+  summary: string;
+  keyPoints: string[];
+  subjects: string[];
+  topics: string[];
+  concepts: string[];
+  skills: string[];
+  prerequisites: string[];
+  misconceptionTargets: string[];
+  pedagogicalRoles: string[];
+  difficulty?: string | null;
+  confidence: number;
+  warnings: string[];
+}
+
+export interface PreparedMediaResourceTutorContext {
+  status: 'semantic_ready' | 'safe_session_fallback' | 'blocked' | 'unavailable';
+  mediaAssetId?: string;
+  semantic?: PreparedMediaResourceTutorSemantic;
+  fallbackSummary?: string | null;
+  reasonCode?: string;
+}
+
+/**
+ * AI-STREAM-2 R15 — extended prepared video context. Existing
+ * recommendation behavior (status/recommendationCount/summary) remains
+ * compatible; resourceContext is additive supporting context only.
+ */
+export interface PreparedVideoTutorContext {
+  status?: string;
+  recommendationCount?: number;
+  summary?: string;
+  activeVideoRef?: ActiveVideoRef | null;
+  resourceContext?: PreparedMediaResourceTutorContext | null;
+}
+
 const BOUNDED_STRING = (value: unknown, max: number): string =>
   typeof value === 'string' ? value.slice(0, max) : '';
 

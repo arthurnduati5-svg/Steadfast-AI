@@ -908,6 +908,30 @@ export class LiveChatPipelineAdapter {
       // passed through so the backend-bounded context reaches generation.
       // R1: the already-resolved rich intent and source freshness decision are
       // passed through — no second DB/context lookup.
+      // AI-STREAM-2 R17: reuse the already-resolved active video reference.
+      // Bounded PreparedVideoTutorContext only — never raw semantic
+      // proposals, never raw transcript, never a second prompt composer.
+      const tutorVideoContext = (prepared.executionContext.tutorContext as unknown as {
+        videoContext?: {
+          status?: string;
+          activeVideoRef?: { sessionVideoId: string; provider: string | null; providerVideoId: string | null } | null;
+          notes?: string[];
+        };
+      } | null | undefined)?.videoContext;
+      const boundedVideoRef = tutorVideoContext?.activeVideoRef;
+      const preparedVideoContextForTurn = boundedVideoRef && boundedVideoRef.sessionVideoId
+        ? {
+            status: typeof tutorVideoContext?.status === 'string' ? tutorVideoContext.status : undefined,
+            activeVideoRef: {
+              sessionVideoId: boundedVideoRef.sessionVideoId,
+              provider: boundedVideoRef.provider ?? null,
+              providerVideoId: boundedVideoRef.providerVideoId ?? null,
+            },
+            summary: Array.isArray(tutorVideoContext?.notes) && tutorVideoContext.notes.length > 0
+              ? String(tutorVideoContext.notes[0]).slice(0, 700)
+              : undefined,
+          }
+        : undefined;
       const orchestrationResult = await orchestrateTutorTurn({
         requestId: prepared.executionContext.executionId,
         schoolId: input.identity.schoolId,
@@ -918,9 +942,10 @@ export class LiveChatPipelineAdapter {
         learnerAge: undefined,
         preferredLanguage: (input.identity as any).preferredLanguage,
         preparedPromptPacket: prepared.promptPacket,
-        resolvedIntent: prepared.executionContext.intentResolution,
+        resolvedIntent: prepared.executionContext.intentResolution ?? undefined,
         sourceFreshnessDecision:
           (prepared.executionContext as any)._sourceFreshnessDecision || undefined,
+        preparedVideoContext: preparedVideoContextForTurn,
         clientContext: {
           displayMode: 'widget',
           subjectHint: input.request.activeSubject || undefined,

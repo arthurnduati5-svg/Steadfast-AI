@@ -155,6 +155,17 @@ export interface TutorTurnContext {
   videoContext: {
     status: ContextStatus;
     activeVideoId?: string | null;
+    /**
+     * AI-STREAM-2 R4 — bounded canonical active-video reference propagated
+     * from the already-resolved VideoLearningSession. One context resolution
+     * remains enough; no second session read is performed later to recover
+     * these fields. sessionVideoId is NEVER assumed to equal MediaAsset.id.
+     */
+    activeVideoRef?: {
+      sessionVideoId: string;
+      provider: string | null;
+      providerVideoId: string | null;
+    } | null;
     transcriptBlocks: unknown[];
     recommendedVideoIds: string[];
     notes: string[];

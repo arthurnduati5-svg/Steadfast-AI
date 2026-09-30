@@ -419,6 +419,50 @@ export async function getMediaAssetById(args: { userId: string; assetId: string 
   return rows[0] ? mapMediaAssetRow(rows[0]) : null;
 }
 
+export type FindMediaAssetByVideoReferenceOutcome =
+  | { outcome: 'resolved'; asset: MediaAsset }
+  | { outcome: 'not_found'; reasonCode: string }
+  | { outcome: 'ambiguous'; reasonCode: string };
+
+/**
+ * AI-STREAM-2 R5(B) — narrow read-only canonical lookup from an active video
+ * reference (provider + provider video ID) to the learner-owned MediaAsset.
+ * Exact user ownership, exact normalized provider match, exact provider video
+ * ID match, LIMIT 2 for ambiguity detection. Never fuzzy-matches title,
+ * never matches by URL substring, never chooses "most recent", never uses a
+ * learner-supplied asset ID. Added only because the canonical registry
+ * exposes no exact provider+providerVideoId read capability.
+ */
+export async function findMediaAssetByVideoReference(args: {
+  userId: string;
+  videoProvider: string;
+  videoId: string;
+}): Promise<FindMediaAssetByVideoReferenceOutcome> {
+  await ensureMediaAssetTables();
+  const userId = safeString(args.userId).trim();
+  const provider = safeString(args.videoProvider).trim().toLowerCase();
+  const videoId = safeString(args.videoId).trim();
+  if (!userId || !provider || !videoId) {
+    return { outcome: 'not_found', reasonCode: 'RESOURCE_NOT_FOUND' };
+  }
+  const rows = await prisma.$queryRawUnsafe<MediaAssetRow[]>(
+    `
+      SELECT *
+      FROM "MediaAsset"
+      WHERE "userId" = $1
+        AND "videoId" = $2
+        AND lower("metadata"->>'videoProvider') = $3
+      LIMIT 2
+    `,
+    userId,
+    videoId,
+    provider
+  );
+  if (rows.length === 0) return { outcome: 'not_found', reasonCode: 'RESOURCE_NOT_FOUND' };
+  if (rows.length > 1) return { outcome: 'ambiguous', reasonCode: 'RESOURCE_AMBIGUOUS' };
+  return { outcome: 'resolved', asset: mapMediaAssetRow(rows[0]) };
+}
+
 export async function findMediaAssetByDedupeKey(args: {
   userId: string;
   dedupeKey: string;

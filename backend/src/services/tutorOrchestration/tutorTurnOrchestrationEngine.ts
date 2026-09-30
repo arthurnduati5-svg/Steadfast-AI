@@ -30,6 +30,27 @@ import { validateOrchestrationOutput } from './tutorOrchestrationOutputValidator
 import { assembleTutorTurnResult } from './tutorTurnResultAssembler';
 import { runSpecialist } from './tutorSpecialistRuntime';
 import { mapTutorIntentResolutionToTurnIntent } from './tutorIntentCompatibilityMapper';
+import {
+  buildMediaResourceTutorTelemetry,
+  createProductionMediaResourceTutorDependencies,
+  prepareMediaResourceTutorContext,
+  shouldPrepareResourceContext,
+  type ActiveVideoRef as ResourceActiveVideoRef,
+  type CurriculumFamily as MediaResourceCurriculumFamily,
+} from './mediaResourceTutorContextService';
+import type { PreparedVideoTutorContext } from './tutorSpecialistContracts';
+
+/**
+ * AI-STREAM-2: map the already-resolved canonical curriculum track to the
+ * frozen CurriculumFamily without reclassification. Exact matches only;
+ * mixed/general/unknown resolve to null so enrichment uses safe fallback
+ * (never infer family from video title/tags/learner text/proposal).
+ */
+function mapCurriculumTrackToFamily(track: string | null | undefined): MediaResourceCurriculumFamily | null {
+  if (track === 'cambridge_academic') return 'cambridge_academic';
+  if (track === 'madrasa_deen') return 'madrasa_deen';
+  return null;
+}
 
 import { generateTutorMessage } from '../aiGateway/tutorMessageGenerationService';
 import { CurriculumEngine } from '../curriculumEngine';
@@ -159,6 +180,88 @@ export async function orchestrateTutorTurn(
       intent = mapTutorIntentResolutionToTurnIntent(input.resolvedIntent);
     }
 
+    // AI-STREAM-2 R16/R18: resource-aware video context preparation. Runs
+    // ONLY when canonical intent says this turn needs video context; all
+    // other turns perform zero media semantic work. Prepared BEFORE the
+    // single runSpecialist invocation; no second specialist call.
+    let preparedVideoContext: PreparedVideoTutorContext | null =
+      (input.preparedVideoContext as PreparedVideoTutorContext | null | undefined) ?? null;
+    if (shouldPrepareResourceContext(input.resolvedIntent as {
+      primaryIntent?: string | null;
+      task?: { taskKind?: string | null } | null;
+    } | null | undefined)) {
+      const incomingRef: ResourceActiveVideoRef | null = preparedVideoContext?.activeVideoRef ?? null;
+      if (incomingRef && incomingRef.sessionVideoId) {
+        const curriculumFamily = mapCurriculumTrackToFamily(curriculumPacket.curriculumTrack);
+        const fallbackSummary =
+          (preparedVideoContext?.summary ?? null) ||
+          (input.preparedPromptPacket?.allowedContext as { videoLearningContext?: { summary?: string } } | undefined)
+            ?.videoLearningContext?.summary ||
+          null;
+        try {
+          const schoolId = input.schoolId;
+          const studentId = input.tutorLearnerId;
+          const resourceContext = await prepareMediaResourceTutorContext({
+            schoolId,
+            studentId,
+            userId: input.tutorLearnerId,
+            activeVideoRef: {
+              sessionVideoId: incomingRef.sessionVideoId,
+              provider: incomingRef.provider ?? null,
+              providerVideoId: incomingRef.providerVideoId ?? null,
+            },
+            curriculumFamily,
+            curriculumVersionId: null,
+            fallbackSummary,
+            // Production authority: ONE canonical factory owns MediaAsset
+            // resolution, MediaResource identity, the single rights snapshot,
+            // canonical external policy, and governed enrichment. No null
+            // rights/policy adapters; enrichment reuses the same snapshot.
+            dependencies: createProductionMediaResourceTutorDependencies({
+              userId: input.tutorLearnerId,
+              schoolId: input.schoolId,
+              learnerGrade: input.learnerGrade ?? null,
+              curriculumVersionId: null,
+            }),
+          });
+          preparedVideoContext = {
+            ...(preparedVideoContext ?? {}),
+            activeVideoRef: {
+              sessionVideoId: incomingRef.sessionVideoId,
+              provider: incomingRef.provider ?? null,
+              providerVideoId: incomingRef.providerVideoId ?? null,
+            },
+            resourceContext,
+          };
+          try {
+            logger.info(
+              buildMediaResourceTutorTelemetry({
+                requestId,
+                mediaAssetId: resourceContext.mediaAssetId ?? null,
+                videoContextStatus: preparedVideoContext.status ?? 'unknown',
+                context: resourceContext,
+                cacheHit: false,
+                enrichmentAttempted: resourceContext.status === 'semantic_ready',
+              }),
+              'AI-STREAM-2 resource context prepared',
+            );
+          } catch {
+            // Telemetry never breaks the tutor turn.
+          }
+        } catch {
+          // R28K/L: semantic failure degrades; the tutor turn still proceeds.
+          preparedVideoContext = {
+            ...(preparedVideoContext ?? {}),
+            resourceContext: {
+              status: 'safe_session_fallback',
+              fallbackSummary,
+              reasonCode: 'ENRICHMENT_FAILED',
+            },
+          };
+        }
+      }
+    }
+
     // R3/R4: ONE deterministic specialist decision per turn (may be none).
     const specialistOutcome = await runSpecialist({
       requestId,
@@ -176,7 +279,7 @@ export async function orchestrateTutorTurn(
             actionHint?: string;
           };
         } | undefined)?.artifactReasoningEvidence ?? null,
-      preparedVideoContext: null,
+      preparedVideoContext,
       deenSourceSensitive: deenSensitive,
       // AI-INTELLIGENCE-03R R3: verified identity already supplied to the
       // canonical tutor runtime — threaded as authenticated seal context only.

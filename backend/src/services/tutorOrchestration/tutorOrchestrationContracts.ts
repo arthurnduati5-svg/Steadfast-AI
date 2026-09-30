@@ -59,6 +59,12 @@ export interface TutorTurnOrchestrationInput {
    * No second DB/context lookup is performed for it.
    */
   sourceFreshnessDecision?: SourceFreshnessDecision;
+  /**
+   * AI-STREAM-2 R17 — bounded prepared video context from Live Chat.
+   * Supporting context only; the canonical tutor turn remains the owner.
+   * Never raw semantic proposals; never raw transcript.
+   */
+  preparedVideoContext?: import('./tutorSpecialistContracts').PreparedVideoTutorContext | null;
   clientContext?: {
     displayMode?: 'widget' | 'fullscreen';
     activeSchoolPage?: string;
