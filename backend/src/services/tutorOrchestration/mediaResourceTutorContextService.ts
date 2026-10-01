@@ -27,6 +27,7 @@ import {
 import {
   resolveRegistryIdentityForLegacyAsset,
   buildCanonicalKey,
+  getMediaResourcesByCanonicalKeys,
   prismaMediaResourceStore,
   type MediaResource,
   type MediaResourceStore,
@@ -563,37 +564,83 @@ export function createProductionMediaResourceTutorDependencies(
       // never title, never URL substring).
       let resource: MediaResource | null = null;
       try {
-        const identity = resolveRegistryIdentityForLegacyAsset({
+        // Canonical candidate resolution: MediaAsset carries NO schoolId.
+        // At most TWO canonical candidates are derived — the base legacy
+        // identity (schoolId: null, preserving GLOBAL/USER law) and, only
+        // when the verified tutor request carries a school, one authorized
+        // verified-school candidate. Neither claims the MediaAsset itself
+        // owns that school identity.
+        const baseIdentity = resolveRegistryIdentityForLegacyAsset({
           userId,
           videoProvider: fullAsset.videoProvider ?? null,
           videoId: fullAsset.videoId ?? null,
           sourceUrl: fullAsset.sourceUrl ?? null,
           dedupeKey: fullAsset.dedupeKey ?? null,
+          schoolId: null,
           assetKind: fullAsset.assetKind ?? null,
         });
-        const canonicalKey = buildCanonicalKey({
-          scope: identity.scope,
-          provider: fullAsset.videoProvider ?? null,
-          providerResourceId: fullAsset.videoId ?? null,
-          sourceUrl: fullAsset.sourceUrl ?? null,
-          schoolId: null,
-          ownerUserId: identity.scope === 'USER' ? userId : null,
-          stableResourceKey: identity.stableResourceKey,
+        const candidateKeys: string[] = [];
+        try {
+          candidateKeys.push(
+            buildCanonicalKey({
+              scope: baseIdentity.scope,
+              provider: fullAsset.videoProvider ?? null,
+              providerResourceId: fullAsset.videoId ?? null,
+              sourceUrl: fullAsset.sourceUrl ?? null,
+              schoolId: null,
+              ownerUserId: baseIdentity.scope === 'USER' ? userId : null,
+              stableResourceKey: baseIdentity.stableResourceKey,
+            }),
+          );
+        } catch {
+          // Unbuildable base candidate: falls through to MISSING below.
+        }
+        if (schoolId) {
+          try {
+            const schoolIdentity = resolveRegistryIdentityForLegacyAsset({
+              userId,
+              videoProvider: fullAsset.videoProvider ?? null,
+              videoId: fullAsset.videoId ?? null,
+              sourceUrl: fullAsset.sourceUrl ?? null,
+              dedupeKey: fullAsset.dedupeKey ?? null,
+              schoolId,
+              assetKind: fullAsset.assetKind ?? null,
+            });
+            candidateKeys.push(
+              buildCanonicalKey({
+                scope: schoolIdentity.scope,
+                provider: fullAsset.videoProvider ?? null,
+                providerResourceId: fullAsset.videoId ?? null,
+                sourceUrl: fullAsset.sourceUrl ?? null,
+                schoolId: schoolIdentity.scope === 'SCHOOL' ? schoolId : null,
+                ownerUserId: schoolIdentity.scope === 'USER' ? userId : null,
+                stableResourceKey: schoolIdentity.stableResourceKey,
+              }),
+            );
+          } catch {
+            // Unbuildable school candidate: base candidate alone decides.
+          }
+        }
+        const dedupedKeys = [...new Set(candidateKeys.map((key) => clean(key)).filter(Boolean))];
+        if (dedupedKeys.length === 0) return { ok: false, code: 'CANONICAL_MEDIA_RESOURCE_MISSING' };
+        // ONE bounded registry read — no custom DB query.
+        const found = await getMediaResourcesByCanonicalKeys(dedupedKeys, resourceStore);
+        // Retain only resources whose canonical scope agrees with verified context.
+        const authorized = found.filter((candidate) => {
+          if (candidate.scope === 'GLOBAL') return true;
+          if (candidate.scope === 'SCHOOL') return clean(candidate.schoolId) === schoolId;
+          if (candidate.scope === 'USER') return clean(candidate.ownerUserId) === userId;
+          return false;
         });
-        resource = await resourceStore.findResourceByKey(canonicalKey);
+        if (authorized.length === 0) return { ok: false, code: 'CANONICAL_MEDIA_RESOURCE_MISSING' };
+        // Without an explicit canonical resource link, multiple valid
+        // identities are ambiguous: fail closed, zero enrichment calls.
+        if (authorized.length > 1) return { ok: false, code: 'CANONICAL_MEDIA_RESOURCE_AMBIGUOUS' };
+        resource = authorized[0] ?? null;
       } catch {
         return { ok: false, code: 'CANONICAL_MEDIA_RESOURCE_MISSING' };
       }
       if (!resource) return { ok: false, code: 'CANONICAL_MEDIA_RESOURCE_MISSING' };
-      // Tenant/resource scope check: GLOBAL proceeds; SCHOOL must match the
-      // verified school; USER must match the verified learner owner. MediaAsset
-      // ownership alone never authorizes the canonical resource.
-      if (resource.scope === 'SCHOOL' && clean(resource.schoolId) !== schoolId) {
-        return { ok: false, code: 'TENANT_SCOPE_MISMATCH' };
-      }
-      if (resource.scope === 'USER' && clean(resource.ownerUserId) !== userId) {
-        return { ok: false, code: 'TENANT_SCOPE_MISMATCH' };
-      }
       // ONE current authorization bundle: independent reads concurrently.
       const [exists, grants, availabilityState, policy] = await Promise.all([
         eligibilityStore.resourceExists(resource.id).catch(() => false),

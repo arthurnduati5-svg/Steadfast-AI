@@ -91,7 +91,9 @@ export async function acquireChatTurn(args: {
       }
     }
   } catch {
-    // Ledger table may not exist yet (migration pending): fail open to legacy path.
+    // Fail closed: on a ledger read error the unique(sessionId, clientTurnId)
+    // create below remains the single-flight guard (race re-reads the winner);
+    // no legacy bypass path exists.
   }
 
   try {
@@ -163,10 +165,193 @@ export async function failChatTurn(args: {
 }
 
 /**
- * Atomic message append (§16): serialize on the owned ChatSession row,
- * number from MAX(messageNumber) under the lock, insert, update projection
+ * Ownership-safe session turn claim (024A §7 companion + concurrency seal).
+ * Atomic compare-and-swap: exactly one UPDATE claims the session, guarded by
+ * a WHERE clause that only matches when activeTurnId IS NULL (free) or
+ * already equals this turn (idempotent retry). Two concurrent claimants can
+ * never both observe null and both succeed — the row write serializes them
+ * and only one UPDATE matches. Never overwrites another live turn.
+ * Fail-closed: any schema/storage error returns claimed=false (a backend
+ * running without the 024A migration is misconfigured and must fail safely).
+ */
+export async function claimSessionTurn(args: {
+  sessionId: string;
+  clientTurnId: string;
+}): Promise<{ claimed: boolean; owner: string | null }> {
+  try {
+    const res = await (prisma as any).chatSession.updateMany({
+      where: {
+        id: args.sessionId,
+        OR: [{ activeTurnId: null }, { activeTurnId: args.clientTurnId }],
+      },
+      data: { activeTurnId: args.clientTurnId },
+    });
+    if (Number(res?.count) === 1) {
+      return { claimed: true, owner: args.clientTurnId };
+    }
+    // CAS lost (or session missing): read the actual owner exactly once.
+    const current = await (prisma as any).chatSession
+      .findUnique({ where: { id: args.sessionId }, select: { id: true, activeTurnId: true } })
+      .catch(() => null);
+    if (!current) return { claimed: false, owner: null };
+    return { claimed: false, owner: (current as any).activeTurnId ?? null };
+  } catch {
+    // Fail closed: missing activeTurnId column (migration absent) or any
+    // storage error is NEVER claimed=true.
+    return { claimed: false, owner: null };
+  }
+}
+
+/**
+ * ONE durability barrier for turn completion (024A §7 + concurrency seal).
+ * Inside a single DB transaction:
+ * - confirm the turn still owns session.activeTurnId (strict equality);
+ * - confirm the ledger row exists and is still in_progress;
+ * - record assistantMessageId + response metadata, mark ledger completed;
+ * - clear ChatSession.activeTurnId.
+ * SSE `done` may be emitted ONLY after this resolves { ok: true }.
+ * Fail-closed: a missing activeTurnId column, a missing ledger row/table, or
+ * any ownership-clear failure resolves { ok: false } — never a successful
+ * completion. A backend running without the 024A migration is misconfigured
+ * and must fail safely.
+ */
+export async function finalizeChatTurn(args: {
+  sessionId: string;
+  clientTurnId: string;
+  userMessageId?: string | null;
+  assistantMessageId?: string | null;
+  responseMetadata?: unknown;
+}): Promise<{ ok: true } | { ok: false; code: string }> {
+  try {
+    const result = await (prisma as any).$transaction(async (tx: any) => {
+      let session: any = null;
+      try {
+        session = await tx.chatSession.findUnique({
+          where: { id: args.sessionId },
+          select: { id: true, activeTurnId: true },
+        });
+      } catch {
+        // Fail closed: activeTurnId unreadable (migration absent).
+        return { ok: false as boolean, code: 'SESSION_CLAIM_UNAVAILABLE' as string };
+      }
+      if (!session) return { ok: false as boolean, code: 'SESSION_NOT_FOUND' as string };
+      const current = (session as any).activeTurnId ?? null;
+      if (current !== args.clientTurnId) {
+        return { ok: false as boolean, code: 'TURN_OWNERSHIP_LOST' as string };
+      }
+      let ledger: any = null;
+      try {
+        ledger = await tx.chatTurnRequestRecord.findUnique({
+          where: { sessionId_clientTurnId: { sessionId: args.sessionId, clientTurnId: args.clientTurnId } },
+        });
+      } catch {
+        // Fail closed: ledger table unreadable (migration absent).
+        return { ok: false as boolean, code: 'TURN_LEDGER_UNAVAILABLE' as string };
+      }
+      if (!ledger) {
+        // Fail closed: no ledger row, no completion.
+        return { ok: false as boolean, code: 'TURN_LEDGER_MISSING' as string };
+      }
+      if (ledger.status !== 'in_progress') {
+        return { ok: false as boolean, code: 'TURN_NOT_IN_PROGRESS' as string };
+      }
+      await tx.chatTurnRequestRecord.update({
+        where: { sessionId_clientTurnId: { sessionId: args.sessionId, clientTurnId: args.clientTurnId } },
+        data: {
+          status: 'completed',
+          userMessageId: args.userMessageId || ledger.userMessageId || undefined,
+          assistantMessageId: args.assistantMessageId || undefined,
+          responseMetadata: (args.responseMetadata as any) ?? ledger.responseMetadata ?? undefined,
+          completedAt: new Date(),
+          updatedAt: new Date(),
+          leaseExpiresAt: null,
+          errorCode: null,
+        },
+      });
+      // Ownership release: any failure rolls the whole transaction back, so a
+      // completed ledger can never strand ownership. No silent fallback.
+      await tx.chatSession.update({
+        where: { id: args.sessionId },
+        data: { activeTurnId: null },
+      });
+      return { ok: true as boolean, code: '' as string };
+    });
+    if ((result as any).ok) return { ok: true };
+    return { ok: false, code: (result as any).code || 'FINALIZE_REJECTED' };
+  } catch (err: any) {
+    return { ok: false, code: String(err?.message || 'FINALIZE_FAILED') };
+  }
+}
+
+/**
+ * Ownership-safe abort for fail/interrupt paths (024A §7 companion + seal).
+ * Ledger moves to failed/interrupted and activeTurnId clears ONLY when still
+ * owned by this turn — a failed clear can neither strand nor steal ownership.
+ * Fail-closed observability: every mutation failure is captured and returned
+ * ({ ok:false, code }) instead of silently claiming durable cleanup succeeded.
+ * Callers MUST treat { ok:false } as "cleanup not proven" (log + retryable).
+ */
+export async function abortSessionTurn(args: {
+  sessionId: string;
+  clientTurnId: string;
+  status: 'failed' | 'interrupted';
+  errorCode?: string;
+}): Promise<{ ok: true } | { ok: false; code: string }> {
+  const failures: string[] = [];
+  try {
+    await (prisma as any).$transaction(async (tx: any) => {
+      try {
+        await tx.chatTurnRequestRecord.update({
+          where: { sessionId_clientTurnId: { sessionId: args.sessionId, clientTurnId: args.clientTurnId } },
+          data: {
+            status: args.status,
+            errorCode: args.errorCode || null,
+            updatedAt: new Date(),
+            leaseExpiresAt: null,
+          },
+        });
+      } catch (err: any) {
+        failures.push(`TURN_LEDGER_ABORT_FAILED:${String(err?.message || err || 'unknown')}`);
+      }
+      let current: string | null = null;
+      let ownershipReadable = true;
+      try {
+        current = ((await tx.chatSession.findUnique({
+          where: { id: args.sessionId },
+          select: { activeTurnId: true },
+        })) as any)?.activeTurnId ?? null;
+      } catch (err: any) {
+        ownershipReadable = false;
+        failures.push(`SESSION_CLAIM_READ_FAILED:${String(err?.message || err || 'unknown')}`);
+      }
+      if (ownershipReadable && current === args.clientTurnId) {
+        try {
+          await tx.chatSession.update({
+            where: { id: args.sessionId },
+            data: { activeTurnId: null },
+          });
+        } catch (err: any) {
+          failures.push(`SESSION_CLAIM_RELEASE_FAILED:${String(err?.message || err || 'unknown')}`);
+        }
+      }
+    });
+  } catch (err: any) {
+    failures.push(`ABORT_TRANSACTION_FAILED:${String(err?.message || err || 'unknown')}`);
+  }
+  if (failures.length > 0) return { ok: false, code: failures[0]!.split(':').slice(0, 1).join('') || 'ABORT_FAILED' };
+  return { ok: true };
+}
+
+/**
+ * Atomic message append (§16 + concurrency seal): serialize on the owned
+ * ChatSession row FIRST (a write lock that serializes all concurrent appends
+ * for one session — a transaction alone does not serialize), then number from
+ * MAX(messageNumber) under the lock, insert, update projection
  * (lastMessageAt, preview, messageCount, updatedAt) in one transaction.
  * Never hold open during AI generation: call once per persisted message.
+ * Fail-closed: a projection-column failure rolls the transaction back. No
+ * updatedAt-only downgrade. @@unique([sessionId, messageNumber]) remains the
+ * final DB defense.
  */
 export async function appendChatMessageAtomic(args: {
   sessionId: string;
@@ -181,6 +366,12 @@ export async function appendChatMessageAtomic(args: {
       select: { id: true },
     });
     if (!session) throw new Error('SESSION_NOT_FOUND');
+    // Per-session serialization: this row write takes the session lock so all
+    // concurrent appends for this session order here before reading MAX.
+    await tx.chatSession.update({
+      where: { id: args.sessionId },
+      data: { updatedAt: new Date() },
+    });
     const agg = await tx.chatMessage.aggregate({
       where: { sessionId: args.sessionId },
       _max: { messageNumber: true },
@@ -206,12 +397,9 @@ export async function appendChatMessageAtomic(args: {
       messageCount: Number(agg?._count?._all || 0) + 1,
       updatedAt: new Date(),
     };
-    try {
-      await tx.chatSession.update({ where: { id: args.sessionId }, data: updateData });
-    } catch {
-      // Older DB without new columns: fall back to updatedAt only.
-      await tx.chatSession.update({ where: { id: args.sessionId }, data: { updatedAt: new Date() } });
-    }
+    // Fail closed: projection columns are required by the 024A migration. Any
+    // failure throws and rolls back the insert — never an updatedAt-only write.
+    await tx.chatSession.update({ where: { id: args.sessionId }, data: updateData });
     return created;
   });
 }

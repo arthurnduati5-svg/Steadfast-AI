@@ -15,10 +15,11 @@ import {
   stripDuplicateRelationFields,
 } from '../services/chatDurableContract024';
 import {
+  abortSessionTurn,
   acquireChatTurn,
   appendChatMessageAtomic,
-  completeChatTurn,
-  failChatTurn,
+  claimSessionTurn,
+  finalizeChatTurn,
   persistSessionTitle,
   rebuildSessionProjection,
 } from '../services/chatDurablePersistence024';
@@ -4079,10 +4080,18 @@ router.post('/chat', schoolAuthMiddleware, requireVerifiedSchoolContext, aiLimit
       }
       return res.status(200).send({ turnId: clientTurnId, replayed: true, userMessageId: replayUserId || null, assistantMessageId: replayAssistantId || null });
     }
-    // Claim the session for this turn (cleared on done/error/interrupt).
-    try {
-      await prisma.chatSession.update({ where: { id: sessionId }, data: { activeTurnId: clientTurnId } as any });
-    } catch { /* older DB: non-fatal */ }
+    // One-barrier session claim: at most one live turn owns the session.
+    // Ownership clears only through finalize/abort; never by bare writes.
+    // A newly acquired ledger that loses the CAS claim persists NOTHING: its
+    // ledger is deterministically released as interrupted (never left
+    // in_progress until lease expiry) and the caller gets 409.
+    if (turnAcquire.outcome === 'owned') {
+      const claim = await claimSessionTurn({ sessionId, clientTurnId });
+      if (!claim.claimed) {
+        await abortSessionTurn({ sessionId, clientTurnId, status: 'interrupted', errorCode: 'SESSION_TURN_IN_PROGRESS' });
+        return res.status(409).send({ message: 'Another turn is in progress for this session.', code: 'SESSION_TURN_IN_PROGRESS', turnId: clientTurnId, retryable: true });
+      }
+    }
 
     const existingEditedUserMessage = editedMessageId
       ? session.ChatMessage.find((message) => message.id === editedMessageId)
@@ -4385,16 +4394,11 @@ router.post('/chat', schoolAuthMiddleware, requireVerifiedSchoolContext, aiLimit
           turnId: clientTurnId,
           metadata: toPrismaMetadata(userMessageMetadata),
         });
-      } catch {
-        // Fallback for DBs without new columns: legacy path (messageNumber from count).
-        savedUserMessage = await createChatMessage({
-          sessionId,
-          role: 'user',
-          content: effectiveMessage,
-          timestamp: new Date(),
-          messageNumber: priorSessionMessages.length + 1,
-          metadata: toPrismaMetadata(userMessageMetadata),
-        });
+      } catch (appendError) {
+        // NO unsafe fallback: a learner append failure means no AI call and no duplicate.
+        await abortSessionTurn({ sessionId, clientTurnId, status: 'failed', errorCode: 'CHAT_PERSISTENCE_UNAVAILABLE' });
+        logger.error({ error: String(appendError), sessionId }, '[Backend] Learner message persistence failed; aborting turn');
+        return res.status(500).send({ message: 'Could not persist your message. Please retry.', code: 'CHAT_PERSISTENCE_UNAVAILABLE', retryable: true });
       }
       try {
         await (prisma as any).chatTurnRequestRecord.update({
@@ -4439,9 +4443,7 @@ router.post('/chat', schoolAuthMiddleware, requireVerifiedSchoolContext, aiLimit
         if (!res.writableEnded) {
           clientDisconnected = true;
           clearHeartbeat();
-          void failChatTurn({ sessionId, clientTurnId, status: 'interrupted', errorCode: 'CLIENT_DISCONNECT' }).then(() => {
-            prisma.chatSession.update({ where: { id: sessionId }, data: { activeTurnId: null } as any }).catch(() => {});
-          });
+          void abortSessionTurn({ sessionId, clientTurnId, status: 'interrupted', errorCode: 'CLIENT_DISCONNECT' });
         }
       });
       res.on('close', () => {
@@ -4753,10 +4755,7 @@ router.post('/chat', schoolAuthMiddleware, requireVerifiedSchoolContext, aiLimit
 
     // Interruption invariant (§21): late computation cannot mutate canonical state.
     if (clientDisconnected) {
-      await failChatTurn({ sessionId, clientTurnId, status: 'interrupted', errorCode: 'CLIENT_DISCONNECT' });
-      try {
-        await prisma.chatSession.update({ where: { id: sessionId }, data: { activeTurnId: null } as any });
-      } catch { /* non-fatal */ }
+      await abortSessionTurn({ sessionId, clientTurnId, status: 'interrupted', errorCode: 'CLIENT_DISCONNECT' });
       try { res.end(); } catch { /* closed */ }
       return;
     }
@@ -4781,25 +4780,19 @@ router.post('/chat', schoolAuthMiddleware, requireVerifiedSchoolContext, aiLimit
           ...assistantMetadata,
         }),
       });
-    } catch {
-      savedAiMsg = await createChatMessage({
-        sessionId,
-        role: 'model',
-        content: finalContent,
-        timestamp: new Date(),
-        messageNumber: priorSessionMessages.length + (savedUserMessage ? 2 : 1),
-        metadata: toPrismaMetadata({
-          videoData: aiResult.videoData,
-          video: aiResult.videoData,
-          sources: safeSources,
-          suggestedTitle: aiResult.suggestedTitle,
-          tutorArtifacts,
-          videoContextSummary: videoSnapshot.activeVideoSummary,
-          videoConcepts: videoSnapshot.activeVideoConcepts,
-          videoWhyRecommended: videoSnapshot.activeVideoWhyRecommended,
-          ...assistantMetadata,
-        }),
-      });
+    } catch (persistError) {
+      // Assistant append failure: NO done; the learner message remains; retryable.
+      await abortSessionTurn({ sessionId, clientTurnId, status: 'failed', errorCode: 'ASSISTANT_PERSISTENCE_FAILED' });
+      logger.error({ error: String(persistError), sessionId }, '[Backend] Assistant message persistence failed; aborting turn');
+      clearHeartbeat();
+      if (isStreaming && !res.writableEnded) {
+        try {
+          res.write(`event: error\ndata: ${JSON.stringify({ type: 'error', turnId: clientTurnId, code: 'ASSISTANT_PERSISTENCE_FAILED', message: 'Your message is kept but the reply could not be saved. Please retry.', retryable: true })}\n\n`);
+          res.end();
+          return;
+        } catch { /* fall through */ }
+      }
+      return res.status(500).send({ message: 'Your message is kept but the reply could not be saved. Please retry.', code: 'ASSISTANT_PERSISTENCE_FAILED', retryable: true });
     }
     recordAssistantEnvelopeAnalytics({
       userId: studentId,
@@ -4870,19 +4863,39 @@ router.post('/chat', schoolAuthMiddleware, requireVerifiedSchoolContext, aiLimit
       await redis.set(cacheKey, JSON.stringify(cacheData), { EX: 86400 }); // Cache for 24h
     }
 
-    // Complete the turn ledger BEFORE emitting done (§19): done implies persistence.
+    // One-barrier completion: SSE done is emitted ONLY after finalize returns ok.
+    // finalize confirms this turn still owns the session and the ledger is live,
+    // records the assistant message, and releases ownership in one transaction.
+    let finalizeResult: { ok: true } | { ok: false; code: string };
+    try {
+      finalizeResult = await finalizeChatTurn({
+        sessionId,
+        clientTurnId,
+        userMessageId: savedUserMessage?.id || null,
+        assistantMessageId: savedAiMsg.id,
+        responseMetadata: { assistantMessageNumber: (savedAiMsg as any)?.messageNumber || null },
+      });
+    } catch {
+      finalizeResult = { ok: false, code: 'FINALIZE_FAILED' };
+    }
+    if (!finalizeResult.ok) {
+      // Barrier rejected: emit error, never done.
+      const finalizeCode = (finalizeResult as { ok: false; code: string }).code;
+      clearHeartbeat();
+      if (isStreaming && !res.writableEnded) {
+        try {
+          res.write(`event: error\ndata: ${JSON.stringify({ type: 'error', turnId: clientTurnId, code: finalizeCode, message: 'The study service could not complete that turn. Your message is kept — please retry.', retryable: true })}\n\n`);
+          res.end();
+          return;
+        } catch { /* fall through */ }
+      }
+      return res.status(500).send({ message: 'The study service could not complete that turn. Your message is kept — please retry.', code: finalizeCode, retryable: true });
+    }
+    // finalizeChatTurn above is the SOLE completion durability barrier: it
+    // records the assistant message, marks the ledger completed, and releases
+    // session ownership in one transaction. No legacy completion call follows.
     const refreshed = await prisma.chatSession.findUnique({ where: { id: sessionId } }).catch(() => null);
     const doneProjection = refreshed ? buildChatSessionProjection(refreshed) : buildChatSessionProjection({ id: sessionId, topic: displayTitle, titleVersion } as any);
-    await completeChatTurn({
-      sessionId,
-      clientTurnId,
-      userMessageId: savedUserMessage?.id || null,
-      assistantMessageId: savedAiMsg.id,
-      responseMetadata: { assistantMessageNumber: (savedAiMsg as any)?.messageNumber || null },
-    });
-    try {
-      await prisma.chatSession.update({ where: { id: sessionId }, data: { activeTurnId: null } as any });
-    } catch { /* non-fatal */ }
     // Observability: IDs/timings only, never bodies (§48).
     logger.info({
       turnId: clientTurnId, requestId, sessionId,
@@ -4957,10 +4970,7 @@ router.post('/chat', schoolAuthMiddleware, requireVerifiedSchoolContext, aiLimit
     const errSessionId = safeString(req.body?.sessionId || req.body?.currentSessionId);
     const errTurnId = safeString(req.body?.turnId || req.body?.clientTurnId);
     if (errSessionId && errTurnId) {
-      await failChatTurn({ sessionId: errSessionId, clientTurnId: errTurnId, status: 'failed', errorCode: 'PROVIDER_FAILURE' });
-      try {
-        await prisma.chatSession.update({ where: { id: errSessionId }, data: { activeTurnId: null } as any });
-      } catch { /* non-fatal */ }
+      await abortSessionTurn({ sessionId: errSessionId, clientTurnId: errTurnId, status: 'failed', errorCode: 'PROVIDER_FAILURE' });
     }
     try {
       const studentId = req.user?.id;

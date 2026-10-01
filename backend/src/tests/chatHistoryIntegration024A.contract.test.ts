@@ -265,15 +265,20 @@ describe('024A R7/R8 interruption + done barrier', () => {
     expect(block).toContain('clientDisconnected');
   });
 
-  it('done is emitted only after assistant persistence + ledger completion', () => {
+  it('done is emitted only after assistant persistence + sole-barrier finalization', () => {
     const persistAt = ROUTE_SRC.indexOf('savedAiMsg = await appendChatMessageAtomic(');
-    const completeAt = ROUTE_SRC.indexOf('await completeChatTurn(');
+    const finalizeAt = ROUTE_SRC.indexOf('await finalizeChatTurn({');
     // Completion-path done write (after persistence); the earlier replay-path
     // done is a separate minimal replay stream for already-completed turns.
     const doneAt = ROUTE_SRC.lastIndexOf('event: done');
     expect(persistAt).toBeGreaterThan(-1);
-    expect(completeAt).toBeGreaterThan(persistAt);
-    expect(doneAt).toBeGreaterThan(completeAt);
+    expect(finalizeAt).toBeGreaterThan(persistAt);
+    expect(doneAt).toBeGreaterThan(finalizeAt);
+  });
+
+  it('finalizeChatTurn is the sole completion owner: no legacy completeChatTurn remains', () => {
+    expect(ROUTE_SRC).toContain('await finalizeChatTurn({');
+    expect(ROUTE_SRC).not.toContain('completeChatTurn');
   });
 
   it('SSE keeps accepted/token/done/error wire types with heartbeat', () => {
@@ -306,5 +311,100 @@ describe('024A R10/R-search delete + search safety', () => {
   it('search is keyword-only tenant-scoped with semantic blocked until proven', () => {
     expect(ROUTE_SRC).toContain('SEMANTIC_SEARCH_UNAVAILABLE');
     expect(ROUTE_SRC).toContain('INVALID_HISTORY_CURSOR');
+  });
+});
+
+describe('024A concurrency seal: CAS claim, serialized numbering, canonical append, fail-closed, sole completion', () => {
+  const CLAIM_SRC = PERSIST_SRC.slice(
+    PERSIST_SRC.indexOf('export async function claimSessionTurn'),
+    PERSIST_SRC.indexOf('export async function finalizeChatTurn')
+  );
+  const APPEND_SRC = PERSIST_SRC.slice(PERSIST_SRC.indexOf('export async function appendChatMessageAtomic'));
+  const FINALIZE_SRC = PERSIST_SRC.slice(
+    PERSIST_SRC.indexOf('export async function finalizeChatTurn'),
+    PERSIST_SRC.indexOf('export async function abortSessionTurn')
+  );
+  const APPEND_FN = APPEND_SRC.slice(0, APPEND_SRC.indexOf('export async function persistSessionTitle'));
+  const MESSAGE_ROUTE_SRC = ROUTE_SRC.slice(
+    ROUTE_SRC.indexOf("router.post('/message'"),
+    ROUTE_SRC.indexOf("router.post('/messages/:id/edit'")
+  );
+  const CHAT_CLAIM_SRC = ROUTE_SRC.slice(
+    ROUTE_SRC.indexOf('One-barrier session claim'),
+    ROUTE_SRC.indexOf('const existingEditedUserMessage')
+  );
+
+  it('A. claimSessionTurn is an atomic compare-and-swap with no read-then-unconditional-update path', () => {
+    expect(CLAIM_SRC).toContain('updateMany');
+    expect(CLAIM_SRC).toContain('activeTurnId: null');
+    expect(CLAIM_SRC).toContain('activeTurnId: args.clientTurnId');
+    expect(CLAIM_SRC).toContain('Number(res?.count) === 1');
+    // No unconditional claim write remains: the only session write is the CAS.
+    expect(CLAIM_SRC).not.toMatch(/chatSession\.update\(\{/);
+    // Exactly one claimed=true exists: the CAS-success path carrying ownership.
+    const claimedTrue = CLAIM_SRC.match(/claimed:\s*true/g) || [];
+    expect(claimedTrue.length).toBe(1);
+    expect(CLAIM_SRC).toContain('{ claimed: true, owner: args.clientTurnId }');
+  });
+
+  it('B. appendChatMessageAtomic serializes on the session row before MAX(messageNumber)', () => {
+    const lockAt = APPEND_FN.indexOf('await tx.chatSession.update({');
+    const maxAt = APPEND_FN.indexOf('_max: { messageNumber: true }');
+    expect(lockAt).toBeGreaterThan(-1);
+    expect(maxAt).toBeGreaterThan(-1);
+    expect(lockAt).toBeLessThan(maxAt);
+    // @@unique([sessionId, messageNumber]) stays the final DB defense.
+    expect(PERSIST_SRC).toContain('@@unique([sessionId, messageNumber])');
+  });
+
+  it('C. POST /message uses the canonical atomic append with no count()+1 allocator', () => {
+    expect(MESSAGE_ROUTE_SRC).toContain('await appendChatMessageAtomic({');
+    // No Prisma count query, no direct message insert, no route-side number
+    // arithmetic (the "Never count()+1" rule is enforced by the service).
+    expect(MESSAGE_ROUTE_SRC).not.toMatch(/chatMessage\.count/);
+    expect(MESSAGE_ROUTE_SRC).not.toMatch(/\.count\(/);
+    expect(MESSAGE_ROUTE_SRC).not.toMatch(/messageNumber\s*[:=]/);
+    expect(MESSAGE_ROUTE_SRC).not.toMatch(/nextNumber/);
+    expect(MESSAGE_ROUTE_SRC).not.toMatch(/prisma\.chatMessage\.create/);
+  });
+
+  it('D. canonical persistence has no fail-open durability downgrade', () => {
+    expect(PERSIST_SRC).not.toContain('Older DB');
+    expect(PERSIST_SRC).not.toContain('ledger remains the authority');
+    expect(PERSIST_SRC).not.toContain('fail open to legacy path');
+    expect(PERSIST_SRC).not.toContain('fall back to updatedAt');
+    // Claim fails closed on schema/storage error (exactly one claimed=true:
+    // the CAS-success path pinned in test A).
+    expect(CLAIM_SRC).toContain('Fail-closed');
+    // Finalize fails closed on missing ownership proof or missing ledger.
+    expect(FINALIZE_SRC).toContain('TURN_LEDGER_MISSING');
+    expect(FINALIZE_SRC).toContain('SESSION_CLAIM_UNAVAILABLE');
+    expect(FINALIZE_SRC).toContain('TURN_LEDGER_UNAVAILABLE');
+    // Append carries no fallback catch: projection failure rolls back.
+    expect(APPEND_FN).not.toContain('catch');
+    // Abort surfaces mutation failure instead of claiming success.
+    expect(PERSIST_SRC).toContain('SESSION_CLAIM_RELEASE_FAILED');
+  });
+
+  it('E. completion ordering is assistant-append -> finalizeChatTurn -> done, nothing after', () => {
+    const persistAt = ROUTE_SRC.indexOf('savedAiMsg = await appendChatMessageAtomic(');
+    const finalizeAt = ROUTE_SRC.indexOf('await finalizeChatTurn({');
+    const doneAt = ROUTE_SRC.lastIndexOf('event: done');
+    expect(persistAt).toBeGreaterThan(-1);
+    expect(finalizeAt).toBeGreaterThan(persistAt);
+    expect(doneAt).toBeGreaterThan(finalizeAt);
+    expect(ROUTE_SRC).not.toContain('completeChatTurn');
+  });
+
+  it('losing turn releases its ledger deterministically and never persists', () => {
+    // Claim gate sits before any learner persist; loss aborts the ledger with
+    // the stable conflict code and returns 409.
+    expect(CHAT_CLAIM_SRC).toContain('await abortSessionTurn({ sessionId, clientTurnId');
+    expect(CHAT_CLAIM_SRC).toContain("errorCode: 'SESSION_TURN_IN_PROGRESS'");
+    expect(CHAT_CLAIM_SRC).toContain('SESSION_TURN_IN_PROGRESS');
+    const claimAt = ROUTE_SRC.indexOf('const claim = await claimSessionTurn({ sessionId, clientTurnId })');
+    const learnerPersistAt = ROUTE_SRC.indexOf('savedUserMessage = await appendChatMessageAtomic({');
+    expect(claimAt).toBeGreaterThan(-1);
+    expect(learnerPersistAt).toBeGreaterThan(claimAt);
   });
 });

@@ -41,6 +41,7 @@ import {
 import {
   buildCanonicalKey,
   createMemoryMediaResourceStore,
+  resolveRegistryIdentityForLegacyAsset,
   type MediaResource,
 } from '../services/mediaResourceRegistryService';
 import {
@@ -982,5 +983,204 @@ describe('AI-STREAM-2 production adapter (P1–P7)', () => {
     expect(setup.counts.grants).toBe(1);
     expect(setup.counts.availability).toBe(1);
     expect(setup.enrichSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('P8 canonical SCHOOL candidate: matching school reaches semantic_ready, cross-school blocked, dual identity ambiguous', async () => {
+    registerProdTaxonomy();
+    // Ordinary real-shaped MediaAsset — never synthesized with schoolId.
+    const asset = makeProdAsset('p8');
+    expect((asset as unknown as Record<string, unknown>).schoolId).toBeUndefined();
+    // Only ONE canonical SCHOOL MediaResource exists: school-a, same provider,
+    // same providerResourceId.
+    const schoolKey = buildCanonicalKey({
+      scope: 'SCHOOL',
+      provider: asset.videoProvider ?? null,
+      providerResourceId: asset.videoId ?? null,
+      sourceUrl: null,
+      schoolId: 'school-a',
+      ownerUserId: null,
+      stableResourceKey: null,
+    });
+    const resource: MediaResource = {
+      ...makeProdResource('p8', asset),
+      id: 'pres_p8',
+      canonicalKey: schoolKey,
+      scope: 'SCHOOL',
+      schoolId: 'school-a',
+      ownerUserId: null,
+    };
+    const resourceStore = createMemoryMediaResourceStore();
+    await resourceStore.insertResourceIgnoreConflict(resource);
+    const inner = createMemoryMediaEligibilityStore();
+    inner.addResource(resource.id);
+    inner.saveGrant(
+      createRightsGrant({
+        resourceId: resource.id,
+        grantSource: 'DIRECT_LICENSE',
+        territories: ['GLOBAL'],
+        schoolScope: 'GLOBAL' as const,
+        validFrom: PNOW - PHOUR,
+        validUntil: PNOW + PHOUR,
+        now: PNOW,
+        permissions: ['AI_PROCESS'],
+      }),
+    );
+    inner.saveAvailability(
+      createAvailabilityState({ resourceId: resource.id, status: 'AVAILABLE', now: PNOW }),
+    );
+    const classificationStore = createMemoryMediaClassificationStore();
+    await classificationStore.saveClassification({
+      resourceId: resource.id,
+      safety: 'ALLOWED',
+      age: 'ALLOWED',
+      deen: 'ALLOWED',
+      answerLeakage: 'ALLOWED',
+      provenance: 'test:allowed',
+      version: 1,
+      classifiedAt: PNOW,
+      reviewAt: null,
+    });
+    const proposal = makeProdProposal(asset.id);
+    const inputFor = (schoolId: string, spy: ReturnType<typeof vi.fn>) => ({
+      schoolId,
+      studentId: 'pstudent_1',
+      userId: 'pstudent_1',
+      activeVideoRef: {
+        sessionVideoId: 'psess_p8',
+        provider: 'youtube',
+        providerVideoId: asset.videoId,
+      },
+      curriculumFamily: 'cambridge_academic' as const,
+      curriculumVersionId: null,
+      fallbackSummary: 'Session fallback: fractions video.',
+      dependencies: createProductionMediaResourceTutorDependencies({
+        userId: 'pstudent_1',
+        schoolId,
+        learnerGrade: 'grade_5',
+        now: PNOW,
+        resourceStore,
+        eligibilityStore: inner,
+        classificationStore,
+        findAssetByVideoRef: (async () => ({ outcome: 'resolved', asset })) as never,
+        getAssetById: (async () => asset) as never,
+        enrichmentRunner: spy as never,
+      }),
+    });
+    // Verified school-a matches the canonical SCHOOL resource → semantic_ready, 1 call.
+    const matchSpy = vi.fn().mockImplementation(async () => ({ ok: true, proposal }));
+    const matched = await prepareMediaResourceTutorContext(inputFor('school-a', matchSpy));
+    expect(matched.status).toBe('semantic_ready');
+    expect(matchSpy).toHaveBeenCalledTimes(1);
+    // Same asset/store with verified school-b → safe fallback, 0 calls.
+    const crossSpy = vi.fn().mockImplementation(async () => ({ ok: true, proposal }));
+    const crossed = await prepareMediaResourceTutorContext(inputFor('school-b', crossSpy));
+    expect(crossed.status === 'safe_session_fallback' || crossed.status === 'unavailable').toBe(true);
+    expect(crossSpy).not.toHaveBeenCalled();
+    expect(crossed.semantic).toBeUndefined();
+    // Ambiguity: fresh asset/cache key whose store holds BOTH a matching
+    // GLOBAL and a matching school-a SCHOOL canonical resource. Verified
+    // school-a must fail closed — no arbitrary authority selection.
+    const ambAsset = makeProdAsset('p8amb');
+    const ambGlobalKey = buildCanonicalKey({
+      scope: 'GLOBAL',
+      provider: ambAsset.videoProvider ?? null,
+      providerResourceId: ambAsset.videoId ?? null,
+      sourceUrl: null,
+      schoolId: null,
+      ownerUserId: null,
+      stableResourceKey: null,
+    });
+    const ambSchoolKey = buildCanonicalKey({
+      scope: 'SCHOOL',
+      provider: ambAsset.videoProvider ?? null,
+      providerResourceId: ambAsset.videoId ?? null,
+      sourceUrl: null,
+      schoolId: 'school-a',
+      ownerUserId: null,
+      stableResourceKey: null,
+    });
+    const ambGlobal: MediaResource = {
+      ...makeProdResource('p8amb', ambAsset),
+      id: 'pres_p8amb_global',
+      canonicalKey: ambGlobalKey,
+      scope: 'GLOBAL',
+      schoolId: null,
+      ownerUserId: null,
+    };
+    const ambSchool: MediaResource = {
+      ...makeProdResource('p8amb', ambAsset),
+      id: 'pres_p8amb_school',
+      canonicalKey: ambSchoolKey,
+      scope: 'SCHOOL',
+      schoolId: 'school-a',
+      ownerUserId: null,
+    };
+    const ambStore = createMemoryMediaResourceStore();
+    await ambStore.insertResourceIgnoreConflict(ambGlobal);
+    await ambStore.insertResourceIgnoreConflict(ambSchool);
+    const ambEligibility = createMemoryMediaEligibilityStore();
+    for (const res of [ambGlobal, ambSchool]) {
+      ambEligibility.addResource(res.id);
+      ambEligibility.saveGrant(
+        createRightsGrant({
+          resourceId: res.id,
+          grantSource: 'DIRECT_LICENSE',
+          territories: ['GLOBAL'],
+          schoolScope: 'GLOBAL' as const,
+          validFrom: PNOW - PHOUR,
+          validUntil: PNOW + PHOUR,
+          now: PNOW,
+          permissions: ['AI_PROCESS'],
+        }),
+      );
+      ambEligibility.saveAvailability(
+        createAvailabilityState({ resourceId: res.id, status: 'AVAILABLE', now: PNOW }),
+      );
+    }
+    const ambClassification = createMemoryMediaClassificationStore();
+    for (const res of [ambGlobal, ambSchool]) {
+      await ambClassification.saveClassification({
+        resourceId: res.id,
+        safety: 'ALLOWED',
+        age: 'ALLOWED',
+        deen: 'ALLOWED',
+        answerLeakage: 'ALLOWED',
+        provenance: 'test:allowed',
+        version: 1,
+        classifiedAt: PNOW,
+        reviewAt: null,
+      });
+    }
+    const ambProposal = makeProdProposal(ambAsset.id);
+    const ambSpy = vi.fn().mockImplementation(async () => ({ ok: true, proposal: ambProposal }));
+    const ambResult = await prepareMediaResourceTutorContext({
+      schoolId: 'school-a',
+      studentId: 'pstudent_1',
+      userId: 'pstudent_1',
+      activeVideoRef: {
+        sessionVideoId: 'psess_p8amb',
+        provider: 'youtube',
+        providerVideoId: ambAsset.videoId,
+      },
+      curriculumFamily: 'cambridge_academic' as const,
+      curriculumVersionId: null,
+      fallbackSummary: 'Session fallback: fractions video.',
+      dependencies: createProductionMediaResourceTutorDependencies({
+        userId: 'pstudent_1',
+        schoolId: 'school-a',
+        learnerGrade: 'grade_5',
+        now: PNOW,
+        resourceStore: ambStore,
+        eligibilityStore: ambEligibility,
+        classificationStore: ambClassification,
+        findAssetByVideoRef: (async () => ({ outcome: 'resolved', asset: ambAsset })) as never,
+        getAssetById: (async () => ambAsset) as never,
+        enrichmentRunner: ambSpy as never,
+      }),
+    });
+    expect(ambResult.status === 'safe_session_fallback' || ambResult.status === 'unavailable').toBe(true);
+    expect(ambResult.reasonCode).toBe('CANONICAL_MEDIA_RESOURCE_AMBIGUOUS');
+    expect(ambSpy).not.toHaveBeenCalled();
+    expect(ambResult.semantic).toBeUndefined();
   });
 });
